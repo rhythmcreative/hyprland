@@ -1,0 +1,349 @@
+@import "colors-pywal.css";
+
+/* --- Global Styles --- */
+* {
+  font-family: 'JetBrainsMono Nerd Font', 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 0;
+  padding-right: 0px;
+  padding-left: 0px;
+  padding-bottom: 0px;
+  border: none;
+  outline: none;
+}
+
+/* --- Waybar Container --- */
+#waybar {
+  background: transparent;
+  color: @foreground;
+  margin: 0px;
+  font-weight: 700;
+  border: none;
+  outline: none;
+}
+
+/* --- Left Modules --- */
+/* Workspaces - Individual rounded block */
+#workspaces {
+  background-color: @background;
+  padding: 2px;
+  margin: 5px 5px 5px 7px; /* Margin from left edge and spacing after */
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  min-width: 0;
+  border: none;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+/* System info group - Seamless bar with varied colors */
+#cpu,
+#memory,
+#temperature.cpu,
+#temperature.package {
+  background-color: @background;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+  border: none;
+  border-right: 1px solid @color8;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+/* First element of system info group - rounded left */
+#cpu {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+  margin-left: 5px;
+}
+
+/* Last element of system info group - rounded right */
+#temperature.package {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-right: none;
+  margin-right: 5px;
+}
+
+/* Middle elements - no border radius */
+#memory,
+#temperature.cpu {
+  border-radius: 0;
+}
+
+/* Hover effects for system info modules */
+#cpu:hover,
+#memory:hover,
+#temperature.cpu:hover,
+#temperature.package:hover {
+  background-color: @color8; /* Brighter highlight */
+}
+
+#workspaces button {
+  color: @foreground;
+  border-radius: 5px; /* Workspaces buttons are always rounded */
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+  border: none;
+  outline: none;
+}
+
+#workspaces button.active {
+  color: @color4;
+  background-color: alpha(@color4, 0.25);
+  box-shadow: inset 0 0 0 1px alpha(@color4, 0.38);
+}
+
+#workspaces button:hover {
+  background: @color8; /* Reference bright hover color */
+  color: @foreground;
+}
+
+/* --- Center Module (Individual, Fully Rounded Block) --- */
+#clock {
+  background-color: @background;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
+  border-radius: 6px; /* This module is always rounded */
+  box-shadow: 0 1px 3px alpha(@color4, 0.38);
+  min-width: 0;
+  border: none;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  color: @color4;
+  font-weight: 700;
+}
+
+/* Simple Hover effect for clock module */
+#clock:hover {
+  background-color: @background; /* Keep consistent background */
+}
+
+#custom-pomodoro {
+    background-color: @background; /* Consistent dark background */
+    padding: 0.3rem 0.7rem; /* Consistent padding with other modules */
+    margin: 5px 0px; /* 5px top/bottom margin, 0px left/right */
+    border-radius: 6px; /* Consistent rounded corners with other individual modules */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); /* Consistent shadow */
+    min-width: 0;
+    border: none;
+    outline: none; /* Ensure no default outline */
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, outline 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    color: @foreground; /* Varied color for pomodoro */
+    font-weight: 600; /* Slightly bolder for the timer */
+}
+
+/* Positioning and spacing for the custom-pomodoro module */
+#custom-pomodoro {
+    margin-left: 5px; /* Spacing from the previous module */
+    margin-right: 5px; /* Spacing before the seamless right bar starts */
+}
+
+/* Hover effect for the pomodoro module */
+#custom-pomodoro:hover {
+    background-color: @color8; /* Brighter highlight */
+    color: @foreground; /* Text color change on hover */
+    outline: 1px solid @color8;
+    outline-offset: -1px;
+}
+
+/* --- Highlighted state for Pomodoro module when running --- */
+#custom-pomodoro.work,
+#custom-pomodoro.break {
+  color: @color4; /* Text color consistent with active workspaces button */
+  background-color: alpha(@color4, 0.25); /* Background color consistent with active workspaces button */
+  box-shadow: inset 0 0 0 1px alpha(@color4, 0.38); /* Inner shadow for outline effect */
+  outline: none;
+}
+
+/* --- Right Modules (Single, Seamless Bar with varied colors) --- */
+#bluetooth,
+#tray,
+#pulseaudio,
+#backlight,
+#custom-dual-battery {
+  background-color: @background;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px; 
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+  border: none;
+  border-right: 1px solid @color8;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+#bluetooth:hover,
+#tray:hover,
+#pulseaudio:hover,
+#backlight:hover,
+#custom-dual-battery:hover {
+  background-color: @color8;
+}
+
+/* First element - rounded left - Bluetooth is actually the first element */
+#bluetooth {
+  margin-left: 5px;
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+
+/* Last element - rounded right */
+#custom-dual-battery {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-right: none;
+  margin-right: 7px;
+}
+
+/* Middle elements - no border radius */
+#tray,
+#pulseaudio,
+#backlight {
+  border-radius: 0;
+}
+
+/* --- Module Colors - USING PYWAL COLORS --- */
+
+/* CPU gets color1 - typically a vibrant color */
+#cpu {
+  color: @color1;
+}
+
+/* Memory gets color5 - usually green-ish */
+#memory {
+  color: @color5;
+}
+
+/* Audio gets color3 - warm color */
+#pulseaudio {
+  color: @color3;
+}
+
+/* Backlight gets color6 - cool color */
+#backlight {
+  color: @color6;
+}
+
+/* Network gets color2 */
+#network {
+  color: @color2;
+}
+
+#network.disconnected {
+  color: @color1;
+}
+
+/* Bluetooth states with varied colors */
+#bluetooth {
+  color: @color8;
+  font-size: 16px;
+}
+
+#bluetooth.on {
+  color: @color2;
+}
+
+#bluetooth.connected {
+  color: @color6;
+}
+
+/* Battery with color4 */
+#battery {
+  color: @color4;
+}
+
+#battery.charging {
+  color: @color5;
+}
+
+#battery.warning:not(.charging) {
+  color: @color1;
+}
+
+/* Tray gets foreground color */
+#tray {
+  color: @foreground;
+}
+
+/* --- Privacy Module Colors --- */
+/* Privacy gets color7 - neutral but important color */
+#privacy {
+  color: @color7;
+  font-size: 16px;
+}
+
+/* Privacy module when active (showing indicators) */
+#privacy.screenshare {
+  color: @color1; /* Alert color when screen sharing */
+}
+
+#privacy.audio-in {
+  color: @color3; /* Warm color for microphone usage */
+}
+
+#privacy.audio-out {
+  color: @color6; /* Cool color for audio output */
+}
+
+/* --- Temperature Module Colors - Different colors for CPU and Package --- */
+#temperature.cpu {
+  color: @color3; /* Warm color for CPU temperature */
+}
+
+#temperature.package {
+  color: @color2; /* Cool color for Package temperature */
+}
+
+#temperature.cpu.critical {
+  color: @color1; /* Red for critical CPU temperature */
+}
+
+#temperature.package.critical {
+  color: @color1; /* Red for critical Package temperature */
+}
+
+/* --- Weather Module - MANTIENE SU COLOR ORIGINAL --- */
+#custom-weather {
+  background-color: @background;
+  color: #94e2d5; /* Color fijo original como solicitaste */
+  padding: 0.3rem 0.7rem;
+  margin: 5px 5px 5px 0px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(148, 226, 213, 0.2); /* Color fijo */
+  min-width: 0;
+  border: none;
+  font-size: 20px;
+  font-weight: 500;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+#custom-weather:hover {
+  background-color: @color8;
+}
+
+#custom-weather.weather-ok {
+  color: #94e2d5; /* Color fijo */
+}
+
+#custom-weather.weather-cached {
+  color: #f9e2af; /* Color fijo */
+}
+
+#custom-weather.weather-error {
+  color: #f38ba8; /* Color fijo */
+}
+
+/* --- Tooltip Styles --- */
+tooltip {
+  background-color: @background;
+  color: @foreground;
+  padding: 5px 12px;
+  margin: 5px 0px;
+  border-radius: 6px;
+  border: 1px solid @color8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}

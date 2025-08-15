@@ -1,0 +1,196 @@
+{
+  "layer": "top",
+  "position": "top",
+  "margin-top": 0,
+  "margin-bottom": 0,
+  "margin-left": 0,
+  "margin-right": 0,
+  "spacing" : 0,
+  "exclusive": true,
+  "modules-left": [
+  "hyprland/workspaces",
+  "group/system-info"
+  ],
+
+  "modules-center": ["custom/weather", "clock"],
+
+  "modules-right": [
+    "bluetooth",
+    "tray",
+    "pulseaudio", 
+    "backlight",
+    "custom/dual-battery"
+  ],
+
+  "hyprland/workspaces": {
+    "format": "{name} {icon}",
+    "format-icons": {
+      "active": "",
+      "default": ""
+    }
+  },
+
+  "group/system-info": {
+    "orientation": "horizontal",
+    "modules": [
+      "cpu",
+      "memory",
+      "temperature#cpu",
+      "temperature#package"
+    ]
+  },
+
+  "bluetooth": {
+    "format": "{icon}",
+    "format-on": "{icon}",
+    "format-off": "{icon}", 
+    "format-connected": "{icon} {num_connections}",
+    "format-disabled": "{icon}",
+    "format-icons": {
+        "enabled": "󰂯",
+        "disabled": "󰂲",
+        "off": "󰂲",
+        "on": "󰂯",
+        "connected": "󰂱"
+    },
+    "on-click": "blueman-manager",
+    "tooltip-format": "{status}",
+    "tooltip-format-connected": "{device_enumerate}",
+    "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
+  },
+
+  "custom/music": {
+    "format": "  {}",
+    "escape": true,
+    "interval": 5,
+    "tooltip": false,
+    "exec": "playerctl metadata --format='{{ artist }} - {{ title }}'",
+    "on-click": "playerctl play-pause",
+    "max-length": 50
+  },
+
+  "clock": {
+    "timezone": "Europe/Madrid",
+    "tooltip": false,
+    "format": "{:%H:%M:%S  -  %A, %d}",
+    "interval": 1
+  },
+
+  "custom/weather": {
+    "exec": "/home/rhythmcreative/.config/waybar/scripts/weather.sh",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 300,
+    "tooltip": true,
+    "on-click": "/home/rhythmcreative/.config/waybar/scripts/weather.sh"
+  },
+
+  "network": {
+    "format-wifi": "󰤢 {signalStrength}%",
+    "format-ethernet": "󰈀 Connected",
+    "format-disconnected": "󰤠 Disconnected",
+    "format-linked": "󰈁 {ifname}",
+    "interval": 5,
+    "tooltip-format": "Network: {ifname}\nIP: {ipaddr}\nGateway: {gwaddr}",
+    "tooltip-format-wifi": "WiFi: {essid} ({signalStrength}%)\nIP: {ipaddr}\nFrequency: {frequency}MHz",
+    "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}\nSpeed: {bandwidthUpBits}/{bandwidthDownBits}",
+    "tooltip-format-disconnected": "Network Disconnected",
+    "on-click": "nm-connection-editor",
+    "on-click-right": "nm-applet"
+  },
+
+  "cpu": {
+    "interval": 5,
+    "format": "󰍛 {icon0}{icon1}{icon2}{icon3} {usage:>2}%",
+    "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+    "on-click": "ghostty -e htop"
+  },
+
+  "memory": {
+    "interval": 60,
+    "format": "󰘚 {used:0.1f}G/{total:0.1f}G",
+    "tooltip-format": "Memory"
+  },
+
+  "custom/uptime": {
+    "format": "{}",
+    "format-icon": [""], 
+    "tooltip": false,
+    "interval": 1600,
+    "exec": "$HOME/.config/waybar/scripts/uptime.sh"
+  },
+  
+  "backlight": {
+        "format": "{icon}  {percent}%",
+        "format-icons": ["","󰃜", "󰃛", "󰃞","󰃝","󰃟","󰃠"],
+        "tooltip": false
+  },
+  
+  "pulseaudio": {
+    "format": "{icon}  {volume}%",
+    "format-muted": "󰝟",
+    "format-icons": {
+      "headphone": ["󰋋", "󰋋", "󰋋"],
+      "hands-free": ["󰋋", "󰋋", "󰋋"],
+      "headset": ["󰋋", "󰋋", "󰋋"],
+      "phone": ["󰏲", "󰏲", "󰏲"],
+      "portable": ["󰦢", "󰦢", "󰦢"],
+      "car": ["󰄋", "󰄋", "󰄋"],
+      "default": ["󰕿", "󰖀", "󰕾"]
+    },
+    "on-click": "pavucontrol",
+    "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +2%",
+    "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%",
+    "tooltip-format": "Volume: {volume}%",
+    "scroll-step": 2,
+    "max-volume": 100
+  },
+
+  "custom/dual-battery": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "$HOME/.config/waybar/scripts/dual_battery.sh",
+    "interval": 30,
+    "tooltip": true
+  },
+  
+  "custom/lock": {
+  "tooltip": false,
+  "on-click": "sh -c '(sleep 0s; hyprlock)' & disown",
+  "format" : ""
+  },
+
+  "custom/pomodoro": {
+	"format": "{}",
+	"return-type": "json",
+	"exec": "waybar-module-pomodoro --no-work-icons",
+	"on-click": "waybar-module-pomodoro toggle",
+	"on-click-right": "waybar-module-pomodoro reset"
+  },
+
+  "temperature#cpu": {
+    "hwmon-path": "/sys/class/hwmon/hwmon4/temp1_input",
+    "critical-threshold": 80,
+    "format": "󰔏 {temperatureC}°C",
+    "format-critical": "󰸁 {temperatureC}°C",
+    "tooltip": true,
+    "tooltip-format": "ThinkPad Temperature: {temperatureC}°C",
+    "interval": 10
+  },
+
+  "temperature#package": {
+    "hwmon-path": "/sys/class/hwmon/hwmon7/temp1_input",
+    "critical-threshold": 85,
+    "format": "󰔏 {temperatureC}°C",
+    "format-critical": "󰸁 {temperatureC}°C",
+    "tooltip": true,
+    "tooltip-format": "CPU Package Temperature: {temperatureC}°C",
+    "interval": 10
+  },
+
+  "tray": {
+    "icon-size": 18,
+    "spacing": 10
+  }
+
+}

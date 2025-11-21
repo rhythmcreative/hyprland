@@ -1,0 +1,236 @@
+#!/bin/bash
+
+# Script para sincronizar Vesktop con pywal
+# Uso: vesktop-pywal-sync
+
+VESKTOP_CONFIG="$HOME/.config/vesktop"
+VESKTOP_THEME="$VESKTOP_CONFIG/discord-pywal.css"
+VENCORD_THEMES="$HOME/.config/Vencord/themes"
+VENCORD_THEME="$VENCORD_THEMES/pywal-discord-default.theme.css"
+WAL_COLORS="$HOME/.cache/wal/colors.css"
+
+# Verificar que pywal esté configurado
+if [[ ! -f "$WAL_COLORS" ]]; then
+    echo "Error: pywal no está configurado o no se encontró colors.css"
+    echo "Ejecuta 'wal -i /path/to/wallpaper' primero"
+    exit 1
+fi
+
+# Crear directorio de temas de Vencord si no existe
+mkdir -p "$VENCORD_THEMES"
+
+# Generar tema mejorado para Vesktop/Vencord
+cat > "$VESKTOP_THEME" << 'EOF'
+/**
+ * @name Discord Pywal
+ * @description Discord theme that uses pywal colors
+ * @author rhythmcreative
+ * @version 2.0
+ */
+
+@import url('/home/rhythmcreative/.cache/wal/colors.css');
+
+/* Variables principales desde pywal */
+:root {
+  --background-primary: var(--color0) !important;
+  --background-secondary: var(--color0) !important;
+  --background-secondary-alt: var(--color0) !important;
+  --background-tertiary: var(--color8) !important;
+  --background-accent: var(--color1) !important;
+  --background-floating: var(--color0) !important;
+  --background-mobile-primary: var(--color0) !important;
+  --background-mobile-secondary: var(--color0) !important;
+  --background-modifier-hover: rgba(255, 255, 255, 0.06) !important;
+  --background-modifier-active: var(--color1) !important;
+  --background-modifier-selected: var(--color1) !important;
+  --background-modifier-accent: var(--color1) !important;
+  --channeltextarea-background: var(--color0) !important;
+  --deprecated-card-bg: var(--color8) !important;
+  --deprecated-card-editable-bg: var(--color8) !important;
+  --deprecated-store-bg: var(--color0) !important;
+  --deprecated-quickswitcher-input-background: var(--color0) !important;
+  --deprecated-text-input-bg: var(--color0) !important;
+  --deprecated-text-input-border: var(--color8) !important;
+  --deprecated-text-input-border-hover: var(--color1) !important;
+  --deprecated-text-input-border-disabled: var(--color8) !important;
+  --activity-card-background: var(--color0) !important;
+  --textbox-markdown-syntax: var(--color8) !important;
+  --spoiler-revealed-background: var(--color8) !important;
+  --spoiler-hidden-background: var(--color8) !important;
+  --scrollbar-auto-thumb: var(--color8) !important;
+  --scrollbar-auto-track: var(--color0) !important;
+  --scrollbar-thin-thumb: var(--color8) !important;
+  --scrollbar-thin-track: transparent !important;
+  
+  /* Colores de texto */
+  --text-normal: var(--foreground) !important;
+  --text-muted: var(--color8) !important;
+  --text-faint: var(--color8) !important;
+  --text-positive: var(--color2) !important;
+  --text-warning: var(--color3) !important;
+  --text-danger: var(--color1) !important;
+  --text-brand: var(--color4) !important;
+  --text-link: var(--color6) !important;
+  --interactive-normal: var(--foreground) !important;
+  --interactive-hover: var(--color7) !important;
+  --interactive-active: var(--color7) !important;
+  --interactive-muted: var(--color8) !important;
+  
+  /* Headers */
+  --header-primary: var(--foreground) !important;
+  --header-secondary: var(--color8) !important;
+  
+  /* Canales */
+  --channels-default: var(--color8) !important;
+  
+  /* Colores de marca */
+  --brand-experiment: var(--color1) !important;
+  --brand-experiment-100: var(--color1) !important;
+  --brand-experiment-130: var(--color1) !important;
+  --brand-experiment-160: var(--color1) !important;
+  --brand-experiment-200: var(--color1) !important;
+  --brand-experiment-230: var(--color1) !important;
+  --brand-experiment-260: var(--color1) !important;
+  --brand-experiment-300: var(--color1) !important;
+  --brand-experiment-330: var(--color1) !important;
+  --brand-experiment-360: var(--color1) !important;
+  --brand-experiment-400: var(--color1) !important;
+  --brand-experiment-430: var(--color1) !important;
+  --brand-experiment-460: var(--color1) !important;
+  --brand-experiment-500: var(--color1) !important;
+  --brand-experiment-530: var(--color1) !important;
+  --brand-experiment-560: var(--color1) !important;
+  --brand-experiment-600: var(--color1) !important;
+  --brand-experiment-630: var(--color1) !important;
+  --brand-experiment-660: var(--color1) !important;
+  --brand-experiment-700: var(--color1) !important;
+  --brand-experiment-730: var(--color1) !important;
+  --brand-experiment-760: var(--color1) !important;
+  --brand-experiment-800: var(--color1) !important;
+  --brand-experiment-830: var(--color1) !important;
+  --brand-experiment-860: var(--color1) !important;
+  --brand-experiment-900: var(--color1) !important;
+  
+  /* Estados de botones */
+  --button-danger-background: var(--color1) !important;
+  --button-danger-background-hover: var(--color9) !important;
+  --button-danger-background-active: var(--color9) !important;
+  --button-positive-background: var(--color2) !important;
+  --button-positive-background-hover: var(--color10) !important;
+  --button-positive-background-active: var(--color10) !important;
+  --button-secondary-background: var(--color8) !important;
+  --button-secondary-background-hover: var(--color8) !important;
+  --button-secondary-background-active: var(--color8) !important;
+  
+  /* Input focus */
+  --input-background: var(--color0) !important;
+  --focus-primary: var(--color1) !important;
+  --radio-group-dot-foreground: var(--color1) !important;
+}
+
+/* Styling adicional para mejor apariencia */
+.theme-dark {
+  --background-primary: var(--color0) !important;
+  --background-secondary: var(--color0) !important;
+  --background-secondary-alt: var(--color0) !important;
+  --background-tertiary: var(--color8) !important;
+}
+
+/* Área de escritura de mensajes */
+.channelTextArea__2e60f,
+.scrollableContainer__33e06 {
+  background-color: var(--color0) !important;
+  border: 1px solid var(--color8) !important;
+}
+
+/* Lista de servidores */
+.guilds__2b93a {
+  background-color: var(--color0) !important;
+}
+
+/* Lista de canales */
+.sidebar_a4d4d9 {
+  background-color: var(--color0) !important;
+}
+
+/* Área de chat */
+.chatContent__5dca8 {
+  background-color: var(--color0) !important;
+}
+
+/* Panel de usuario */
+.panels__58331 {
+  background-color: var(--color0) !important;
+  border-top: 1px solid var(--color8) !important;
+}
+
+/* Lista de miembros */
+.members__9f47b {
+  background-color: var(--color0) !important;
+}
+
+/* Barra de título */
+.typeWindows__5bb0d {
+  background-color: var(--color0) !important;
+  border-bottom: 1px solid var(--color8) !important;
+}
+
+/* Resultados de búsqueda */
+.searchResultsWrap_c2b47d {
+  background-color: var(--color0) !important;
+}
+
+/* Configuraciones */
+.contentRegion_c5c3d9,
+.sidebarRegion_c5c3d9 {
+  background-color: var(--color0) !important;
+}
+
+/* Botones de reacción */
+.reaction__2694a {
+  background-color: var(--color0) !important;
+  border: 1px solid var(--color8) !important;
+}
+
+.reaction__2694a.reactionMe__61dd3 {
+  background-color: var(--color1) !important;
+  border-color: var(--color1) !important;
+}
+
+/* Embeds */
+.embedFull__8dc21 {
+  background-color: var(--color8) !important;
+  border-left-color: var(--color1) !important;
+}
+
+/* Modales */
+.modal__69e9e {
+  background-color: var(--color0) !important;
+}
+
+/* Tooltips */
+.tooltip_a6c5c9 {
+  background-color: var(--color8) !important;
+  color: var(--foreground) !important;
+}
+
+/* Popouts */
+.popout__79f19 {
+  background-color: var(--color0) !important;
+  border: 1px solid var(--color8) !important;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24) !important;
+}
+EOF
+
+# Copiar el tema también para Vencord
+cp "$VESKTOP_THEME" "$VENCORD_THEME"
+
+echo "✅ Tema de pywal sincronizado para Vesktop/Vencord"
+echo "📄 Archivo: $VESKTOP_THEME"
+echo "📄 Archivo: $VENCORD_THEME"
+echo ""
+echo "💡 Para aplicar los cambios:"
+echo "   1. Reinicia Vesktop"
+echo "   2. O usa Ctrl+R para recargar"
+echo ""
+echo "🔄 Para automatizar la sincronización, añade este comando a tu script de pywal"

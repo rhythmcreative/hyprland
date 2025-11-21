@@ -1,0 +1,43 @@
+#!/bin/bash
+# Script para cambiar temas de Oh My Posh
+# Uso: posh-theme [nombre-del-tema]
+
+THEMES_DIR="$HOME/.cache/oh-my-posh/themes"
+BASHRC="$HOME/.bashrc"
+
+if [ $# -eq 0 ]; then
+    echo "🎨 Temas disponibles de Oh My Posh:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ls "$THEMES_DIR" | sed 's/.omp.json//' | column -c 80
+    echo ""
+    echo "📝 Uso: posh-theme [nombre-del-tema]"
+    echo "💡 Ejemplos populares:"
+    echo "   • posh-theme custom              (✨ TEMA PERSONALIZADO ✨)"
+    echo "   • posh-theme catppuccin_mocha    (oscuro, elegante)"
+    echo "   • posh-theme tokyonight_storm    (azul, moderno)"
+    echo "   • posh-theme dracula             (morado, clásico)"
+    echo "   • posh-theme bubbles             (colorido, divertido)"
+    echo "   • posh-theme atomic              (minimalista)"
+    exit 0
+fi
+
+THEME_NAME="$1"
+THEME_FILE="$THEMES_DIR/${THEME_NAME}.omp.json"
+
+if [ ! -f "$THEME_FILE" ]; then
+    echo "❌ Tema '$THEME_NAME' no encontrado."
+    echo "📋 Temas disponibles:"
+    ls "$THEMES_DIR" | sed 's/.omp.json//' | head -10
+    echo "..."
+    echo "💡 Usa 'posh-theme' sin argumentos para ver todos los temas."
+    exit 1
+fi
+
+# Actualizar .bashrc con el nuevo tema
+sed -i "s|eval \"\$(~/bin/oh-my-posh init bash --config .*\.omp\.json)\"|eval \"\$(~/bin/oh-my-posh init bash --config $THEME_FILE)\"|" "$BASHRC"
+
+echo "✅ Tema '$THEME_NAME' aplicado exitosamente!"
+echo "🔄 Reinicia tu terminal o ejecuta: source ~/.bashrc"
+echo ""
+echo "🎨 Vista previa del tema:"
+eval "$(~/bin/oh-my-posh init bash --config "$THEME_FILE")"

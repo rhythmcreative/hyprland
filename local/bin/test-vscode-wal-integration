@@ -1,0 +1,193 @@
+#!/bin/bash
+
+# Script de prueba para verificar la integración completa de VSCode con pywal
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Test-VSCode-Wal] $1" >> "$LOG_FILE"
+    echo "[Test-VSCode-Wal] $1"
+}
+
+echo "🧪 Probando integración VSCode + pywal..."
+log "Iniciando prueba de integración VSCode + pywal"
+
+# Verificar componentes necesarios
+echo ""
+echo "🔍 Verificando componentes..."
+
+# 1. Verificar pywal
+if command -v wal > /dev/null 2>&1; then
+    echo "✅ pywal está instalado"
+    log "pywal: ✅"
+else
+    echo "❌ pywal no está instalado"
+    log "pywal: ❌"
+    exit 1
+fi
+
+# 2. Verificar VSCode
+if command -v code > /dev/null 2>&1; then
+    echo "✅ VSCode está instalado"
+    log "VSCode: ✅"
+else
+    echo "❌ VSCode no está instalado"
+    log "VSCode: ❌"
+    exit 1
+fi
+
+# 3. Verificar extensión wal-theme
+if code --list-extensions | grep -q "dlasagno.wal-theme"; then
+    echo "✅ Extensión wal-theme instalada"
+    log "Extensión wal-theme: ✅"
+else
+    echo "❌ Extensión wal-theme no instalada"
+    log "Extensión wal-theme: ❌"
+    echo "   Ejecutando: /home/rhythmcreative/.local/bin/configure-vscode-wal"
+    /home/rhythmcreative/.local/bin/configure-vscode-wal
+fi
+
+# 4. Verificar configuración de VSCode
+VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
+if [ -f "$VSCODE_SETTINGS" ]; then
+    if grep -q "\"workbench.colorTheme\": \"Wal\"" "$VSCODE_SETTINGS" && grep -q "\"walTheme.autoUpdate\": true" "$VSCODE_SETTINGS"; then
+        echo "✅ VSCode configurado para usar tema Wal"
+        log "Configuración VSCode: ✅"
+    else
+        echo "⚠️  VSCode no está configurado correctamente"
+        log "Configuración VSCode: ⚠️"
+        echo "   Ejecutando configuración automática..."
+        /home/rhythmcreative/.local/bin/configure-vscode-wal
+    fi
+else
+    echo "⚠️  Archivo settings.json no existe"
+    log "settings.json: ⚠️"
+    echo "   Ejecutando configuración automática..."
+    /home/rhythmcreative/.local/bin/configure-vscode-wal
+fi
+
+# 5. Verificar que pywal haya sido ejecutado al menos una vez
+if [ -f "$HOME/.cache/wal/colors.json" ]; then
+    echo "✅ pywal ha sido ejecutado (colores disponibles)"
+    log "Colores pywal: ✅"
+    
+    # Mostrar colores actuales
+    if command -v jq > /dev/null 2>&1; then
+        current_wallpaper=$(jq -r '.wallpaper' "$HOME/.cache/wal/colors.json" 2>/dev/null)
+        if [ "$current_wallpaper" != "null" ] && [ -n "$current_wallpaper" ]; then
+            echo "   Wallpaper actual: $(basename "$current_wallpaper")"
+            log "Wallpaper actual: $current_wallpaper"
+        fi
+    fi
+else
+    echo "⚠️  pywal no ha sido ejecutado aún"
+    log "Colores pywal: ⚠️"
+    echo "   Para probar completamente, ejecuta el selector de wallpaper con Super+Shift+W"
+fi
+
+# 6. Verificar scripts necesarios
+echo ""
+echo "🔍 Verificando scripts..."
+
+scripts=(
+    "/home/rhythmcreative/.local/bin/wallpaper-selector-hyde"
+    "/home/rhythmcreative/.local/bin/configure-vscode-wal"
+)
+
+for script in "${scripts[@]}"; do
+    if [ -f "$script" ] && [ -x "$script" ]; then
+        echo "✅ $(basename "$script")"
+        log "Script $script: ✅"
+    else
+        echo "❌ $(basename "$script") (no existe o no es ejecutable)"
+        log "Script $script: ❌"
+    fi
+done
+
+# 7. Verificar binding de Hyprland
+echo ""
+echo "🔍 Verificando configuración de Hyprland..."
+
+HYPRLAND_CONFIG="$HOME/.config/hypr/hyprland.conf"
+if [ -f "$HYPRLAND_CONFIG" ]; then
+    if grep -q "bind.*mainMod.*SHIFT.*W.*wallpaper-selector-hyde" "$HYPRLAND_CONFIG"; then
+        echo "✅ Binding Super+Shift+W configurado"
+        log "Hyprland binding: ✅"
+    else
+        echo "⚠️  Binding Super+Shift+W no encontrado o incorrecto"
+        log "Hyprland binding: ⚠️"
+    fi
+else
+    echo "⚠️  Archivo hyprland.conf no encontrado"
+    log "Hyprland config: ⚠️"
+fi
+
+# 8. Prueba funcional (si VSCode está corriendo)
+echo ""
+echo "🧪 Prueba funcional..."
+
+if pgrep -x "code" > /dev/null || pgrep -f "code.*--" > /dev/null; then
+    echo "✅ VSCode está corriendo"
+    log "VSCode corriendo: ✅"
+    
+    echo "   Enviando comando de actualización de tema..."
+    if code --command "walTheme.update" > /dev/null 2>&1; then
+        echo "✅ Comando de actualización enviado correctamente"
+        log "Comando actualización: ✅"
+    else
+        echo "⚠️  Error al enviar comando de actualización"
+        log "Comando actualización: ⚠️"
+    fi
+else
+    echo "ℹ️  VSCode no está corriendo actualmente"
+    log "VSCode corriendo: No"
+    echo "   El tema se aplicará automáticamente cuando se abra VSCode"
+fi
+
+# Resumen final
+echo ""
+echo "📋 Resumen:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Verificar estado general
+all_good=true
+
+# Verificar componentes críticos
+if ! command -v wal > /dev/null 2>&1; then
+    all_good=false
+fi
+
+if ! command -v code > /dev/null 2>&1; then
+    all_good=false
+fi
+
+if ! code --list-extensions | grep -q "dlasagno.wal-theme"; then
+    all_good=false
+fi
+
+if [ "$all_good" = true ]; then
+    echo "🎉 ¡Integración VSCode + pywal configurada correctamente!"
+    echo ""
+    echo "📝 Uso:"
+    echo "   1. Presiona Super+Shift+W para abrir el selector de wallpaper"
+    echo "   2. Selecciona una imagen"
+    echo "   3. El tema de VSCode se actualizará automáticamente"
+    echo ""
+    echo "💡 Consejos:"
+    echo "   • Si VSCode está abierto, el tema se actualiza inmediatamente"
+    echo "   • Si VSCode está cerrado, el tema se aplicará al abrirlo"
+    echo "   • Puedes actualizar manualmente con Ctrl+Shift+P > 'Wal Theme: Update'"
+    
+    log "Estado final: ✅ Todo configurado correctamente"
+else
+    echo "⚠️  Hay algunos problemas que necesitan atención"
+    echo "   Revisa los elementos marcados con ❌ o ⚠️  arriba"
+    
+    log "Estado final: ⚠️ Problemas detectados"
+fi
+
+echo ""
+echo "📊 Para más detalles, revisa el log: $LOG_FILE"
+
+log "Prueba de integración completada"

@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# Script de verificación para probar la sincronización de nm-applet
+# Verifica que todos los componentes estén funcionando correctamente
+
+echo "🔍 === Verificación de Sincronización nm-applet + Waybar ==="
+echo ""
+
+# Verificar si nm-applet está corriendo
+echo "📶 Verificando nm-applet..."
+if pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet está corriendo"
+else
+    echo "❌ nm-applet NO está corriendo"
+fi
+
+# Verificar si waybar está corriendo
+echo "📱 Verificando waybar..."
+if pgrep -x waybar > /dev/null; then
+    echo "✅ waybar está corriendo"
+else
+    echo "❌ waybar NO está corriendo"
+fi
+
+# Verificar archivos pywal
+echo "🎨 Verificando archivos pywal..."
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "✅ Colores pywal disponibles"
+    source "$HOME/.cache/wal/colors.sh"
+    echo "  Background: $background"
+    echo "  Foreground: $foreground"
+    echo "  Accent (color4): $color4"
+else
+    echo "❌ Archivos pywal NO encontrados"
+fi
+
+# Verificar CSS de nm-applet
+echo "🎨 Verificando CSS de nm-applet..."
+if [[ -f "$HOME/.config/gtk-3.0/nm-applet-pywal.css" ]]; then
+    echo "✅ CSS de nm-applet (GTK3) existe"
+    echo "  Modificado: $(stat -c %y "$HOME/.config/gtk-3.0/nm-applet-pywal.css")"
+else
+    echo "❌ CSS de nm-applet (GTK3) NO existe"
+fi
+
+if [[ -f "$HOME/.config/gtk-4.0/nm-applet-pywal.css" ]]; then
+    echo "✅ CSS de nm-applet (GTK4) existe"
+else
+    echo "❌ CSS de nm-applet (GTK4) NO existe"
+fi
+
+# Verificar scripts de sincronización
+echo "🔧 Verificando scripts..."
+if [[ -x "$HOME/.local/bin/nm-applet-auto-sync" ]]; then
+    echo "✅ nm-applet-auto-sync ejecutable"
+else
+    echo "❌ nm-applet-auto-sync NO encontrado o no ejecutable"
+fi
+
+if [[ -x "$HOME/.local/bin/complete-wallpaper-sync" ]]; then
+    echo "✅ complete-wallpaper-sync ejecutable"
+else
+    echo "❌ complete-wallpaper-sync NO encontrado o no ejecutable"
+fi
+
+# Verificar configuración GTK
+echo "🎛️ Verificando configuración GTK..."
+if command -v gsettings &> /dev/null; then
+    current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "No configurado")
+    echo "  Tema GTK actual: $current_theme"
+    color_scheme=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo "No configurado")
+    echo "  Esquema de colores: $color_scheme"
+else
+    echo "⚠️ gsettings no disponible"
+fi
+
+echo ""
+echo "🧪 === Prueba Rápida de Sincronización ==="
+echo "¿Deseas probar la sincronización de nm-applet ahora? (y/n)"
+read -r response
+
+if [[ "$response" =~ ^[Yy]$ ]]; then
+    echo "🚀 Ejecutando sincronización de nm-applet..."
+    if [[ -x "$HOME/.local/bin/nm-applet-auto-sync" ]]; then
+        "$HOME/.local/bin/nm-applet-auto-sync" --force
+        echo ""
+        echo "✅ Sincronización completada. Verifica nm-applet en el system tray."
+    else
+        echo "❌ Script de sincronización no disponible"
+    fi
+else
+    echo "ℹ️ Prueba omitida"
+fi
+
+echo ""
+echo "📋 === Resumen ==="
+echo "Para sincronizar manualmente: Super + Shift + N"
+echo "Para sincronización completa: Super + Shift + W" 
+echo "Logs disponibles en: ~/.cache/nm-applet-auto-sync.log"
+echo "Logs completos en: ~/.cache/complete-wallpaper-sync.log"
+echo ""

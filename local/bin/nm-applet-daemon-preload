@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Daemon que mantiene nm-applet pre-cargado para inicio INSTANTÁNEO
+# Se ejecuta en background y mantiene nm-applet siempre listo
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/nm-applet-daemon.log"
+PID_FILE="/tmp/nm-applet-daemon.pid"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] DAEMON: $1" | tee -a "$LOG_FILE"
+}
+
+# Verificar si el daemon ya está ejecutándose
+if [[ -f "$PID_FILE" ]]; then
+    daemon_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [[ -n "$daemon_pid" ]] && kill -0 "$daemon_pid" 2>/dev/null; then
+        log "⚠️ Daemon ya ejecutándose (PID: $daemon_pid)"
+        exit 0
+    fi
+fi
+
+# Crear PID file
+echo $$ > "$PID_FILE"
+
+# Función de limpieza
+cleanup() {
+    rm -f "$PID_FILE"
+    log "🛑 Daemon terminado"
+    exit 0
+}
+trap cleanup EXIT INT TERM
+
+log "🚀 === INICIANDO DAEMON NM-APPLET PRELOAD ==="
+
+# Función para mantener nm-applet activo y optimizado
+maintain_nm_applet() {
+    while true; do
+        # Verificar si nm-applet está ejecutándose
+        if ! pgrep -x nm-applet > /dev/null; then
+            log "🔄 nm-applet no detectado, iniciando..."
+            
+            # Pre-configurar entorno para máxima velocidad
+            export GDK_BACKEND=x11
+            export QT_QPA_PLATFORM=xcb
+            export NO_AT_BRIDGE=1
+            
+            # Iniciar con máxima prioridad
+            nice -n -15 nm-applet --indicator > /dev/null 2>&1 &
+            local nm_pid=$!
+            
+            # Verificación rápida
+            sleep 0.1
+            if pgrep -x nm-applet > /dev/null; then
+                log "✅ nm-applet iniciado (PID: $nm_pid)"
+            else
+                log "⚠️ Reintentar nm-applet..."
+                nm-applet --indicator & disown
+            fi
+        fi
+        
+        # Verificar cada 5 segundos
+        sleep 5
+    done
+}
+
+log "💫 Iniciando monitoreo continuo de nm-applet..."
+
+# Ejecutar función de mantenimiento
+maintain_nm_applet

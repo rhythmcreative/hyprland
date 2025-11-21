@@ -1,0 +1,271 @@
+#!/bin/bash
+
+# Script para sincronizar Powerlevel10k con pywal automáticamente
+# Ejecutado por: Super + Shift + W en Hyprland
+# Los colores se aplican dinámicamente sin modificar el archivo .p10k.zsh
+
+set -eo pipefail
+
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+LOCK_FILE="/tmp/p10k-pywal-sync.lock"
+LOG_FILE="$HOME/.cache/p10k-pywal-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "🎨 $1"
+}
+
+# Función de limpieza
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+# Verificar si ya hay un proceso en ejecución
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "Sincronización ya en progreso (PID: $lock_pid)"
+        exit 0
+    else
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Crear archivo de bloqueo
+echo $$ > "$LOCK_FILE"
+
+log "=== Iniciando sincronización Powerlevel10k con pywal ==="
+
+# Verificar que el archivo de colores exista
+if [[ ! -f "$COLORS_FILE" ]]; then
+    log "❌ Error: No se encontró el archivo de colores de pywal: $COLORS_FILE"
+    notify-send "❌ Error P10k Sync" "Archivo de colores de pywal no encontrado" -t 3000
+    exit 1
+fi
+
+# Leer colores de pywal de forma segura
+log "📖 Leyendo colores de pywal..."
+
+# Leer colores directamente desde el archivo JSON de pywal
+WAL_COLORS_JSON="$HOME/.cache/wal/colors.json"
+if [[ -f "$WAL_COLORS_JSON" ]]; then
+    # Usar jq para extraer colores
+    if command -v jq >/dev/null 2>&1; then
+        background=$(jq -r '.special.background' "$WAL_COLORS_JSON")
+        foreground=$(jq -r '.special.foreground' "$WAL_COLORS_JSON")
+        color0=$(jq -r '.colors.color0' "$WAL_COLORS_JSON")
+        color1=$(jq -r '.colors.color1' "$WAL_COLORS_JSON")
+        color2=$(jq -r '.colors.color2' "$WAL_COLORS_JSON")
+        color3=$(jq -r '.colors.color3' "$WAL_COLORS_JSON")
+        color4=$(jq -r '.colors.color4' "$WAL_COLORS_JSON")
+        color5=$(jq -r '.colors.color5' "$WAL_COLORS_JSON")
+        color6=$(jq -r '.colors.color6' "$WAL_COLORS_JSON")
+        color7=$(jq -r '.colors.color7' "$WAL_COLORS_JSON")
+        color8=$(jq -r '.colors.color8' "$WAL_COLORS_JSON")
+    else
+        log "⚠️ jq no disponible, usando método de respaldo..."
+        # Método de respaldo: leer directamente del archivo colors.sh pero de forma segura
+        if [[ -f "$COLORS_FILE" ]]; then
+            background=$(grep '^background=' "$COLORS_FILE" | cut -d"'" -f2)
+            foreground=$(grep '^foreground=' "$COLORS_FILE" | cut -d"'" -f2)
+            color0=$(grep '^color0=' "$COLORS_FILE" | cut -d"'" -f2)
+            color1=$(grep '^color1=' "$COLORS_FILE" | cut -d"'" -f2)
+            color2=$(grep '^color2=' "$COLORS_FILE" | cut -d"'" -f2)
+            color3=$(grep '^color3=' "$COLORS_FILE" | cut -d"'" -f2)
+            color4=$(grep '^color4=' "$COLORS_FILE" | cut -d"'" -f2)
+            color5=$(grep '^color5=' "$COLORS_FILE" | cut -d"'" -f2)
+            color6=$(grep '^color6=' "$COLORS_FILE" | cut -d"'" -f2)
+            color7=$(grep '^color7=' "$COLORS_FILE" | cut -d"'" -f2)
+            color8=$(grep '^color8=' "$COLORS_FILE" | cut -d"'" -f2)
+        fi
+    fi
+else
+    # Fallback: leer del archivo colors.sh de forma segura
+    if [[ -f "$COLORS_FILE" ]]; then
+        background=$(grep '^background=' "$COLORS_FILE" | cut -d"'" -f2)
+        foreground=$(grep '^foreground=' "$COLORS_FILE" | cut -d"'" -f2)
+        color0=$(grep '^color0=' "$COLORS_FILE" | cut -d"'" -f2)
+        color1=$(grep '^color1=' "$COLORS_FILE" | cut -d"'" -f2)
+        color2=$(grep '^color2=' "$COLORS_FILE" | cut -d"'" -f2)
+        color3=$(grep '^color3=' "$COLORS_FILE" | cut -d"'" -f2)
+        color4=$(grep '^color4=' "$COLORS_FILE" | cut -d"'" -f2)
+        color5=$(grep '^color5=' "$COLORS_FILE" | cut -d"'" -f2)
+        color6=$(grep '^color6=' "$COLORS_FILE" | cut -d"'" -f2)
+        color7=$(grep '^color7=' "$COLORS_FILE" | cut -d"'" -f2)
+        color8=$(grep '^color8=' "$COLORS_FILE" | cut -d"'" -f2)
+    fi
+fi
+
+# Verificar que los colores se cargaron correctamente
+if [[ -z "${color1:-}" ]] || [[ -z "${background:-}" ]] || [[ -z "${foreground:-}" ]]; then
+    log "❌ Error: No se pudieron cargar los colores de pywal correctamente"
+    notify-send "❌ Error P10k Sync" "Colores de pywal no válidos" -t 3000
+    exit 1
+fi
+
+log "✅ Colores cargados exitosamente"
+log "   Background: $background"
+log "   Foreground: $foreground"
+log "   Color1 (rojo): $color1"
+log "   Color2 (verde): $color2"
+log "   Color3 (amarillo): $color3"
+log "   Color4 (azul): $color4"
+log "   Color5 (magenta): $color5"
+log "   Color6 (cian): $color6"
+
+# Función para convertir color hex a número de color de terminal
+hex_to_color_num() {
+    local hex_color="$1"
+    # Remover el # si existe
+    hex_color="${hex_color#\#}"
+    
+    # Convertir a RGB
+    local r=$((16#${hex_color:0:2}))
+    local g=$((16#${hex_color:2:2}))
+    local b=$((16#${hex_color:4:2}))
+    
+    # Buscar el color más cercano en la paleta de 256 colores
+    # Simplificado: usar los valores RGB directamente
+    printf "%d" $(( (r * 5 / 255) * 36 + (g * 5 / 255) * 6 + (b * 5 / 255) + 16 ))
+}
+
+# Convertir colores hex a números de terminal
+BG_COLOR=$(hex_to_color_num "$background")
+FG_COLOR=$(hex_to_color_num "$foreground")
+COLOR1_NUM=$(hex_to_color_num "$color1")
+COLOR2_NUM=$(hex_to_color_num "$color2")
+COLOR3_NUM=$(hex_to_color_num "$color3")
+COLOR4_NUM=$(hex_to_color_num "$color4")
+COLOR5_NUM=$(hex_to_color_num "$color5")
+COLOR6_NUM=$(hex_to_color_num "$color6")
+
+log "🎯 Colores convertidos a números de terminal:"
+log "   BG: $BG_COLOR, FG: $FG_COLOR"
+log "   Color1: $COLOR1_NUM, Color2: $COLOR2_NUM, Color3: $COLOR3_NUM"
+log "   Color4: $COLOR4_NUM, Color5: $COLOR5_NUM, Color6: $COLOR6_NUM"
+
+# Aplicar colores dinámicamente a Powerlevel10k mediante variables de entorno
+# Estas variables serán leídas por p10k en nuevas sesiones de terminal
+
+log "🎨 Aplicando colores dinámicos a Powerlevel10k..."
+
+# Crear archivo temporal con configuración dinámica
+DYNAMIC_P10K_COLORS="$HOME/.cache/wal/p10k-colors.zsh"
+cat > "$DYNAMIC_P10K_COLORS" << EOF
+# Configuración dinámica de colores para Powerlevel10k generada por pywal
+# Generado: $(date)
+
+# Colores principales basados en pywal
+export P10K_PYWAL_BG="$BG_COLOR"
+export P10K_PYWAL_FG="$FG_COLOR"
+export P10K_PYWAL_COLOR1="$COLOR1_NUM"  # rojo
+export P10K_PYWAL_COLOR2="$COLOR2_NUM"  # verde
+export P10K_PYWAL_COLOR3="$COLOR3_NUM"  # amarillo  
+export P10K_PYWAL_COLOR4="$COLOR4_NUM"  # azul
+export P10K_PYWAL_COLOR5="$COLOR5_NUM"  # magenta
+export P10K_PYWAL_COLOR6="$COLOR6_NUM"  # cian
+
+# Aplicar colores dinámicamente si p10k está cargado
+if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
+    # OS icon - usar color principal
+    typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND="\$P10K_PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Directory - usar color de acento
+    typeset -g POWERLEVEL9K_DIR_BACKGROUND="\$P10K_PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_DIR_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Git status - usar colores apropiados
+    typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND="\$P10K_PYWAL_COLOR3"
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_VCS_CONFLICTED_BACKGROUND="\$P10K_PYWAL_COLOR1"
+    
+    # Context (user@host)
+    typeset -g POWERLEVEL9K_CONTEXT_BACKGROUND="\$P10K_PYWAL_COLOR5"
+    typeset -g POWERLEVEL9K_CONTEXT_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Prompt char
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND="\$P10K_PYWAL_COLOR1"
+fi
+
+# Función para aplicar colores inmediatamente en la sesión actual
+apply_p10k_colors() {
+    if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
+        typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND="$COLOR4_NUM"
+        typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND="$FG_COLOR"
+        typeset -g POWERLEVEL9K_DIR_BACKGROUND="$COLOR4_NUM"
+        typeset -g POWERLEVEL9K_DIR_FOREGROUND="$FG_COLOR"
+        typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND="$COLOR2_NUM"
+        typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND="$COLOR3_NUM"
+        typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND="$COLOR2_NUM"
+        typeset -g POWERLEVEL9K_VCS_CONFLICTED_BACKGROUND="$COLOR1_NUM"
+        typeset -g POWERLEVEL9K_CONTEXT_BACKGROUND="$COLOR5_NUM"
+        typeset -g POWERLEVEL9K_CONTEXT_FOREGROUND="$FG_COLOR"
+        typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND="$COLOR2_NUM"
+        typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND="$COLOR1_NUM"
+        
+        # Forzar actualización del prompt si p10k está disponible
+        if [[ "\${+functions[p10k]}" == 1 ]]; then
+            p10k reload
+        fi
+    fi
+}
+
+# Auto-ejecutar en fuentes
+apply_p10k_colors 2>/dev/null || true
+EOF
+
+log "✅ Archivo de colores dinámicos creado: $DYNAMIC_P10K_COLORS"
+
+# Agregar el archivo a .zshrc si no está presente
+ZSHRC_FILE="$HOME/.zshrc"
+INCLUDE_LINE="[[ -f \"$DYNAMIC_P10K_COLORS\" ]] && source \"$DYNAMIC_P10K_COLORS\""
+
+if ! grep -Fq "$DYNAMIC_P10K_COLORS" "$ZSHRC_FILE" 2>/dev/null; then
+    log "📝 Agregando include a .zshrc..."
+    echo "" >> "$ZSHRC_FILE"
+    echo "# Colores dinámicos de Powerlevel10k desde pywal" >> "$ZSHRC_FILE"
+    echo "$INCLUDE_LINE" >> "$ZSHRC_FILE"
+    log "✅ Include agregado a .zshrc"
+else
+    log "ℹ️ Include ya presente en .zshrc"
+fi
+
+# Aplicar colores inmediatamente en terminales activos
+log "🔄 Aplicando colores a terminales activos..."
+
+# Buscar sesiones de zsh activas y aplicar colores
+for zsh_pid in $(pgrep -x zsh); do
+    # Enviar comando para recargar colores
+    if [[ -e "/proc/$zsh_pid" ]]; then
+        log "🔄 Recargando terminal PID: $zsh_pid"
+        # Nota: No podemos enviar comandos directamente a otras sesiones de zsh
+        # Los colores se aplicarán automáticamente en nuevos prompts
+    fi
+done
+
+# Intentar recargar p10k en la sesión actual si está disponible
+if command -v p10k >/dev/null 2>&1; then
+    log "🔄 Recargando Powerlevel10k en sesión actual..."
+    # Cargar colores dinámicos
+    source "$DYNAMIC_P10K_COLORS" 2>/dev/null || true
+    # Recargar p10k
+    p10k reload 2>/dev/null || true
+    log "✅ Powerlevel10k recargado"
+else
+    log "ℹ️ Powerlevel10k no disponible en esta sesión"
+fi
+
+# Notificación de éxito (opcional)
+notify-send "🎨 Powerlevel10k Sincronizado" "Colores aplicados desde pywal. Los cambios se verán en nuevas sesiones de terminal." -t 4000 2>/dev/null || true
+
+log "✅ Sincronización completada exitosamente"
+log "📝 Los colores se aplicarán automáticamente en nuevas sesiones de terminal"
+log "💡 Para aplicar inmediatamente: ejecuta 'source ~/.zshrc' en cada terminal"
+
+echo "🎉 ¡Powerlevel10k sincronizado con pywal!"
+echo "🔄 Reinicia las terminales existentes o ejecuta 'source ~/.zshrc' para ver los cambios"

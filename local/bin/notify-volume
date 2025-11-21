@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Get current volume
+VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -Po '\d+(?=%)' | head -1)
+MUTED=$(pactl get-sink-mute @DEFAULT_SINK@ | grep -Po '(?<=Mute: )\\w+')
+
+# Create progress bar
+FILLED=$((VOLUME / 10))
+EMPTY=$((10 - FILLED))
+BAR=""
+
+for i in $(seq 1 $FILLED); do
+    BAR="${BAR}━"
+done
+
+for i in $(seq 1 $EMPTY); do
+    BAR="${BAR}─"
+done
+
+# Send notification
+if [ "$MUTED" = "yes" ]; then
+    notify-send -a "volume" -u low -h string:x-canonical-private-synchronous:volume \
+        -h string:category:volume \
+        "Volume" "Muted" -t 1500
+else
+    notify-send -a "volume" -u low -h string:x-canonical-private-synchronous:volume \
+        -h string:category:volume \
+        -h int:value:$VOLUME \
+        "" "$VOLUME%" -t 1500
+fi

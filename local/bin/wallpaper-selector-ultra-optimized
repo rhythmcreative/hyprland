@@ -1,0 +1,251 @@
+#!/bin/bash
+
+# Script ultra-optimizado: Selector de wallpaper + Sincronización instantánea
+# SOLO UN REINICIO DE WAYBAR - MÁXIMA VELOCIDAD
+
+# Variables
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_DIR="/tmp/rofi-wallpaper-$$"
+LOG_FILE="/tmp/wallpaper-ultra-sync.log"
+
+# Logging rápido
+log() {
+    echo "$(date '+%H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Crear directorios
+mkdir -p "$CACHE_DIR" "$TEMP_DIR"
+
+# Limpiar al salir
+cleanup() {
+    if pgrep -x waybar > /dev/null; then
+        pkill -SIGUSR2 waybar 2>/dev/null || true
+    fi
+    rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+log "🚀 INICIO - Selector ultra-optimizado"
+
+# Verificaciones rápidas
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+for dep in convert wal swww rofi; do
+    if ! command -v "$dep" > /dev/null 2>&1; then
+        notify-send "❌ Error" "$dep no está instalado" -u critical
+        exit 1
+    fi
+done
+
+# Buscar imágenes
+cd "$WALLPAPER_DIR" || exit 1
+shopt -s nullglob
+images=(*.{jpg,jpeg,png,gif,webp,bmp})
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No se encontraron imágenes válidas" -u critical
+    exit 1
+fi
+
+# Ocultar waybar SOLO una vez
+if pgrep -x waybar > /dev/null; then
+    pkill -SIGUSR1 waybar 2>/dev/null || true
+    log "👁️ Waybar oculto"
+fi
+
+# Generar opciones para rofi (paralelo)
+options=""
+valid_images=()
+
+for img in "${images[@]}"; do
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Generar preview si no existe (optimizado)
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+        fi
+    fi
+    
+    valid_images+=("$img")
+    options+="$clean_name\0icon\x1f$preview_file\n"
+done
+
+# Esperar a que terminen los procesos de conversión
+wait
+
+# Filtrar opciones válidas
+final_options=""
+final_images=()
+for img in "${valid_images[@]}"; do
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    if [[ -f "$preview_file" ]]; then
+        final_images+=("$img")
+        final_options+="$clean_name\0icon\x1f$preview_file\n"
+    fi
+done
+
+if [[ ${#final_images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No se pudieron generar previews" -u critical
+    exit 1
+fi
+
+# Crear archivo para rofi
+options_file="$TEMP_DIR/options"
+printf "$final_options" > "$options_file"
+
+# Mostrar selector
+log "🎯 Mostrando selector"
+theme_file="$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi"
+
+selected=$(cat "$options_file" | rofi -dmenu -i \
+    -theme "$theme_file" \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -show-icons \
+    -markup-rows \
+    -no-custom)
+
+[[ -z "$selected" ]] && exit 0
+
+# Buscar archivo seleccionado
+selected_file=""
+for img in "${final_images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    notify-send "❌ Error" "Archivo no encontrado: $selected" -u critical
+    exit 1
+fi
+
+log "🎨 Aplicando: $selected_file"
+
+# PROCESO OPTIMIZADO - TODO EN PARALELO
+{
+    # Aplicar wallpaper
+    notify-send "🎨 Aplicando Wallpaper" "$selected" -t 1500 &
+    swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.2 &
+    
+    # Guardar wallpaper actual
+    echo "$selected_file" > ~/.cache/current-wallpaper
+    
+    # Aplicar pywal (proceso más lento)
+    if [[ "${selected_file,,}" == *.gif ]]; then
+        gif_frame_temp="/tmp/wal_gif_$$.png"
+        convert "$selected_file[0]" "$gif_frame_temp" 2>/dev/null
+        wal -i "$gif_frame_temp" -n >/dev/null 2>&1 &
+        WAL_PID=$!
+        rm -f "$gif_frame_temp" 2>/dev/null || true &
+    else
+        wal -i "$selected_file" -n >/dev/null 2>&1 &
+        WAL_PID=$!
+    fi
+    
+    log "🎨 Pywal iniciado en background (PID: $WAL_PID)"
+}
+
+# Esperar solo a pywal (crítico para colores)
+wait $WAL_PID
+log "✅ Pywal completado"
+
+# Aplicar cambios a Hyprland
+hyprctl reload >/dev/null 2>&1 || true &
+
+# SINCRONIZACIÓN WAYBAR ULTRA-RÁPIDA (una sola vez)
+log "⚡ Sincronización waybar ultra-rápida"
+
+# Preparar colores INMEDIATAMENTE
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+    
+    waybar_config_dir="$HOME/.config/waybar"
+    
+    # Generar CSS instantáneamente
+    cat > "$waybar_config_dir/colors-pywal.css" << EOF
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    
+    # Aplicar style optimizado si existe
+    if [[ -f "$waybar_config_dir/style-pywal.css" ]]; then
+        cp "$waybar_config_dir/style-pywal.css" "$waybar_config_dir/style.css"
+    fi
+    
+    log "💾 CSS actualizado instantáneamente"
+fi
+
+# REINICIO ÚNICO E INMEDIATO DE WAYBAR
+waybar_pids=$(pgrep -x waybar)
+pid_count=$(echo "$waybar_pids" | wc -w)
+
+log "🔄 ÚNICO REINICIO waybar (instancias: $pid_count)"
+
+if [[ $pid_count -eq 1 ]]; then
+    # UNA INSTANCIA - Recarga instantánea con señal
+    if kill -USR2 $waybar_pids 2>/dev/null; then
+        log "⚡ Waybar recargado INSTANTÁNEAMENTE con USR2"
+    else
+        # Fallback - reinicio rápido
+        kill -TERM $waybar_pids 2>/dev/null
+        sleep 0.8
+        waybar &
+        log "🚀 Waybar reiniciado (fallback rápido)"
+    fi
+elif [[ $pid_count -gt 1 ]]; then
+    # MÚLTIPLES INSTANCIAS - Limpieza rápida
+    kill -TERM $waybar_pids 2>/dev/null
+    sleep 1
+    pkill -9 waybar 2>/dev/null || true
+    waybar &
+    log "🧹 Múltiples instancias limpiadas y reiniciado"
+else
+    # NO HAY WAYBAR - Inicio inmediato
+    waybar &
+    log "🚀 Waybar iniciado desde cero"
+fi
+
+# Para GIFs - restaurar animación en background
+if [[ "${selected_file,,}" == *.gif ]]; then
+    {
+        sleep 1.5
+        if ! pgrep -x "swww-daemon" > /dev/null; then
+            swww-daemon --format xrgb &
+            sleep 1.5
+        fi
+        swww img "$selected_file" --transition-type none --transition-duration 0.1 >/dev/null 2>&1 || true
+        log "🎬 GIF animación restaurada"
+    } &
+fi
+
+log "🎉 PROCESO COMPLETADO - Una sola operación de waybar"
+notify-send "✅ Ultra-Sync Completo" "Wallpaper y waybar sincronizados instantáneamente" -t 2000 &

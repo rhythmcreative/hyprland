@@ -1,0 +1,182 @@
+#!/bin/bash
+
+# Script para actualizar el tema de Vesktop con colores de pywal
+# Autor: rhythmcreative
+
+VESKTOP_CONFIG_DIR="$HOME/.config/vesktop"
+THEME_FILE="$VESKTOP_CONFIG_DIR/discord-pywal.css"
+PYWAL_COLORS="$HOME/.cache/wal/colors.css"
+
+# Verificar que existe el directorio de colores de pywal
+if [[ ! -f "$PYWAL_COLORS" ]]; then
+    echo "Error: No se encontraron colores de pywal en $PYWAL_COLORS"
+    echo "Ejecuta 'wal -i /ruta/a/imagen' primero"
+    exit 1
+fi
+
+# Crear directorio si no existe
+mkdir -p "$VESKTOP_CONFIG_DIR"
+
+echo "Actualizando tema de Vesktop con colores de pywal..."
+
+# Regenerar el archivo CSS del tema
+cat > "$THEME_FILE" << 'EOF'
+/**
+ * @name Discord Pywal
+ * @description Discord theme that uses pywal colors
+ * @author rhythmcreative
+ * @version 1.0
+ */
+
+@import url('/home/rhythmcreative/.cache/wal/colors.css');
+
+/* Variables from pywal */
+:root {
+  --background-primary: var(--color0) !important;
+  --background-secondary: var(--color0) !important;
+  --background-secondary-alt: var(--color0) !important;
+  --background-tertiary: var(--color8) !important;
+  --background-accent: var(--color1) !important;
+  --background-floating: var(--color0) !important;
+  --background-mobile-primary: var(--color0) !important;
+  --background-mobile-secondary: var(--color0) !important;
+  --background-modifier-hover: var(--color8) !important;
+  --background-modifier-active: var(--color1) !important;
+  --background-modifier-selected: var(--color1) !important;
+  --background-modifier-accent: var(--color1) !important;
+  --channeltextarea-background: var(--color0) !important;
+  --deprecated-card-bg: var(--color8) !important;
+  --deprecated-card-editable-bg: var(--color8) !important;
+  --deprecated-store-bg: var(--color0) !important;
+  --deprecated-quickswitcher-input-background: var(--color0) !important;
+  --deprecated-text-input-bg: var(--color0) !important;
+  --deprecated-text-input-border: var(--color8) !important;
+  --deprecated-text-input-border-hover: var(--color1) !important;
+  --deprecated-text-input-border-disabled: var(--color8) !important;
+  --activity-card-background: var(--color0) !important;
+  --textbox-markdown-syntax: var(--color8) !important;
+  --spoiler-revealed-background: var(--color8) !important;
+  --spoiler-hidden-background: var(--color8) !important;
+  --scrollbar-auto-thumb: var(--color8) !important;
+  --scrollbar-auto-track: var(--color0) !important;
+  --scrollbar-thin-thumb: var(--color8) !important;
+  --scrollbar-thin-track: transparent !important;
+  
+  /* Text colors */
+  --text-normal: var(--foreground) !important;
+  --text-muted: var(--color8) !important;
+  --text-faint: var(--color8) !important;
+  --text-positive: var(--color2) !important;
+  --text-warning: var(--color3) !important;
+  --text-danger: var(--color1) !important;
+  --text-brand: var(--color4) !important;
+  --text-link: var(--color6) !important;
+  --interactive-normal: var(--foreground) !important;
+  --interactive-hover: var(--color7) !important;
+  --interactive-active: var(--color7) !important;
+  --interactive-muted: var(--color8) !important;
+  
+  /* Header colors */
+  --header-primary: var(--foreground) !important;
+  --header-secondary: var(--color8) !important;
+  
+  /* Channel colors */
+  --channels-default: var(--color8) !important;
+  
+  /* Brand color */
+  --brand-experiment: var(--color1) !important;
+  --brand-experiment-100: var(--color1) !important;
+  --brand-experiment-130: var(--color1) !important;
+  --brand-experiment-160: var(--color1) !important;
+  --brand-experiment-200: var(--color1) !important;
+  --brand-experiment-230: var(--color1) !important;
+  --brand-experiment-260: var(--color1) !important;
+  --brand-experiment-300: var(--color1) !important;
+  --brand-experiment-330: var(--color1) !important;
+  --brand-experiment-360: var(--color1) !important;
+  --brand-experiment-400: var(--color1) !important;
+  --brand-experiment-430: var(--color1) !important;
+  --brand-experiment-460: var(--color1) !important;
+  --brand-experiment-500: var(--color1) !important;
+  --brand-experiment-530: var(--color1) !important;
+  --brand-experiment-560: var(--color1) !important;
+  --brand-experiment-600: var(--color1) !important;
+  --brand-experiment-630: var(--color1) !important;
+  --brand-experiment-660: var(--color1) !important;
+  --brand-experiment-700: var(--color1) !important;
+  --brand-experiment-730: var(--color1) !important;
+  --brand-experiment-760: var(--color1) !important;
+  --brand-experiment-800: var(--color1) !important;
+  --brand-experiment-830: var(--color1) !important;
+  --brand-experiment-860: var(--color1) !important;
+  --brand-experiment-900: var(--color1) !important;
+}
+
+/* Additional styling */
+.theme-dark {
+  --background-primary: var(--color0) !important;
+  --background-secondary: var(--color0) !important;
+  --background-secondary-alt: var(--color0) !important;
+  --background-tertiary: var(--color8) !important;
+}
+
+/* Chat input */
+.channelTextArea__2e60f {
+  background-color: var(--color0) !important;
+}
+
+/* Server list */
+.guilds__2b93a {
+  background-color: var(--color0) !important;
+}
+
+/* Channel list */
+.sidebar_a4d4d9 {
+  background-color: var(--color0) !important;
+}
+
+/* Chat area */
+.chatContent__5dca8 {
+  background-color: var(--color0) !important;
+}
+
+/* User area */
+.panels__58331 {
+  background-color: var(--color0) !important;
+}
+
+/* Member list */
+.members__9f47b {
+  background-color: var(--color0) !important;
+}
+
+/* Title bar */
+.typeWindows__5bb0d {
+  background-color: var(--color0) !important;
+}
+
+/* Search results */
+.searchResultsWrap_c2b47d {
+  background-color: var(--color0) !important;
+}
+
+/* Settings */
+.contentRegion_c5c3d9 {
+  background-color: var(--color0) !important;
+}
+
+.sidebarRegion_c5c3d9 {
+  background-color: var(--color0) !important;
+}
+EOF
+
+echo "✅ Tema de Vesktop actualizado: $THEME_FILE"
+echo ""
+echo "Para aplicar el tema:"
+echo "1. Abre Vesktop"
+echo "2. Ve a Settings → Vencord → Themes"
+echo "3. Agrega este archivo CSS: $THEME_FILE"
+echo ""
+echo "Para hacer que el tema se actualice automáticamente, añade este comando"
+echo "al final de tu script de pywal o ~/.bashrc:"
+echo "    vesktop-pywal-update"

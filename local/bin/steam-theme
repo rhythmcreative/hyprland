@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# Script para gestionar temas de Steam usando wal_steam
+# Uso: steam-theme [update|apply|status|help]
+
+SCRIPT_NAME="steam-theme"
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $1" >> "$LOG_FILE"
+}
+
+# Función para mostrar ayuda
+show_help() {
+    echo "Gestor de temas de Steam con pywal"
+    echo ""
+    echo "Uso: $SCRIPT_NAME [COMANDO]"
+    echo ""
+    echo "Comandos:"
+    echo "  apply       Aplicar tema actual de pywal a Steam"
+    echo "  update      Forzar actualización completa del tema"
+    echo "  status      Mostrar estado de Steam y wal_steam"
+    echo "  help        Mostrar esta ayuda"
+    echo ""
+    echo "Si no se especifica comando, se ejecuta 'apply'"
+    echo ""
+    echo "Requisitos:"
+    echo "  - wal_steam instalado"
+    echo "  - pywal con colores generados"
+    echo ""
+}
+
+# Función para mostrar estado
+show_status() {
+    echo "=== Estado del Sistema ==="
+    echo ""
+    
+    # Verificar Steam
+    if command -v steam > /dev/null 2>&1; then
+        echo "✅ Steam: Instalado"
+        if pgrep -x "steam" > /dev/null; then
+            echo "🔄 Steam: Ejecutándose"
+        else
+            echo "⏹️  Steam: Detenido"
+        fi
+    else
+        echo "❌ Steam: No instalado"
+    fi
+    
+    # Verificar wal_steam
+    if command -v wal_steam > /dev/null 2>&1; then
+        echo "✅ wal_steam: Instalado"
+        echo "📍 Ubicación: $(which wal_steam)"
+    else
+        echo "❌ wal_steam: No instalado"
+    fi
+    
+    # Verificar pywal
+    if command -v wal > /dev/null 2>&1; then
+        echo "✅ pywal: Instalado"
+        if [ -f "$HOME/.cache/wal/colors" ]; then
+            echo "🎨 Colores de pywal: Disponibles"
+            echo "🖼️  Última imagen: $(cat ~/.cache/wal/wal 2>/dev/null || echo 'No disponible')"
+        else
+            echo "⚠️  Colores de pywal: No generados"
+        fi
+    else
+        echo "❌ pywal: No instalado"
+    fi
+    
+    # Verificar directorio de skins
+    if [ -d "$HOME/.steam/skins" ]; then
+        echo "📁 Directorio de skins de Steam: Existe"
+        SKIN_COUNT=$(find "$HOME/.steam/skins" -maxdepth 1 -type d | wc -l)
+        echo "🎭 Skins instalados: $((SKIN_COUNT - 1))"
+    else
+        echo "📁 Directorio de skins de Steam: No existe"
+    fi
+    
+    echo ""
+}
+
+# Función para aplicar tema
+apply_theme() {
+    local FORCE_UPDATE=""
+    if [[ "$1" == "force" ]]; then
+        FORCE_UPDATE="--force-update"
+    fi
+    
+    echo "🎮 Aplicando tema de Steam..."
+    log "Iniciando aplicación de tema Steam"
+    
+    # Verificar prerrequisitos
+    if ! command -v wal_steam > /dev/null 2>&1; then
+        echo "❌ Error: wal_steam no está instalado"
+        echo "Instálalo con: yay -S python-wal-steam-git"
+        exit 1
+    fi
+    
+    if [ ! -f "$HOME/.cache/wal/colors" ]; then
+        echo "❌ Error: No se encontraron colores de pywal"
+        echo "Ejecuta primero: wal -i [imagen]"
+        exit 1
+    fi
+    
+    # Ejecutar el script de aplicación de tema
+    if [[ -f "$HOME/.local/bin/apply-steam-theme" ]]; then
+        "$HOME/.local/bin/apply-steam-theme" $FORCE_UPDATE
+        RESULT=$?
+        
+        if [ $RESULT -eq 0 ]; then
+            echo "✅ Tema aplicado exitosamente"
+            if pgrep -x "steam" > /dev/null; then
+                echo "💡 Reinicia Steam para ver los cambios"
+            fi
+        else
+            echo "❌ Error al aplicar el tema (código: $RESULT)"
+        fi
+    else
+        echo "❌ Error: Script apply-steam-theme no encontrado"
+        exit 1
+    fi
+}
+
+# Procesar argumentos
+case "${1:-apply}" in
+    "apply")
+        apply_theme
+        ;;
+    "update")
+        apply_theme force
+        ;;
+    "status")
+        show_status
+        ;;
+    "help"|"-h"|"--help")
+        show_help
+        ;;
+    *)
+        echo "❌ Comando desconocido: $1"
+        echo "Usa '$SCRIPT_NAME help' para ver los comandos disponibles"
+        exit 1
+        ;;
+esac

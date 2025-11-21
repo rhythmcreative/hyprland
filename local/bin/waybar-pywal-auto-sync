@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Script para sincronización automática de waybar con pywal
+# Se ejecuta después de que pywal genera nuevos colores
+
+LOG_FILE="$HOME/.cache/waybar-pywal-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "=== Iniciando sincronización waybar-pywal ==="
+
+# Verificar que pywal haya generado los archivos
+if [[ ! -f ~/.cache/wal/colors-pywal.css ]]; then
+    log "ERROR: No se encontró ~/.cache/wal/colors-pywal.css"
+    exit 1
+fi
+
+# Crear directorio de waybar si no existe
+mkdir -p ~/.config/waybar
+
+# Copiar colores de pywal a waybar
+if cp ~/.cache/wal/colors-pywal.css ~/.config/waybar/colors-pywal.css; then
+    log "✓ Colores copiados a waybar"
+else
+    log "ERROR: No se pudieron copiar los colores"
+    exit 1
+fi
+
+# Verificar si waybar está corriendo
+if pgrep -x "waybar" > /dev/null; then
+    log "Waybar está corriendo, reiniciando..."
+    # Reiniciar waybar suavemente
+    pkill -SIGUSR2 waybar 2>/dev/null || {
+        log "Forzando reinicio de waybar..."
+        pkill waybar
+        sleep 0.5
+        nohup waybar > /dev/null 2>&1 &
+    }
+else
+    log "Waybar no está corriendo, iniciando..."
+    nohup waybar > /dev/null 2>&1 &
+fi
+
+# Esperar un momento para que waybar se inicie
+sleep 1
+
+# Verificar que waybar se inició correctamente
+if pgrep -x "waybar" > /dev/null; then
+    log "✓ Waybar sincronizado correctamente con pywal"
+    notify-send "🎨 Waybar Sincronizado" "Colores actualizados automáticamente" -t 2000
+else
+    log "ERROR: Waybar no se pudo iniciar"
+    notify-send "❌ Error Waybar" "No se pudo sincronizar con pywal" -u critical -t 3000
+    exit 1
+fi
+
+log "=== Sincronización completada ==="

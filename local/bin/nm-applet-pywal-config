@@ -1,0 +1,468 @@
+#!/bin/bash
+
+# ╔═══════════════════════════════════════════════════════════════════════════════════════╗
+# ║                        NetworkManager Applet PyWal Config                            ║  
+# ║                                                                                       ║
+# ║  Configuración avanzada de nm-applet para sincronización con pywal                   ║
+# ║                          by rhythmcreative                                            ║
+# ║                                                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════════════════════════╝
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Variables
+PYWAL_COLORS="$HOME/.cache/wal/colors.sh"
+NM_CONFIG_DIR="$HOME/.config/nm-applet"
+NM_THEME_DIR="$HOME/.themes/PyWal-Dynamic/nm-applet"
+
+# Funciones de mensajes
+print_status() {
+    echo -e "${GREEN}[NM-PYWAL]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[NM-PYWAL]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[NM-PYWAL]${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}[NM-PYWAL]${NC} $1"
+}
+
+# Verificar dependencias
+check_dependencies() {
+    if ! command -v nm-applet &> /dev/null; then
+        print_error "nm-applet no está instalado"
+        print_info "Instala con: sudo pacman -S network-manager-applet"
+        exit 1
+    fi
+    
+    if [[ ! -f "$PYWAL_COLORS" ]]; then
+        print_error "Colores de pywal no encontrados"
+        print_info "Ejecuta primero: wal -i /ruta/a/imagen.jpg"
+        exit 1
+    fi
+}
+
+# Cargar colores de pywal
+load_pywal_colors() {
+    print_status "🎨 Cargando colores de pywal..."
+    source "$PYWAL_COLORS"
+}
+
+# Crear configuración avanzada de nm-applet
+create_nm_applet_config() {
+    print_status "🌐 Creando configuración avanzada de nm-applet..."
+    
+    mkdir -p "$NM_CONFIG_DIR"
+    mkdir -p "$NM_THEME_DIR"
+    
+    # Crear configuración CSS específica para nm-applet
+    cat > "$NM_CONFIG_DIR/nm-applet.css" << EOF
+/* NetworkManager Applet PyWal Theme */
+/* Generated on: $(date) */
+
+/* Main nm-applet window */
+.nm-applet-dialog {
+    background-color: ${background};
+    color: ${foreground};
+    border: 2px solid ${color6};
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 8px;
+}
+
+/* Menu styling */
+.nm-applet-menu {
+    background-color: ${background};
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 8px;
+    padding: 4px 0;
+}
+
+/* Menu items */
+.nm-applet-menuitem {
+    padding: 8px 16px;
+    color: ${foreground};
+    border-radius: 6px;
+    margin: 2px 4px;
+    transition: all 0.2s ease;
+}
+
+.nm-applet-menuitem:hover {
+    background-color: ${color6};
+    color: ${background};
+}
+
+.nm-applet-menuitem:selected {
+    background-color: ${color6};
+    color: ${background};
+    font-weight: bold;
+}
+
+/* Connection status indicators */
+.nm-applet-connection-active {
+    color: ${color2};
+    font-weight: bold;
+}
+
+.nm-applet-connection-available {
+    color: ${foreground};
+}
+
+.nm-applet-connection-unavailable {
+    color: ${color8};
+}
+
+/* Signal strength indicators */
+.nm-applet-signal-excellent {
+    color: ${color2};
+}
+
+.nm-applet-signal-good {
+    color: ${color6};
+}
+
+.nm-applet-signal-fair {
+    color: ${color3};
+}
+
+.nm-applet-signal-poor {
+    color: ${color1};
+}
+
+/* Security indicators */
+.nm-applet-secure {
+    color: ${color2};
+}
+
+.nm-applet-unsecure {
+    color: ${color1};
+}
+
+/* Button styling */
+.nm-applet-button {
+    background: linear-gradient(to bottom, ${color8}, ${color0});
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin: 2px;
+}
+
+.nm-applet-button:hover {
+    background: linear-gradient(to bottom, ${color6}, ${color8});
+    color: ${background};
+    border-color: ${color6};
+}
+
+.nm-applet-button:active {
+    background-color: ${color6};
+    color: ${background};
+}
+
+/* Entry fields for passwords */
+.nm-applet-entry {
+    background-color: ${color0};
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 4px;
+    padding: 6px 8px;
+}
+
+.nm-applet-entry:focus {
+    border-color: ${color6};
+    box-shadow: 0 0 0 2px rgba(${color6//\#/}, 0.3);
+}
+
+/* Progress bars for connection */
+.nm-applet-progressbar {
+    background-color: ${color8};
+    border-radius: 4px;
+}
+
+.nm-applet-progressbar-fill {
+    background: linear-gradient(to right, ${color6}, ${color2});
+    border-radius: 4px;
+}
+
+/* Separator lines */
+.nm-applet-separator {
+    background-color: ${color8};
+    height: 1px;
+    margin: 4px 8px;
+}
+
+/* Tooltips */
+.nm-applet-tooltip {
+    background-color: ${color8};
+    color: ${foreground};
+    border: 1px solid ${color6};
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* Status text */
+.nm-applet-status-connected {
+    color: ${color2};
+    font-weight: bold;
+}
+
+.nm-applet-status-connecting {
+    color: ${color3};
+    font-style: italic;
+}
+
+.nm-applet-status-disconnected {
+    color: ${color1};
+}
+
+.nm-applet-status-disabled {
+    color: ${color8};
+}
+EOF
+
+    # Crear script de arranque personalizado para nm-applet
+    cat > "$NM_CONFIG_DIR/start-nm-applet.sh" << 'EOF'
+#!/bin/bash
+# Script personalizado para iniciar nm-applet con tema pywal
+
+# Cargar colores de pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+fi
+
+# Variables de entorno para nm-applet
+export GTK_THEME="PyWal-Dynamic"
+export GTK2_RC_FILES="$HOME/.themes/PyWal-Dynamic/gtk-2.0/gtkrc"
+
+# Cargar CSS personalizado si existe
+if [[ -f "$HOME/.config/nm-applet/nm-applet.css" ]]; then
+    export GTK_THEME_CSS="$HOME/.config/nm-applet/nm-applet.css"
+fi
+
+# Iniciar nm-applet con configuración personalizada
+exec nm-applet --indicator "$@"
+EOF
+
+    chmod +x "$NM_CONFIG_DIR/start-nm-applet.sh"
+    
+    # Crear configuración para el icono de la bandeja del sistema
+    cat > "$NM_CONFIG_DIR/tray-icon.conf" << EOF
+# Configuración del icono de nm-applet en la bandeja del sistema
+# Colores basados en pywal
+
+[TrayIcon]
+ConnectedColor=${color2}
+ConnectingColor=${color3}
+DisconnectedColor=${color1}
+ErrorColor=${color1}
+BackgroundColor=${background}
+BorderColor=${color6}
+
+[Animation]
+Enable=true
+Duration=500
+FadeEffect=true
+
+[Position]
+PreferredPosition=right
+Spacing=4
+IconSize=22
+EOF
+}
+
+# Configurar autostart de nm-applet
+configure_autostart() {
+    print_status "🔄 Configurando autostart de nm-applet..."
+    
+    AUTOSTART_DIR="$HOME/.config/autostart"
+    mkdir -p "$AUTOSTART_DIR"
+    
+    cat > "$AUTOSTART_DIR/nm-applet-pywal.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=NetworkManager Applet (PyWal)
+Comment=Manage your network connections with PyWal theming
+Exec=$NM_CONFIG_DIR/start-nm-applet.sh
+Terminal=false
+Icon=network-workgroup
+Categories=Network;System;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-AutoRestart=true
+X-KDE-autostart-after=panel
+EOF
+}
+
+# Crear script de sincronización automática
+create_sync_script() {
+    print_status "🔄 Creando script de sincronización automática..."
+    
+    cat > "$NM_CONFIG_DIR/sync-with-pywal.sh" << 'EOF'
+#!/bin/bash
+# Script de sincronización automática de nm-applet con pywal
+# Se ejecuta automáticamente cuando cambian los colores de pywal
+
+PYWAL_COLORS="$HOME/.cache/wal/colors.sh"
+NM_CONFIG_DIR="$HOME/.config/nm-applet"
+
+# Verificar si existen los colores de pywal
+if [[ ! -f "$PYWAL_COLORS" ]]; then
+    echo "Error: Colores de pywal no encontrados"
+    exit 1
+fi
+
+# Cargar colores
+source "$PYWAL_COLORS"
+
+# Regenerar configuración de nm-applet
+/home/rhythmcreative/.local/bin/nm-applet-pywal-config
+
+# Reiniciar nm-applet si está ejecutándose
+if pgrep -x nm-applet > /dev/null; then
+    pkill -x nm-applet
+    sleep 1
+    "$NM_CONFIG_DIR/start-nm-applet.sh" &
+fi
+
+echo "nm-applet sincronizado con pywal exitosamente"
+EOF
+
+    chmod +x "$NM_CONFIG_DIR/sync-with-pywal.sh"
+}
+
+# Crear servicio systemd para sincronización automática
+create_systemd_service() {
+    print_status "⚙️ Creando servicio systemd para sincronización automática..."
+    
+    SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+    mkdir -p "$SYSTEMD_USER_DIR"
+    
+    # Crear servicio
+    cat > "$SYSTEMD_USER_DIR/nm-applet-pywal-sync.service" << EOF
+[Unit]
+Description=NetworkManager Applet PyWal Synchronizer
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=$NM_CONFIG_DIR/sync-with-pywal.sh
+RemainAfterExit=false
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Crear timer para ejecutar el servicio periódicamente
+    cat > "$SYSTEMD_USER_DIR/nm-applet-pywal-sync.timer" << EOF
+[Unit]
+Description=Run NetworkManager Applet PyWal Sync periodically
+Requires=nm-applet-pywal-sync.service
+
+[Timer]
+OnStartupSec=30
+OnUnitActiveSec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    # Habilitar y iniciar el timer
+    systemctl --user daemon-reload
+    systemctl --user enable nm-applet-pywal-sync.timer
+    systemctl --user start nm-applet-pywal-sync.timer
+    
+    print_info "Servicio systemd configurado para sincronización automática cada 5 minutos"
+}
+
+# Función principal
+main() {
+    clear
+    echo -e "${PURPLE}╔═══════════════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}                    ${CYAN}NetworkManager Applet PyWal Config${NC}                            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}  ${GREEN}Configuración avanzada de nm-applet para sincronización con pywal${NC}                   ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                          ${YELLOW}by rhythmcreative${NC}                                            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚═══════════════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    print_status "🚀 Configurando nm-applet con pywal..."
+    
+    # Verificar dependencias
+    check_dependencies
+    
+    # Cargar colores
+    load_pywal_colors
+    
+    # Crear configuración de nm-applet
+    create_nm_applet_config
+    
+    # Configurar autostart
+    configure_autostart
+    
+    # Crear script de sincronización
+    create_sync_script
+    
+    # Crear servicio systemd
+    create_systemd_service
+    
+    # Reiniciar nm-applet con nueva configuración
+    print_status "🔄 Reiniciando nm-applet con nueva configuración..."
+    pkill -f nm-applet 2>/dev/null || true
+    sleep 2
+    
+    # Iniciar con el script personalizado
+    "$NM_CONFIG_DIR/start-nm-applet.sh" &
+    
+    # Mostrar resumen
+    echo ""
+    print_status "✅ Configuración de nm-applet completada exitosamente!"
+    echo ""
+    print_info "📋 Componentes configurados:"
+    echo -e "   • CSS personalizado: ${GREEN}✓${NC}"
+    echo -e "   • Script de inicio: ${GREEN}✓${NC}"
+    echo -e "   • Autostart: ${GREEN}✓${NC}"
+    echo -e "   • Sincronización automática: ${GREEN}✓${NC}"
+    echo -e "   • Servicio systemd: ${GREEN}✓${NC}"
+    echo ""
+    print_info "🎨 Colores aplicados:"
+    echo -e "   • Fondo: ${background}"
+    echo -e "   • Texto: ${foreground}"
+    echo -e "   • Acento: ${color6}"
+    echo -e "   • Estado: ${color2} (conectado), ${color1} (error)"
+    echo ""
+    print_warning "💡 nm-applet se reiniciará automáticamente cuando cambien los colores de pywal"
+    
+    # Notificación opcional
+    if command -v notify-send &> /dev/null; then
+        notify-send "NetworkManager Applet" "Configuración con pywal completada! 🌐" -t 3000
+    fi
+}
+
+# Verificar argumentos
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "NetworkManager Applet PyWal Config"
+    echo "Uso: $0"
+    echo ""
+    echo "Configura nm-applet para sincronización automática con pywal."
+    echo "Incluye CSS personalizado, autostart y servicios systemd."
+    exit 0
+fi
+
+# Ejecutar función principal
+main "$@"

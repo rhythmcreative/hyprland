@@ -1,0 +1,143 @@
+#!/bin/bash
+
+# Script para configurar VSCode con la extensión wal-theme de pywal
+# Este script asegura que VSCode esté configurado correctamente para usar el tema pywal
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [VSCode-Wal] $1" >> "$LOG_FILE"
+}
+
+log "Iniciando configuración de VSCode con wal-theme"
+
+# Verificar si VSCode está instalado
+if ! command -v code > /dev/null 2>&1; then
+    log "ERROR: VSCode no está instalado"
+    notify-send "Error" "VSCode no está instalado"
+    exit 1
+fi
+
+# Verificar si la extensión wal-theme está instalada
+if ! code --list-extensions | grep -q "dlasagno.wal-theme"; then
+    log "Instalando extensión wal-theme"
+    notify-send "VSCode Wal" "Instalando extensión wal-theme..."
+    code --install-extension dlasagno.wal-theme
+    if [ $? -eq 0 ]; then
+        log "Extensión wal-theme instalada exitosamente"
+        notify-send "VSCode Wal" "✅ Extensión wal-theme instalada"
+    else
+        log "ERROR: Fallo al instalar extensión wal-theme"
+        notify-send "Error" "No se pudo instalar la extensión wal-theme"
+        exit 1
+    fi
+fi
+
+# Configurar VSCode para usar el tema wal automáticamente
+VSCODE_SETTINGS_DIR="$HOME/.config/Code/User"
+SETTINGS_FILE="$VSCODE_SETTINGS_DIR/settings.json"
+
+# Crear directorio de configuración si no existe
+mkdir -p "$VSCODE_SETTINGS_DIR"
+
+log "Configurando settings.json de VSCode"
+
+# Crear o modificar settings.json
+if [ -f "$SETTINGS_FILE" ]; then
+    # Hacer backup del archivo original
+    cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+    log "Backup de settings.json creado"
+fi
+
+# Función para actualizar configuración JSON
+update_vscode_settings() {
+    local temp_file=$(mktemp)
+    
+    # Si el archivo existe y no está vacío
+    if [ -s "$SETTINGS_FILE" ]; then
+        # Usar jq para actualizar la configuración si está disponible
+        if command -v jq > /dev/null 2>&1; then
+            jq '. += {
+                "workbench.colorTheme": "Wal",
+                "walTheme.autoUpdate": true
+            }' "$SETTINGS_FILE" > "$temp_file"
+            
+            if [ $? -eq 0 ]; then
+                mv "$temp_file" "$SETTINGS_FILE"
+                log "Configuración actualizada usando jq"
+                return 0
+            else
+                log "WARNING: Error usando jq, aplicando método alternativo"
+                rm -f "$temp_file"
+            fi
+        fi
+        
+        # Método alternativo sin jq
+        log "Actualizando configuración manualmente"
+        
+        # Remover la última llave de cierre y añadir nuevas configuraciones
+        sed '$s/}$//' "$SETTINGS_FILE" > "$temp_file"
+        
+        # Verificar si ya hay configuraciones (no está vacío después de quitar la llave)
+        if [ -s "$temp_file" ] && ! grep -q "^{$" "$temp_file"; then
+            echo ',' >> "$temp_file"
+        fi
+        
+        # Añadir configuraciones de wal-theme
+        cat >> "$temp_file" << 'EOF'
+    "workbench.colorTheme": "Wal",
+    "walTheme.autoUpdate": true
+}
+EOF
+    else
+        # Crear archivo nuevo
+        log "Creando nuevo archivo settings.json"
+        cat > "$temp_file" << 'EOF'
+{
+    "workbench.colorTheme": "Wal",
+    "walTheme.autoUpdate": true
+}
+EOF
+    fi
+    
+    # Validar JSON antes de aplicar
+    if command -v jq > /dev/null 2>&1; then
+        if jq . "$temp_file" > /dev/null 2>&1; then
+            mv "$temp_file" "$SETTINGS_FILE"
+            log "Configuración aplicada exitosamente"
+        else
+            log "ERROR: JSON inválido generado"
+            rm -f "$temp_file"
+            return 1
+        fi
+    else
+        mv "$temp_file" "$SETTINGS_FILE"
+        log "Configuración aplicada (sin validación JSON)"
+    fi
+}
+
+# Aplicar configuraciones
+update_vscode_settings
+
+if [ $? -eq 0 ]; then
+    log "VSCode configurado exitosamente para usar wal-theme"
+    notify-send "VSCode Wal" "✅ VSCode configurado con tema pywal\n🎨 El tema se actualizará automáticamente"
+else
+    log "ERROR: Fallo al configurar VSCode"
+    notify-send "Error" "No se pudo configurar VSCode con wal-theme"
+    exit 1
+fi
+
+# Si pywal ya fue ejecutado anteriormente, aplicar el tema ahora
+if [ -f "$HOME/.cache/wal/colors.json" ]; then
+    log "Detectada configuración pywal existente, aplicando tema"
+    
+    # Si VSCode está corriendo, enviar comando de actualización
+    if pgrep -x "code" > /dev/null || pgrep -f "code.*--" > /dev/null; then
+        log "VSCode está corriendo, enviando comando de actualización"
+        code --command "walTheme.update" > /dev/null 2>&1 &
+    fi
+fi
+
+log "Configuración de VSCode wal-theme completada"

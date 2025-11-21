@@ -1,0 +1,276 @@
+#!/bin/bash
+
+# Script mejorado para sincronización automática de wallpaper en SDDM (SIN SUDO)
+# Autor: rhythmcreative
+# Versión que NO requiere sudo para sincronizar automáticamente
+# Solo usa pkexec cuando es absolutamente necesario y funciona de forma transparente
+
+LOG_FILE="/tmp/sddm-auto-sync-nosudo-v2.log"
+USER_HOME="/home/rhythmcreative"
+SDDM_SYSTEM_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+TEMP_DIR="/tmp/sddm-sync-$$"
+WALLPAPER_CACHE="$USER_HOME/.cache/sddm-current-wallpaper"
+POLKIT_POLICY_DIR="/usr/share/polkit-1/actions"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Auto-Sync" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    # Intentar obtener wallpaper desde pywal
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        cat "$USER_HOME/.cache/wal/wal" 2>/dev/null
+        return 0
+    fi
+    
+    # Fallback: buscar en archivos de configuración de swww
+    if [[ -f "$USER_HOME/.cache/current-wallpaper" ]]; then
+        cat "$USER_HOME/.cache/current-wallpaper" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+# Verificar si el wallpaper ya está aplicado (para evitar cambios innecesarios)
+is_wallpaper_current() {
+    local wallpaper="$1"
+    local config_file="$SDDM_SYSTEM_DIR/Themes/theme1.conf"
+    local wallpaper_name=$(basename "$wallpaper")
+    
+    if [[ -f "$config_file" ]]; then
+        if grep -q "Background=\"Backgrounds/$wallpaper_name\"" "$config_file" 2>/dev/null; then
+            return 0  # Ya está aplicado
+        fi
+    fi
+    
+    return 1  # No está aplicado
+}
+
+# Crear script polkit personalizado (solo necesario una vez)
+setup_polkit_rule() {
+    local rule_file="/tmp/sddm-sync-rule.rules"
+    
+    cat > "$rule_file" << 'EOF'
+// Regla polkit para permitir sincronización SDDM sin contraseña
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program").indexOf("sddm-sync") > -1 &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+    
+    if pkexec cp "$rule_file" "/etc/polkit-1/rules.d/99-sddm-sync.rules" 2>/dev/null; then
+        log "✅ Regla polkit instalada para sincronización sin contraseña"
+        rm -f "$rule_file"
+        return 0
+    else
+        log "⚠️ No se pudo instalar regla polkit (continuando sin ella)"
+        rm -f "$rule_file"
+        return 1
+    fi
+}
+
+# Función principal de sincronización
+sync_wallpaper_direct() {
+    local wallpaper="$1"
+    local wallpaper_name=$(basename "$wallpaper")
+    
+    log "🔄 Iniciando sincronización para: $wallpaper_name"
+    
+    # Verificar si ya está aplicado
+    if is_wallpaper_current "$wallpaper"; then
+        log "✅ El wallpaper $wallpaper_name ya está aplicado en SDDM"
+        notify_user "✅ SDDM ya sincronizado con $wallpaper_name"
+        return 0
+    fi
+    
+    # Preparar directorio temporal
+    mkdir -p "$TEMP_DIR"
+    
+    # Copiar wallpaper al directorio temporal
+    if ! cp "$wallpaper" "$TEMP_DIR/$wallpaper_name"; then
+        log "❌ Error al copiar wallpaper al directorio temporal"
+        return 1
+    fi
+    
+    # Crear script temporal que se ejecutará con privilegios mínimos
+    local temp_script="$TEMP_DIR/apply-sddm.sh"
+    
+    cat > "$temp_script" << EOF
+#!/bin/bash
+
+WALLPAPER_SRC="$TEMP_DIR/$wallpaper_name"
+WALLPAPER_NAME="$wallpaper_name"
+SYSTEM_DEST="$SDDM_SYSTEM_DIR/Backgrounds/\$WALLPAPER_NAME"
+CONFIG_FILE="$SDDM_SYSTEM_DIR/Themes/theme1.conf"
+
+# Solo mostrar progreso si el comando se ejecuta interactivamente
+if [[ -t 1 ]]; then
+    echo "🔧 Aplicando wallpaper \$WALLPAPER_NAME al sistema SDDM..."
+fi
+
+# Crear directorio de backgrounds si no existe
+mkdir -p "$SDDM_SYSTEM_DIR/Backgrounds" || exit 1
+
+# Copiar wallpaper
+if cp "\$WALLPAPER_SRC" "\$SYSTEM_DEST" 2>/dev/null; then
+    chmod 644 "\$SYSTEM_DEST" 2>/dev/null
+    [[ -t 1 ]] && echo "✅ Wallpaper copiado: \$WALLPAPER_NAME"
+else
+    [[ -t 1 ]] && echo "❌ Error al copiar wallpaper"
+    exit 1
+fi
+
+# Actualizar configuración
+if [[ -f "\$CONFIG_FILE" ]]; then
+    # Crear backup solo si no existe uno reciente (último minuto)
+    if [[ ! -f "\$CONFIG_FILE.backup" ]] || [[ \$(find "\$CONFIG_FILE.backup" -mmin -1 2>/dev/null) == "" ]]; then
+        cp "\$CONFIG_FILE" "\$CONFIG_FILE.backup" 2>/dev/null
+    fi
+    
+    # Actualizar Background
+    sed -i "s|^Background=.*|Background=\"Backgrounds/\$WALLPAPER_NAME\"|g" "\$CONFIG_FILE"
+    
+    # Aplicar colores de pywal si están disponibles
+    if [[ -f "$USER_HOME/.cache/wal/colors" ]]; then
+        local background=\$(sed -n '1p' "$USER_HOME/.cache/wal/colors")
+        local foreground=\$(sed -n '8p' "$USER_HOME/.cache/wal/colors")
+        
+        # Actualizar colores en configuración si existen las líneas
+        sed -i "s|BackgroundColor=.*|BackgroundColor=\"\$background\"|g" "\$CONFIG_FILE" 2>/dev/null
+        sed -i "s|TextColor=.*|TextColor=\"\$foreground\"|g" "\$CONFIG_FILE" 2>/dev/null
+    fi
+    
+    [[ -t 1 ]] && echo "✅ Configuración actualizada"
+else
+    [[ -t 1 ]] && echo "❌ Archivo de configuración no encontrado"
+    exit 1
+fi
+
+# Limpiar archivos temporales
+rm -rf "$TEMP_DIR" 2>/dev/null
+
+[[ -t 1 ]] && echo "🎉 Sincronización completada"
+exit 0
+EOF
+    
+    chmod +x "$temp_script"
+    
+    # Ejecutar script con pkexec (se ejecutará silenciosamente si hay regla polkit)
+    log "🔐 Aplicando cambios al sistema..."
+    
+    # Ejecutar de forma silenciosa para uso automático
+    if pkexec "$temp_script" >/dev/null 2>&1; then
+        log "✅ Wallpaper $wallpaper_name aplicado exitosamente"
+        notify_user "✅ SDDM sincronizado con $wallpaper_name"
+        
+        # Guardar wallpaper actual en cache
+        echo "$wallpaper" > "$WALLPAPER_CACHE"
+        
+        # Limpiar temporal si no se limpió automáticamente
+        rm -rf "$TEMP_DIR" 2>/dev/null
+        return 0
+    else
+        log "❌ Error al aplicar cambios (permisos denegados o error de sistema)"
+        notify_user "❌ Error: no se pudo sincronizar SDDM"
+        rm -rf "$TEMP_DIR" 2>/dev/null
+        return 1
+    fi
+}
+
+# Función principal
+main() {
+    log "🚀 Iniciando sincronización automática SDDM (modo sin sudo)..."
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+        log "❌ No se pudo obtener el wallpaper actual"
+        notify_user "❌ Wallpaper no encontrado"
+        exit 1
+    fi
+    
+    log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    
+    # Verificar si es diferente del último aplicado
+    if [[ -f "$WALLPAPER_CACHE" ]]; then
+        local cached_wallpaper=$(cat "$WALLPAPER_CACHE" 2>/dev/null)
+        if [[ "$cached_wallpaper" == "$CURRENT_WALLPAPER" ]]; then
+            log "✅ Wallpaper no ha cambiado desde la última sincronización"
+            exit 0
+        fi
+    fi
+    
+    # Sincronizar wallpaper
+    if sync_wallpaper_direct "$CURRENT_WALLPAPER"; then
+        log "🎉 Sincronización completada exitosamente"
+        echo "✅ SDDM sincronizado con $(basename "$CURRENT_WALLPAPER")"
+    else
+        log "❌ Error en la sincronización"
+        echo "❌ Error al sincronizar SDDM"
+        exit 1
+    fi
+}
+
+# Función de configuración inicial
+setup() {
+    echo "🔧 Configuración inicial de SDDM Auto-Sync..."
+    echo "============================================="
+    echo ""
+    echo "Este script configurará la sincronización automática de wallpapers para SDDM."
+    echo "Se requieren permisos de administrador SOLO para la configuración inicial."
+    echo ""
+    
+    # Intentar configurar regla polkit para evitar contraseñas futuras
+    read -p "¿Deseas configurar regla polkit para evitar contraseñas en el futuro? (s/n): " -n 1 -r
+    echo ""
+    
+    if [[ $REPLY =~ ^[SsYy]$ ]]; then
+        setup_polkit_rule
+    fi
+    
+    echo ""
+    echo "✅ Configuración completada."
+    echo "🔄 Ahora puedes ejecutar el script normalmente: $(basename "$0")"
+    echo ""
+}
+
+# Manejo de argumentos
+case "$1" in
+    --setup)
+        setup
+        ;;
+    --wallpaper)
+        if [[ -n "$2" ]] && [[ -f "$2" ]]; then
+            log "🖼️ Sincronizando con wallpaper específico: $2"
+            sync_wallpaper_direct "$2"
+        else
+            echo "❌ Error: especifica un archivo de wallpaper válido"
+            echo "Uso: $0 --wallpaper /ruta/al/wallpaper.jpg"
+            exit 1
+        fi
+        ;;
+    --help|-h)
+        echo "SDDM Auto-Sync (Sin Sudo) - Sincronización automática de wallpapers"
+        echo "Uso:"
+        echo "  $0                    - Sincronizar con wallpaper actual"
+        echo "  $0 --setup          - Configuración inicial"
+        echo "  $0 --wallpaper FILE - Sincronizar con wallpaper específico"
+        echo "  $0 --help           - Mostrar esta ayuda"
+        ;;
+    *)
+        main
+        ;;
+esac

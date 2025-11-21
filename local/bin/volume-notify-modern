@@ -1,0 +1,178 @@
+#!/bin/bash
+
+# Notificaciones de volumen con diseño moderno y limpio
+# Inspirado en diseños contemporáneos de iOS/Android
+
+TIMEOUT=2000
+URGENT="low"
+
+# Generar indicador de volumen minimalista
+generate_volume_indicator() {
+    local percent=$1
+    local width=15
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    local bar=""
+    # Usar puntos para un look más sutil
+    for ((i=0; i<filled; i++)); do
+        bar+="●"
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="○"
+    done
+    
+    echo "$bar"
+}
+
+# Crear porcentaje visual con estilo
+generate_percentage_display() {
+    local percent=$1
+    
+    if [ "$percent" -eq 0 ]; then
+        echo "──"
+    elif [ "$percent" -lt 10 ]; then
+        echo "0$percent"
+    else
+        echo "$percent"
+    fi
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo simplificado
+get_device_short() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-20)
+    if [ -z "$device" ]; then
+        echo "Audio Device"
+    else
+        echo "$device"
+    fi
+}
+
+# Notificación moderna y limpia
+show_modern_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        # Notificación de mute ultra-limpia
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "🔇  Muted" \
+                   "<b>Audio silenciado</b>
+
+<i>$device</i>"
+    else
+        # Notificación normal moderna
+        local indicator="$(generate_volume_indicator $volume)"
+        local display_percent="$(generate_percentage_display $volume)"
+        local icon=""
+        
+        # Icono según nivel
+        if [ "$volume" -eq 0 ]; then
+            icon="🔇"
+        elif [ "$volume" -lt 33 ]; then
+            icon="🔈"
+        elif [ "$volume" -lt 66 ]; then
+            icon="🔉"
+        else
+            icon="🔊"
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$icon  Volume" \
+                   "<b>$display_percent%</b>
+
+$indicator
+
+<i>$device</i>"
+    fi
+}
+
+# Notificación de audio/música moderna
+show_audio_modern_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_device_short)"
+    local indicator="$(generate_volume_indicator $volume)"
+    local display_percent="$(generate_percentage_display $volume)"
+    
+    local icon="🎵"
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    elif [[ "$title" == *"Music"* ]]; then
+        icon="🎵"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon  $title" \
+               "$message
+
+<b>Volume: $display_percent%</b>
+$indicator
+
+<i>$device</i>"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_audio_modern_notification "${2:-Audio}" "${3:-Now playing}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing modern volume notifications..."
+        echo "Volume 30%..."
+        show_modern_notification "30" "false" "$(get_device_short)"
+        sleep 2
+        echo "Volume 80%..."
+        show_modern_notification "80" "false" "$(get_device_short)"
+        sleep 2
+        echo "Muted..."
+        show_modern_notification "0" "true" "$(get_device_short)"
+        sleep 2
+        echo "Audio notification..."
+        show_audio_modern_notification "Spotify" "Now Playing: Some Great Song"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_device_short)"
+
+show_modern_notification "$volume" "$muted" "$device"
+exit 0

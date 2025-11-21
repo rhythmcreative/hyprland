@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Script para sincronizar Powerlevel10k con pywal automáticamente
+# Los colores ahora se cargan dinámicamente desde p10k.zsh
+
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+
+# Verificar que el archivo de colores exista
+if [[ ! -f "$COLORS_FILE" ]]; then
+    echo "❌ Error: No se encontró el archivo de colores de pywal: $COLORS_FILE"
+    echo "💡 Ejecuta 'wal -i /ruta/a/imagen' primero para generar los colores."
+    exit 1
+fi
+
+# Leer colores de pywal
+echo "🎨 Leyendo colores actuales de pywal..."
+source "$COLORS_FILE"
+
+echo "✅ Sincronización completada automáticamente"
+echo "🎯 Colores activos:"
+echo "   Background: $background"
+echo "   Foreground: $foreground"
+echo "   Color primario: $color1"
+echo "   Color de directorio: $color3"
+echo "   Color de git: $color4"
+echo "🔄 Los colores se aplican automáticamente en nuevas sesiones de terminal"
+echo "📝 Para aplicar ahora: ejecuta 'source ~/.zshrc' o reinicia la terminal"

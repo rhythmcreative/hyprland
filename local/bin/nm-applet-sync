@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Script para sincronizar nm-applet con colores de pywal
+# Reinicia nm-applet para que use los nuevos colores GTK
+
+LOG_FILE="$HOME/.cache/nm-applet-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "🔄 Iniciando sincronización de nm-applet..."
+
+# Verificar si pywal ha generado colores
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "⚠️ No se encontraron colores de pywal"
+    notify-send "⚠️ Advertencia" "No hay colores de pywal para aplicar" -t 2000
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$HOME/.cache/wal/colors.sh"
+log "✅ Colores de pywal cargados"
+
+# Sincronizar GTK para asegurar que los colores estén disponibles
+if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.interface gtk-theme "oomox-pywal" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Papirus-Dark" 2>/dev/null || true
+    log "✅ GTK theme actualizado"
+fi
+
+# Reiniciar nm-applet para aplicar nuevos colores
+log "🔄 Reiniciando nm-applet..."
+
+if pgrep -f nm-applet >/dev/null; then
+    log "⏹️ Cerrando nm-applet actual..."
+    pkill -f nm-applet 2>/dev/null || true
+    
+    # Esperar a que se cierre completamente
+    for i in {1..5}; do
+        if ! pgrep -f nm-applet >/dev/null; then
+            break
+        fi
+        sleep 1
+        log "⏳ Esperando cierre ($i/5)..."
+    done
+    
+    # Si sigue corriendo, forzar cierre
+    if pgrep -f nm-applet >/dev/null; then
+        log "🔨 Forzando cierre de nm-applet..."
+        pkill -9 -f nm-applet 2>/dev/null || true
+        sleep 1
+    fi
+    
+    log "✅ nm-applet cerrado exitosamente"
+else
+    log "ℹ️ nm-applet no estaba corriendo"
+fi
+
+# Iniciar nm-applet en segundo plano con variables de entorno actualizadas
+log "🚀 Iniciando nm-applet con nuevos colores..."
+
+# Asegurar que las variables GTK estén configuradas
+export GTK_THEME="oomox-pywal"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+
+# Iniciar nm-applet
+if command -v setsid >/dev/null 2>&1; then
+    setsid nm-applet >/dev/null 2>&1 &
+    disown
+else
+    nohup nm-applet >/dev/null 2>&1 &
+    disown
+fi
+
+# Dar tiempo para que se inicie
+sleep 2
+
+# Verificar que se haya iniciado correctamente
+if pgrep -f nm-applet >/dev/null; then
+    log "✅ nm-applet iniciado correctamente con nuevos colores"
+    notify-send "🌐 nm-applet" "Sincronizado con colores de pywal" -t 2000 2>/dev/null || true
+else
+    log "❌ Error: No se pudo iniciar nm-applet"
+    notify-send "❌ Error nm-applet" "No se pudo reiniciar" -u critical -t 3000 2>/dev/null || true
+    exit 1
+fi
+
+log "🎉 Sincronización de nm-applet completada"
+exit 0

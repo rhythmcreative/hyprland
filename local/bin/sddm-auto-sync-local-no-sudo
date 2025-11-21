@@ -1,0 +1,357 @@
+#!/bin/bash
+
+# Script para sincronización automática de wallpaper en SDDM (SIN SUDO)
+# Autor: rhythmcreative
+# Versión sin privilegios - usa enlaces simbólicos para evitar necesidad de sudo
+# REQUIERE configuración inicial con sudo, pero después funciona automáticamente
+
+LOG_FILE="/tmp/sddm-auto-sync-local-no-sudo.log"
+USER_HOME="/home/rhythmcreative"
+SDDM_THEME_DIR="$USER_HOME/.config/sddm-theme"
+SDDM_SYSTEM_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BG_SDDM_DIR="/home/rhythmcreative/BG-SDDM"
+
+# Crear estructura de directorios locales
+setup_local_dirs() {
+    mkdir -p "$SDDM_THEME_DIR/Backgrounds"
+    mkdir -p "$SDDM_THEME_DIR/Themes"
+    mkdir -p "$SDDM_THEME_DIR/scripts"
+    
+    # Copiar configuración base si existe y no tenemos una local
+    if [[ -f "$SDDM_SYSTEM_DIR/Themes/theme1.conf" ]] && [[ ! -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]]; then
+        cp "$SDDM_SYSTEM_DIR/Themes/theme1.conf" "$SDDM_THEME_DIR/Themes/theme1.conf" 2>/dev/null || {
+            # Si no podemos copiar, crear una configuración básica
+            cat > "$SDDM_THEME_DIR/Themes/theme1.conf" <<'EOF'
+[General]
+#################### General ####################
+
+# Configuración automática de resolución para múltiples monitores
+# El tema se adapta dinámicamente según los monitores detectados
+ScreenWidth="auto"
+ScreenHeight="auto"
+Font="Open Sans"
+KeyboardSize="0.4"
+RoundCorners="20"
+HourFormat="HH:mm"
+DateFormat="dddd d MMMM"
+HeaderText=""
+
+#################### Background ####################
+
+Background="Backgrounds/default.jpg"
+DimBackground="0.3"
+CropBackground="true"
+BackgroundHorizontalAlignment="center"
+BackgroundVerticalAlignment="center"
+
+#################### Colors ####################
+
+HighlightColor="#000000"
+BackgroundColor="#000000"
+TextColor="#ffffff"
+PlaceholderColor="#bbbbbb"
+SystemButtonsIconColor="#ffffff"
+HighlightTextColor="#ffffff"
+HoverSessionAndVirtualKeyboard="#333333"
+
+#################### Form ####################
+
+PartialBlur="no"
+FullBlur="true"
+BlurMax="64"
+Blur="1.0"
+HaveFormBackground="true"
+FormPosition="center"
+FormBackgroundColor="#000000"
+FormBackgroundOpacity="0.6"
+
+#################### Virtual Keyboard ####################
+
+VirtualKeyboardPosition="center"
+
+#################### Interface Behavior ####################
+
+HideVirtualKeyboard="false"
+HideSystemButtons="false"
+HideLoginButton="true"
+ForceLastUser="true"
+PasswordFocus="true"
+HideCompletePassword="true"
+AllowEmptyPassword="false"
+AllowUppercaseLettersInUsernames="false"
+RightToLeftLayout="false"
+EOF
+        }
+    fi
+}
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Sync (No-Sudo)" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    # Intentar obtener wallpaper desde pywal
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        cat "$USER_HOME/.cache/wal/wal" 2>/dev/null
+        return 0
+    fi
+    
+    # Fallback: buscar en archivos de configuración de swww
+    if [[ -f "$USER_HOME/.cache/current-wallpaper" ]]; then
+        cat "$USER_HOME/.cache/current-wallpaper" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+# Verificar si el sistema está configurado para symlinks
+check_symlink_setup() {
+    local system_backgrounds_dir="$SDDM_SYSTEM_DIR/Backgrounds"
+    local system_config_file="$SDDM_SYSTEM_DIR/Themes/theme1.conf"
+    local local_backgrounds_dir="$SDDM_THEME_DIR/Backgrounds"
+    local local_config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    
+    # Verificar si los enlaces simbólicos están configurados
+    if [[ -L "$system_backgrounds_dir" ]] && [[ "$(readlink "$system_backgrounds_dir")" == "$local_backgrounds_dir" ]]; then
+        log "✅ Enlace simbólico de Backgrounds configurado correctamente"
+        SYMLINKS_CONFIGURED=true
+    else
+        log "⚠️ Enlace simbólico de Backgrounds NO configurado"
+        SYMLINKS_CONFIGURED=false
+    fi
+    
+    if [[ -L "$system_config_file" ]] && [[ "$(readlink "$system_config_file")" == "$local_config_file" ]]; then
+        log "✅ Enlace simbólico de configuración configurado correctamente"
+        CONFIG_SYMLINK_CONFIGURED=true
+    else
+        log "⚠️ Enlace simbólico de configuración NO configurado"
+        CONFIG_SYMLINK_CONFIGURED=false
+    fi
+}
+
+# Crear script de configuración inicial (se ejecuta una sola vez con sudo)
+create_setup_script() {
+    local setup_script="$SDDM_THEME_DIR/scripts/setup-symlinks.sh"
+    
+    cat > "$setup_script" <<EOF
+#!/bin/bash
+# Script de configuración inicial para enlaces simbólicos SDDM (ejecutar UNA VEZ con sudo)
+
+SDDM_SYSTEM_DIR="$SDDM_SYSTEM_DIR"
+SDDM_THEME_DIR="$SDDM_THEME_DIR"
+
+echo "🔧 Configurando enlaces simbólicos para SDDM (se ejecuta una sola vez)"
+
+# Hacer backup de archivos originales
+if [[ -d "\$SDDM_SYSTEM_DIR/Backgrounds" ]] && [[ ! -L "\$SDDM_SYSTEM_DIR/Backgrounds" ]]; then
+    echo "📁 Haciendo backup del directorio Backgrounds original..."
+    mv "\$SDDM_SYSTEM_DIR/Backgrounds" "\$SDDM_SYSTEM_DIR/Backgrounds.backup.\$(date +%Y%m%d_%H%M%S)"
+fi
+
+if [[ -f "\$SDDM_SYSTEM_DIR/Themes/theme1.conf" ]] && [[ ! -L "\$SDDM_SYSTEM_DIR/Themes/theme1.conf" ]]; then
+    echo "📁 Haciendo backup del archivo de configuración original..."
+    mv "\$SDDM_SYSTEM_DIR/Themes/theme1.conf" "\$SDDM_SYSTEM_DIR/Themes/theme1.conf.backup.\$(date +%Y%m%d_%H%M%S)"
+fi
+
+# Crear enlaces simbólicos
+echo "🔗 Creando enlace simbólico para Backgrounds..."
+ln -sf "\$SDDM_THEME_DIR/Backgrounds" "\$SDDM_SYSTEM_DIR/Backgrounds"
+
+echo "🔗 Creando enlace simbólico para configuración..."
+ln -sf "\$SDDM_THEME_DIR/Themes/theme1.conf" "\$SDDM_SYSTEM_DIR/Themes/theme1.conf"
+
+echo "✅ Enlaces simbólicos configurados correctamente"
+echo "🎉 Ahora el script principal funcionará sin sudo"
+echo ""
+echo "Para verificar:"
+echo "  ls -la \$SDDM_SYSTEM_DIR/Backgrounds"
+echo "  ls -la \$SDDM_SYSTEM_DIR/Themes/theme1.conf"
+EOF
+
+    chmod +x "$setup_script"
+    log "📋 Script de configuración creado: $setup_script"
+}
+
+# Función principal de sincronización (sin sudo)
+sync_wallpaper_no_sudo() {
+    local wallpaper="$1"
+    log "📱 Sincronización SDDM sin sudo..."
+    
+    setup_local_dirs
+    
+    # Copiar wallpaper al directorio local
+    local filename=$(basename "$wallpaper")
+    local dest_path="$SDDM_THEME_DIR/Backgrounds/$filename"
+    
+    if [[ ! -f "$dest_path" ]] || ! cmp -s "$wallpaper" "$dest_path" 2>/dev/null; then
+        log "📁 Copiando wallpaper: $filename"
+        if cp "$wallpaper" "$dest_path" 2>/dev/null; then
+            chmod 644 "$dest_path" 2>/dev/null || true
+            log "✅ Wallpaper copiado a directorio local"
+        else
+            log "❌ Error al copiar wallpaper"
+            return 1
+        fi
+    fi
+    
+    # Actualizar configuración local
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    if [[ -f "$config_file" ]]; then
+        log "⚙️ Actualizando configuración local..."
+        
+        # Crear backup
+        cp "$config_file" "$config_file.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        
+        # Actualizar configuración local
+        if sed -i "s|^Background=.*|Background=\"Backgrounds/$filename\"|g" "$config_file" 2>/dev/null; then
+            log "✅ Configuración local actualizada para: $filename"
+            
+            # Si los symlinks están configurados, los cambios se aplican automáticamente
+            if [[ "$SYMLINKS_CONFIGURED" == "true" ]] && [[ "$CONFIG_SYMLINK_CONFIGURED" == "true" ]]; then
+                log "🎉 Cambios aplicados automáticamente al sistema (via symlinks)"
+                return 0
+            else
+                log "⚠️ Enlaces simbólicos no configurados, se requiere configuración inicial"
+                create_setup_script
+                return 2  # Código especial para indicar que se necesita configuración
+            fi
+        else
+            log "❌ Error al actualizar configuración local"
+            return 1
+        fi
+    else
+        log "❌ Archivo de configuración no encontrado: $config_file"
+        return 1
+    fi
+}
+
+# Aplicar colores de pywal a configuración local
+sync_pywal_colors_local() {
+    log "🎨 Aplicando colores de pywal a configuración local..."
+    
+    local colors_file="$USER_HOME/.cache/wal/colors"
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    
+    if [[ ! -f "$colors_file" ]]; then
+        log "⚠️ Archivo de colores pywal no encontrado"
+        return 1
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        log "❌ Archivo de configuración local no encontrado"
+        return 1
+    fi
+    
+    # Leer colores
+    local background=$(sed -n '1p' "$colors_file")
+    local foreground=$(sed -n '8p' "$colors_file")
+    local color1=$(sed -n '2p' "$colors_file")
+    local color4=$(sed -n '5p' "$colors_file")
+    local color5=$(sed -n '6p' "$colors_file")
+    
+    # Aplicar colores usando patrones más específicos del tema
+    sed -i "s|^HighlightColor=.*|HighlightColor=\"$color1\"|g" "$config_file" 2>/dev/null || true
+    sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|g" "$config_file" 2>/dev/null || true
+    sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|g" "$config_file" 2>/dev/null || true
+    sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$foreground\"|g" "$config_file" 2>/dev/null || true
+    sed -i "s|^HighlightTextColor=.*|HighlightTextColor=\"$foreground\"|g" "$config_file" 2>/dev/null || true
+    sed -i "s|^FormBackgroundColor=.*|FormBackgroundColor=\"$background\"|g" "$config_file" 2>/dev/null || true
+    
+    log "🎨 Colores pywal aplicados a configuración local"
+}
+
+main() {
+    log "🔐 Iniciando sincronización automática de SDDM (modo sin sudo)..."
+    
+    # Verificar configuración de symlinks
+    check_symlink_setup
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+        log "❌ No se pudo obtener el wallpaper actual"
+        notify_user "❌ No se pudo sincronizar: wallpaper no encontrado"
+        exit 1
+    fi
+    
+    log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    
+    # Sincronizar wallpaper (sin sudo)
+    sync_result=$(sync_wallpaper_no_sudo "$CURRENT_WALLPAPER")
+    sync_exit_code=$?
+    
+    case $sync_exit_code in
+        0)
+            # Aplicar colores de pywal si están disponibles
+            sync_pywal_colors_local
+            
+            log "🎉 Sincronización completada exitosamente (sin sudo)"
+            notify_user "✅ SDDM sincronizado automáticamente con $(basename "$CURRENT_WALLPAPER")"
+            echo "✅ SDDM sincronizado automáticamente"
+            echo "🔄 Los cambios estarán visibles en el próximo logout/reinicio"
+            ;;
+        2)
+            log "⚠️ Configuración inicial requerida"
+            notify_user "⚠️ Se requiere configuración inicial única"
+            echo "⚠️ CONFIGURACIÓN INICIAL REQUERIDA"
+            echo ""
+            echo "Para habilitar la sincronización automática sin sudo, ejecuta UNA VEZ:"
+            echo "  sudo $SDDM_THEME_DIR/scripts/setup-symlinks.sh"
+            echo ""
+            echo "Después de eso, este script funcionará automáticamente sin sudo."
+            ;;
+        *)
+            log "❌ Error en la sincronización"
+            notify_user "❌ Error en sincronización"
+            exit 1
+            ;;
+    esac
+}
+
+# Permitir argumentos específicos
+if [[ "$1" == "--wallpaper" ]] && [[ -n "$2" ]] && [[ -f "$2" ]]; then
+    log "🖼️ Sincronizando con wallpaper específico: $2"
+    check_symlink_setup
+    CURRENT_WALLPAPER="$2"
+    sync_wallpaper_no_sudo "$CURRENT_WALLPAPER"
+    sync_pywal_colors_local
+elif [[ "$1" == "--setup" ]]; then
+    # Crear directorio de configuración y script de setup
+    setup_local_dirs
+    create_setup_script
+    echo "📋 Script de configuración creado en: $SDDM_THEME_DIR/scripts/setup-symlinks.sh"
+    echo "Ejecuta: sudo $SDDM_THEME_DIR/scripts/setup-symlinks.sh"
+elif [[ "$1" == "--status" ]]; then
+    # Mostrar estado de configuración
+    check_symlink_setup
+    echo "Estado de configuración SDDM sin sudo:"
+    echo "======================================"
+    if [[ "$SYMLINKS_CONFIGURED" == "true" ]]; then
+        echo "✅ Enlaces de Backgrounds: Configurado"
+    else
+        echo "❌ Enlaces de Backgrounds: NO configurado"
+    fi
+    if [[ "$CONFIG_SYMLINK_CONFIGURED" == "true" ]]; then
+        echo "✅ Enlaces de configuración: Configurado"
+    else
+        echo "❌ Enlaces de configuración: NO configurado"
+    fi
+    echo ""
+    if [[ "$SYMLINKS_CONFIGURED" == "true" ]] && [[ "$CONFIG_SYMLINK_CONFIGURED" == "true" ]]; then
+        echo "🎉 Sistema completamente configurado - funcionará automáticamente"
+    else
+        echo "⚠️ Ejecuta: $0 --setup  y sigue las instrucciones"
+    fi
+else
+    main
+fi

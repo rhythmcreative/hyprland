@@ -1,0 +1,86 @@
+[global]
+    # Posicionamiento como waybar
+    monitor = 0
+    follow = none
+    
+    # Geometría que coincide con el estilo de waybar
+    width = 360
+    height = (0, 120)
+    origin = top-right
+    offset = (7, 50)
+    indicate_hidden = yes
+    shrink = no
+    transparency = 0
+    separator_height = 0
+    padding = 11
+    horizontal_padding = 14
+    frame_width = 0
+    frame_color = "{background}"
+    separator_color = "{background}"
+    
+    # Fuente y texto igual que waybar
+    font = JetBrainsMono Nerd Font 13
+    line_height = 0
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+    show_age_threshold = 60
+    word_wrap = yes
+    ellipsize = end
+    ignore_newline = no
+    stack_duplicates = true
+    hide_duplicate_count = true
+    show_indicators = no
+    
+    # Iconos igual que waybar
+    icon_position = left
+    min_icon_size = 18
+    max_icon_size = 24
+    icon_path = /usr/share/icons/Papirus/16x16/status/:/usr/share/icons/Papirus/16x16/devices/
+    
+    # Interacción
+    sticky_history = yes
+    history_length = 20
+    dmenu = /usr/bin/rofi -dmenu -p dunst:
+    browser = /usr/bin/xdg-open
+    always_run_script = true
+    title = Dunst
+    class = Dunst
+    corner_radius = 6
+    
+    # Acciones del ratón
+    mouse_left_click = close_current
+    mouse_middle_click = do_action
+    mouse_right_click = close_all
+
+# Estilo que coincide exactamente con waybar
+[urgency_low]
+    background = "{background}"
+    foreground = "{foreground}"
+    timeout = 4
+
+[urgency_normal]
+    background = "{background}"
+    foreground = "{foreground}"
+    timeout = 6
+
+[urgency_critical]
+    background = "{background}"
+    foreground = "{color1}"
+    timeout = 0
+
+# Notificaciones especiales con colores de waybar
+[summary="Volume"]
+    background = "{background}"
+    foreground = "{color4}"
+    timeout = 2
+
+[summary="Audio"]
+    background = "{background}"
+    foreground = "{color4}"
+    timeout = 2
+
+[summary="Music"]
+    background = "{background}"
+    foreground = "{color4}"
+    timeout = 4

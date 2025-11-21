@@ -1,0 +1,471 @@
+#!/bin/bash
+# Script para sincronizar SDDM con configuración de monitores compatible con nwg-displays
+# Actualizado para funcionar con swww, conversión de GIF a JPG, y configuración del cursor
+
+WALLPAPER_DIR="$HOME/.config/SDDM"
+SDDM_THEME_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BACKGROUNDS_DIR="$SDDM_THEME_DIR/Backgrounds"
+WALLPAPERS_FOLDER="$HOME/Pictures/Wallpapers"
+CURSOR_THEME="Bibata-Modern-Ice"
+CURSOR_SIZE="24"
+
+get_current_swww_wallpaper() {
+    # Intentar obtener wallpaper actual de swww
+    if command -v swww >/dev/null 2>&1; then
+        # Intentar obtener desde swww query (usar grep con lookbehind para extraer la ruta completa)
+        CURRENT_WALLPAPER=$(swww query 2>/dev/null | head -1 | grep -oP 'image: \K.*' 2>/dev/null)
+        
+        if [ -n "$CURRENT_WALLPAPER" ] && [ -f "$CURRENT_WALLPAPER" ]; then
+            echo "$CURRENT_WALLPAPER"
+            return 0
+        fi
+    fi
+    
+    # Fallback: buscar el wallpaper más reciente en la carpeta de wallpapers
+    if [ -d "$WALLPAPERS_FOLDER" ]; then
+        RECENT_WALLPAPER=$(ls -t "$WALLPAPERS_FOLDER"/* 2>/dev/null | head -1)
+        if [ -f "$RECENT_WALLPAPER" ]; then
+            echo "$RECENT_WALLPAPER"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+convert_gif_to_jpg() {
+    local input_file="$1"
+    local output_file="$2"
+    
+    echo "🔄 Convirtiendo GIF a JPG para SDDM..."
+    
+    if [[ "$input_file" == *.gif ]]; then
+        # Convertir primer frame del GIF a JPG
+        if convert "$input_file[0]" -quality 90 "$output_file" 2>/dev/null; then
+            echo "✅ GIF convertido a JPG: $(basename "$output_file")"
+            return 0
+        else
+            echo "❌ Error al convertir GIF a JPG"
+            return 1
+        fi
+    else
+        # Si no es GIF, solo copiar
+        if cp "$input_file" "$output_file" 2>/dev/null; then
+            echo "✅ Wallpaper copiado: $(basename "$output_file")"
+            return 0
+        else
+            return 1
+        fi
+    fi
+}
+
+sync_pywal_colors() {
+    echo "🎨 Sincronizando colores pywal con SDDM..."
+    
+    # Verificar si pywal está disponible y tiene colores generados
+    PYWAL_COLORS="$HOME/.cache/wal/colors.sh"
+    if [ ! -f "$PYWAL_COLORS" ]; then
+        echo "⚠️ Colores pywal no encontrados en $PYWAL_COLORS"
+        echo "💡 Ejecuta 'wal -i /ruta/a/imagen' para generar colores pywal"
+        return 1
+    fi
+    
+    # Cargar colores de pywal
+    source "$PYWAL_COLORS"
+    
+    echo "📋 Colores pywal detectados:"
+    echo "   • Fondo: $background"
+    echo "   • Texto: $foreground"
+    echo "   • Acento 1: $color1"
+    echo "   • Acento 2: $color4"
+    echo "   • Gris: $color8"
+    
+    # Verificar que el archivo de tema existe
+    THEME_CONFIG="$SDDM_THEME_DIR/Themes/theme1.conf"
+    if [ ! -f "$THEME_CONFIG" ]; then
+        echo "❌ Archivo de tema SDDM no encontrado: $THEME_CONFIG"
+        return 1
+    fi
+    
+    # Crear archivo temporal con los nuevos colores
+    temp_config="/tmp/sddm-pywal-colors.conf"
+    
+    # Leer archivo original y reemplazar colores
+    while IFS= read -r line; do
+        case "$line" in
+            HighlightColor=*)
+                echo "HighlightColor=\"$color4\""
+                ;;
+            BackgroundColor=*)
+                echo "BackgroundColor=\"$background\""
+                ;;
+            TextColor=*)
+                echo "TextColor=\"$foreground\""
+                ;;
+            PlaceholderColor=*)
+                echo "PlaceholderColor=\"$color8\""
+                ;;
+            SystemButtonsIconColor=*)
+                echo "SystemButtonsIconColor=\"$color1\""
+                ;;
+            HoverSessionAndVirtualKeyboard=*)
+                echo "HoverSessionAndVirtualKeyboard=\"$color1\""
+                ;;
+            *)
+                echo "$line"
+                ;;
+        esac
+    done < "$THEME_CONFIG" > "$temp_config"
+    
+    # Aplicar configuración
+    if sudo cp "$temp_config" "$THEME_CONFIG"; then
+        echo "✅ Colores pywal aplicados al tema SDDM astronaut"
+        echo "🎨 Colores aplicados:"
+        echo "   • Color principal: $color4"
+        echo "   • Fondo: $background"
+        echo "   • Texto: $foreground"
+        echo "   • Placeholder: $color8"
+        echo "   • Iconos sistema: $color1"
+        echo "   • Hover elementos: $color1"
+    else
+        echo "❌ Error al aplicar colores pywal al tema SDDM"
+        rm -f "$temp_config"
+        return 1
+    fi
+    
+    # Limpiar archivo temporal
+    rm -f "$temp_config"
+    
+    return 0
+}
+
+sync_cursor_theme() {
+    echo "🖱️ Configurando cursor $CURSOR_THEME para SDDM..."
+    
+    # Verificar si el cursor theme está instalado
+    CURSOR_PATHS=(
+        "/usr/share/icons/$CURSOR_THEME"
+        "$HOME/.local/share/icons/$CURSOR_THEME"
+        "$HOME/.icons/$CURSOR_THEME"
+    )
+    
+    CURSOR_FOUND=false
+    for path in "${CURSOR_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            CURSOR_FOUND=true
+            echo "✅ Cursor theme encontrado en: $path"
+            break
+        fi
+    done
+    
+    if [ "$CURSOR_FOUND" = false ]; then
+        echo "⚠️ Cursor theme $CURSOR_THEME no encontrado"
+        echo "💡 Instala el cursor con: yay -S bibata-cursor-theme"
+        return 1
+    fi
+    
+    # Actualizar configuración de SDDM
+    if sudo sed -i "s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" /etc/sddm.conf && 
+       sudo sed -i "s/^CursorSize=.*/CursorSize=$CURSOR_SIZE/" /etc/sddm.conf; then
+        echo "✅ Cursor $CURSOR_THEME configurado en SDDM (tamaño: $CURSOR_SIZE)"
+    else
+        echo "❌ Error al configurar cursor en SDDM"
+        return 1
+    fi
+    
+    # También actualizar en el tema específico si existe
+    if [ -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]; then
+        sudo sed -i "/\[General\]/,/^\[/ s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" "$SDDM_THEME_DIR/Themes/theme1.conf" 2>/dev/null || true
+        echo "✅ Cursor también configurado en el tema astronaut"
+    fi
+    
+    return 0
+}
+
+sync_wallpaper() {
+    echo "🖼️ Sincronizando wallpaper SDDM desde swww..."
+
+    # Crear directorio si no existe
+    mkdir -p "$WALLPAPER_DIR"
+
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_swww_wallpaper)
+
+    if [ -z "$CURRENT_WALLPAPER" ] || [ ! -f "$CURRENT_WALLPAPER" ]; then
+        echo "⚠️ No se encontró wallpaper de swww, usando configuración por defecto"
+        return 0
+    fi
+
+    echo "📁 Wallpaper encontrado: $CURRENT_WALLPAPER"
+
+    # Generar nombre para el archivo SDDM (siempre JPG)
+    WALLPAPER_NAME=$(basename "$CURRENT_WALLPAPER")
+    WALLPAPER_BASE="${WALLPAPER_NAME%.*}"
+    SDDM_WALLPAPER="$WALLPAPER_DIR/${WALLPAPER_BASE}.jpg"
+
+    # Convertir/copiar wallpaper
+    if convert_gif_to_jpg "$CURRENT_WALLPAPER" "$SDDM_WALLPAPER"; then
+        echo "✅ Wallpaper preparado en: $SDDM_WALLPAPER"
+    else
+        echo "❌ Error al preparar wallpaper"
+        return 1
+    fi
+
+    # Copiar al directorio del tema con sudo
+    if sudo cp "$SDDM_WALLPAPER" "$BACKGROUNDS_DIR/current_wallpaper.jpg"; then
+        echo "✅ Wallpaper aplicado al tema SDDM"
+    else
+        echo "❌ Error al aplicar wallpaper al tema"
+        return 1
+    fi
+
+    # Actualizar configuración del tema para usar el nuevo wallpaper
+    sudo sed -i 's|^Background=.*|Background="Backgrounds/current_wallpaper.jpg"|' "$SDDM_THEME_DIR/Themes/theme1.conf"
+
+    echo "🎨 Wallpaper SDDM sincronizado exitosamente!"
+}
+
+setup_monitors_nwg_compatible() {
+    echo "🖥️ Configurando monitores SDDM compatibles con nwg-displays..."
+
+    # Crear script Xsetup actualizado basado en la configuración de nwg-displays
+    xsetup_temp="/tmp/sddm-nwg-monitors.sh"
+    cat > "$xsetup_temp" << 'XSETUP_EOF'
+#!/bin/sh
+# Xsetup - configuración basada exactamente en nwg-displays
+# DP-6/DP-1-0: 2560x1440 a la izquierda (0x0)
+# eDP-1: 1920x1080 a la derecha (2560x0)
+
+echo "=== SDDM Xsetup iniciado en $(date) ===" >> /var/log/sddm-xsetup.log
+
+# Esperar a que los monitores se inicialicen
+sleep 3
+
+# Detectar monitores conectados (DP-6 puede aparecer como DP-1-0 en SDDM)
+EDCONNECTED=$(xrandr | grep "eDP-1 connected" | wc -l)
+DPCONNECTED_6=$(xrandr | grep "DP-6 connected" | wc -l)
+DPCONNECTED_1_0=$(xrandr | grep "DP-1-0 connected" | wc -l)
+
+echo "eDP-1 conectado: $EDCONNECTED" >> /var/log/sddm-xsetup.log
+echo "DP-6 conectado: $DPCONNECTED_6" >> /var/log/sddm-xsetup.log
+echo "DP-1-0 conectado: $DPCONNECTED_1_0" >> /var/log/sddm-xsetup.log
+
+# Listar todos los outputs para debug
+echo "Outputs disponibles:" >> /var/log/sddm-xsetup.log
+xrandr | grep -E "(connected|disconnected)" >> /var/log/sddm-xsetup.log
+
+# Determinar el nombre del puerto externo
+EXTERNAL_PORT=""
+if [ "$DPCONNECTED_6" -eq 1 ]; then
+    EXTERNAL_PORT="DP-6"
+elif [ "$DPCONNECTED_1_0" -eq 1 ]; then
+    EXTERNAL_PORT="DP-1-0"
+fi
+
+if [ "$EDCONNECTED" -eq 1 ] && [ -n "$EXTERNAL_PORT" ]; then
+    # Ambos monitores conectados - usar configuración exacta de nwg-displays
+    echo "Configurando: $EXTERNAL_PORT (izquierda) + eDP-1 (derecha)" >> /var/log/sddm-xsetup.log
+    
+    # Monitor externo a la izquierda (posición 0x0) - 2560x1440 - PRIMARIO
+    xrandr --output "$EXTERNAL_PORT" --mode 2560x1440 --pos 0x0 --rotate normal --primary
+    
+    # eDP-1 a la derecha (posición 2560x0) - 1920x1080  
+    xrandr --output eDP-1 --mode 1920x1080 --pos 2560x0 --rotate normal
+    
+    echo "Configuración dual aplicada con $EXTERNAL_PORT como primario" >> /var/log/sddm-xsetup.log
+    
+elif [ -n "$EXTERNAL_PORT" ]; then
+    # Solo monitor externo
+    echo "Solo $EXTERNAL_PORT conectado..." >> /var/log/sddm-xsetup.log
+    xrandr --output "$EXTERNAL_PORT" --mode 2560x1440 --primary
+    xrandr --output eDP-1 --off
+    
+elif [ "$EDCONNECTED" -eq 1 ]; then
+    # Solo laptop eDP-1
+    echo "Solo eDP-1 conectado..." >> /var/log/sddm-xsetup.log
+    xrandr --output eDP-1 --mode 1920x1080 --primary
+else
+    echo "Usando detección automática..." >> /var/log/sddm-xsetup.log
+    xrandr --auto
+fi
+
+# Estado final
+echo "Estado final de xrandr:" >> /var/log/sddm-xsetup.log
+xrandr >> /var/log/sddm-xsetup.log 2>&1
+echo "=== Fin Xsetup ===" >> /var/log/sddm-xsetup.log
+XSETUP_EOF
+
+    chmod +x "$xsetup_temp"
+
+    # Aplicar configuración
+    echo "📝 Actualizando script Xsetup de SDDM..."
+    if sudo cp "$xsetup_temp" "/etc/sddm/Xsetup"; then
+        sudo chmod +x "/etc/sddm/Xsetup"
+        echo "✅ SDDM configurado con disposición de monitores compatible con nwg-displays"
+        rm "$xsetup_temp"
+        return 0
+    else
+        echo "❌ Error al actualizar configuración de monitores"
+        return 1
+    fi
+}
+
+sync_nwg_displays_config() {
+    echo "📐 Sincronizando con configuración actual de nwg-displays..."
+    
+    # Verificar si existe la configuración de monitores de Hyprland
+    if [ -f "$HOME/.config/hypr/monitors.conf" ]; then
+        echo "📄 Detectada configuración de monitores de nwg-displays:"
+        cat "$HOME/.config/hypr/monitors.conf"
+        echo ""
+        echo "✅ Configuración SDDM actualizada para coincidir con nwg-displays"
+    else
+        echo "⚠️ No se encontró ~/.config/hypr/monitors.conf"
+        echo "💡 Ejecuta nwg-displays para generar la configuración de monitores"
+    fi
+}
+
+show_current_config() {
+    echo "🎯 Configuración actual de SDDM:"
+    echo ""
+    
+    # Mostrar wallpaper
+    echo "🖼️ Wallpaper detectado:"
+    CURRENT=$(get_current_swww_wallpaper)
+    if [ -n "$CURRENT" ]; then
+        echo "  📁 $CURRENT"
+        echo "  📏 $(file "$CURRENT" 2>/dev/null | cut -d':' -f2- | xargs)"
+    else
+        echo "  ❌ No se pudo detectar wallpaper actual"
+    fi
+    echo ""
+    
+    # Mostrar cursor
+    echo "🖱️ Cursor configurado:"
+    CURRENT_CURSOR=$(grep "^CursorTheme=" /etc/sddm.conf 2>/dev/null | cut -d'=' -f2)
+    CURRENT_SIZE=$(grep "^CursorSize=" /etc/sddm.conf 2>/dev/null | cut -d'=' -f2)
+    if [ -n "$CURRENT_CURSOR" ]; then
+        echo "  🎯 Tema: $CURRENT_CURSOR"
+        echo "  📏 Tamaño: ${CURRENT_SIZE:-N/A}"
+    else
+        echo "  ❌ No configurado"
+    fi
+    echo ""
+    
+    # Mostrar monitores
+    echo "🖥️ Configuración de monitores (nwg-displays):"
+    if [ -f "$HOME/.config/hypr/monitors.conf" ]; then
+        cat "$HOME/.config/hypr/monitors.conf" | grep -v "^#" | grep -v "^$"
+    else
+        echo "  ❌ No encontrada"
+    fi
+}
+
+show_current_wallpaper() {
+    echo "🖼️ Wallpaper actual detectado:"
+    CURRENT=$(get_current_swww_wallpaper)
+    if [ -n "$CURRENT" ]; then
+        echo "  📁 $CURRENT"
+        echo "  📏 $(file "$CURRENT" 2>/dev/null | cut -d':' -f2- | xargs)"
+    else
+        echo "  ❌ No se pudo detectar wallpaper actual"
+    fi
+}
+
+restart_sddm() {
+    echo "🔄 Reiniciando SDDM para aplicar cambios..."
+    sudo systemctl restart sddm
+    echo "✅ SDDM reiniciado"
+}
+
+# Función principal
+main() {
+    case "$1" in
+        "--wallpaper-only"|"-w")
+            sync_wallpaper
+            ;;
+        "--cursor-only"|"-c")
+            sync_cursor_theme
+            ;;
+        "--pywal-only"|"-p")
+            sync_pywal_colors
+            ;;
+        "--monitors-only"|"-m")
+            setup_monitors_nwg_compatible
+            sync_nwg_displays_config
+            if [ "$2" = "--restart" ] || [ "$2" = "-r" ]; then
+                restart_sddm
+            fi
+            ;;
+        "--restart"|"-r")
+            restart_sddm
+            ;;
+        "--sync-nwg")
+            echo "🔄 Sincronizando SDDM con nwg-displays..."
+            setup_monitors_nwg_compatible
+            sync_nwg_displays_config
+            echo "✅ Sincronización con nwg-displays completa"
+            ;;
+        "--show-current")
+            show_current_wallpaper
+            ;;
+        "--show-config")
+            show_current_config
+            ;;
+        "--help"|"-h")
+            echo "Uso: $0 [OPCIÓN] [--restart]"
+            echo ""
+            echo "Opciones:"
+            echo "  (sin parámetros)      : Sincronizar TODO (wallpaper + monitores + cursor + pywal)"
+            echo "  --wallpaper-only, -w  : Sincronizar SOLO wallpaper desde swww"
+            echo "  --cursor-only, -c     : Configurar SOLO cursor ($CURSOR_THEME)"
+            echo "  --pywal-only, -p      : Aplicar SOLO colores pywal al tema SDDM"
+            echo "  --monitors-only, -m   : Configurar SOLO monitores"
+            echo "  --sync-nwg            : Sincronizar con configuración de nwg-displays"
+            echo "  --show-current        : Mostrar wallpaper actual detectado"
+            echo "  --show-config         : Mostrar configuración completa de SDDM"
+            echo "  --restart, -r         : Solo reiniciar SDDM"
+            echo "  --help, -h            : Mostrar esta ayuda"
+            echo ""
+            echo "Configuración que aplica:"
+            echo "  🖼️ Wallpaper: Desde swww (GIF → JPG automático)"
+            echo "  🖥️ Monitores: Igual que nwg-displays (DP-6 izq. + eDP-1 der.)"
+            echo "  🖱️ Cursor: $CURSOR_THEME (tamaño $CURSOR_SIZE)"
+            echo "  🎨 Colores: Sincronizado con pywal (~/.cache/wal/colors.sh)"
+            echo "  📁 Carpeta wallpapers: $WALLPAPERS_FOLDER"
+            ;;
+        "")
+            # COMPORTAMIENTO POR DEFECTO: TODO (wallpaper + monitores + cursor + pywal)
+            echo "🚀 Configuración completa SDDM (wallpaper + monitores + cursor + pywal)"
+            show_current_wallpaper
+            if sync_wallpaper && setup_monitors_nwg_compatible && sync_cursor_theme && sync_pywal_colors; then
+                sync_nwg_displays_config
+                echo ""
+                echo "✨ Configuración completa exitosa!"
+                echo "💡 Para aplicar cambios ejecuta: $0 --restart"
+            else
+                echo "❌ Error en la configuración"
+                exit 1
+            fi
+            ;;
+        "--full-restart")
+            echo "🚀 Configuración completa + reinicio"
+            show_current_wallpaper
+            if sync_wallpaper && setup_monitors_nwg_compatible && sync_cursor_theme && sync_pywal_colors; then
+                sync_nwg_displays_config
+                restart_sddm
+                echo "✨ Configuración completa y reinicio exitosos!"
+            else
+                echo "❌ Error en la configuración"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "❌ Opción no válida: $1"
+            echo "Usa --help para ver las opciones disponibles"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

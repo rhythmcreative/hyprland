@@ -1,0 +1,366 @@
+#!/bin/bash
+
+# Script mejorado para cambio de wallpaper con sincronización COMPLETA de pywal
+# Versión unificada que maneja: wallpaper + pywal + waybar + hyprland + aplicaciones GTK
+# Creado por rhythmcreative - Optimizado para Hyprland + pywal
+
+set -euo pipefail
+
+# ======================== CONFIGURACIÓN ========================
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_$$"
+LOG_FILE="$HOME/.cache/wallpaper-pywal-sync.log"
+
+# ======================== FUNCIONES AUXILIARES ========================
+
+# Función de logging con colores
+log() {
+    local level="${2:-INFO}"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $1"
+    echo "$message" >> "$LOG_FILE"
+    echo "$message" >&2
+}
+
+# Función para verificar dependencias críticas
+check_dependencies() {
+    local deps=("swww" "wal" "rofi" "convert" "notify-send")
+    local missing=()
+    
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            missing+=("$dep")
+        fi
+    done
+    
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log "❌ Dependencias faltantes: ${missing[*]}" "ERROR"
+        notify-send "❌ Error de Dependencias" "Faltan: ${missing[*]}" -u critical
+        exit 1
+    fi
+}
+
+# Función para inicializar swww-daemon
+init_swww() {
+    if ! pgrep -x "swww-daemon" > /dev/null; then
+        log "🚀 Iniciando swww-daemon" 
+        swww-daemon --format xrgb &
+        sleep 3
+        log "✅ swww-daemon iniciado"
+    else
+        log "✅ swww-daemon ya está corriendo"
+    fi
+}
+
+# Función para aplicar wallpaper con swww
+apply_wallpaper() {
+    local wallpaper_file="$1"
+    
+    log "🖼️ Aplicando wallpaper: $(basename "$wallpaper_file")"
+    
+    if swww img "$wallpaper_file" \
+        --transition-type grow \
+        --transition-pos "0.9,0.1" \
+        --transition-duration 1.5; then
+        
+        # Guardar wallpaper actual
+        echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
+        log "✅ Wallpaper aplicado exitosamente"
+        return 0
+    else
+        log "❌ Error al aplicar wallpaper" "ERROR"
+        return 1
+    fi
+}
+
+# Función para aplicar pywal y sincronizar colores
+apply_pywal() {
+    local wallpaper_file="$1"
+    
+    log "🎨 Generando colores con pywal..."
+    notify-send "🌈 Pywal" "Generando colores desde wallpaper..." -t 2000 2>/dev/null || true
+    
+    # Generar colores con pywal (backend auto-detección)
+    if wal -i "$wallpaper_file" -n -q --backend wal; then
+        log "✅ Colores generados exitosamente"
+        
+        # Crear archivo de colores para waybar
+        if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+            source "$HOME/.cache/wal/colors.sh"
+            
+            # Crear CSS para waybar
+            mkdir -p "$HOME/.config/waybar"
+            cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+            log "✅ CSS de waybar actualizado"
+        fi
+        
+        return 0
+    else
+        log "❌ Error al generar colores con pywal" "ERROR"
+        return 1
+    fi
+}
+
+# Función para sincronizar aplicaciones con pywal
+sync_applications() {
+    log "🔄 Sincronizando aplicaciones..."
+    
+    # 1. Recargar Hyprland para usar nuevos colores
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 || true
+        log "✅ Hyprland recargado"
+    fi
+    
+    # 2. Aplicar colores a GTK (si existe pywal-discord, aplicarlo también)
+    if [[ -f "$HOME/.cache/wal/colors-gtk.css" ]]; then
+        # Aplicar tema GTK
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.desktop.interface gtk-theme "oomox-pywal" 2>/dev/null || true
+            gsettings set org.gnome.desktop.interface icon-theme "Papirus-Dark" 2>/dev/null || true
+        fi
+        log "✅ GTK sincronizado"
+    fi
+    
+    # 3. Sincronizar otras aplicaciones si existen
+    # Discord (si pywal-discord está instalado)
+    if command -v pywal-discord >/dev/null 2>&1; then
+        pywal-discord -t abou 2>/dev/null || true
+        log "✅ Discord sincronizado"
+    fi
+    
+    # Kitty (si existe)
+    if [[ -f "$HOME/.config/kitty/kitty.conf" ]] && [[ -f "$HOME/.cache/wal/colors-kitty.conf" ]]; then
+        # Enviar señal USR1 a kitty para recargar configuración
+        pkill -USR1 kitty 2>/dev/null || true
+        log "✅ Kitty sincronizado"
+    fi
+}
+
+# Función para reiniciar waybar de forma inteligente
+restart_waybar() {
+    log "🔄 Reiniciando waybar..."
+    
+    # Método 1: Intentar reload si waybar lo soporta
+    if pgrep -x waybar >/dev/null; then
+        log "🔄 Intentando recarga suave de waybar..."
+        
+        # Intentar señal USR2 para recargar CSS
+        if kill -USR2 $(pgrep -x waybar) 2>/dev/null; then
+            sleep 1.5
+            if pgrep -x waybar >/dev/null; then
+                log "✅ Waybar recargado suavemente"
+                return 0
+            fi
+        fi
+        
+        # Si falla, reinicio completo
+        log "🔄 Reinicio completo de waybar..."
+        pkill waybar
+        sleep 2
+    fi
+    
+    # Iniciar waybar
+    log "🚀 Iniciando waybar..."
+    if command -v setsid >/dev/null 2>&1; then
+        setsid waybar >/dev/null 2>&1 &
+        disown
+    else
+        nohup waybar >/dev/null 2>&1 &
+        disown
+    fi
+    
+    # Verificar inicio
+    sleep 3
+    if pgrep -x waybar >/dev/null; then
+        log "✅ Waybar iniciado correctamente"
+        return 0
+    else
+        log "❌ Error al iniciar waybar" "ERROR"
+        # Segundo intento
+        (waybar >/dev/null 2>&1 &)
+        sleep 2
+        if pgrep -x waybar >/dev/null; then
+            log "✅ Waybar iniciado en segundo intento"
+            return 0
+        else
+            log "❌ Error crítico: No se pudo iniciar waybar" "ERROR"
+            return 1
+        fi
+    fi
+}
+
+# Función para crear previews de imágenes
+create_previews() {
+    local images=("$@")
+    
+    log "🖼️ Generando previews (${#images[@]} imágenes)..."
+    mkdir -p "$CACHE_DIR"
+    
+    > "$TEMP_FILE"
+    local count=0
+    
+    for img in "${images[@]}"; do
+        [[ ! -f "$img" ]] && continue
+        
+        local clean_name="${img%.*}"
+        local preview_file="$CACHE_DIR/preview_${clean_name}.png"
+        
+        # Generar preview si no existe
+        if [[ ! -f "$preview_file" ]]; then
+            if [[ "$img" == *.gif ]]; then
+                convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+            else
+                convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+            fi
+        fi
+        
+        if [[ -f "$preview_file" ]]; then
+            echo -e "$clean_name\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+            ((count++))
+        else
+            echo "$clean_name" >> "$TEMP_FILE"
+        fi
+    done
+    
+    log "✅ $count previews generados"
+}
+
+# Función de limpieza
+cleanup() {
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+    
+    # Asegurar que waybar esté corriendo al salir
+    if ! pgrep -x waybar >/dev/null; then
+        log "🚨 Waybar no está corriendo, iniciando..." "WARN"
+        waybar >/dev/null 2>&1 &
+    fi
+}
+
+# ======================== FUNCIÓN PRINCIPAL ========================
+main() {
+    log "=== Iniciando Wallpaper + Pywal Sync v2.0 ==="
+    
+    # Configurar trap para limpieza
+    trap cleanup EXIT INT TERM
+    
+    # Verificar dependencias
+    check_dependencies
+    
+    # Verificar directorio de wallpapers
+    if [[ ! -d "$WALLPAPER_DIR" ]]; then
+        log "❌ Directorio de wallpapers no encontrado: $WALLPAPER_DIR" "ERROR"
+        notify-send "❌ Error" "Directorio de wallpapers no encontrado" -u critical
+        exit 1
+    fi
+    
+    # Inicializar swww-daemon
+    init_swww
+    
+    # Buscar imágenes
+    cd "$WALLPAPER_DIR" || exit 1
+    mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+    
+    if [[ ${#images[@]} -eq 0 ]]; then
+        log "❌ No se encontraron imágenes en $WALLPAPER_DIR" "ERROR"
+        notify-send "❌ Error" "No hay imágenes en el directorio" -u critical
+        exit 1
+    fi
+    
+    log "📁 Encontradas ${#images[@]} imágenes"
+    
+    # Crear previews
+    create_previews "${images[@]}"
+    
+    # Mostrar selector de rofi
+    log "🎭 Mostrando selector de wallpapers..."
+    local selected
+    selected=$(rofi -dmenu -i \
+        -p "🖼️ Seleccionar Wallpaper + Pywal" \
+        -show-icons \
+        -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+        < "$TEMP_FILE")
+    
+    # Verificar selección
+    if [[ -z "$selected" ]]; then
+        log "ℹ️ No se seleccionó ningún wallpaper"
+        exit 0
+    fi
+    
+    # Buscar archivo seleccionado
+    local selected_file=""
+    for img in "${images[@]}"; do
+        if [[ "${img%.*}" == "$selected" ]]; then
+            selected_file="$WALLPAPER_DIR/$img"
+            break
+        fi
+    done
+    
+    if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+        log "❌ Archivo no encontrado: $selected" "ERROR"
+        notify-send "❌ Error" "Archivo no encontrado" -u critical
+        exit 1
+    fi
+    
+    log "🎯 Wallpaper seleccionado: $(basename "$selected_file")"
+    
+    # Proceso completo de aplicación
+    notify-send "🌈 Aplicando Tema Completo" "Wallpaper + Pywal + Apps..." -t 3000 2>/dev/null || true
+    
+    # 1. Aplicar wallpaper
+    if ! apply_wallpaper "$selected_file"; then
+        notify-send "❌ Error" "No se pudo aplicar el wallpaper" -u critical
+        exit 1
+    fi
+    
+    # 2. Generar colores con pywal
+    if ! apply_pywal "$selected_file"; then
+        notify-send "⚠️ Advertencia" "Wallpaper aplicado pero pywal falló" -t 3000
+        exit 1
+    fi
+    
+    # 3. Sincronizar aplicaciones
+    sync_applications
+    
+    # 4. Reiniciar waybar
+    restart_waybar
+    
+    # 5. Notificación final
+    local wallpaper_name
+    wallpaper_name=$(basename "$selected_file")
+    
+    log "🎉 ¡Tema completo aplicado exitosamente!"
+    notify-send "🎨 Tema Aplicado" "$wallpaper_name + Pywal + Apps sincronizadas" -t 4000 2>/dev/null || true
+    
+    # Guardar información para futuros usos
+    cat > "$HOME/.cache/last-theme-info" << EOF
+wallpaper=$selected_file
+applied_date=$(date)
+script_version=2.0
+EOF
+    
+    log "✨ Sincronización completa finalizada"
+}
+
+# ======================== EJECUCIÓN ========================
+main "$@"

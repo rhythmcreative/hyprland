@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Script específico para lanzar nm-applet con tema personalizado de pywal
+# Este script NO modifica la configuración global de GTK
+
+# Cargar colores de pywal
+if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+    source "$HOME/.cache/wal/colors.sh"
+else
+    echo "Error: No se encontraron los colores de pywal"
+    exit 1
+fi
+
+# Directorio del tema
+GTK_THEME_DIR="$HOME/.local/share/themes/PywalNMApplet"
+
+# Asegurar que el tema existe
+if [ ! -d "$GTK_THEME_DIR" ]; then
+    echo "Tema no encontrado, creándolo..."
+    "$HOME/.local/bin/nm-applet-theme-sync"
+fi
+
+# Configurar variables de entorno específicamente para nm-applet
+export GTK_THEME="PywalNMApplet"
+export GTK_USE_PORTAL=1
+export GDK_BACKEND=wayland,x11
+export GTK2_RC_FILES="$GTK_THEME_DIR/gtk-2.0/gtkrc"
+
+# Imprimir información de debug
+echo "🚀 Iniciando nm-applet con tema personalizado..."
+echo "   Tema GTK: $GTK_THEME"
+echo "   Directorio del tema: $GTK_THEME_DIR"
+echo "   Colores: Fondo=$color0, Texto=$color7"
+
+# Verificar si nm-applet ya está corriendo
+if pgrep -f nm-applet > /dev/null; then
+    echo "⚠️  nm-applet ya está corriendo, terminándolo..."
+    pkill -TERM nm-applet 2>/dev/null || true
+    sleep 1
+    pkill -KILL nm-applet 2>/dev/null || true
+    sleep 1
+fi
+
+# Lanzar nm-applet con las variables de entorno correctas
+echo "🔄 Iniciando nm-applet..."
+exec nm-applet

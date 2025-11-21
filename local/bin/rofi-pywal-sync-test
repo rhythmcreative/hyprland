@@ -1,0 +1,196 @@
+#!/bin/bash
+
+# Script de prueba para la sincronización de rofi con pywal
+# Puede ser ejecutado de forma independiente para verificar la sincronización
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/rofi-pywal-sync-test.log"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 Rofi Pywal Sync Test" "$1" -t 3000 2>/dev/null || true
+}
+
+log "🔄 === INICIANDO PRUEBA DE SINCRONIZACIÓN ROFI-PYWAL ==="
+
+# Verificar que pywal está disponible
+if ! command -v wal > /dev/null 2>&1; then
+    log "❌ ERROR: pywal no está instalado o disponible"
+    notify "❌ Error: pywal no encontrado"
+    exit 1
+fi
+
+# Verificar que hay colores de pywal generados
+if [[ ! -f "$HOME/.cache/wal/colors-rofi.rasi" ]]; then
+    log "⚠️ No hay colores de pywal generados - ejecutando pywal con wallpaper actual"
+    
+    current_wallpaper_file="$HOME/.cache/current-wallpaper"
+    if [[ -f "$current_wallpaper_file" ]]; then
+        current_wallpaper=$(cat "$current_wallpaper_file" 2>/dev/null)
+        if [[ -n "$current_wallpaper" ]] && [[ -f "$current_wallpaper" ]]; then
+            log "🎨 Generando colores desde wallpaper actual: $current_wallpaper"
+            wal -i "$current_wallpaper" -n -q
+            sleep 1
+        else
+            log "❌ ERROR: No hay wallpaper actual válido"
+            exit 1
+        fi
+    else
+        log "❌ ERROR: No se encontró archivo de wallpaper actual"
+        exit 1
+    fi
+fi
+
+# Verificar archivos de pywal
+log "🔍 Verificando archivos de pywal..."
+required_files=(
+    "$HOME/.cache/wal/colors-rofi.rasi"
+    "$HOME/.cache/wal/colors.sh"
+)
+
+for file in "${required_files[@]}"; do
+    if [[ -f "$file" ]]; then
+        log "✅ Encontrado: $file"
+    else
+        log "❌ Faltante: $file"
+        exit 1
+    fi
+done
+
+# Crear directorio de configuración de rofi si no existe
+mkdir -p "$HOME/.config/rofi"
+
+# Copiar colores de pywal
+log "📋 Copiando colores de pywal..."
+cp "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
+
+# Verificar temas originales
+log "🔍 Verificando temas originales..."
+theme_files=(
+    "$HOME/Downloads/style-3.rasi"
+    "$HOME/Downloads/wallpaper-select.rasi"
+)
+
+for theme_file in "${theme_files[@]}"; do
+    if [[ -f "$theme_file" ]]; then
+        theme_name=$(basename "$theme_file" .rasi)
+        pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
+        
+        log "🔧 Creando tema pywal: ${theme_name}-pywal.rasi"
+        
+        # Crear tema pywal optimizado
+        temp_file=$(mktemp)
+        echo '@import "colors-pywal.rasi"' > "$temp_file"
+        echo '' >> "$temp_file"
+        
+        # Procesar archivo original eliminando colores hardcodeados
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^[[:space:]]*\* ]]; then
+                echo "$line" >> "$temp_file"
+                continue
+            elif [[ "$line" =~ ^[[:space:]]*(bgcolor|background|background-alt|foreground|foreground-alt|selected|active|urgent|color[0-9]+)[[:space:]]*: ]]; then
+                echo "    /* $line (overridden by pywal) */" >> "$temp_file"
+                continue
+            else
+                echo "$line" >> "$temp_file"
+            fi
+        done < "$theme_file"
+        
+        # Verificar y mover archivo
+        if [[ -s "$temp_file" ]]; then
+            mv "$temp_file" "$pywal_theme"
+            log "✅ Tema creado: ${theme_name}-pywal.rasi"
+        else
+            log "❌ ERROR: No se pudo crear tema: $theme_name"
+            rm -f "$temp_file"
+        fi
+    else
+        log "⚠️ Tema original no encontrado: $theme_file"
+    fi
+done
+
+# Mostrar información de colores generados
+log "🎨 Información de colores de pywal:"
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    # Configurar variables que pueden faltar
+    export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+    
+    source "$HOME/.cache/wal/colors.sh" 2>/dev/null || {
+        log "⚠️ No se pudo cargar colors.sh, usando archivo JSON"
+        if [[ -f "$HOME/.cache/wal/colors.json" ]]; then
+            background=$(jq -r '.colors.color0' "$HOME/.cache/wal/colors.json")
+            foreground=$(jq -r '.colors.color15' "$HOME/.cache/wal/colors.json")
+            color1=$(jq -r '.colors.color1' "$HOME/.cache/wal/colors.json")
+            color2=$(jq -r '.colors.color2' "$HOME/.cache/wal/colors.json")
+        fi
+    }
+    
+    if [[ -n "${background:-}" ]]; then
+        log "   Background: $background"
+        log "   Foreground: ${foreground:-N/A}" 
+        log "   Color1: ${color1:-N/A}"
+        log "   Color2: ${color2:-N/A}"
+    else
+        log "⚠️ No se pudieron cargar los colores"
+    fi
+fi
+
+# Probar un tema con rofi
+log "🧪 Probando tema sincronizado con rofi..."
+test_theme="$HOME/.config/rofi/wallpaper-select-pywal.rasi"
+
+if [[ -f "$test_theme" ]]; then
+    log "🚀 Ejecutando test de rofi con tema pywal..."
+    echo -e "Prueba 1\0icon\x1f$HOME/.cache/wal/gif-placeholder.png
+Prueba 2
+Prueba 3" | rofi -dmenu -i -p "🧪 Test Pywal Theme" -theme "$test_theme" -width 400 -lines 3 &
+    
+    rofi_pid=$!
+    sleep 2
+    
+    if kill -0 $rofi_pid 2>/dev/null; then
+        log "✅ Rofi ejecutándose correctamente con tema pywal"
+        kill $rofi_pid 2>/dev/null || true
+    fi
+else
+    log "❌ No se encontró tema de prueba: $test_theme"
+fi
+
+# Verificar archivos finales creados
+log "📋 Verificando archivos sincronizados:"
+sync_files=(
+    "$HOME/.config/rofi/colors-pywal.rasi"
+    "$HOME/.config/rofi/wallpaper-select-pywal.rasi"
+    "$HOME/.config/rofi/style-3-pywal.rasi"
+)
+
+all_ok=true
+for file in "${sync_files[@]}"; do
+    if [[ -f "$file" ]]; then
+        log "✅ Sincronizado: $(basename "$file")"
+    else
+        log "❌ Faltante: $(basename "$file")"
+        all_ok=false
+    fi
+done
+
+if [[ "$all_ok" == "true" ]]; then
+    log "🎉 ¡SINCRONIZACIÓN COMPLETADA EXITOSAMENTE!"
+    notify "🎉 Sincronización rofi-pywal completada exitosamente"
+else
+    log "⚠️ Sincronización completada con advertencias"
+    notify "⚠️ Sincronización completada con algunos errores"
+fi
+
+log "📁 Los archivos sincronizados están en: ~/.config/rofi/"
+log "📄 Log completo guardado en: $LOG_FILE"
+log "🔄 === FIN DE PRUEBA DE SINCRONIZACIÓN ==="
+
+exit 0

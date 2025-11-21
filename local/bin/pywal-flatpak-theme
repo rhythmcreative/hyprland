@@ -1,0 +1,50 @@
+#!/bin/bash
+# Script para aplicar tema pywal a aplicaciones Flatpak
+# Autor: rhythmcreative
+
+# Verificar que existen los archivos de pywal
+if [ ! -f "$HOME/.cache/wal/gtk3.css" ] || [ ! -f "$HOME/.cache/wal/gtk4.css" ]; then
+    echo "Error: No se encontraron los archivos CSS de pywal. Ejecuta 'wal -i imagen' primero."
+    exit 1
+fi
+
+# Copiar archivos de tema GTK4 de pywal
+echo "Aplicando tema pywal a GTK4..."
+cp "$HOME/.cache/wal/gtk4.css" "$HOME/.config/gtk-4.0/gtk.css"
+cp "$HOME/.cache/wal/gtk4.css" "$HOME/.config/gtk-4.0/gtk-dark.css"
+
+# Crear tema adicional para libadwaita (Mission Center)
+echo "Creando tema libadwaita personalizado..."
+cat > "$HOME/.config/gtk-4.0/gtk.css" << EOF
+/* Importar tema base de pywal */
+$(cat "$HOME/.cache/wal/gtk4.css")
+
+/* Estilos adicionales para libadwaita */
+.view {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+
+.card {
+    background-color: alpha(@window_fg_color, 0.05);
+    color: @window_fg_color;
+    border: 1px solid alpha(@window_fg_color, 0.15);
+}
+
+.toolbar {
+    background: @headerbar_bg_color;
+    color: @headerbar_fg_color;
+}
+
+EOF
+
+# El archivo GTK3 se actualiza automáticamente por pywal
+echo "Tema GTK3 ya está actualizado por pywal..."
+
+# Recargar configuración dconf para aplicar cambios
+echo "Recargando configuración GTK..."
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+
+echo "¡Tema pywal aplicado a aplicaciones Flatpak!"
+echo "Reinicia las aplicaciones Flatpak para ver los cambios."

@@ -1,0 +1,7 @@
+#!/home/rhythmcreative/.local/share/pipx/venvs/wal-steam/bin/python
+import sys
+from wal_steam import main
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(main())

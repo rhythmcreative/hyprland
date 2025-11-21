@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Script para cambiar entre diferentes temas de pywal-discord
+
+AVAILABLE_THEMES=("default" "abou")
+CURRENT_THEME=${1:-default}
+
+if [[ ! " ${AVAILABLE_THEMES[@]} " =~ " ${CURRENT_THEME} " ]]; then
+    echo "❌ Tema '$CURRENT_THEME' no disponible."
+    echo "📋 Temas disponibles: ${AVAILABLE_THEMES[*]}"
+    exit 1
+fi
+
+echo "🎨 Aplicando tema '$CURRENT_THEME' a Discord..."
+
+if pywal-discord -t "$CURRENT_THEME" -d; then
+    echo "✅ Tema '$CURRENT_THEME' aplicado exitosamente"
+    
+    # Notificación de éxito
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "🎨 Discord Theme" "Tema '$CURRENT_THEME' aplicado a Discord"
+    fi
+else
+    echo "❌ Error al aplicar tema '$CURRENT_THEME'"
+    
+    # Notificación de error
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "⚠️ Discord Theme" "Error al aplicar tema '$CURRENT_THEME'"
+    fi
+    exit 1
+fi
+
+echo "ℹ️ Reinicia Discord para ver los cambios"

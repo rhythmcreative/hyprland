@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Script para probar la sincronización automática de wpgtk con pywal
+
+echo "🧪 Probando sincronización de wpgtk con pywal..."
+
+# Lista de wallpapers disponibles
+WALLPAPERS=(
+    "$HOME/Pictures/Wallpapers/1.jpg"
+    "$HOME/Pictures/Wallpapers/2.jpg" 
+    "$HOME/Pictures/Wallpapers/3.jpg"
+)
+
+for wallpaper in "${WALLPAPERS[@]}"; do
+    if [ -f "$wallpaper" ]; then
+        echo
+        echo "📸 Probando con wallpaper: $(basename "$wallpaper")"
+        
+        # Cambiar wallpaper con pywal
+        wal -i "$wallpaper" >/dev/null 2>&1
+        
+        # Esperar un poco para que se ejecuten los hooks
+        echo "⏳ Esperando sincronización..."
+        sleep 5
+        
+        # Verificar sincronización
+        current_pywal=$(basename "$(cat ~/.cache/wal/wal)")
+        current_wpgtk=$(wpg -c 2>/dev/null)
+        
+        echo "🎨 Pywal actual: $current_pywal"
+        echo "🎨 wpgtk actual: $current_wpgtk"
+        
+        if [ "$current_pywal" = "$current_wpgtk" ]; then
+            echo "✅ Sincronización exitosa"
+        else
+            echo "❌ Sincronización fallida - ejecutando manualmente..."
+            bash ~/.cache/wal/wpgtk-sync-hook.sh
+            current_wpgtk=$(wpg -c 2>/dev/null)
+            echo "🎨 wpgtk después del hook manual: $current_wpgtk"
+        fi
+        
+        sleep 2
+    fi
+done
+
+echo
+echo "📋 Estado final de wpgtk:"
+wpg -l
+echo
+echo "🎯 Wallpaper activo en wpgtk: $(wpg -c)"
+echo "🎯 Wallpaper activo en pywal: $(basename "$(cat ~/.cache/wal/wal)")"
+
+echo
+echo "🎉 Prueba completada"

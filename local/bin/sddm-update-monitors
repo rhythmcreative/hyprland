@@ -1,0 +1,27 @@
+#!/bin/bash
+# Script para actualizar configuración de monitores de SDDM (solo eDP-1)
+
+echo "🖥️ Configurando SDDM para mostrar solo en eDP-1..."
+
+# Crear script Xsetup que solo muestra en eDP-1
+xsetup_temp="/tmp/sddm-single-monitor.sh"
+cat > "$xsetup_temp" << 'XSETUP_EOF'
+#!/bin/sh
+# Xsetup - Solo mostrar SDDM en eDP-1 (pantalla del laptop)
+# Desactivar todos los otros monitores
+
+xrandr --output eDP-1 --auto --primary
+xrandr --output DP-6 --off
+xrandr --output DP-1-0 --off
+XSETUP_EOF
+
+chmod +x "$xsetup_temp"
+
+# Aplicar con sudo
+echo "Aplicando configuración solo para eDP-1..."
+if sudo cp "$xsetup_temp" "/etc/sddm/Xsetup"; then
+    sudo chmod +x "/etc/sddm/Xsetup"
+    echo "✅ SDDM configurado para mostrar solo en eDP-1"
+else
+    echo "❌ Error al aplicar configuración"
+fi

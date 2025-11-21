@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Hook de pywal - Se ejecuta después de generar colores
+# Sincroniza automáticamente los colores con el teclado ASUS
+
+# Ejecutar sincronización en background para no retrasar pywal
+nohup "$HOME/.local/bin/pywal-asusctl-sync" &>/dev/null &
+
+# Sincronizar LibreWolf con los nuevos colores
+nohup "$HOME/.config/wal/scripts/librewolf-sync.sh" &>/dev/null &
+
+# Sincronizar Vesktop (Discord) con los nuevos colores
+nohup pywal-discord &>/dev/null &
+
+# Sincronizar SDDM con el nuevo wallpaper y colores
+nohup "$HOME/.local/bin/sddm-auto-sync-local" --wallpaper-only &>/dev/null &

@@ -1,0 +1,3 @@
+#!/bin/bash
+cd ~/.config/wal-gtk-sync
+exec python3 wal-gtk-sync.py "$@"

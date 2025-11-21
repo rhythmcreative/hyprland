@@ -1,0 +1,187 @@
+#!/bin/bash
+
+# Selector de wallpaper usando wallpaper-select.rasi
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+LOG_FILE="$HOME/.cache/wallpaper-rasi.log"
+
+# Crear directorio log si no existe
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -t 3000
+    exit 1
+fi
+
+log "Iniciando selector de wallpaper con wallpaper-select.rasi"
+
+# Obtener lista de imágenes y GIFs
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" -o -iname "*.gif" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes en $WALLPAPER_DIR"
+    notify-send "❌ Error" "No se encontraron imágenes en $WALLPAPER_DIR" -t 3000
+    exit 1
+fi
+
+log "Encontradas ${#images[@]} imágenes"
+
+# Crear archivo temporal con la lista de wallpapers
+temp_file=$(mktemp)
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_ext="${img##*.}"
+    file_ext_upper="${file_ext^^}"
+    
+    # Añadir emoji indicador
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎬 ${basename_img%.*}"
+    else
+        display_name="🖼️ ${basename_img%.*}"
+    fi
+    
+    echo "$display_name" >> "$temp_file"
+done
+
+# Mostrar selector con rofi usando wallpaper-select.rasi
+log "Mostrando selector rofi con wallpaper-select.rasi"
+# Intentar con wallpaper-select.rasi, si falla usar tema default
+selected=$(cat "$temp_file" | rofi -dmenu -i -p "🎨 Selecciona Wallpaper:" \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" 2>/dev/null)
+
+# Si falla con el tema personalizado, usar el default
+if [[ $? -ne 0 ]]; then
+    log "Error con wallpaper-select.rasi, usando tema default"
+    selected=$(cat "$temp_file" | rofi -dmenu -i -p "🎨 Selecciona Wallpaper:" 2>/dev/null)
+fi
+
+# Limpiar archivo temporal
+rm -f "$temp_file"
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    log "No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "Seleccionado: $selected"
+
+# Encontrar la ruta completa del archivo seleccionado
+selected_path=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎬 ${basename_img%.*}"
+    else
+        display_name="🖼️ ${basename_img%.*}"
+    fi
+    
+    if [[ "$display_name" == "$selected" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    log "ERROR: No se pudo encontrar el archivo seleccionado"
+    notify-send "❌ Error" "No se pudo encontrar el archivo seleccionado" -t 3000
+    exit 1
+fi
+
+log "Ruta completa: $selected_path"
+
+# Guardar el wallpaper seleccionado
+echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+log "Wallpaper guardado en cache"
+
+# Verificar que swww-daemon está corriendo
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "Iniciando swww-daemon..."
+    notify-send "🔄 Iniciando swww-daemon..." -t 2000
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# Aplicar wallpaper
+log "Aplicando wallpaper: $selected_path"
+
+if [[ "${selected_path,,}" == *.gif ]]; then
+    log "Aplicando GIF animado"
+    swww img "$selected_path" --transition-type fade --transition-duration 0.8 --transition-fps 60
+    if [ $? -eq 0 ]; then
+        log "GIF wallpaper aplicado exitosamente"
+        notify-send "🎬 GIF Wallpaper" "$(basename "$selected_path") aplicado" -t 3000
+    else
+        log "ERROR: Fallo al aplicar GIF wallpaper"
+        notify-send "❌ Error" "No se pudo aplicar el GIF wallpaper" -t 3000
+        exit 1
+    fi
+else
+    log "Aplicando imagen estática"
+    swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+    if [ $? -eq 0 ]; then
+        log "Imagen wallpaper aplicada exitosamente"
+        notify-send "🖼️ Wallpaper" "$(basename "$selected_path") aplicado" -t 3000
+    else
+        log "ERROR: Fallo al aplicar imagen wallpaper"
+        notify-send "❌ Error" "No se pudo aplicar el wallpaper" -t 3000
+        exit 1
+    fi
+fi
+
+# Aplicar colores con pywal
+if command -v wal > /dev/null 2>&1; then
+    log "Generando colores con pywal"
+    notify-send "🎨 Generando colores..." "Aplicando tema con pywal" -t 2000
+    
+    # Para GIFs, usar el primer frame
+    if [[ "${selected_path,,}" == *.gif ]]; then
+        log "Extrayendo colores del primer frame del GIF"
+        temp_image="$HOME/.cache/gif_frame_for_wal.png"
+        convert "$selected_path[0]" "$temp_image" 2>/dev/null
+        wal -i "$temp_image" --backend wal > /dev/null 2>&1
+        rm -f "$temp_image" 2>/dev/null || true
+    else
+        wal -i "$selected_path" --backend wal > /dev/null 2>&1
+    fi
+    
+    if [ $? -eq 0 ]; then
+        log "Colores generados exitosamente"
+        
+        # Recargar Hyprland
+        if pgrep -x "Hyprland" > /dev/null; then
+            log "Recargando Hyprland"
+            sleep 1
+            hyprctl reload > /dev/null 2>&1
+        fi
+        
+        # Recargar waybar
+        if pgrep -x "waybar" > /dev/null; then
+            log "Recargando waybar"
+            pkill -SIGUSR2 waybar > /dev/null 2>&1
+        fi
+        
+        # Aplicar tema a Discord
+        if command -v pywal-discord > /dev/null 2>&1; then
+            log "Aplicando tema a Discord"
+            pywal-discord -t default -d > /dev/null 2>&1 &
+        fi
+        
+        notify-send "✅ Tema Aplicado" "Wallpaper y colores actualizados" -t 3000
+    else
+        log "ERROR: Fallo al generar colores"
+        notify-send "⚠️ Advertencia" "Wallpaper aplicado pero falló la generación de colores" -t 3000
+    fi
+else
+    log "pywal no está instalado"
+    notify-send "⚠️ Advertencia" "pywal no está instalado. Solo se cambió el wallpaper" -t 3000
+fi
+
+log "Proceso completado exitosamente"

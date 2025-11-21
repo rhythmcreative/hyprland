@@ -1,0 +1,961 @@
+#!/bin/bash
+
+# ╔═══════════════════════════════════════════════════════════════════════════════════════╗
+# ║                          PyWal GTK Theme Generator                                    ║  
+# ║                                                                                       ║
+# ║  Genera y aplica tema GTK dinámico basado en colores pywal                           ║
+# ║  Incluye sincronización con nm-applet y soporte GTK 3.0/4.0                         ║
+# ║                          by rhythmcreative                                            ║
+# ║                                                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════════════════════════╝
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Variables
+THEME_NAME="PyWal-Dynamic"
+GTK_THEME_DIR="$HOME/.themes/$THEME_NAME"
+PYWAL_COLORS="$HOME/.cache/wal/colors.sh"
+
+# Función para mostrar mensajes con colores
+print_status() {
+    echo -e "${GREEN}[PYWAL-GTK]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[PYWAL-GTK]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[PYWAL-GTK]${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}[PYWAL-GTK]${NC} $1"
+}
+
+# Verificar dependencias
+check_dependencies() {
+    local missing_deps=()
+    
+    if ! command -v wal &> /dev/null; then
+        missing_deps+=("pywal")
+    fi
+    
+    if ! command -v gsettings &> /dev/null; then
+        missing_deps+=("gsettings (glib2)")
+    fi
+    
+    if [[ ${#missing_deps[@]} -ne 0 ]]; then
+        print_error "Dependencias faltantes: ${missing_deps[*]}"
+        print_info "Instala con: sudo pacman -S python-pywal glib2"
+        exit 1
+    fi
+}
+
+# Verificar si pywal tiene colores
+check_pywal_colors() {
+    if [[ ! -f "$PYWAL_COLORS" ]]; then
+        print_error "Colores de pywal no encontrados en $PYWAL_COLORS"
+        print_info "Ejecuta primero: wal -i /ruta/a/imagen.jpg"
+        exit 1
+    fi
+}
+
+# Cargar colores de pywal
+load_pywal_colors() {
+    print_status "🎨 Cargando colores de pywal..."
+    source "$PYWAL_COLORS"
+    
+    # Mostrar colores cargados
+    print_info "Colores cargados:"
+    echo -e "   • Fondo: ${background}"
+    echo -e "   • Texto: ${foreground}"
+    echo -e "   • Acento: ${color6}"
+    echo -e "   • Secundario: ${color8}"
+}
+
+# Crear directorios del tema
+create_theme_structure() {
+    print_status "📁 Creando estructura del tema..."
+    mkdir -p "$GTK_THEME_DIR"/{gtk-3.0,gtk-4.0,metacity-1}
+    
+    # Crear archivo index.theme
+    cat > "$GTK_THEME_DIR/index.theme" << EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=PyWal Dynamic
+Comment=Dynamic GTK theme generated from pywal colors
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=PyWal-Dynamic
+MetacityTheme=PyWal-Dynamic
+EOF
+}
+
+# Generar tema GTK 3.0
+generate_gtk3_theme() {
+    print_status "📝 Generando tema GTK 3.0..."
+    
+    cat > "$GTK_THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* PyWal Dynamic GTK 3.0 Theme - Auto-generated */
+/* Generated on: $(date) */
+
+/* Color palette from pywal */
+@define-color bg_color ${background};
+@define-color fg_color ${foreground};
+@define-color base_color ${color0};
+@define-color text_color ${foreground};
+@define-color selected_bg_color ${color6};
+@define-color selected_fg_color ${background};
+@define-color tooltip_bg_color ${color8};
+@define-color tooltip_fg_color ${foreground};
+
+/* Standard GTK colors */
+@define-color theme_bg_color @bg_color;
+@define-color theme_fg_color @fg_color;
+@define-color theme_base_color @base_color;
+@define-color theme_text_color @text_color;
+@define-color theme_selected_bg_color @selected_bg_color;
+@define-color theme_selected_fg_color @selected_fg_color;
+@define-color theme_tooltip_bg_color @tooltip_bg_color;
+@define-color theme_tooltip_fg_color @tooltip_fg_color;
+
+/* Additional colors */
+@define-color borders ${color8};
+@define-color unfocused_borders alpha(${color8}, 0.5);
+@define-color warning_color ${color3};
+@define-color error_color ${color1};
+@define-color success_color ${color2};
+
+/* Window styling */
+window {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+/* Headerbar */
+headerbar {
+    background: linear-gradient(to bottom, 
+                alpha(${color6}, 0.1), 
+                @bg_color);
+    color: @fg_color;
+    border-bottom: 1px solid @borders;
+    box-shadow: inset 0 1px alpha(${foreground}, 0.1);
+}
+
+headerbar:backdrop {
+    background-color: @bg_color;
+    color: alpha(@fg_color, 0.6);
+}
+
+headerbar .title {
+    color: @fg_color;
+    font-weight: bold;
+}
+
+headerbar .subtitle {
+    color: alpha(@fg_color, 0.7);
+    font-size: smaller;
+}
+
+/* Headerbar buttons */
+headerbar button {
+    background: linear-gradient(to bottom, 
+                alpha(${color8}, 0.8), 
+                alpha(${color0}, 0.8));
+    color: @fg_color;
+    border: 1px solid @borders;
+    border-radius: 5px;
+    padding: 4px 8px;
+    min-height: 16px;
+}
+
+headerbar button:hover {
+    background: linear-gradient(to bottom, 
+                ${color6}, 
+                alpha(${color6}, 0.8));
+    color: @selected_fg_color;
+    border-color: ${color6};
+}
+
+headerbar button:active,
+headerbar button:checked {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+    border-color: @selected_bg_color;
+    box-shadow: inset 0 1px alpha(black, 0.1);
+}
+
+/* Regular buttons */
+button {
+    background: linear-gradient(to bottom, 
+                alpha(@borders, 0.6), 
+                @base_color);
+    color: @fg_color;
+    border: 1px solid @borders;
+    border-radius: 5px;
+    padding: 6px 12px;
+    min-height: 24px;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, 
+                @selected_bg_color, 
+                alpha(@selected_bg_color, 0.8));
+    color: @selected_fg_color;
+    border-color: @selected_bg_color;
+}
+
+button:active {
+    background-color: alpha(@selected_bg_color, 0.8);
+    color: @selected_fg_color;
+    box-shadow: inset 0 1px alpha(black, 0.2);
+}
+
+button.suggested-action {
+    background: linear-gradient(to bottom, 
+                @selected_bg_color, 
+                alpha(@selected_bg_color, 0.8));
+    color: @selected_fg_color;
+    border-color: @selected_bg_color;
+}
+
+button.destructive-action {
+    background: linear-gradient(to bottom, 
+                @error_color, 
+                alpha(@error_color, 0.8));
+    color: white;
+    border-color: @error_color;
+}
+
+/* Entry fields */
+entry {
+    background-color: @base_color;
+    color: @text_color;
+    border: 1px solid @borders;
+    border-radius: 4px;
+    padding: 6px 8px;
+    min-height: 24px;
+}
+
+entry:focus {
+    border-color: @selected_bg_color;
+    box-shadow: inset 0 0 0 1px alpha(@selected_bg_color, 0.3);
+}
+
+entry:disabled {
+    background-color: alpha(@base_color, 0.5);
+    color: alpha(@text_color, 0.5);
+}
+
+/* Selection styling */
+selection,
+*:selected {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    background-color: alpha(@borders, 0.6);
+    border-radius: 10px;
+    min-width: 12px;
+    min-height: 12px;
+    margin: 2px;
+}
+
+scrollbar slider:hover {
+    background-color: @selected_bg_color;
+}
+
+scrollbar slider:active {
+    background-color: alpha(@selected_bg_color, 0.8);
+}
+
+/* Treeview */
+treeview {
+    background-color: @base_color;
+    color: @text_color;
+    border: 1px solid @borders;
+}
+
+treeview:selected {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+treeview header button {
+    background-color: alpha(@bg_color, 0.8);
+    color: @fg_color;
+    border: 1px solid @borders;
+    border-radius: 0;
+}
+
+/* Menus */
+menu {
+    background-color: @bg_color;
+    color: @fg_color;
+    border: 1px solid @borders;
+    border-radius: 4px;
+    padding: 4px 0;
+}
+
+menuitem {
+    padding: 6px 12px;
+    min-height: 20px;
+}
+
+menuitem:hover {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+menuitem:disabled {
+    color: alpha(@fg_color, 0.5);
+}
+
+/* Notebook (tabs) */
+notebook {
+    background-color: @bg_color;
+}
+
+notebook header {
+    background-color: alpha(@borders, 0.2);
+    border-bottom: 1px solid @borders;
+}
+
+notebook tab {
+    background-color: alpha(@base_color, 0.6);
+    color: alpha(@fg_color, 0.7);
+    border: 1px solid @borders;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    padding: 6px 12px;
+    margin: 0 2px;
+}
+
+notebook tab:checked {
+    background-color: @bg_color;
+    color: @fg_color;
+    border-bottom: 2px solid @selected_bg_color;
+}
+
+/* Switch */
+switch {
+    background-color: @borders;
+    border-radius: 12px;
+    min-width: 44px;
+    min-height: 24px;
+}
+
+switch:checked {
+    background-color: @selected_bg_color;
+}
+
+switch slider {
+    background-color: white;
+    border: 1px solid alpha(black, 0.2);
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 2px;
+}
+
+/* Progressbar */
+progressbar {
+    background-color: @borders;
+    border-radius: 4px;
+    font-size: smaller;
+}
+
+progressbar progress {
+    background: linear-gradient(to right, 
+                @selected_bg_color, 
+                alpha(@selected_bg_color, 0.8));
+    border-radius: 4px;
+    min-height: 8px;
+}
+
+/* Tooltips */
+tooltip {
+    background-color: @tooltip_bg_color;
+    color: @tooltip_fg_color;
+    border: 1px solid alpha(@selected_bg_color, 0.5);
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+/* Separators */
+separator {
+    background-color: @borders;
+    min-width: 1px;
+    min-height: 1px;
+}
+
+/* Checkboxes and radio buttons */
+check,
+radio {
+    background-color: @base_color;
+    border: 1px solid @borders;
+    color: @selected_bg_color;
+}
+
+check:checked,
+radio:checked {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+    border-color: @selected_bg_color;
+}
+
+/* Spinbutton */
+spinbutton {
+    background-color: @base_color;
+    border: 1px solid @borders;
+    border-radius: 4px;
+}
+
+spinbutton button {
+    background-color: transparent;
+    border: none;
+    color: @fg_color;
+}
+
+spinbutton button:hover {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+EOF
+
+    # Crear settings.ini para GTK 3.0
+    cat > "$GTK_THEME_DIR/gtk-3.0/settings.ini" << EOF
+[Settings]
+gtk-theme-name = PyWal-Dynamic
+gtk-icon-theme-name = Adwaita
+gtk-font-name = Sans 10
+gtk-cursor-theme-name = Adwaita
+gtk-cursor-theme-size = 24
+gtk-toolbar-style = GTK_TOOLBAR_BOTH_HORIZ
+gtk-toolbar-icon-size = GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-button-images = 0
+gtk-menu-images = 0
+gtk-enable-event-sounds = 1
+gtk-enable-input-feedback-sounds = 1
+gtk-xft-antialias = 1
+gtk-xft-hinting = 1
+gtk-xft-hintstyle = hintslight
+gtk-xft-rgba = rgb
+gtk-application-prefer-dark-theme = 1
+EOF
+}
+
+# Generar tema GTK 4.0
+generate_gtk4_theme() {
+    print_status "📝 Generando tema GTK 4.0..."
+    
+    cat > "$GTK_THEME_DIR/gtk-4.0/gtk.css" << EOF
+/* PyWal Dynamic GTK 4.0 Theme - Auto-generated */
+/* Generated on: $(date) */
+
+/* Color definitions */
+@define-color accent_bg_color ${color6};
+@define-color accent_fg_color ${background};
+@define-color destructive_bg_color ${color1};
+@define-color destructive_fg_color white;
+@define-color success_bg_color ${color2};
+@define-color success_fg_color white;
+@define-color warning_bg_color ${color3};
+@define-color warning_fg_color black;
+@define-color error_bg_color ${color1};
+@define-color error_fg_color white;
+@define-color window_bg_color ${background};
+@define-color window_fg_color ${foreground};
+@define-color view_bg_color ${color0};
+@define-color view_fg_color ${foreground};
+@define-color headerbar_bg_color ${background};
+@define-color headerbar_fg_color ${foreground};
+@define-color popover_bg_color ${background};
+@define-color popover_fg_color ${foreground};
+@define-color card_bg_color alpha(${color0}, 0.8);
+@define-color card_fg_color ${foreground};
+@define-color shade_color alpha(black, 0.36);
+@define-color scrollbar_outline_color alpha(${foreground}, 0.2);
+
+/* Window styling */
+window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+
+/* Headerbar */
+headerbar {
+    background: linear-gradient(to bottom, 
+                alpha(@accent_bg_color, 0.1), 
+                @headerbar_bg_color);
+    color: @headerbar_fg_color;
+    border-bottom: 1px solid alpha(@accent_bg_color, 0.3);
+    min-height: 40px;
+}
+
+headerbar .title {
+    font-weight: bold;
+    color: @headerbar_fg_color;
+}
+
+headerbar .subtitle {
+    font-size: smaller;
+    color: alpha(@headerbar_fg_color, 0.7);
+}
+
+/* Buttons */
+button {
+    background: linear-gradient(to bottom, 
+                alpha(${color8}, 0.6), 
+                @view_bg_color);
+    color: @view_fg_color;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 6px;
+    padding: 8px 16px;
+    min-height: 24px;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, 
+                @accent_bg_color, 
+                alpha(@accent_bg_color, 0.8));
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+button:active {
+    background-color: alpha(@accent_bg_color, 0.8);
+    color: @accent_fg_color;
+}
+
+button.suggested-action {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+button.destructive-action {
+    background: @destructive_bg_color;
+    color: @destructive_fg_color;
+    border-color: @destructive_bg_color;
+}
+
+button.flat {
+    background: transparent;
+    border: transparent;
+    color: @window_fg_color;
+}
+
+/* Entry fields */
+entry {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-height: 32px;
+}
+
+entry:focus {
+    border-color: @accent_bg_color;
+    outline: 2px solid alpha(@accent_bg_color, 0.3);
+    outline-offset: -1px;
+}
+
+/* TextView */
+textview {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+
+textview text {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+
+textview text selection {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* ScrolledWindow and Scrollbars */
+scrolledwindow {
+    background-color: @view_bg_color;
+}
+
+scrollbar {
+    background: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    background-color: alpha(@accent_bg_color, 0.5);
+    border-radius: 20px;
+    min-width: 12px;
+    min-height: 12px;
+    margin: 2px;
+}
+
+scrollbar slider:hover {
+    background-color: @accent_bg_color;
+}
+
+/* ListView */
+listview {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+    border-radius: 6px;
+}
+
+listview row {
+    padding: 8px 12px;
+    border-bottom: 1px solid alpha(@accent_bg_color, 0.1);
+}
+
+listview row:selected {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* TreeView */
+treeview {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+
+treeview:selected {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Notebook */
+notebook {
+    background-color: @window_bg_color;
+}
+
+notebook > header {
+    background-color: alpha(@view_bg_color, 0.5);
+    border-bottom: 1px solid alpha(@accent_bg_color, 0.3);
+}
+
+notebook > header > tabs > tab {
+    background-color: transparent;
+    color: alpha(@window_fg_color, 0.7);
+    border: none;
+    border-radius: 6px 6px 0 0;
+    padding: 8px 16px;
+    margin: 0 2px;
+}
+
+notebook > header > tabs > tab:checked {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    border-bottom: 2px solid @accent_bg_color;
+}
+
+/* Switch */
+switch {
+    background-color: alpha(@accent_bg_color, 0.3);
+    border-radius: 16px;
+    min-width: 52px;
+    min-height: 32px;
+}
+
+switch:checked {
+    background-color: @accent_bg_color;
+}
+
+switch slider {
+    background-color: white;
+    border: 1px solid alpha(black, 0.1);
+    border-radius: 50%;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 2px;
+}
+
+/* ProgressBar */
+progressbar {
+    background-color: alpha(@accent_bg_color, 0.2);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+progressbar progress {
+    background: linear-gradient(to right, 
+                @accent_bg_color, 
+                alpha(@accent_bg_color, 0.8));
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+/* Popover */
+popover {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px alpha(black, 0.2);
+    padding: 8px;
+}
+
+/* Menu */
+menu {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 8px;
+    padding: 4px 0;
+}
+
+menu menuitem {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px 4px;
+}
+
+menu menuitem:hover {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Tooltip */
+tooltip {
+    background-color: alpha(black, 0.9);
+    color: white;
+    border: 1px solid alpha(@accent_bg_color, 0.5);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+/* CheckButton and RadioButton */
+checkbutton,
+radiobutton {
+    padding: 4px;
+}
+
+checkbutton check,
+radiobutton radio {
+    background-color: @view_bg_color;
+    border: 2px solid alpha(@accent_bg_color, 0.5);
+    color: @accent_bg_color;
+    min-width: 16px;
+    min-height: 16px;
+}
+
+checkbutton check:checked,
+radiobutton radio:checked {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+radiobutton radio {
+    border-radius: 50%;
+}
+
+checkbutton check {
+    border-radius: 3px;
+}
+
+/* Separator */
+separator {
+    background-color: alpha(@accent_bg_color, 0.2);
+}
+
+/* SpinButton */
+spinbutton {
+    background-color: @view_bg_color;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 6px;
+}
+
+spinbutton entry {
+    border: none;
+    background: transparent;
+}
+
+spinbutton button {
+    background-color: transparent;
+    border: none;
+    color: @view_fg_color;
+}
+
+spinbutton button:hover {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+EOF
+}
+
+# Configurar nm-applet
+configure_nm_applet() {
+    print_status "🌐 Configurando nm-applet para usar el tema..."
+    
+    # Crear configuración específica para nm-applet
+    NM_CONFIG_DIR="$HOME/.config/nm-applet"
+    mkdir -p "$NM_CONFIG_DIR"
+    
+    cat > "$NM_CONFIG_DIR/nm-applet.css" << EOF
+/* nm-applet custom styling with pywal colors */
+.nm-applet-popup {
+    background-color: ${background};
+    color: ${foreground};
+    border: 1px solid ${color6};
+    border-radius: 8px;
+}
+
+.nm-applet-menu {
+    background-color: ${background};
+    color: ${foreground};
+}
+
+.nm-applet-menuitem:hover {
+    background-color: ${color6};
+    color: ${background};
+}
+
+.nm-applet-button {
+    color: ${foreground};
+}
+
+.nm-applet-button:hover {
+    color: ${color6};
+}
+EOF
+
+    # Reiniciar nm-applet para aplicar cambios
+    print_status "🔄 Reiniciando nm-applet..."
+    pkill -f nm-applet 2>/dev/null || true
+    sleep 1
+    
+    # Iniciar nm-applet con la nueva configuración
+    GTK_THEME="$THEME_NAME" nohup nm-applet >/dev/null 2>&1 &
+}
+
+# Aplicar configuración GTK
+apply_gtk_settings() {
+    print_status "⚙️  Aplicando configuración GTK..."
+    
+    # Configurar gsettings
+    gsettings set org.gnome.desktop.interface gtk-theme "$THEME_NAME"
+    gsettings set org.gnome.desktop.wm.preferences theme "$THEME_NAME"
+    
+    # Configurar variables de entorno
+    echo "export GTK_THEME=\"$THEME_NAME\"" >> "$HOME/.bashrc"
+    export GTK_THEME="$THEME_NAME"
+    
+    # Crear archivo de configuración GTK
+    mkdir -p "$HOME/.config/gtk-3.0"
+    cat > "$HOME/.config/gtk-3.0/settings.ini" << EOF
+[Settings]
+gtk-theme-name=$THEME_NAME
+gtk-icon-theme-name=Adwaita
+gtk-font-name=Sans 10
+gtk-cursor-theme-name=Adwaita
+gtk-cursor-theme-size=24
+gtk-application-prefer-dark-theme=1
+EOF
+
+    mkdir -p "$HOME/.config/gtk-4.0"
+    cat > "$HOME/.config/gtk-4.0/settings.ini" << EOF
+[Settings]
+gtk-theme-name=$THEME_NAME
+gtk-icon-theme-name=Adwaita
+gtk-font-name=Sans 10
+gtk-cursor-theme-name=Adwaita
+gtk-cursor-theme-size=24
+gtk-application-prefer-dark-theme=1
+EOF
+}
+
+# Función principal
+main() {
+    clear
+    echo -e "${PURPLE}╔═══════════════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}                          ${CYAN}PyWal GTK Theme Generator${NC}                                    ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}  ${GREEN}Genera y aplica tema GTK dinámico basado en colores pywal${NC}                           ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}  ${GREEN}Incluye sincronización con nm-applet y soporte GTK 3.0/4.0${NC}                         ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                          ${YELLOW}by rhythmcreative${NC}                                            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚═══════════════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    print_status "🚀 Iniciando generación del tema GTK con pywal..."
+    
+    # Verificar dependencias
+    check_dependencies
+    
+    # Verificar colores de pywal
+    check_pywal_colors
+    
+    # Cargar colores
+    load_pywal_colors
+    
+    # Crear estructura del tema
+    create_theme_structure
+    
+    # Generar temas
+    generate_gtk3_theme
+    generate_gtk4_theme
+    
+    # Configurar nm-applet
+    configure_nm_applet
+    
+    # Aplicar configuración
+    apply_gtk_settings
+    
+    # Mostrar resumen
+    echo ""
+    print_status "✅ Tema GTK PyWal generado y aplicado exitosamente!"
+    echo ""
+    print_info "📋 Resumen:"
+    echo -e "   • Tema: ${CYAN}$THEME_NAME${NC}"
+    echo -e "   • Ubicación: ${CYAN}$GTK_THEME_DIR${NC}"
+    echo -e "   • GTK 3.0: ${GREEN}✓${NC}"
+    echo -e "   • GTK 4.0: ${GREEN}✓${NC}"
+    echo -e "   • nm-applet: ${GREEN}✓${NC}"
+    echo ""
+    print_info "🎨 Colores aplicados:"
+    echo -e "   • Fondo: ${background}"
+    echo -e "   • Texto: ${foreground}"
+    echo -e "   • Acento: ${color6}"
+    echo -e "   • Secundario: ${color8}"
+    echo ""
+    print_warning "💡 Reinicia las aplicaciones GTK para ver los cambios completos"
+    
+    # Notificación opcional
+    if command -v notify-send &> /dev/null; then
+        notify-send "PyWal GTK Theme" "Tema generado y aplicado exitosamente! 🎨" -t 5000
+    fi
+}
+
+# Verificar argumentos
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "PyWal GTK Theme Generator"
+    echo "Uso: $0"
+    echo ""
+    echo "Genera y aplica un tema GTK dinámico basado en los colores de pywal."
+    echo "Incluye soporte para GTK 3.0, GTK 4.0 y nm-applet."
+    exit 0
+fi
+
+# Ejecutar función principal
+main "$@"

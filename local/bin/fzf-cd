@@ -1,0 +1,59 @@
+#!/bin/bash
+# FZF Directory Navigator - Navegación avanzada de directorios con FZF
+# Este script mejora la experiencia de navegación de directorios en Kitty
+
+# Configuración de colores para FZF
+export FZF_DEFAULT_OPTS="
+    --height 60%
+    --layout=reverse
+    --border
+    --preview 'ls -la {}'
+    --preview-window=right:50%:wrap
+    --bind 'ctrl-/:toggle-preview'
+    --header 'CTRL-C: salir, CTRL-/: toggle preview, ENTER: seleccionar'
+    --color=header:italic
+"
+
+# Función principal para navegación interactiva
+fzf_directory_navigation() {
+    local dir
+    
+    # Combinar directorios de varias fuentes
+    {
+        # Directorios frecuentes de zoxide (si está disponible)
+        if command -v zoxide >/dev/null 2>&1; then
+            echo "# Directorios frecuentes (zoxide)"
+            zoxide query --list | head -20
+        fi
+        
+        echo "# Directorio actual y subdirectorios"
+        find . -type d -not -path '*/\.*' 2>/dev/null | head -50
+        
+        # Directorios del CDPATH
+        if [ -n "$CDPATH" ]; then
+            echo "# Directorios de CDPATH"
+            IFS=':' read -ra PATHS <<< "$CDPATH"
+            for path in "${PATHS[@]}"; do
+                [ -d "$path" ] && find "$path" -maxdepth 2 -type d 2>/dev/null
+            done
+        fi
+        
+        echo "# Directorios comunes del sistema"
+        echo "/tmp"
+        echo "/var/log"
+        echo "/etc"
+        echo "/usr/local"
+        echo "/opt"
+    } | sort -u | fzf \
+        --prompt="📁 Selecciona directorio: " \
+        --header-first \
+        --ansi
+}
+
+# Si se ejecuta directamente, mostrar el navegador
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    selected_dir=$(fzf_directory_navigation)
+    if [ -n "$selected_dir" ] && [ "$selected_dir" != "# "* ]; then
+        cd "$selected_dir" && pwd
+    fi
+fi

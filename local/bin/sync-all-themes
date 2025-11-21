@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Script universal para sincronizar todos los themes con pywal
+# Funciona tanto con Oh My Posh (bash) como con Powerlevel10k (zsh)
+
+echo "🌈 Sincronizando todos los themes con pywal..."
+
+# Verificar que pywal esté configurado
+if [[ ! -f "$HOME/.cache/wal/colors.json" ]]; then
+    echo "❌ No se encontraron colores de pywal."
+    echo "💡 Ejecuta 'wal -i /ruta/a/imagen' primero."
+    exit 1
+fi
+
+# Sincronizar Oh My Posh (bash)
+if [[ -f "$HOME/.config/oh-my-posh/pywal-theme.omp.json" ]]; then
+    echo "🚀 Sincronizando Oh My Posh..."
+    "$HOME/.local/bin/sync-omp-pywal"
+    echo ""
+fi
+
+# Sincronizar Powerlevel10k (zsh)
+if [[ -f "$HOME/Hyde/Configs/.config/zsh/.p10k.zsh" || -f "$HOME/.p10k.zsh" ]]; then
+    echo "⚡ Sincronizando Powerlevel10k..."
+    "$HOME/.local/bin/sync-p10k-pywal"
+    echo ""
+fi
+
+# Sincronizar Kitty
+echo "🐱 Sincronizando bordes de Kitty..."
+"$HOME/.local/bin/sync-kitty-pywal"
+echo ""
+
+echo "✅ ¡Sincronización completa!"
+echo ""
+echo "💡 Instrucciones para ver los cambios:"
+echo "   • En bash: Abre una nueva terminal o ejecuta 'source ~/.bashrc'"
+echo "   • En zsh: Abre una nueva terminal o ejecuta 'source ~/.zshrc'"
+echo "   • En Kitty: Los colores ya están actualizados"

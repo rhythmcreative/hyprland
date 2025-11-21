@@ -1,0 +1,366 @@
+#!/bin/bash
+
+# Script para generar un tema GTK uniforme desde colores de pywal
+# Uso: wal-gtk-uniform
+
+THEME_DIR="$HOME/.themes/wal-gtk-auto"
+
+# Crear directorios si no existen
+mkdir -p "$THEME_DIR/gtk-3.0"
+mkdir -p "$THEME_DIR/gtk-4.0"
+
+# Leer colores de pywal
+if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+    source "$HOME/.cache/wal/colors.sh"
+else
+    echo "Error: No se encontraron colores de pywal. Ejecuta 'wal -i /ruta/a/imagen' primero."
+    exit 1
+fi
+
+# Generar paleta uniforme basada en el color principal de pywal
+MAIN_COLOR="$color1"
+# Crear variaciones del color principal para mayor uniformidad
+LIGHT_VARIANT=$(echo "$MAIN_COLOR" | sed 's/#//' | perl -pe 's/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/sprintf("#%02x%02x%02x", hex($1)+16, hex($2)+16, hex($3)+16)/ie')
+DARK_VARIANT=$(echo "$MAIN_COLOR" | sed 's/#//' | perl -pe 's/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/sprintf("#%02x%02x%02x", hex($1)-16, hex($2)-16, hex($3)-16)/ie')
+
+# Crear archivo index.theme
+cat > "$THEME_DIR/index.theme" << EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=wal-gtk-auto
+Comment=Tema GTK uniforme generado desde pywal
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=wal-gtk-auto
+MetacityTheme=wal-gtk-auto
+IconTheme=Adwaita
+CursorTheme=Adwaita
+ButtonLayout=:minimize,maximize,close
+EOF
+
+# Generar GTK3 CSS
+cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Generated GTK3 theme from pywal colors - Uniform Edition */
+
+/* Paleta uniforme con tonos cohesivos */
+@define-color bg_color $background;
+@define-color fg_color $foreground;
+@define-color base_color $background;
+@define-color text_color $foreground;
+@define-color selected_bg_color $MAIN_COLOR;
+@define-color selected_fg_color $background;
+@define-color tooltip_bg_color $color8;
+@define-color tooltip_fg_color $foreground;
+@define-color titlebar_bg_color $background;
+@define-color titlebar_fg_color $foreground;
+@define-color menu_bg_color $background;
+@define-color menu_fg_color $foreground;
+@define-color link_color $MAIN_COLOR;
+@define-color visited_link_color $LIGHT_VARIANT;
+
+/* Window styling */
+window {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+/* Button styling */
+button {
+    background: linear-gradient(to bottom, @tooltip_bg_color, @bg_color);
+    border: 1px solid alpha(@tooltip_bg_color, 0.8);
+    color: @fg_color;
+    border-radius: 6px;
+    padding: 8px 16px;
+    min-height: 24px;
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, alpha(@selected_bg_color, 0.8), @tooltip_bg_color);
+    border-color: alpha(@selected_bg_color, 0.7);
+    transform: translateY(-1px);
+}
+
+button:active {
+    background: @selected_bg_color;
+    border-color: @selected_bg_color;
+    color: @selected_fg_color;
+    transform: translateY(0);
+}
+
+/* Entry styling */
+entry {
+    background-color: @base_color;
+    border: 1px solid alpha(@tooltip_bg_color, 0.6);
+    color: @text_color;
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-height: 24px;
+    transition: all 0.2s ease;
+}
+
+entry:focus {
+    border-color: @selected_bg_color;
+    box-shadow: 0 0 0 2px alpha(@selected_bg_color, 0.3);
+}
+
+/* Selection styling */
+*:selected,
+selection {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+/* Headerbar styling */
+headerbar {
+    background: linear-gradient(to bottom, @titlebar_bg_color, alpha(@titlebar_bg_color, 0.95));
+    border-bottom: 1px solid alpha(@tooltip_bg_color, 0.6);
+    color: @titlebar_fg_color;
+    min-height: 46px;
+    box-shadow: 0 1px 3px alpha(black, 0.1);
+}
+
+headerbar button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: @titlebar_fg_color;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+headerbar button:hover {
+    background: alpha(@tooltip_bg_color, 0.7);
+    border-color: alpha(@tooltip_bg_color, 0.5);
+}
+
+/* Menu styling */
+menu,
+.menu {
+    background-color: @menu_bg_color;
+    color: @menu_fg_color;
+    border: 1px solid alpha(@tooltip_bg_color, 0.6);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px alpha(black, 0.15);
+}
+
+menuitem {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px;
+    transition: all 0.2s ease;
+}
+
+menuitem:hover {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+/* Scrollbar styling */
+scrollbar {
+    background-color: @bg_color;
+    border-radius: 8px;
+}
+
+scrollbar slider {
+    background-color: alpha(@tooltip_bg_color, 0.8);
+    border-radius: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    transition: all 0.2s ease;
+}
+
+scrollbar slider:hover {
+    background-color: @selected_bg_color;
+}
+
+/* Switch styling */
+switch {
+    background-color: alpha(@tooltip_bg_color, 0.6);
+    border-radius: 14px;
+    border: 1px solid alpha(@tooltip_bg_color, 0.4);
+    min-width: 44px;
+    min-height: 24px;
+    transition: all 0.2s ease;
+}
+
+switch:checked {
+    background-color: @selected_bg_color;
+    border-color: @selected_bg_color;
+}
+
+switch slider {
+    background-color: @fg_color;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 2px;
+    transition: all 0.2s ease;
+}
+
+switch:checked slider {
+    background-color: @selected_fg_color;
+}
+EOF
+
+# Generar GTK4 CSS simplificado y uniforme
+cat > "$THEME_DIR/gtk-4.0/gtk.css" << EOF
+/* GTK4 Theme - Pywal Uniforme */
+
+/* === VARIABLES DE COLOR UNIFORMES === */
+@define-color window_bg_color $background;
+@define-color window_fg_color $foreground;
+@define-color base_color $background;
+@define-color text_color $foreground;
+@define-color surface_color $color8;
+@define-color accent_bg_color $MAIN_COLOR;
+@define-color accent_fg_color $background;
+@define-color accent_color $MAIN_COLOR;
+@define-color success_bg_color $MAIN_COLOR;
+@define-color warning_bg_color $LIGHT_VARIANT;
+@define-color error_bg_color $LIGHT_VARIANT;
+@define-color destructive_bg_color $LIGHT_VARIANT;
+@define-color border_color $color8;
+@define-color shade_color $color8;
+
+/* === ESTILOS GLOBALES === */
+* {
+    outline-color: alpha(@accent_color, 0.5);
+    outline-width: 2px;
+    outline-offset: -2px;
+}
+
+window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    font-family: system-ui, sans-serif;
+}
+
+/* === BOTONES === */
+button {
+    background: linear-gradient(to bottom, 
+                alpha(@window_fg_color, 0.08) 0%,
+                alpha(@window_fg_color, 0.12) 100%);
+    color: @window_fg_color;
+    border: 1px solid alpha(@border_color, 0.3);
+    border-radius: 8px;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px alpha(black, 0.1);
+}
+
+button:hover {
+    background: linear-gradient(to bottom, 
+                alpha(@window_fg_color, 0.15) 0%,
+                alpha(@window_fg_color, 0.18) 100%);
+    border-color: alpha(@border_color, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px alpha(black, 0.15);
+}
+
+button:checked,
+button:active {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+button.suggested-action {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+/* === ENTRADAS === */
+entry {
+    background: @base_color;
+    color: @text_color;
+    border: 1px solid alpha(@border_color, 0.3);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.2s ease;
+}
+
+entry:focus {
+    border-color: @accent_color;
+    box-shadow: 0 0 0 3px alpha(@accent_color, 0.2);
+}
+
+/* === PESTAÑAS === */
+notebook > header > tabs > tab {
+    background: transparent;
+    color: alpha(@window_fg_color, 0.7);
+    border: none;
+    border-radius: 8px 8px 0 0;
+    padding: 12px 20px;
+    margin: 0 2px;
+    transition: all 0.2s ease;
+}
+
+notebook > header > tabs > tab:hover {
+    background: alpha(@accent_color, 0.1);
+    color: @window_fg_color;
+}
+
+notebook > header > tabs > tab:checked {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* === LISTAS === */
+listview > row:selected,
+list > row:selected {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* === INTERRUPTORES === */
+switch {
+    background: alpha(@shade_color, 0.3);
+    border-radius: 20px;
+    min-width: 48px;
+    min-height: 24px;
+    transition: all 0.2s ease;
+}
+
+switch:checked {
+    background: @accent_bg_color;
+}
+
+switch > slider {
+    background: @window_fg_color;
+    border-radius: 50%;
+    margin: 2px;
+    min-width: 20px;
+    min-height: 20px;
+    transition: all 0.2s ease;
+}
+
+switch:checked > slider {
+    background: @accent_fg_color;
+}
+
+/* === BARRAS DE DESPLAZAMIENTO === */
+scrollbar > range > slider {
+    background: alpha(@window_fg_color, 0.3);
+    border-radius: 10px;
+    min-width: 8px;
+    min-height: 8px;
+    transition: all 0.2s ease;
+}
+
+scrollbar > range > slider:hover {
+    background: alpha(@window_fg_color, 0.5);
+}
+
+scrollbar > range > slider:active {
+    background: @accent_bg_color;
+}
+EOF
+
+echo "✅ Tema GTK uniforme generado exitosamente!"
+echo "🎨 Color principal: $MAIN_COLOR"
+echo "📁 Ubicación: $THEME_DIR"
+echo ""
+echo "Para aplicar el tema, ejecuta:"
+echo "gsettings set org.gnome.desktop.interface gtk-theme 'wal-gtk-auto'"

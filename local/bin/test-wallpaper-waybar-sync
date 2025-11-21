@@ -1,0 +1,140 @@
+#!/bin/bash
+
+# Script de prueba para verificar el funcionamiento de wallpaper + waybar + pywal
+
+echo "🧪 Iniciando prueba de sincronización Wallpaper + Waybar + Pywal"
+echo "================================================================="
+
+# Verificar dependencias
+echo -n "Verificando dependencias... "
+missing_deps=()
+for dep in wal swww waybar rofi convert; do
+    if ! command -v "$dep" > /dev/null 2>&1; then
+        missing_deps+=("$dep")
+    fi
+done
+
+if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    echo "❌ FALLO"
+    echo "Dependencias faltantes: ${missing_deps[*]}"
+    exit 1
+else
+    echo "✅ OK"
+fi
+
+# Verificar directorios
+echo -n "Verificando directorio de wallpapers... "
+if [[ -d "$HOME/Pictures/Wallpapers" ]]; then
+    wallpaper_count=$(find "$HOME/Pictures/Wallpapers" -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.webp" -o -name "*.bmp" | wc -l)
+    echo "✅ OK ($wallpaper_count imágenes encontradas)"
+else
+    echo "❌ No existe $HOME/Pictures/Wallpapers"
+    exit 1
+fi
+
+# Verificar archivos de configuración
+echo -n "Verificando configuración de Waybar... "
+if [[ -f "$HOME/.config/waybar/config" && -f "$HOME/.config/waybar/style.css" ]]; then
+    echo "✅ OK"
+else
+    echo "❌ Archivos de configuración de Waybar no encontrados"
+fi
+
+# Verificar scripts
+echo -n "Verificando scripts personalizados... "
+scripts_ok=0
+total_scripts=0
+
+for script in "wallpaper-simple-no-duplicates" "waybar-gif-colors-sync" "waybar-pywal-universal-sync" "fix-gif-wallpaper"; do
+    total_scripts=$((total_scripts + 1))
+    if [[ -x "$HOME/.local/bin/$script" ]]; then
+        scripts_ok=$((scripts_ok + 1))
+    else
+        echo ""
+        echo "  ⚠️  $script no encontrado o no es ejecutable"
+    fi
+done
+
+if [[ $scripts_ok -eq $total_scripts ]]; then
+    echo "✅ OK ($scripts_ok/$total_scripts scripts)"
+else
+    echo "⚠️  $scripts_ok/$total_scripts scripts disponibles"
+fi
+
+# Verificar procesos
+echo -n "Verificando procesos activos... "
+processes_status=""
+
+if pgrep -x waybar > /dev/null; then
+    processes_status+="waybar:✅ "
+else
+    processes_status+="waybar:❌ "
+fi
+
+if pgrep -x swww-daemon > /dev/null; then
+    processes_status+="swww-daemon:✅ "
+else
+    processes_status+="swww-daemon:❌ "
+fi
+
+echo "$processes_status"
+
+# Verificar archivos de pywal
+echo -n "Verificando archivos de pywal... "
+pywal_files_ok=0
+if [[ -f "$HOME/.cache/wal/colors.css" ]]; then
+    pywal_files_ok=$((pywal_files_ok + 1))
+fi
+if [[ -f "$HOME/.cache/wal/colors-hyprland.conf" ]]; then
+    pywal_files_ok=$((pywal_files_ok + 1))
+fi
+
+if [[ $pywal_files_ok -eq 2 ]]; then
+    echo "✅ OK"
+else
+    echo "⚠️  Algunos archivos de pywal no están disponibles"
+fi
+
+# Verificar wallpaper actual
+echo -n "Verificando wallpaper actual... "
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    current_wallpaper=$(cat "$HOME/.cache/current-wallpaper")
+    if [[ -f "$current_wallpaper" ]]; then
+        wallpaper_name=$(basename "$current_wallpaper")
+        if [[ "${current_wallpaper,,}" == *.gif ]]; then
+            echo "✅ OK (GIF: $wallpaper_name)"
+        else
+            echo "✅ OK (Imagen: $wallpaper_name)"
+        fi
+    else
+        echo "⚠️  Archivo no existe: $current_wallpaper"
+    fi
+else
+    echo "⚠️  No hay wallpaper configurado"
+fi
+
+echo ""
+echo "🎯 KEYBINDINGS DISPONIBLES:"
+echo "  Super+Shift+W           : Selector principal de wallpapers"
+echo "  Super+Ctrl+Shift+W      : Sincronización universal waybar+pywal"
+echo "  Super+Alt+W             : Reiniciar waybar manualmente"
+echo "  Super+Shift+G           : Reparar animación de GIF"
+echo "  Super+Ctrl+W            : Sincronizar waybar con pywal"
+
+echo ""
+echo "📋 RESUMEN:"
+if [[ ${#missing_deps[@]} -eq 0 ]]; then
+    echo "✅ Todas las dependencias están disponibles"
+else
+    echo "❌ Faltan dependencias críticas"
+fi
+
+if [[ $scripts_ok -eq $total_scripts ]]; then
+    echo "✅ Todos los scripts están listos"
+else
+    echo "⚠️  Algunos scripts necesitan verificación"
+fi
+
+echo ""
+echo "🚀 ¡Prueba Super+Shift+W para abrir el selector de wallpapers!"
+echo "================================================================="

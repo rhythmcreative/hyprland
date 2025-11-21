@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Script rápido para arreglar los colores del nm-applet
+# Úsalo cuando veas que nm-applet no tiene los colores correctos
+
+echo "🔧 Arreglando colores del nm-applet..."
+
+# Verificar si nm-applet está corriendo
+if ! pgrep -f nm-applet > /dev/null; then
+    echo "⚠️  nm-applet no está corriendo. Iniciándolo..."
+fi
+
+# Aplicar tema personalizado
+if [ -f "$HOME/.local/bin/nm-applet-theme-sync" ]; then
+    "$HOME/.local/bin/nm-applet-theme-sync"
+else
+    echo "❌ Script de sincronización no encontrado"
+    exit 1
+fi
+
+echo "✅ Colores del nm-applet arreglados!"
+echo "💡 Si aún ves colores incorrectos, cierra y abre el menú del nm-applet"

@@ -1,0 +1,91 @@
+#!/bin/bash
+
+echo "🎨 Selector de Estilos de Notificaciones de Volumen"
+echo "=================================================="
+echo ""
+echo "Estilos disponibles:"
+echo ""
+echo "1. 🌟 Moderno Minimalista (iOS/Android style)"
+echo "2. 🚀 Cyberpunk Futurista (ASCII art + neon)"
+echo "3. 💎 Premium HyDE (original mejorado)"
+echo "4. 🔧 Personalizado (crear tu propio estilo)"
+echo ""
+
+read -p "Selecciona un estilo (1-4): " choice
+
+case $choice in
+    1)
+        echo ""
+        echo "🌟 Probando estilo Moderno Minimalista..."
+        ~/.local/bin/volume-notify-modern test
+        echo ""
+        read -p "¿Te gusta este estilo? (y/n): " like
+        if [[ "$like" == "y" || "$like" == "Y" ]]; then
+            # Actualizar Hyprland para usar este estilo
+            sed -i 's/volume-notify-[a-z]*/volume-notify-modern/g' ~/.config/hypr/hyprland.conf
+            echo "✅ Estilo Moderno Minimalista activado!"
+        fi
+        ;;
+    2)
+        echo ""
+        echo "🚀 Probando estilo Cyberpunk Futurista..."
+        ~/.local/bin/volume-notify-cyber test
+        echo ""
+        read -p "¿Te gusta este estilo? (y/n): " like
+        if [[ "$like" == "y" || "$like" == "Y" ]]; then
+            # Actualizar Hyprland para usar este estilo
+            sed -i 's/volume-notify-[a-z]*/volume-notify-cyber/g' ~/.config/hypr/hyprland.conf
+            echo "✅ Estilo Cyberpunk Futurista activado!"
+        fi
+        ;;
+    3)
+        echo ""
+        echo "💎 Probando estilo Premium HyDE..."
+        ~/.local/bin/volume-notify-premium test
+        echo ""
+        read -p "¿Te gusta este estilo? (y/n): " like
+        if [[ "$like" == "y" || "$like" == "Y" ]]; then
+            # Actualizar Hyprland para usar este estilo
+            sed -i 's/volume-notify-[a-z]*/volume-notify-premium/g' ~/.config/hypr/hyprland.conf
+            echo "✅ Estilo Premium HyDE activado!"
+        fi
+        ;;
+    4)
+        echo ""
+        echo "🔧 Modo Personalizado"
+        echo "Te ayudo a crear tu propio estilo..."
+        echo ""
+        echo "¿Qué elementos quieres?"
+        echo "1. Barra de progreso: ●○○○○ (puntos)"
+        echo "2. Barra de progreso: ████▒▒▒ (bloques)"
+        echo "3. Barra de progreso: ━━━┅┅┅ (líneas)"
+        echo "4. ASCII art con marcos"
+        echo ""
+        read -p "Selecciona barra de progreso (1-4): " bar_style
+        
+        echo ""
+        echo "¿Qué información mostrar?"
+        echo "a. Solo volumen y porcentaje"
+        echo "b. Volumen + dispositivo"
+        echo "c. Volumen + dispositivo + estado"
+        echo ""
+        read -p "Selecciona información (a-c): " info_style
+        
+        echo ""
+        echo "🔧 Creando tu estilo personalizado..."
+        echo "Los parámetros serán: barra=$bar_style, info=$info_style"
+        echo "⚠️  Esta función se implementará próximamente"
+        ;;
+    *)
+        echo "❌ Opción inválida"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "💡 Tips adicionales:"
+echo "• Puedes probar cualquier estilo con: ~/.local/bin/volume-notify-ESTILO test"
+echo "• Para cambiar después, vuelve a ejecutar este script"
+echo "• Los estilos se sincronizan automáticamente con pywal"
+echo ""
+echo "🎵 ¡Disfruta tus nuevas notificaciones!"

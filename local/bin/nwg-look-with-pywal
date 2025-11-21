@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Wrapper para nwg-look que también ejecuta pywal-gtk4 generate
+# Uso: nwg-look-with-pywal [argumentos de nwg-look]
+
+# Función para mostrar ayuda
+show_help() {
+    echo "🎨 nwg-look-with-pywal - Wrapper que ejecuta nwg-look y pywal-gtk4"
+    echo ""
+    echo "Este script ejecuta nwg-look con los argumentos proporcionados y luego"
+    echo "ejecuta pywal-gtk4 generate para sincronizar los temas."
+    echo ""
+    echo "ARGUMENTOS DE NWG-LOOK:"
+    nwg-look --help 2>/dev/null || echo "  -a    Aplicar configuración guardada y salir"
+    echo ""
+    echo "ARGUMENTOS ADICIONALES:"
+    echo "  --no-pywal    No ejecutar pywal-gtk4 generate"
+    echo "  --help        Mostrar esta ayuda"
+    echo ""
+    echo "EJEMPLOS:"
+    echo "  nwg-look-with-pywal                # Abrir GUI y generar tema"
+    echo "  nwg-look-with-pywal -a             # Aplicar tema y generar"
+    echo "  nwg-look-with-pywal --no-pywal     # Solo nwg-look"
+}
+
+# Variables
+run_pywal=true
+nwg_args=()
+
+# Procesar argumentos
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-pywal)
+            run_pywal=false
+            shift
+            ;;
+        --help)
+            show_help
+            exit 0
+            ;;
+        *)
+            nwg_args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Verificar que pywal-gtk4 existe
+if [[ ! -x "$HOME/.local/bin/pywal-gtk4" ]] && $run_pywal; then
+    echo "⚠️  Advertencia: pywal-gtk4 no encontrado en ~/.local/bin/pywal-gtk4"
+    echo "   Continuando solo con nwg-look..."
+    run_pywal=false
+fi
+
+# Ejecutar nwg-look
+echo "🚀 Ejecutando nwg-look ${nwg_args[*]}"
+if ! nwg-look "${nwg_args[@]}"; then
+    echo "❌ Error al ejecutar nwg-look"
+    exit 1
+fi
+
+# Ejecutar pywal-gtk4 si está habilitado
+if $run_pywal; then
+    echo ""
+    echo "🎨 Generando tema GTK4 con pywal-gtk4..."
+    if ~/.local/bin/pywal-gtk4 generate; then
+        echo "✅ Tema GTK4 generado exitosamente"
+    else
+        echo "⚠️  Error al generar tema GTK4 (código de salida: $?)"
+        echo "   Los cambios de nwg-look se aplicaron correctamente."
+    fi
+fi
+
+echo "🎯 Proceso completado"

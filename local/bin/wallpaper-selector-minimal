@@ -1,0 +1,226 @@
+#!/bin/bash
+
+# Directorio de wallpapers
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+
+# Crear directorio de cache si no existe
+mkdir -p "$CACHE_DIR"
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "Error" "No se encontraron imágenes en $WALLPAPER_DIR" -u critical
+    exit 1
+fi
+
+# Función para generar miniaturas optimizadas
+generate_thumbnails() {
+    local count=0
+    local total=${#images[@]}
+    
+    for img in "${images[@]}"; do
+        local basename_img=$(basename "$img")
+        local thumb_path="$CACHE_DIR/${basename_img%.*}.jpg"
+        
+        # Generar miniatura si no existe o si la imagen es más nueva
+        if [[ ! -f "$thumb_path" ]] || [[ "$img" -nt "$thumb_path" ]]; then
+            # Crear miniatura más grande y de mejor calidad
+            convert "$img" -resize "400x300^" -gravity center -extent "400x300" \
+                -unsharp 0x0.75+0.75+0.008 \
+                -quality 85 "$thumb_path" 2>/dev/null &
+        fi
+        
+        count=$((count + 1))
+        # Limitar procesos en paralelo
+        if (( count % 4 == 0 )); then
+            wait
+        fi
+    done
+    wait  # Esperar a que terminen todos los procesos
+}
+
+# Generar miniaturas
+echo "Generando miniaturas de alta calidad..." >&2
+generate_thumbnails
+
+# Crear lista solo con rutas de miniaturas (sin texto)
+image_list=""
+declare -A thumb_to_original
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    thumb_path="$CACHE_DIR/${basename_img%.*}.jpg"
+    
+    # Mapear miniatura a imagen original
+    thumb_to_original["$thumb_path"]="$img"
+    
+    # Solo agregar la ruta de la miniatura
+    image_list="$image_list$thumb_path\n"
+done
+
+# Tema minimalista sin texto
+rofi_minimal_theme="
+* {
+    background-color: rgba(20, 20, 20, 0.9);
+    text-color: transparent;
+    border-color: #61afef;
+    selected-color: #61afef;
+}
+
+window {
+    width: 95%;
+    height: 85%;
+    background-color: @background-color;
+    border: 1px solid @border-color;
+    border-radius: 8px;
+    padding: 10px;
+    location: center;
+    anchor: center;
+}
+
+mainbox {
+    spacing: 5px;
+    background-color: transparent;
+}
+
+inputbar {
+    enabled: false;
+}
+
+listview {
+    columns: 5;
+    lines: 4;
+    spacing: 8px;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: vertical;
+    border-radius: 6px;
+    padding: 3px;
+    background-color: transparent;
+    border: 2px solid transparent;
+}
+
+element selected {
+    border-color: @selected-color;
+    background-color: rgba(97, 175, 239, 0.1);
+    box-shadow: 0 0 10px rgba(97, 175, 239, 0.5);
+}
+
+element-icon {
+    size: 140px;
+    border-radius: 4px;
+    margin: 0 auto;
+}
+
+element-text {
+    enabled: false;
+}
+"
+
+# Crear lista con nombres de archivos para rofi
+image_options=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    image_options="$image_options$(basename "$img")\n"
+done
+
+# Mostrar rofi con configuración básica usando nombres de archivos
+selected_name=$(printf "%b" "$image_options" | rofi -dmenu \
+    -theme-str 'listview {columns: 1; lines: 8;}' \
+    -theme-str 'element {padding: 8px;}' \
+    -theme-str 'element-text {horizontal-align: 0.5;}' \
+    -theme-str 'inputbar {enabled: true;}' \
+    -format "s" \
+    -no-custom \
+    -p "Selecciona wallpaper:")
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected_name" ]]; then
+    exit 0
+fi
+
+# Obtener la imagen original correspondiente por nombre
+selected_path=""
+for img in "${images[@]}"; do
+    if [[ "$(basename "$img")" == "$selected_name" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    notify-send "Error" "No se pudo encontrar el archivo seleccionado" -u critical
+    exit 1
+fi
+
+# Aplicar wallpaper con transición elegante
+echo "Aplicando wallpaper: $(basename "$selected_path")"
+swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+
+# Aplicar colores con wal
+if command -v wal > /dev/null 2>&1; then
+    echo "Generando paleta de colores..."
+    wal -i "$selected_path" -n
+    
+    # Aplicar colores generados inmediatamente
+    echo "Aplicando colores del terminal..."
+    source ~/.cache/wal/colors.sh 2>/dev/null || true
+    
+    # Recargar waybar si está ejecutándose
+    if pgrep -x waybar > /dev/null; then
+        echo "Recargando waybar..."
+        pkill -SIGUSR2 waybar 2>/dev/null || pkill waybar && waybar &
+    fi
+    
+    # Recargar terminal kitty si está ejecutándose
+    if pgrep -x kitty > /dev/null; then
+        echo "Recargando kitty..."
+        killall -SIGUSR1 kitty 2>/dev/null || true
+    fi
+    
+    # Aplicar colores de GTK
+    if [ -f ~/.cache/wal/gtk3.css ]; then
+        echo "Aplicando colores GTK..."
+        mkdir -p ~/.config/gtk-3.0/
+        cp ~/.cache/wal/gtk3.css ~/.config/gtk-3.0/gtk.css 2>/dev/null || true
+    fi
+    
+    if [ -f ~/.cache/wal/gtk4.css ]; then
+        mkdir -p ~/.config/gtk-4.0/
+        cp ~/.cache/wal/gtk4.css ~/.config/gtk-4.0/gtk.css 2>/dev/null || true
+    fi
+    
+    # Recargar hyprland con los nuevos colores si el archivo existe
+    if [ -f ~/.cache/wal/colors-hyprland.conf ]; then
+        echo "Aplicando colores a Hyprland..."
+        # Recargar configuración de Hyprland
+        hyprctl reload 2>/dev/null || true
+    fi
+    
+    # Aplicar colores del esquema de color al sistema
+    echo "Aplicando esquema de colores completo..."
+    
+    # Actualizar tema de iconos y cursor si están configurados
+    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+    
+    # Notificación con imagen
+    notify-send "🎨 Tema Aplicado" "$(basename "$selected_path")" -i "$selected_path" -t 3000
+    
+    echo "✅ Wallpaper y tema aplicados completamente"
+else
+    notify-send "⚠️ Pywal no encontrado" "Solo wallpaper aplicado" -t 2000
+    echo "⚠️ Solo wallpaper aplicado - pywal no está instalado"
+fi

@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# Wallpaper Selector con Debug - Versión mejorada para diagnosticar problemas
+
+# Configurar variables de entorno para Wayland/Hyprland
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_CURRENT_DESKTOP="Hyprland"
+export XDG_SESSION_TYPE="wayland"
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+THEME_PATH="$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+PREVIEW_SIZE="300x200"
+DEBUG_FILE="/tmp/wallpaper-selector-debug.log"
+
+# Función de logging
+log_debug() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$DEBUG_FILE"
+}
+
+# Limpiar log anterior
+> "$DEBUG_FILE"
+
+log_debug "🚀 Iniciando selector de wallpapers con debug"
+
+# Crear directorio de cache si no existe
+mkdir -p "$CACHE_DIR"
+
+# Verificar dependencias
+if ! command -v convert > /dev/null 2>&1; then
+    log_debug "❌ ImageMagick no encontrado"
+    notify-send "❌ Error" "ImageMagick requerido para generar previews" -u critical
+    exit 1
+fi
+
+if ! command -v rofi > /dev/null 2>&1; then
+    log_debug "❌ Rofi no encontrado"
+    notify-send "❌ Error" "Rofi no está instalado" -u critical
+    exit 1
+fi
+
+# Verificar directorio de wallpapers
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log_debug "❌ Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+log_debug "📁 Buscando imágenes en $WALLPAPER_DIR"
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log_debug "❌ No se encontraron imágenes"
+    notify-send "❌ Error" "No se encontraron imágenes en $WALLPAPER_DIR" -u critical
+    exit 1
+fi
+
+log_debug "📷 Encontradas ${#images[@]} imágenes"
+
+# Crear archivo temporal para los datos de rofi
+ROFI_DATA_FILE="/tmp/rofi-wallpaper-data"
+> "$ROFI_DATA_FILE"
+
+declare -A image_map
+PREVIEW_COUNT=0
+
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    clean_name="${basename_img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    log_debug "🔄 Procesando: $basename_img"
+    
+    # Generar preview si no existe o es más antiguo que el original
+    if [[ ! -f "$preview_file" ]] || [[ "$img" -nt "$preview_file" ]]; then
+        log_debug "🎨 Generando preview para: $basename_img"
+        # Para GIFs, usar el primer frame
+        if [[ "$img" == *.gif ]]; then
+            if ! convert "${img}[0]" -resize "${PREVIEW_SIZE}^" -gravity center -extent "${PREVIEW_SIZE}" "$preview_file" 2>/dev/null; then
+                log_debug "❌ Error generando preview para GIF: $basename_img"
+            fi
+        else
+            if ! convert "$img" -resize "${PREVIEW_SIZE}^" -gravity center -extent "${PREVIEW_SIZE}" "$preview_file" 2>/dev/null; then
+                log_debug "❌ Error generando preview para: $basename_img"
+            fi
+        fi
+    fi
+    
+    # Verificar que el preview se generó correctamente
+    if [[ -f "$preview_file" ]]; then
+        log_debug "✅ Preview generado: $preview_file"
+        # Usar formato correcto para rofi con iconos
+        echo -e "$clean_name\0icon\x1f$preview_file" >> "$ROFI_DATA_FILE"
+        image_map["$clean_name"]="$img"
+        ((PREVIEW_COUNT++))
+    else
+        log_debug "⚠️ Preview no generado para: $basename_img"
+        # Fallback sin preview
+        echo "$clean_name" >> "$ROFI_DATA_FILE"
+        image_map["$clean_name"]="$img"
+        ((PREVIEW_COUNT++))
+    fi
+done
+
+if [[ $PREVIEW_COUNT -eq 0 ]]; then
+    log_debug "❌ No se pudieron procesar los wallpapers"
+    notify-send "⚠️ Advertencia" "No se pudieron procesar los wallpapers"
+    exit 1
+fi
+
+log_debug "✅ $PREVIEW_COUNT wallpapers listos"
+
+# Verificar tema
+if [[ ! -f "$THEME_PATH" ]]; then
+    log_debug "⚠️ Tema wallpaper-select.rasi no encontrado"
+    THEME_PATH=""
+fi
+
+# Ejecutar rofi
+log_debug "🚀 Lanzando rofi..."
+
+if [[ -n "$THEME_PATH" ]]; then
+    log_debug "🎨 Usando tema: $THEME_PATH"
+    SELECTED=$(cat "$ROFI_DATA_FILE" | rofi -dmenu -i \
+        -theme "$THEME_PATH" \
+        -p "🖼️ Selecciona un Wallpaper" \
+        -format "s" \
+        -show-icons \
+        -icon-theme "Adwaita" \
+        -markup-rows \
+        -eh 2 \
+        -kb-accept-entry "Return" \
+        -kb-cancel "Escape")
+else
+    log_debug "🎨 Usando tema por defecto"
+    SELECTED=$(cat "$ROFI_DATA_FILE" | rofi -dmenu -i \
+        -theme-str 'window {width: 85%; height: 75%;}' \
+        -theme-str 'listview {columns: 4; lines: 3; spacing: 15px;}' \
+        -theme-str 'element {orientation: vertical; padding: 15px;}' \
+        -theme-str 'element-icon {size: 150px; border-radius: 8px;}' \
+        -theme-str 'element-text {horizontal-align: 0.5; margin: 5px 0 0 0;}' \
+        -p "🖼️ Selecciona un Wallpaper" \
+        -format "s" \
+        -show-icons \
+        -icon-theme "Adwaita" \
+        -markup-rows)
+fi
+
+# Limpiar archivo temporal
+rm -f "$ROFI_DATA_FILE"
+
+# Si no se seleccionó nada, salir
+if [[ -z "$SELECTED" ]]; then
+    log_debug "❌ No se seleccionó nada"
+    exit 0
+fi
+
+log_debug "✅ Seleccionado: $SELECTED"
+
+# Obtener la imagen seleccionada
+selected_path="${image_map[$SELECTED]}"
+
+if [[ -z "$selected_path" ]]; then
+    log_debug "❌ No se encontró el archivo para: $SELECTED"
+    notify-send "Error" "No se pudo encontrar el archivo seleccionado" -u critical
+    exit 1
+fi
+
+log_debug "🎯 Aplicando: $selected_path"
+
+# Aplicar wallpaper con transición elegante
+notify-send "🎨 Aplicando Wallpaper" "$(basename "$selected_path")" -t 2000
+swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+
+# Aplicar colores con wal
+if command -v wal > /dev/null 2>&1; then
+    log_debug "🎨 Aplicando pywal"
+    wal -i "$selected_path" -n
+    
+    # Recargar waybar si está ejecutándose
+    if pgrep -x waybar > /dev/null; then
+        log_debug "🔄 Recargando waybar"
+        pkill -SIGUSR2 waybar 2>/dev/null || pkill waybar && waybar &
+    fi
+    
+    # Recargar hyprland con los nuevos colores si el archivo existe
+    if [ -f ~/.cache/wal/colors-hyprland.conf ]; then
+        log_debug "🔄 Recargando Hyprland"
+        hyprctl reload 2>/dev/null || true
+    fi
+    
+    notify-send "✅ Tema Completo" "Wallpaper y colores aplicados" -t 3000
+    log_debug "✅ Proceso completado exitosamente"
+else
+    notify-send "⚠️ Pywal no encontrado" "Solo wallpaper aplicado" -t 2000
+    log_debug "⚠️ Solo wallpaper aplicado - pywal no está instalado"
+fi
+
+log_debug "🎉 Selector de wallpapers completado"

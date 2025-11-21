@@ -56,23 +56,23 @@ else
     TOTAL_TIME_REMAINING=0
 fi
 
-# Función para obtener icono según capacidad
+# Función para obtener icono según capacidad (versión vertical)
 get_battery_icon() {
     local capacity=$1
     local status=$2
     
     if [[ "$status" == "Charging" ]]; then
-        echo "󰂄"  # Nerd Font charging icon
+        echo "󰂄"  # Nerd Font charging battery
     elif [[ $capacity -ge 80 ]]; then
-        echo "󰁹"  # Nerd Font full battery
+        echo "󰂂"  # Nerd Font full battery vertical
     elif [[ $capacity -ge 60 ]]; then
-        echo "󰂀"  # Nerd Font 3/4 battery
+        echo "󰂁"  # Nerd Font 3/4 battery vertical
     elif [[ $capacity -ge 40 ]]; then
-        echo "󰁾"  # Nerd Font 1/2 battery
+        echo "󰂀"  # Nerd Font 1/2 battery vertical  
     elif [[ $capacity -ge 20 ]]; then
-        echo "󰁼"  # Nerd Font 1/4 battery
+        echo "󰁿"  # Nerd Font 1/4 battery vertical
     else
-        echo "󰁺"  # Nerd Font empty battery
+        echo "󰁺"  # Nerd Font empty battery vertical
     fi
 }
 
@@ -80,18 +80,18 @@ get_battery_icon() {
 BAT0_ICON=$(get_battery_icon $BAT0_CAPACITY "$BAT0_STATUS")
 BAT1_ICON=$(get_battery_icon $BAT1_CAPACITY "$BAT1_STATUS")
 
-# Calcular capacidad total promedio
-TOTAL_CAPACITY=$(( (BAT0_CAPACITY + BAT1_CAPACITY) / 2 ))
+# Usar solo la batería principal (BAT0)
+TOTAL_CAPACITY=$BAT0_CAPACITY
 
-# Determinar clase CSS basada en el promedio
-if [[ $TOTAL_CAPACITY -le 15 ]]; then
+# Determinar clase CSS basada en la batería principal
+if [[ $BAT0_CAPACITY -le 15 ]]; then
     CLASS="critical"
-elif [[ $TOTAL_CAPACITY -le 30 ]]; then
+elif [[ $BAT0_CAPACITY -le 30 ]]; then
     CLASS="warning"
 else
     CLASS="normal"
 fi
 
-# Salida JSON para Waybar
-TIME_FORMATTED=$(format_time $TOTAL_TIME_REMAINING)
-echo "{\"text\":\"$BAT0_ICON ${BAT0_CAPACITY}% | $BAT1_ICON ${BAT1_CAPACITY}%\",\"tooltip\":\"Promedio de Batería: ${TOTAL_CAPACITY}%\\nTiempo restante: $TIME_FORMATTED\\nBatería Principal: ${BAT0_CAPACITY}% (${BAT0_STATUS})\\nBatería Secundaria: ${BAT1_CAPACITY}% (${BAT1_STATUS})\",\"class\":\"$CLASS\"}"
+# Salida JSON para Waybar - Solo batería principal con icono vertical
+TIME_FORMATTED=$(format_time $BAT0_TIME_REMAINING)
+echo "{\"text\":\"$BAT0_ICON ${BAT0_CAPACITY}%\",\"tooltip\":\"Batería: ${BAT0_CAPACITY}%\\nTiempo restante: $TIME_FORMATTED\\nEstado: ${BAT0_STATUS}\",\"class\":\"$CLASS\"}"

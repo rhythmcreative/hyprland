@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Script de prueba para verificar la sincronización automática
+
+echo "🧪 Probando sincronización automática de pywal-gtk..."
+
+# Verificar que el daemon está ejecutándose
+if ! systemctl --user is-active --quiet pywal-gtk-daemon.service; then
+    echo "❌ El daemon no está ejecutándose"
+    echo "   Inicia con: systemctl --user start pywal-gtk-daemon.service"
+    exit 1
+fi
+
+echo "✅ Daemon ejecutándose"
+
+# Simular cambio ejecutando wal -R
+if [ -f "$HOME/.cache/wal/wal" ]; then
+    echo "🔄 Ejecutando wal -R para recargar colores..."
+    wal -R
+    
+    echo "⏳ Esperando sincronización automática (5 segundos)..."
+    sleep 5
+    
+    # Verificar si los archivos CSS fueron actualizados recientemente
+    css_gtk3="$HOME/.themes/wal-gtk-auto/gtk-3.0/gtk.css"
+    css_gtk4="$HOME/.themes/wal-gtk-auto/gtk-4.0/gtk.css"
+    
+    if [ -f "$css_gtk3" ] && [ $(find "$css_gtk3" -mtime -1 | wc -l) -gt 0 ]; then
+        echo "✅ Tema GTK3 actualizado automáticamente"
+    else
+        echo "❌ Tema GTK3 no se actualizó"
+    fi
+    
+    if [ -f "$css_gtk4" ] && [ $(find "$css_gtk4" -mtime -1 | wc -l) -gt 0 ]; then
+        echo "✅ Tema GTK4 actualizado automáticamente"
+    else
+        echo "❌ Tema GTK4 no se actualizó"
+    fi
+    
+    echo ""
+    echo "📋 Estado del daemon:"
+    systemctl --user status pywal-gtk-daemon.service --no-pager -l
+    
+    echo ""
+    echo "📝 Últimas líneas del log:"
+    tail -n 10 "$HOME/.cache/wal/daemon.log" 2>/dev/null || echo "Log no disponible"
+    
+else
+    echo "❌ No se encontró configuración de pywal"
+    echo "   Ejecuta 'wal -i /path/to/image' primero"
+    exit 1
+fi
+
+echo ""
+echo "🎉 Prueba completada"

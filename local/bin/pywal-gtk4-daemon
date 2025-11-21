@@ -1,0 +1,315 @@
+#!/bin/bash
+# Daemon para monitoreo automático de cambios de wallpaper y aplicación de tema GTK4
+
+# Variables de configuración
+DAEMON_NAME="pywal-gtk4-daemon"
+PID_FILE="$HOME/.cache/$DAEMON_NAME.pid"
+LOG_FILE="$HOME/.cache/$DAEMON_NAME.log"
+WALLPAPER_CACHE="$HOME/.cache/wal/wal"
+LAST_WALLPAPER_CACHE="$HOME/.cache/$DAEMON_NAME-last-wallpaper"
+
+# Colores para logging
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Función de logging
+log_message() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local color=""
+    
+    case "$level" in
+        "INFO")  color="$BLUE" ;;
+        "SUCCESS") color="$GREEN" ;;
+        "WARNING") color="$YELLOW" ;;
+        "ERROR") color="$RED" ;;
+    esac
+    
+    echo -e "${color}[$timestamp][$level]${NC} $message" | tee -a "$LOG_FILE"
+}
+
+# Función para verificar si el daemon está ejecutándose
+is_running() {
+    [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+# Función para iniciar el daemon
+start_daemon() {
+    if is_running; then
+        log_message "WARNING" "El daemon ya está ejecutándose (PID: $(cat "$PID_FILE"))"
+        return 1
+    fi
+    
+    log_message "INFO" "Iniciando daemon de monitoreo..."
+    
+    # Verificar dependencias
+    if ! command -v apply-pywal-gtk4 &> /dev/null; then
+        log_message "ERROR" "apply-pywal-gtk4 no encontrado en PATH"
+        return 1
+    fi
+    
+    if ! command -v wal &> /dev/null; then
+        log_message "ERROR" "pywal no está instalado"
+        return 1
+    fi
+    
+    # Iniciar monitoreo en background
+    monitor_wallpaper &
+    local daemon_pid=$!
+    
+    # Guardar PID
+    echo "$daemon_pid" > "$PID_FILE"
+    
+    log_message "SUCCESS" "Daemon iniciado (PID: $daemon_pid)"
+    return 0
+}
+
+# Función para detener el daemon
+stop_daemon() {
+    if ! is_running; then
+        log_message "WARNING" "El daemon no está ejecutándose"
+        return 1
+    fi
+    
+    local pid=$(cat "$PID_FILE")
+    log_message "INFO" "Deteniendo daemon (PID: $pid)..."
+    
+    if kill "$pid" 2>/dev/null; then
+        # Esperar a que el proceso termine
+        local count=0
+        while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+            sleep 1
+            count=$((count + 1))
+        done
+        
+        if kill -0 "$pid" 2>/dev/null; then
+            log_message "WARNING" "Forzando terminación del daemon..."
+            kill -9 "$pid" 2>/dev/null
+        fi
+        
+        rm -f "$PID_FILE"
+        log_message "SUCCESS" "Daemon detenido"
+        return 0
+    else
+        log_message "ERROR" "No se pudo detener el daemon"
+        rm -f "$PID_FILE"  # Limpiar PID file inválido
+        return 1
+    fi
+}
+
+# Función para reiniciar el daemon
+restart_daemon() {
+    log_message "INFO" "Reiniciando daemon..."
+    stop_daemon
+    sleep 2
+    start_daemon
+}
+
+# Función principal de monitoreo
+monitor_wallpaper() {
+    local check_interval=2  # Segundos entre verificaciones
+    
+    log_message "INFO" "Iniciando monitoreo de wallpaper (intervalo: ${check_interval}s)"
+    
+    # Aplicar tema inicial si existe wallpaper
+    if [ -f "$WALLPAPER_CACHE" ]; then
+        local current_wallpaper=$(cat "$WALLPAPER_CACHE")
+        log_message "INFO" "Aplicando tema inicial para: $current_wallpaper"
+        apply-pywal-gtk4 --apply-only 2>&1 | while read line; do
+            log_message "INFO" "  $line"
+        done
+        echo "$current_wallpaper" > "$LAST_WALLPAPER_CACHE"
+    fi
+    
+    # Loop principal de monitoreo
+    while true; do
+        if [ -f "$WALLPAPER_CACHE" ]; then
+            local current_wallpaper=$(cat "$WALLPAPER_CACHE")
+            local last_wallpaper=""
+            
+            if [ -f "$LAST_WALLPAPER_CACHE" ]; then
+                last_wallpaper=$(cat "$LAST_WALLPAPER_CACHE")
+            fi
+            
+            # Verificar si el wallpaper ha cambiado
+            if [ "$current_wallpaper" != "$last_wallpaper" ]; then
+                log_message "SUCCESS" "Cambio de wallpaper detectado: $current_wallpaper"
+                
+                # Aplicar nuevo tema
+                if apply-pywal-gtk4 --apply-only 2>&1 | while read line; do
+                    log_message "INFO" "  $line"
+                done; then
+                    echo "$current_wallpaper" > "$LAST_WALLPAPER_CACHE"
+                    log_message "SUCCESS" "Tema GTK4 actualizado"
+                else
+                    log_message "ERROR" "Error al aplicar tema GTK4"
+                fi
+            fi
+        else
+            # Si no hay cache de pywal, esperamos
+            if [ ! -f "$LAST_WALLPAPER_CACHE" ] || [ -n "$(cat "$LAST_WALLPAPER_CACHE")" ]; then
+                log_message "INFO" "Esperando configuración inicial de pywal..."
+                echo "" > "$LAST_WALLPAPER_CACHE"
+            fi
+        fi
+        
+        sleep "$check_interval"
+    done
+}
+
+# Función para mostrar estado
+show_status() {
+    echo "Estado del daemon PyWal GTK4:"
+    echo "  Nombre: $DAEMON_NAME"
+    echo "  PID file: $PID_FILE"
+    echo "  Log file: $LOG_FILE"
+    
+    if is_running; then
+        local pid=$(cat "$PID_FILE")
+        echo -e "  Estado: ${GREEN}Ejecutándose${NC} (PID: $pid)"
+        echo "  Tiempo activo: $(ps -o etime= -p "$pid" 2>/dev/null | xargs)"
+        echo "  Uso CPU: $(ps -o %cpu= -p "$pid" 2>/dev/null | xargs)%"
+        echo "  Uso memoria: $(ps -o %mem= -p "$pid" 2>/dev/null | xargs)%"
+    else
+        echo -e "  Estado: ${RED}No ejecutándose${NC}"
+    fi
+    
+    if [ -f "$WALLPAPER_CACHE" ]; then
+        echo "  Wallpaper actual: $(cat "$WALLPAPER_CACHE")"
+    else
+        echo "  Wallpaper actual: No configurado"
+    fi
+    
+    if [ -f "$LAST_WALLPAPER_CACHE" ]; then
+        local last=$(cat "$LAST_WALLPAPER_CACHE")
+        if [ -n "$last" ]; then
+            echo "  Último procesado: $last"
+        fi
+    fi
+    
+    echo "  Configuración GTK4:"
+    if [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
+        echo -e "    GTK4: ${GREEN}Configurado${NC}"
+    else
+        echo -e "    GTK4: ${RED}No configurado${NC}"
+    fi
+    
+    if [ -f "$HOME/.config/gtk-3.0/gtk.css" ]; then
+        echo -e "    GTK3: ${GREEN}Configurado${NC}"
+    else
+        echo -e "    GTK3: ${RED}No configurado${NC}"
+    fi
+}
+
+# Función para mostrar logs en tiempo real
+show_logs() {
+    if [ -f "$LOG_FILE" ]; then
+        if command -v tail &> /dev/null; then
+            echo "Mostrando logs en tiempo real (Ctrl+C para salir):"
+            tail -f "$LOG_FILE"
+        else
+            echo "Últimos logs:"
+            cat "$LOG_FILE"
+        fi
+    else
+        echo "No hay archivo de logs disponible: $LOG_FILE"
+    fi
+}
+
+# Función para limpiar archivos temporales
+cleanup() {
+    log_message "INFO" "Limpiando archivos temporales..."
+    
+    if is_running; then
+        log_message "WARNING" "Deteniendo daemon antes de limpiar..."
+        stop_daemon
+    fi
+    
+    rm -f "$PID_FILE"
+    rm -f "$LAST_WALLPAPER_CACHE"
+    
+    if [ "$1" = "--logs" ]; then
+        rm -f "$LOG_FILE"
+        log_message "SUCCESS" "Logs eliminados"
+    fi
+    
+    log_message "SUCCESS" "Archivos temporales limpiados"
+}
+
+# Función de ayuda
+show_help() {
+    cat << EOF
+pywal-gtk4-daemon - Daemon para aplicación automática de temas GTK4 basados en PyWal
+
+USAGE:
+    pywal-gtk4-daemon [COMMAND]
+
+COMMANDS:
+    start           Iniciar el daemon
+    stop            Detener el daemon
+    restart         Reiniciar el daemon
+    status          Mostrar estado del daemon
+    logs            Mostrar logs en tiempo real
+    cleanup         Limpiar archivos temporales
+    cleanup --logs  Limpiar archivos temporales y logs
+    help            Mostrar esta ayuda
+
+EXAMPLES:
+    # Iniciar daemon
+    pywal-gtk4-daemon start
+    
+    # Ver estado
+    pywal-gtk4-daemon status
+    
+    # Ver logs en tiempo real
+    pywal-gtk4-daemon logs
+    
+    # Reiniciar daemon
+    pywal-gtk4-daemon restart
+
+NOTES:
+    - El daemon monitorea cambios en ~/.cache/wal/wal
+    - Los logs se guardan en ~/.cache/pywal-gtk4-daemon.log
+    - El PID se guarda en ~/.cache/pywal-gtk4-daemon.pid
+    - Requiere apply-pywal-gtk4 en PATH
+EOF
+}
+
+# Función principal
+main() {
+    case "${1:-start}" in
+        start)
+            start_daemon
+            ;;
+        stop)
+            stop_daemon
+            ;;
+        restart)
+            restart_daemon
+            ;;
+        status)
+            show_status
+            ;;
+        logs)
+            show_logs
+            ;;
+        cleanup)
+            cleanup "$2"
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            echo "Comando desconocido: $1"
+            echo "Usa 'pywal-gtk4-daemon help' para ver comandos disponibles"
+            exit 1
+            ;;
+    esac
+}
+
+# Ejecutar función principal
+main "$@"

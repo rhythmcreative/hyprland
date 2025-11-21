@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Debug Wallpaper Selector
+set -e  # Salir si hay cualquier error
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+THUMBNAILS_DIR="$HOME/.cache/wallpaper-thumbnails"
+THUMBNAIL_SIZE="300x200"
+
+echo "=== DEBUG WALLPAPER SELECTOR ==="
+echo "WALLPAPER_DIR: $WALLPAPER_DIR"
+echo "THUMBNAILS_DIR: $THUMBNAILS_DIR"
+
+# Verificar directorios
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    echo "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    exit 1
+fi
+
+# Crear directorio de thumbnails
+mkdir -p "$THUMBNAILS_DIR"
+echo "Directorio de thumbnails creado/verificado"
+
+# Buscar imágenes
+echo "Buscando imágenes..."
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) | sort)
+
+echo "Encontradas ${#images[@]} imágenes:"
+for img in "${images[@]}"; do
+    echo "  - $(basename "$img")"
+done
+
+# Función simplificada para crear thumbnails
+create_thumb() {
+    local img="$1"
+    local basename_img=$(basename "$img")
+    local thumb_path="$THUMBNAILS_DIR/${basename_img%.*}_thumb.png"
+    
+    echo "Procesando: $basename_img"
+    
+    if [[ ! -f "$thumb_path" ]]; then
+        echo "  Creando thumbnail..."
+        if [[ "${img,,}" == *.gif ]]; then
+            magick "$img[0]" -resize "$THUMBNAIL_SIZE^" -gravity center -extent "$THUMBNAIL_SIZE" "$thumb_path" 2>/dev/null || echo "  ERROR creando thumbnail GIF"
+        else
+            magick "$img" -resize "$THUMBNAIL_SIZE^" -gravity center -extent "$THUMBNAIL_SIZE" "$thumb_path" 2>/dev/null || echo "  ERROR creando thumbnail"
+        fi
+    else
+        echo "  Thumbnail ya existe"
+    fi
+    
+    echo "$thumb_path"
+}
+
+# Procesar cada imagen
+for img in "${images[@]}"; do
+    create_thumb "$img"
+done
+
+echo "=== PROCESO COMPLETADO ==="
+echo "Thumbnails disponibles:"
+ls -la "$THUMBNAILS_DIR"

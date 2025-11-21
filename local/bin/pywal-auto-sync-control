@@ -1,0 +1,121 @@
+#!/bin/bash
+
+# Control script para Pywal Auto-Sync Service
+
+SERVICE_NAME="pywal-auto-sync.service"
+LOG_FILE="$HOME/.cache/pywal-auto-sync.log"
+
+case "$1" in
+    start)
+        echo "🚀 Iniciando servicio de sincronización automática de pywal..."
+        systemctl --user daemon-reload
+        systemctl --user start "$SERVICE_NAME"
+        systemctl --user enable "$SERVICE_NAME"
+        echo "✅ Servicio iniciado y habilitado"
+        ;;
+    stop)
+        echo "⏹️ Deteniendo servicio de sincronización automática de pywal..."
+        systemctl --user stop "$SERVICE_NAME"
+        echo "✅ Servicio detenido"
+        ;;
+    restart)
+        echo "🔄 Reiniciando servicio de sincronización automática de pywal..."
+        systemctl --user restart "$SERVICE_NAME"
+        echo "✅ Servicio reiniciado"
+        ;;
+    status)
+        echo "📊 Estado del servicio:"
+        systemctl --user status "$SERVICE_NAME" --no-pager
+        ;;
+    enable)
+        echo "🔧 Habilitando servicio para inicio automático..."
+        systemctl --user daemon-reload
+        systemctl --user enable "$SERVICE_NAME"
+        echo "✅ Servicio habilitado"
+        ;;
+    disable)
+        echo "🔧 Deshabilitando servicio..."
+        systemctl --user disable "$SERVICE_NAME"
+        echo "✅ Servicio deshabilitado"
+        ;;
+    logs)
+        if [[ -f "$LOG_FILE" ]]; then
+            echo "📋 Últimos logs del daemon:"
+            tail -n 20 "$LOG_FILE"
+        else
+            echo "📋 Logs del sistema:"
+            journalctl --user -u "$SERVICE_NAME" -n 20 --no-pager
+        fi
+        ;;
+    test)
+        echo "🧪 Probando sincronización manual..."
+        if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+            current_wallpaper=$(cat "$HOME/.cache/current-wallpaper")
+            echo "Wallpaper actual: $current_wallpaper"
+            echo "Aplicando pywal..."
+            wal -i "$current_wallpaper" -n
+            echo "✅ Pywal aplicado manualmente"
+            
+            # Recargar Hyprland
+            if command -v hyprctl >/dev/null 2>&1; then
+                hyprctl reload
+                echo "✅ Hyprland recargado"
+            fi
+        else
+            echo "❌ No se encontró wallpaper actual en cache"
+        fi
+        ;;
+    install)
+        echo "📦 Instalando sistema completo de sincronización automática..."
+        
+        # Recargar systemd
+        systemctl --user daemon-reload
+        
+        # Habilitar e iniciar servicio
+        systemctl --user enable "$SERVICE_NAME"
+        systemctl --user start "$SERVICE_NAME"
+        
+        # Agregar al inicio de Hyprland si no está
+        hypr_config="$HOME/.config/hypr/hyprland.conf"
+        if [[ -f "$hypr_config" ]] && ! grep -q "pywal-auto-sync.service" "$hypr_config"; then
+            echo "# Servicio de sincronización automática de pywal" >> "$hypr_config"
+            echo "exec-once = systemctl --user start pywal-auto-sync.service" >> "$hypr_config"
+            echo "✅ Agregado al autostart de Hyprland"
+        fi
+        
+        echo "✅ Sistema instalado completamente"
+        echo "🎨 Pywal ahora se sincronizará automáticamente cuando cambies el wallpaper"
+        ;;
+    uninstall)
+        echo "🗑️ Desinstalando sistema de sincronización automática..."
+        systemctl --user stop "$SERVICE_NAME"
+        systemctl --user disable "$SERVICE_NAME"
+        
+        # Remover del autostart de Hyprland
+        hypr_config="$HOME/.config/hypr/hyprland.conf"
+        if [[ -f "$hypr_config" ]]; then
+            sed -i '/pywal-auto-sync.service/d' "$hypr_config"
+            sed -i '/# Servicio de sincronización automática de pywal/d' "$hypr_config"
+        fi
+        
+        echo "✅ Sistema desinstalado"
+        ;;
+    *)
+        echo "🎨 Pywal Auto-Sync Control"
+        echo ""
+        echo "Uso: $0 {start|stop|restart|status|enable|disable|logs|test|install|uninstall}"
+        echo ""
+        echo "Comandos:"
+        echo "  start     - Iniciar el servicio"
+        echo "  stop      - Detener el servicio"
+        echo "  restart   - Reiniciar el servicio"
+        echo "  status    - Ver estado del servicio"
+        echo "  enable    - Habilitar inicio automático"
+        echo "  disable   - Deshabilitar inicio automático"
+        echo "  logs      - Ver logs recientes"
+        echo "  test      - Probar sincronización manual"
+        echo "  install   - Instalar y configurar todo el sistema"
+        echo "  uninstall - Desinstalar el sistema completo"
+        exit 1
+        ;;
+esac

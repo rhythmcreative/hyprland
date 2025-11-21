@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# Script simple para recargar waybar con colores actuales de pywal (MEJORADO)
+# Prioriza recarga de CSS sin reiniciar el proceso cuando es posible
+
+LOG_FILE="$HOME/.cache/reload-waybar-simple.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "$1"
+}
+
+# Verificar que existen colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ ERROR: No hay colores de pywal disponibles"
+    notify-send "❌ Error" "No hay colores de pywal disponibles" -u critical
+    exit 1
+fi
+
+log "🔄 Recargando waybar con colores de pywal..."
+
+# Cargar colores
+source "$HOME/.cache/wal/colors.sh"
+
+# Actualizar CSS
+mkdir -p "$HOME/.config/waybar"
+cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores pywal - $(date '+%H:%M:%S') */
+@define-color background $background;
+@define-color foreground $foreground;
+@define-color cursor $cursor;
+@define-color color0 $color0;
+@define-color color1 $color1;
+@define-color color2 $color2;
+@define-color color3 $color3;
+@define-color color4 $color4;
+@define-color color5 $color5;
+@define-color color6 $color6;
+@define-color color7 $color7;
+@define-color color8 $color8;
+@define-color color9 $color9;
+@define-color color10 $color10;
+@define-color color11 $color11;
+@define-color color12 $color12;
+@define-color color13 $color13;
+@define-color color14 $color14;
+@define-color color15 $color15;
+EOF
+
+log "✅ CSS de waybar actualizado con colores pywal"
+
+# MÉTODO 1: Intentar recarga de CSS SIN reiniciar proceso
+if pgrep -x waybar > /dev/null; then
+    log "🎨 Intentando recarga de CSS sin reiniciar waybar..."
+    
+    # Intentar SIGUSR2 (recarga de CSS solamente)
+    if pkill -SIGUSR2 waybar 2>/dev/null; then
+        log "✅ CSS recargado exitosamente (método SIGUSR2)"
+        notify-send "🎨 Waybar CSS" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
+        exit 0
+    fi
+    
+    # Si SIGUSR2 falla, intentar SIGHUP (recarga completa sin reiniciar)
+    log "⚠️ SIGUSR2 falló, intentando SIGHUP..."
+    if pkill -SIGHUP waybar 2>/dev/null; then
+        sleep 0.5
+        log "✅ Waybar recargado completamente (método SIGHUP)"
+        notify-send "🎨 Waybar" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
+        exit 0
+    fi
+    
+    # MÉTODO 2: Solo si los métodos suaves fallan, reiniciar
+    log "⚠️ Métodos de recarga suave fallaron, reiniciando waybar..."
+else
+    log "🚀 Waybar no está corriendo, iniciándolo..."
+fi
+
+# Reiniciar waybar (solo si es necesario)
+pkill waybar 2>/dev/null || true
+sleep 1
+
+# Esperar a que termine completamente
+count=0
+while pgrep waybar > /dev/null 2>&1; do
+    sleep 0.2
+    count=$((count + 1))
+    if [[ $count -gt 10 ]]; then
+        log "⚠️ Waybar tomó demasiado tiempo en cerrarse, forzando..."
+        pkill -9 waybar 2>/dev/null || true
+        sleep 0.5
+        break
+    fi
+done
+
+# Iniciar waybar
+log "🚀 Iniciando waybar..."
+waybar > /dev/null 2>&1 &
+sleep 1
+
+if pgrep waybar > /dev/null 2>&1; then
+    log "✅ Waybar reiniciado exitosamente"
+    notify-send "✅ Waybar" "Reiniciado con colores de pywal" -t 2000 2>/dev/null || true
+else
+    log "❌ ERROR: No se pudo reiniciar waybar"
+    notify-send "❌ Error" "No se pudo reiniciar waybar" -u critical 2>/dev/null || true
+    exit 1
+fi

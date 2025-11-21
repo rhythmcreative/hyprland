@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Simple Wallpaper Preview Selector
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+THUMBNAILS_DIR="$HOME/.cache/wallpaper-thumbnails"
+TEMP_DIR="/tmp/wallpaper-$$"
+
+mkdir -p "$THUMBNAILS_DIR" "$TEMP_DIR"
+
+# Cleanup function
+cleanup() {
+    rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+# Find images
+images=($(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | sort))
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "No images found in $WALLPAPER_DIR"
+    exit 1
+fi
+
+# Create simple rofi list with thumbnails
+rofi_entries=()
+declare -A image_paths
+
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    
+    # Create thumbnail if it doesn't exist
+    thumb_path="$THUMBNAILS_DIR/${basename_img%.*}_thumb.png"
+    if [[ ! -f "$thumb_path" ]]; then
+        if [[ "${img,,}" == *.gif ]]; then
+            magick "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$thumb_path" 2>/dev/null
+        else
+            magick "$img" -resize "200x150^" -gravity center -extent "200x150" "$thumb_path" 2>/dev/null
+        fi
+    fi
+    
+    # Add to rofi list
+    display_name="$(basename "$img")"
+    rofi_entries+=("$display_name")
+    image_paths["$display_name"]="$img"
+    
+    # Create rofi entry with icon
+    echo -e "$display_name\0icon\x1f$thumb_path" >> "$TEMP_DIR/rofi_list"
+done
+
+# Show rofi selector
+selected=$(rofi -dmenu \
+    -p "Select Wallpaper:" \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    -format "s" \
+    -sep '\0' \
+    -show-icons \
+    < "$TEMP_DIR/rofi_list")
+
+if [[ -n "$selected" ]]; then
+    selected_path="${image_paths[$selected]}"
+    
+    # Apply wallpaper with swww
+    if command -v swww >/dev/null; then
+        if ! pgrep -x "swww-daemon" > /dev/null; then
+            swww-daemon --format xrgb &
+            sleep 2
+        fi
+        
+        swww img "$selected_path"
+        notify-send "Wallpaper Applied" "$(basename "$selected_path")"
+        echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+    fi
+fi

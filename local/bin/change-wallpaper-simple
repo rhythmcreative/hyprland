@@ -1,0 +1,136 @@
+#!/bin/bash
+
+# Script simple y efectivo para cambiar wallpaper con pywal y waybar
+# Diseñado para ser confiable y funcionar siempre
+
+set -e
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Función para logging simple
+log() {
+    echo "[$(date '+%H:%M:%S')] $1"
+}
+
+main() {
+    log "Iniciando cambio de wallpaper"
+    
+    # Verificar directorio
+    if [[ ! -d "$WALLPAPER_DIR" ]]; then
+        notify-send "❌ Error" "Directorio no encontrado: $WALLPAPER_DIR" -u critical
+        exit 1
+    fi
+    
+    # Buscar imágenes
+    cd "$WALLPAPER_DIR"
+    readarray -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" \) | sed 's|^./||' | sort)
+    
+    if [[ ${#images[@]} -eq 0 ]]; then
+        notify-send "❌ Error" "No hay imágenes disponibles" -u critical
+        exit 1
+    fi
+    
+    # Seleccionar wallpaper
+    selected=$(printf '%s\n' "${images[@]}" | rofi -dmenu -i -p "🖼️ Wallpaper" -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" 2>/dev/null || echo "")
+    
+    if [[ -z "$selected" ]]; then
+        log "No se seleccionó nada"
+        exit 0
+    fi
+    
+    wallpaper_path="$WALLPAPER_DIR/$selected"
+    
+    if [[ ! -f "$wallpaper_path" ]]; then
+        notify-send "❌ Error" "Archivo no encontrado" -u critical
+        exit 1
+    fi
+    
+    log "Aplicando: $(basename "$wallpaper_path")"
+    
+    # Iniciar swww si no está corriendo
+    if ! pgrep -x swww-daemon >/dev/null 2>&1; then
+        log "Iniciando swww-daemon"
+        swww-daemon --format xrgb &
+        sleep 2
+    fi
+    
+    # Aplicar wallpaper
+    if swww img "$wallpaper_path" --transition-type wipe --transition-duration 1; then
+        echo "$wallpaper_path" > "$HOME/.cache/current-wallpaper"
+        log "✅ Wallpaper aplicado"
+    else
+        notify-send "❌ Error" "Falló aplicar wallpaper" -u critical
+        exit 1
+    fi
+    
+    # Aplicar pywal
+    log "Aplicando pywal"
+    if wal -i "$wallpaper_path" -n -q; then
+        log "✅ Pywal aplicado"
+        
+        # Actualizar waybar inmediatamente
+        log "Recargando waybar"
+        
+        # Cargar colores de pywal
+        source "$HOME/.cache/wal/colors.sh"
+        
+        # Actualizar CSS de waybar
+        mkdir -p "$HOME/.config/waybar"
+        cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores pywal - $(date '+%H:%M:%S') */
+@define-color background $background;
+@define-color foreground $foreground;
+@define-color cursor $cursor;
+@define-color color0 $color0;
+@define-color color1 $color1;
+@define-color color2 $color2;
+@define-color color3 $color3;
+@define-color color4 $color4;
+@define-color color5 $color5;
+@define-color color6 $color6;
+@define-color color7 $color7;
+@define-color color8 $color8;
+@define-color color9 $color9;
+@define-color color10 $color10;
+@define-color color11 $color11;
+@define-color color12 $color12;
+@define-color color13 $color13;
+@define-color color14 $color14;
+@define-color color15 $color15;
+EOF
+        
+        # Forzar recarga de waybar - método directo
+        pkill waybar 2>/dev/null || true
+        sleep 1
+        
+        # Esperar a que termine completamente
+        while pgrep waybar > /dev/null 2>&1; do
+            sleep 0.2
+        done
+        
+        # Iniciar waybar con nuevos colores
+        waybar > /dev/null 2>&1 &
+        sleep 2
+        
+        # Verificar que está corriendo
+        if pgrep waybar > /dev/null 2>&1; then
+            log "✅ Waybar recargado con nuevos colores"
+        else
+            log "⚠️ Reintentando waybar"
+            waybar > /dev/null 2>&1 &
+        fi
+        
+        # Recargar hyprland
+        hyprctl reload > /dev/null 2>&1 || true
+        
+        # Notificación de éxito
+        notify-send "🎨 Tema Aplicado" "$(basename "$selected")" -t 2000
+        log "🎉 Completado exitosamente"
+        
+    else
+        log "❌ Error con pywal"
+        notify-send "⚠️ Advertencia" "Wallpaper OK, pywal falló" -t 2000
+    fi
+}
+
+main "$@"

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Comando simple para alternar temas de waybar
+# Uso: waybar-toggle [original|varied|status]
+
+exec "$HOME/.config/waybar/scripts/toggle_theme.sh" "$@"

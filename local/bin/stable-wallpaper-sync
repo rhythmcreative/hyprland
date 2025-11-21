@@ -1,0 +1,316 @@
+#!/bin/bash
+
+# Script ESTABLE para cambiar wallpaper con sincronización completa
+# Versión optimizada que evita problemas con workspaces y nm-applet
+# Ejecutado por: Super + Shift + W en Hyprland
+
+set -euo pipefail
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_stable_$$"
+LOG_FILE="$HOME/.cache/stable-wallpaper-sync.log"
+LOCK_FILE="/tmp/stable-wallpaper-sync.lock"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 Wallpaper Sync" "$1" -t 3000 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Sincronización ya en progreso (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Función de limpieza
+cleanup() {
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT INT TERM
+
+log "🚀 === INICIANDO SINCRONIZACIÓN ESTABLE ==="
+notify "Iniciando cambio de wallpaper..."
+
+# Verificar directorio de wallpapers
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify "❌ Error: Directorio de wallpapers no encontrado"
+    exit 1
+fi
+
+# Verificar swww
+if ! command -v swww &>/dev/null; then
+    log "ERROR: swww no está instalado"
+    notify "❌ Error: swww no está instalado"
+    exit 1
+fi
+
+# Verificar e iniciar swww-daemon si es necesario
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Iniciando swww-daemon..."
+    notify "🔄 Iniciando swww daemon..."
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# Crear directorios necesarios
+mkdir -p "$CACHE_DIR"
+
+# Buscar imágenes
+log "🔍 Buscando imágenes en $WALLPAPER_DIR"
+cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
+
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes"
+    notify "❌ Error: No se encontraron imágenes"
+    exit 1
+fi
+
+log "📁 Encontradas ${#images[@]} imágenes"
+
+# Crear archivo temporal para rofi
+> "$TEMP_FILE"
+
+# Procesar cada imagen para crear previews
+for img in "${images[@]}"; do
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Crear preview si no existe
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        fi
+    fi
+    
+    # Agregar entrada a rofi
+    if [[ -f "$preview_file" ]]; then
+        echo -e "$clean_name\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+    else
+        echo "$clean_name" >> "$TEMP_FILE"
+    fi
+done
+
+# Verificar que tenemos entradas
+if [[ ! -s "$TEMP_FILE" ]]; then
+    log "ERROR: No se pudieron procesar las imágenes"
+    notify "❌ Error: No se pudieron procesar las imágenes"
+    exit 1
+fi
+
+log "🎭 Mostrando selector de wallpapers..."
+
+# Ejecutar rofi con tema apropiado
+selected=$(rofi -dmenu -i \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -show-icons \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    < "$TEMP_FILE")
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    log "ℹ️ No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "✅ Seleccionado: $selected"
+
+# Buscar el archivo correspondiente
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+# Verificar archivo seleccionado
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    log "ERROR: Archivo no encontrado: $selected"
+    notify "❌ Error: Archivo no encontrado"
+    exit 1
+fi
+
+# ===== APLICACIÓN ESTABLE DEL WALLPAPER =====
+
+log "🖼️ PASO 1: Aplicando wallpaper: $selected_file"
+
+# 1. Aplicar wallpaper con swww
+if swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+    log "✅ Wallpaper aplicado con swww"
+    notify "🖼️ Wallpaper aplicado: $(basename "$selected_file")"
+else
+    log "❌ Error al aplicar wallpaper con swww"
+    exit 1
+fi
+
+# 2. Guardar wallpaper actual
+echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+
+# 3. Aplicar pywal SOLO si está disponible
+if command -v wal > /dev/null 2>&1; then
+    log "🎨 PASO 2: Aplicando colores con pywal..."
+    notify "🌈 Generando colores con pywal..."
+    
+    if wal -i "$selected_file" -n -q; then
+        log "✅ Pywal aplicado exitosamente"
+        
+        # Esperar a que pywal genere todos los archivos
+        sleep 2
+        
+        # 4. Actualizar archivo de colores para Waybar
+        log "🎨 PASO 3: Actualizando colores de Waybar..."
+        if [[ -f "$HOME/.cache/wal/colors-waybar.css" ]]; then
+            cp "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
+            log "✅ Archivo colors-waybar.css copiado"
+        elif [[ -f "$HOME/.cache/wal/colors.css" ]]; then
+            # Si no hay colors-waybar.css, generar desde colors.css
+            cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal */
+$(grep -E '^--color[0-9]+|^--background|^--foreground|^--cursor' "$HOME/.cache/wal/colors.css" | sed 's/--/@define-color /' | sed 's/: / /g' | sed 's/;//g')
+EOF
+            log "✅ Archivo colors-pywal.css generado desde colors.css"
+        else
+            # Generar desde colors.sh si no hay CSS
+            source "$HOME/.cache/wal/colors.sh"
+            cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal */
+@define-color background $background;
+@define-color foreground $foreground;
+@define-color cursor $cursor;
+@define-color color0 $color0;
+@define-color color1 $color1;
+@define-color color2 $color2;
+@define-color color3 $color3;
+@define-color color4 $color4;
+@define-color color5 $color5;
+@define-color color6 $color6;
+@define-color color7 $color7;
+@define-color color8 $color8;
+@define-color color9 $color9;
+@define-color color10 $color10;
+@define-color color11 $color11;
+@define-color color12 $color12;
+@define-color color13 $color13;
+@define-color color14 $color14;
+@define-color color15 $color15;
+EOF
+            log "✅ Archivo colors-pywal.css generado desde colors.sh"
+        fi
+        
+        # 5. Recargar Hyprland config (para obtener nuevos colores)
+        log "🔄 PASO 4: Recargando configuración de Hyprland..."
+        hyprctl reload >/dev/null 2>&1 || log "WARNING: No se pudo recargar Hyprland"
+        
+        # 6. Actualizar Waybar de forma ESTABLE - SIN REINICIAR
+        log "📱 PASO 5: Actualizando Waybar de forma estable..."
+        if pgrep -x waybar > /dev/null; then
+            # Método 1: Recargar solo CSS con SIGUSR1 (más estable que USR2)
+            if pkill -SIGUSR1 waybar 2>/dev/null; then
+                log "✅ CSS de Waybar recargado con SIGUSR1"
+                sleep 1
+                
+                # Verificar que waybar sigue funcionando
+                if pgrep -x waybar > /dev/null; then
+                    log "✅ Waybar verificado - funcionando correctamente"
+                else
+                    log "⚠️ Waybar se cerró, reiniciando de forma suave..."
+                    nohup waybar > /dev/null 2>&1 &
+                    sleep 2
+                fi
+            else
+                log "ℹ️ SIGUSR1 no funcionó, manteniendo Waybar actual (evita interrupciones)"
+            fi
+        else
+            log "🚀 Waybar no está corriendo, iniciándolo..."
+            nohup waybar > /dev/null 2>&1 &
+            sleep 2
+        fi
+        
+        # 7. Configurar temas GTK (después de pywal)
+        log "🎨 PASO 6: Configurando temas GTK..."
+        sleep 1  # Esperar a que pywal termine completamente
+        
+        # Aplicar tema Arc-Dark (sobrescribir PywalDark)
+        if gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null; then
+            log "✅ Tema GTK Arc-Dark aplicado"
+        else
+            log "⚠️ No se pudo aplicar Arc-Dark, usando tema predeterminado"
+        fi
+        
+        # Aplicar iconos Tela circle black
+        if gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null; then
+            log "✅ Tema de iconos Tela-circle-black-dark aplicado"
+        else
+            log "⚠️ No se pudo aplicar Tela-circle-black-dark, usando tema predeterminado"
+        fi
+        
+        # Exportar variables de entorno
+        export GTK_THEME="Arc-Dark"
+        
+        log "✅ Temas GTK configurados correctamente"
+        
+        # 8. nm-applet: NO TOCAR (se mantiene funcionando)
+        log "📶 PASO 7: nm-applet preservado (sin modificaciones)"
+        log "ℹ️ nm-applet mantendrá los colores automáticamente vía gsettings"
+        
+        notify "🎨 ¡Wallpaper y colores aplicados exitosamente!"
+        
+    else
+        log "❌ Error: Pywal falló"
+        notify "⚠️ Error en pywal - wallpaper aplicado parcialmente"
+    fi
+else
+    log "ℹ️ Pywal no disponible, solo se aplicó el wallpaper"
+    notify "ℹ️ Solo wallpaper aplicado (pywal no disponible)"
+fi
+
+# Verificación final
+log "🔍 PASO FINAL: Verificación de componentes..."
+
+# Verificar Waybar
+if pgrep -x waybar > /dev/null; then
+    log "✅ Waybar está funcionando correctamente"
+else
+    log "⚠️ Waybar no está corriendo"
+fi
+
+# Verificar nm-applet
+if pgrep -x nm-applet > /dev/null; then
+    log "✅ nm-applet está funcionando correctamente"
+else
+    log "ℹ️ nm-applet no está corriendo (normal si se detuvo manualmente)"
+fi
+
+# Verificar archivos pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "✅ Colores pywal disponibles"
+else
+    log "⚠️ Archivos pywal no encontrados"
+fi
+
+log "🎉 === SINCRONIZACIÓN ESTABLE COMPLETADA ==="
+log "📸 Wallpaper: $(basename "$selected_file")"
+log "🎨 Sistema sincronizado exitosamente"
+
+exit 0

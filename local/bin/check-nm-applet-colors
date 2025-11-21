@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Script para verificar que nm-applet tiene los colores correctos
+
+echo "🔍 Verificando sincronización de colores nm-applet ↔ Waybar..."
+
+# Check if colors file exists
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Load pywal colors
+export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+source "$HOME/.cache/wal/colors.sh"
+
+echo "📊 Colores actuales de pywal:"
+echo "  Background: $background"
+echo "  Foreground: $foreground" 
+echo "  Accent (color4): $color4"
+
+# Check CSS file
+CSS_FILE="$HOME/.config/gtk-3.0/nm-applet-waybar.css"
+if [[ -f "$CSS_FILE" ]]; then
+    echo "📄 Archivo CSS encontrado: $CSS_FILE"
+    
+    # Check if colors match
+    if grep -q "$background" "$CSS_FILE" && grep -q "$foreground" "$CSS_FILE" && grep -q "$color4" "$CSS_FILE"; then
+        echo "✅ Los colores en el CSS coinciden con pywal"
+    else
+        echo "❌ Los colores en el CSS NO coinciden con pywal"
+        echo "   Ejecuta: nm-applet-waybar-sync para corregir"
+    fi
+else
+    echo "❌ Archivo CSS no encontrado. Ejecuta: nm-applet-waybar-sync"
+fi
+
+# Check if nm-applet is running
+if pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet está ejecutándose"
+else
+    echo "⚠️ nm-applet no está ejecutándose"
+    echo "   Ejecuta: nm-applet &"
+fi
+
+echo "🎨 Para sincronizar manualmente: nm-applet-waybar-sync"

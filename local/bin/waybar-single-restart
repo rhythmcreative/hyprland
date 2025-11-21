@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# Script mejorado para reiniciar waybar UNA SOLA VEZ sin conflictos
+# Evita reinicios múltiples y mejora la sincronización de colores
+# Versión optimizada con debouncing y detección de cambios recientes
+
+LOCK_FILE="/tmp/waybar-restart.lock"
+LOG_FILE="$HOME/.cache/waybar-single-restart.log"
+LAST_RESTART_FILE="/tmp/waybar-last-restart"
+DEBOUNCE_SECONDS=8  # Tiempo mínimo entre reinicios
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función para verificar si es necesario hacer debouncing
+check_debouncing() {
+    if [[ -f "$LAST_RESTART_FILE" ]]; then
+        local last_restart=$(cat "$LAST_RESTART_FILE" 2>/dev/null || echo "0")
+        local current_time=$(date +%s)
+        local time_diff=$((current_time - last_restart))
+        
+        if [[ $time_diff -lt $DEBOUNCE_SECONDS ]]; then
+            log "⏳ Debouncing: Último reinicio hace ${time_diff}s (mín: ${DEBOUNCE_SECONDS}s)"
+            log "🚫 Reinicio cancelado para evitar exceso de reinicios"
+            # Actualizar el tiempo para extender el debouncing
+            echo "$current_time" > "$LAST_RESTART_FILE"
+            exit 0
+        fi
+    fi
+    
+    # Registrar tiempo actual
+    echo "$(date +%s)" > "$LAST_RESTART_FILE"
+}
+
+# Verificar si ya hay un reinicio en progreso
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Reinicio ya en progreso (PID: $lock_pid), esperando..."
+        # Esperar hasta 10 segundos a que termine el proceso
+        for i in {1..20}; do
+            if ! kill -0 "$lock_pid" 2>/dev/null; then
+                break
+            fi
+            sleep 0.5
+        done
+        if kill -0 "$lock_pid" 2>/dev/null; then
+            log "⚠️ Proceso de reinicio anterior se colgó, continuando..."
+            rm -f "$LOCK_FILE"
+        else
+            log "✅ Proceso anterior terminó, waybar ya debería estar corriendo"
+            exit 0
+        fi
+    else
+        # Archivo de bloqueo huérfano, eliminarlo
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Verificar debouncing antes de proceder
+check_debouncing
+
+# Crear archivo de bloqueo
+echo $$ > "$LOCK_FILE"
+
+# Función de limpieza
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+log "=== Iniciando reinicio único de waybar ==="
+
+# Paso 1: Detener waybar actual de forma inteligente
+waybar_pids=$(pgrep -x waybar 2>/dev/null)
+if [[ -n "$waybar_pids" ]]; then
+    pid_count=$(echo "$waybar_pids" | wc -l)
+    log "🔄 Deteniendo $pid_count instancia(s) de waybar..."
+    
+    # Intentar cierre suave primero
+    kill -TERM $waybar_pids 2>/dev/null
+    
+    # Esperar hasta 5 segundos a que se cierren
+    for i in {1..10}; do
+        if ! pgrep -x waybar >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.5
+    done
+    
+    # Si siguen corriendo, forzar cierre
+    if pgrep -x waybar >/dev/null 2>&1; then
+        log "⚠️ Forzando cierre de procesos persistentes..."
+        pkill -KILL waybar 2>/dev/null
+        sleep 1
+    fi
+    
+    log "✅ Todos los procesos waybar cerrados"
+else
+    log "ℹ️ Waybar no estaba corriendo"
+fi
+
+# Paso 2: Esperar a que los archivos de configuración estén listos
+log "⏳ Esperando configuración..."
+attempts=0
+while [[ $attempts -lt 20 ]]; do
+    if [[ -f ~/.cache/wal/colors-hyprland.conf ]] || [[ $attempts -gt 10 ]]; then
+        break
+    fi
+    sleep 0.2
+    ((attempts++))
+done
+
+# Paso 3: Iniciar waybar UNA sola vez
+log "🚀 Iniciando waybar..."
+if waybar &>/dev/null & then
+    waybar_pid=$!
+    sleep 2
+    
+    # Verificar que waybar está corriendo
+    if kill -0 "$waybar_pid" 2>/dev/null && pgrep -x waybar >/dev/null; then
+        log "✅ Waybar iniciado correctamente (PID: $waybar_pid)"
+        notify-send "✅ Waybar" "Reiniciado exitosamente" -t 2000 2>/dev/null || true
+    else
+        log "❌ Waybar falló al iniciar"
+        # Intentar una vez más con configuración básica
+        if waybar & then
+            sleep 2
+            if pgrep -x waybar >/dev/null; then
+                log "✅ Waybar iniciado con configuración básica"
+                notify-send "⚠️ Waybar" "Iniciado con configuración básica" -t 2000 2>/dev/null || true
+            else
+                log "❌ ERROR CRÍTICO: No se pudo iniciar waybar"
+                notify-send "❌ Error Waybar" "No se pudo iniciar" -u critical -t 5000 2>/dev/null || true
+                exit 1
+            fi
+        fi
+    fi
+else
+    log "❌ Error al ejecutar waybar"
+    exit 1
+fi
+
+log "=== Reinicio único completado ==="

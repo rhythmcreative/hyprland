@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Script wrapper para sincronizar el wallpaper de SDDM usando sudo
+# Este script se puede llamar sin permisos de root
+
+LOG_FILE="$HOME/.cache/sddm-wallpaper-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "Ejecutando sincronización de wallpaper de SDDM con sudo"
+
+# Ejecutar el script principal con sudo
+sudo "$HOME/.local/bin/sync-sddm-wallpaper"
+
+if [[ $? -eq 0 ]]; then
+    log "Sincronización completada exitosamente"
+else
+    log "ERROR: Fallo en la sincronización"
+    notify-send "SDDM Wallpaper" "Error al sincronizar wallpaper con SDDM"
+fi

@@ -1,0 +1,47 @@
+[global]
+# Configuración ultra simple y elegante
+width = 300
+height = (0, 100)
+origin = top-right
+offset = (20, 60)
+
+# Estilo minimalista
+padding = 12
+horizontal_padding = 16
+frame_width = 2
+frame_color = "{color1}"
+corner_radius = 10
+gap_size = 6
+
+# Fuente y formato
+font = JetBrainsMono Nerd Font 11
+format = "<b>%s</b>\n%b"
+alignment = center
+word_wrap = yes
+show_indicators = no
+
+# Comportamiento
+timeout = 4000
+idle_threshold = 0
+max_icon_size = 32
+icon_position = left
+stack_duplicates = true
+sticky_history = yes
+
+[urgency_low]
+background = "{background}"
+foreground = "{foreground}"
+frame_color = "{color8}"
+timeout = 3000
+
+[urgency_normal]
+background = "{background}"
+foreground = "{foreground}"
+frame_color = "{color1}"
+timeout = 4000
+
+[urgency_critical]
+background = "{color1}"
+foreground = "{background}"
+frame_color = "{color9}"
+timeout = 0

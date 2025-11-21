@@ -1,0 +1,767 @@
+#!/bin/bash
+
+# Script optimizado para cambiar wallpaper SIN perder workspaces de waybar
+# Método mejorado que evita problemas con hyprland/workspaces
+# Ejecutado por: Super + Shift + W en Hyprland
+
+set -euo pipefail
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_fixed_$$"
+LOG_FILE="$HOME/.cache/wallpaper-change-fixed.log"
+LOCK_FILE="/tmp/wallpaper-change-fixed.lock"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    # Usar flock para evitar conflictos de escritura cuando rofi está leyendo archivos
+    echo "$message" >> "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 Wallpaper Change" "$1" -t 3000 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Cambio de wallpaper ya en progreso (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Función de cleanup - SIMPLIFICADA
+cleanup() {
+    local exit_code=$?
+    
+    # Limpiar archivos temporales
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+    rm -f "$LOCK_FILE"
+    
+    # SIMPLIFICADO: Siempre asegurar que waybar esté corriendo si estaba corriendo originalmente
+    # No importa en qué punto del script estemos
+    if [[ "${ORIGINAL_WAYBAR_STATE:-}" == "running" ]]; then
+        # Verificar si waybar está corriendo
+        if ! pgrep -x waybar >/dev/null 2>&1; then
+            log "📱 Cleanup: Restaurando Waybar (no está corriendo)..."
+            ensure_waybar_running
+        else
+            log "📱 Cleanup: Waybar ya está corriendo, no es necesario restaurar"
+        fi
+    else
+        log "📱 Cleanup: Waybar no estaba corriendo originalmente, no se restaura"
+    fi
+    
+    log "🧹 Cleanup completado (exit code: $exit_code)"
+}
+trap cleanup EXIT INT TERM
+
+# Función para ocultar Waybar (método optimizado para velocidad)
+hide_waybar() {
+    log "📱 Ocultando Waybar..."
+    
+    # Método rápido: matar directamente
+    if pgrep -x waybar > /dev/null; then
+        log "🛑 Deteniendo waybar..."
+        pkill -KILL waybar 2>/dev/null
+        sleep 0.1  # Reducido de 0.5 a 0.1
+        
+        if ! pgrep -x waybar > /dev/null; then
+            log "✅ Waybar detenido rápidamente"
+            return 0
+        fi
+    else
+        log "ℹ️ Waybar ya estaba detenido"
+        return 0
+    fi
+    
+    log "⚠️ No se pudo ocultar waybar completamente"
+}
+
+# Función para mostrar Waybar (método optimizado para velocidad)
+show_waybar() {
+    log "📱 Mostrando Waybar..."
+    
+    # Verificar si waybar está ejecutándose
+    if ! pgrep -x waybar > /dev/null; then
+        log "🔄 Waybar no está ejecutándose, iniciando..."
+        # Iniciar waybar en background con nohup
+        nohup waybar >/dev/null 2>&1 &
+        waybar_pid=$!
+        
+        # Esperar mínimo para que inicie
+        sleep 0.3  # Reducido de 1.5 a 0.3
+        
+        if pgrep -x waybar > /dev/null; then
+            log "✅ Waybar iniciado rápidamente (PID: $waybar_pid)"
+        else
+            log "⚠️ Waybar tardando en iniciar, continuando..."
+            # No esperamos más, continuamos
+        fi
+    else
+        log "ℹ️ Waybar ya estaba ejecutándose"
+    fi
+}
+
+# Función robusta para asegurar que waybar esté corriendo (para cleanup)
+ensure_waybar_running() {
+    log "🔧 Asegurando que waybar esté corriendo..."
+    
+    # Verificar si waybar está corriendo
+    if ! pgrep -x waybar >/dev/null 2>&1; then
+        log "🚀 Iniciando waybar..."
+        # Intentar con nohup primero
+        nohup waybar >/dev/null 2>&1 &
+        waybar_pid=$!
+        
+        # Esperar brevemente
+        sleep 0.5
+        
+        if pgrep -x waybar >/dev/null 2>&1; then
+            log "✅ Waybar iniciado exitosamente (PID: $waybar_pid)"
+            return 0
+        else
+            log "⚠️ Primer intento falló, intentando método directo..."
+            # Intentar método directo
+            waybar &
+            sleep 1
+            
+            if pgrep -x waybar >/dev/null 2>&1; then
+                log "✅ Waybar iniciado con método directo"
+                return 0
+            else
+                log "❌ No se pudo iniciar waybar"
+                return 1
+            fi
+        fi
+    else
+        log "✅ Waybar ya está corriendo"
+        return 0
+    fi
+}
+
+# Determinar estado original de waybar para manejo correcto en caso de cancelación
+if pgrep -x waybar > /dev/null; then
+    ORIGINAL_WAYBAR_STATE="running"
+    log "📝 Estado inicial: Waybar está ejecutándose"
+else
+    ORIGINAL_WAYBAR_STATE="stopped"
+    log "📝 Estado inicial: Waybar no está ejecutándose"
+fi
+
+# Inicializar variables de control para evitar reinicios dobles
+WAYBAR_ALREADY_RESTARTED="false"
+NM_APPLET_ALREADY_RESTARTED="false"
+
+log "🚀 === INICIANDO CAMBIO DE WALLPAPER (MÉTODO FIXED) ==="
+notify "Iniciando cambio de wallpaper..."
+
+# Verificar directorio de wallpapers
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify "❌ Error: Directorio de wallpapers no encontrado"
+    exit 1
+fi
+
+# Verificar swww
+if ! command -v swww &>/dev/null; then
+    log "ERROR: swww no está instalado"
+    notify "❌ Error: swww no está instalado"
+    exit 1
+fi
+
+# Verificar e iniciar swww-daemon si es necesario
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Iniciando swww-daemon..."
+    swww-daemon --format xrgb &
+    # NO sleep - continuar inmediatamente
+fi
+
+# Crear directorios necesarios
+mkdir -p "$CACHE_DIR"
+
+# Buscar imágenes
+log "🔍 Buscando imágenes en $WALLPAPER_DIR"
+cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
+
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes"
+    notify "❌ Error: No se encontraron imágenes"
+    exit 1
+fi
+
+log "📁 Encontradas ${#images[@]} imágenes"
+
+# Crear archivo temporal para rofi
+> "$TEMP_FILE"
+# Función para generar preview RÁPIDA (cache simple)
+generate_preview() {
+    local img="$1"
+    local clean_name="${img%.*}"
+    local safe_name="$(echo "$clean_name" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+    local preview_file="$CACHE_DIR/preview_${safe_name}.png"
+    
+    # Cache simple: Solo verificar si existe
+    if [[ -f "$preview_file" ]]; then
+        return 0  # Ya existe, usar cache
+    fi
+    
+    # Usar magick en lugar de convert para ImageMagick v7
+    local convert_cmd="magick"
+    # Fallback a convert si magick no está disponible
+    if ! command -v magick &> /dev/null; then
+        convert_cmd="convert"
+    fi
+    
+    # Generar preview
+    if [[ "$img" == *.gif ]]; then
+        # GIF: extraer primer frame y generar preview real
+        $convert_cmd "$img[0]" -resize "150x100^" -gravity center -extent "150x100" -strip -quality 60 "$preview_file" 2>/dev/null || {
+            # Fallback: usar placeholder si no se puede procesar el GIF
+            local placeholder="$HOME/.cache/wal/gif-placeholder.png"
+            if [[ ! -f "$placeholder" ]]; then
+                $convert_cmd -size 150x100 xc:"#2e3440" -pointsize 12 -fill white -gravity center -annotate +0+0 "GIF" "$placeholder" 2>/dev/null || touch "$placeholder"
+            fi
+            [[ -f "$placeholder" ]] && cp "$placeholder" "$preview_file" 2>/dev/null
+        }
+    else
+        # Imagen estática: conversión rápida
+        $convert_cmd "$img" -resize "150x100^" -gravity center -extent "150x100" -strip -quality 60 "$preview_file" 2>/dev/null
+    fi
+    
+    return 0
+}
+
+# Procesar imágenes en paralelo para máxima velocidad
+log "🚀 Generando previews en paralelo..."
+pids=()
+max_jobs=4  # Número de trabajos paralelos
+
+# Función para procesar una imagen individual
+process_image() {
+    local img="$1"
+    [[ ! -f "$img" ]] && return
+    
+    if generate_preview "$img"; then
+        local clean_name="${img%.*}"
+        local safe_name="$(echo "$clean_name" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+        local preview_file="$CACHE_DIR/preview_${safe_name}.png"
+        
+        # Agregar entrada a archivo temporal individual
+        local temp_entry="$TEMP_FILE.$(basename "$img")" 
+        if [[ -f "$preview_file" ]]; then
+            echo -e "$img\\0icon\\x1f$preview_file" > "$temp_entry"
+        else
+            echo "$img" > "$temp_entry"
+        fi
+    fi
+}
+
+# Procesar imágenes SILENCIOSAMENTE para máxima velocidad
+for img in "${images[@]}"; do
+    clean_name="${img%.*}"
+    safe_name="$(echo "$clean_name" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+    preview_file="$CACHE_DIR/preview_${safe_name}.png"
+    
+    # Generar preview sin logs detallados
+    generate_preview "$img"
+    
+    # Añadir a archivo rofi
+    if [[ -f "$preview_file" ]]; then
+        echo -e "$img\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+    else
+        echo "$img" >> "$TEMP_FILE"
+    fi
+done
+
+log "✅ Procesamiento paralelo completado"
+
+# Verificar que tenemos entradas
+if [[ ! -s "$TEMP_FILE" ]]; then
+    log "ERROR: No se pudieron procesar las imágenes"
+    notify "❌ Error: No se pudieron procesar las imágenes"
+    exit 1
+fi
+
+log "🎭 Mostrando selector de wallpapers..."
+
+# ===== MÉTODO CONSISTENTE PARA ROFI + WAYBAR =====
+log "📱 Configurando manejo de waybar para rofi..."
+
+# Función para ejecutar rofi con manejo correcto de waybar
+execute_rofi_with_waybar() {
+    local temp_file="$1"
+    local result=""
+    local waybar_was_running=false
+    
+    # Verificar si waybar está ejecutándose antes de iniciarlo
+    if pgrep -x waybar > /dev/null; then
+        waybar_was_running=true
+        log "📝 Waybar estaba ejecutándose antes de rofi"
+    else
+        log "📝 Waybar no estaba ejecutándose antes de rofi"
+    fi
+    
+    log "📱 Ocultando waybar antes de rofi..."
+    hide_waybar
+    
+    # Verificación rápida
+    sleep 0.1  # Reducido de 0.5 a 0.1
+    if pgrep -x waybar > /dev/null; then
+        log "⚠️ Waybar sigue ejecutándose, forzando cierre..."
+        pkill -KILL waybar 2>/dev/null
+        sleep 0.1  # Reducido de 0.3 a 0.1
+    fi
+    
+    log "🚀 Ejecutando rofi..."
+    # CRÍTICO: Crear copia completamente aislada para evitar contaminación de logs
+    local rofi_temp_file="${temp_file}_rofi_$$"
+    
+    # ARREGLADO: Crear archivo completamente limpio sin logs
+    # Usar exec para redirigir SOLO el output del archivo, no los logs
+    {
+        exec 3>&1 1>"$rofi_temp_file"  # Redirigir stdout temporalmente
+        cat "$temp_file"
+        exec 1>&3 3>&-  # Restaurar stdout
+    } 2>/dev/null  # Suprimir stderr para evitar contaminación
+    
+    result=$(rofi -dmenu -i \
+        -p "🖼️ Seleccionar Wallpaper" \
+        -show-icons \
+        -theme "$HOME/Downloads/wallpaper-select.rasi" \
+        < "$rofi_temp_file" 2>/dev/null || true)
+    
+    # Limpiar archivo temporal
+    rm -f "$rofi_temp_file"
+    
+    # IMPORTANTE: Solo restaurar Waybar si NO vamos a reiniciarlo después
+    # Si pywal está disponible, el reinicio se hará en el paso principal
+    if [[ "$waybar_was_running" == "true" ]] && ! command -v wal > /dev/null 2>&1; then
+        log "📱 Restaurando waybar después de rofi (sin pywal)..."
+        show_waybar
+    elif [[ "$waybar_was_running" == "true" ]]; then
+        log "📱 No se restaura waybar ahora - se reiniciará después con pywal"
+    else
+        log "ℹ️ No se restaura waybar porque no estaba ejecutándose antes"
+    fi
+    
+    echo "$result"
+}
+
+# Ejecutar rofi con manejo mejorado
+selected=$(execute_rofi_with_waybar "$TEMP_FILE")
+
+# Marcar que Rofi se completó correctamente
+ROFI_COMPLETED="true"
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    log "ℹ️ No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "✅ Seleccionado: $selected"
+
+# ARREGLO: Si la selección contiene texto de log (detectar por formato de timestamp), extraer solo el nombre del archivo
+if [[ "$selected" =~ \[20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] ]]; then
+    log "⚠️ Detectado texto de log en selección, extrayendo nombre del archivo..."
+    # Extraer la última línea que contenga un nombre de archivo válido
+    selected=$(echo "$selected" | grep -E '\.(jpg|jpeg|png|gif|webp|bmp)$' | tail -1 | tr -d '\n')
+    log "🔧 Archivo extraído del log: '$selected'"
+fi
+
+# Buscar el archivo correspondiente - ahora seleccionamos el nombre completo
+selected_file=""
+
+# Primero intentar búsqueda directa (nombre completo del archivo)
+if [[ -f "$WALLPAPER_DIR/$selected" ]]; then
+    selected_file="$WALLPAPER_DIR/$selected"
+    log "🎯 Archivo encontrado directamente: $selected_file"
+else
+    # Fallback: buscar por nombre sin extensión (compatibilidad)
+    for img in "${images[@]}"; do
+        if [[ "${img%.*}" == "$selected" ]]; then
+            selected_file="$WALLPAPER_DIR/$img"
+            log "🎯 Archivo encontrado por fallback: $selected_file"
+            break
+        fi
+    done
+fi
+
+# Verificar archivo seleccionado
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    log "❌ ERROR: Archivo no encontrado: $selected"
+    log "🔍 Debug info:"
+    log "   - Selección: '$selected'"
+    log "   - Directorio: '$WALLPAPER_DIR'"
+    log "   - Archivos disponibles:"
+    for img in "${images[@]}"; do
+        log "     * '$img'"
+    done
+    notify "❌ Error: Archivo no encontrado"
+    exit 1
+fi
+
+# ===== APLICACIÓN MEJORADA DEL WALLPAPER =====
+
+log "🖼️ PASO 1: Aplicando wallpaper: $selected_file"
+
+# 1. Aplicar wallpaper con swww
+if swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+    log "✅ Wallpaper aplicado con swww"
+    notify "🖼️ Wallpaper aplicado: $(basename "$selected_file")"
+else
+    log "❌ Error al aplicar wallpaper con swww"
+    exit 1
+fi
+
+# 2. Los monitores se configurarán automáticamente al recargar Hyprland config
+log "🖥️ PASO 1.5: Los monitores se configurarán con hyprctl reload..."
+
+# 3. Guardar wallpaper actual
+echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+
+# 4. Aplicar pywal SOLO si está disponible
+if command -v wal > /dev/null 2>&1; then
+    log "🎨 PASO 2: Aplicando colores con pywal..."
+    notify "🌈 Generando colores con pywal..."
+    
+    if wal -i "$selected_file" -n -q; then
+        log "✅ Pywal aplicado exitosamente"
+        
+        # Esperar a que pywal genere todos los archivos - reducido
+        sleep 0.5
+        
+        # 5. Actualizar archivo de colores para Waybar
+        log "🎨 PASO 3: Actualizando colores de Waybar..."
+        if [[ -f "$HOME/.cache/wal/colors-waybar.css" ]]; then
+            cp "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
+            log "✅ Archivo colors-waybar.css copiado"
+        elif [[ -f "$HOME/.cache/wal/colors.css" ]]; then
+            # Si no hay colors-waybar.css, generar desde colors.css
+            cat > "$HOME/.config/waybar/colors-pywal.css" <<EOF
+/* Colores generados automáticamente por pywal */
+$(grep -E '^--color[0-9]+|^--background|^--foreground|^--cursor' "$HOME/.cache/wal/colors.css" | sed 's/--/@define-color /' | sed 's/: / /g' | sed 's/;//g')
+EOF
+            log "✅ Archivo colors-pywal.css generado desde colors.css"
+        else
+            # Generar desde colors.sh si no hay CSS
+            source "$HOME/.cache/wal/colors.sh"
+            cat > "$HOME/.config/waybar/colors-pywal.css" <<EOF
+/* Colores generados automáticamente por pywal */
+@define-color background $background;
+@define-color foreground $foreground;
+@define-color cursor $cursor;
+@define-color color0 $color0;
+@define-color color1 $color1;
+@define-color color2 $color2;
+@define-color color3 $color3;
+@define-color color4 $color4;
+@define-color color5 $color5;
+@define-color color6 $color6;
+@define-color color7 $color7;
+@define-color color8 $color8;
+@define-color color9 $color9;
+@define-color color10 $color10;
+@define-color color11 $color11;
+@define-color color12 $color12;
+@define-color color13 $color13;
+@define-color color14 $color14;
+@define-color color15 $color15;
+EOF
+            log "✅ Archivo colors-pywal.css generado desde colors.sh"
+        fi
+        
+        # 5. NUEVO: Generar configuración segura de monitores antes del reload
+        log "🖥️ PASO 4A: Generando configuración segura de monitores..."
+        if [[ -x "$HOME/.local/bin/safe-monitor-config" ]]; then
+            if "$HOME/.local/bin/safe-monitor-config" generate > /dev/null 2>&1; then
+                log "✅ Configuración de monitores actualizada de forma segura"
+            else
+                log "⚠️ Advertencia: No se pudo generar configuración segura de monitores"
+                # Continuar de cualquier manera, pero ser más cuidadoso con el reload
+            fi
+        else
+            log "⚠️ Script safe-monitor-config no encontrado, usando configuración existente"
+        fi
+        
+        # 5. Recargar Hyprland config (para obtener nuevos colores) - AHORA MÁS SEGURO
+        log "🔄 PASO 4B: Recargando configuración de Hyprland de forma segura..."
+        
+        # Verificar que no hay instancias problemáticas antes del reload
+        monitor_count=$(hyprctl monitors | grep -c "^Monitor" || echo "1")
+        log "📺 Monitores detectados antes del reload: $monitor_count"
+        
+        # Intentar reload con manejo de errores mejorado
+        if timeout 10s hyprctl reload > /dev/null 2>&1; then
+            log "✅ Configuración de Hyprland recargada exitosamente"
+            
+            # Verificar que Hyprland sigue funcionando después del reload
+            sleep 0.5
+            if ! hyprctl version > /dev/null 2>&1; then
+                log "❌ CRÍTICO: Hyprland no responde después del reload"
+                notify "⚠️ Error: Problema con Hyprland después de recargar configuración"
+            else
+                log "✅ Hyprland funcionando correctamente después del reload"
+            fi
+        else
+            log "❌ WARNING: No se pudo recargar Hyprland o timeout alcanzado"
+            notify "⚠️ Advertencia: Problema al recargar configuración de Hyprland"
+            
+            # Verificar si Hyprland sigue funcionando
+            if ! hyprctl version > /dev/null 2>&1; then
+                log "❌ CRÍTICO: Hyprland no responde - posible crash"
+                notify "❌ Error crítico: Hyprland puede haber fallado"
+                # En este punto, el sistema debería estar regresando a sddm
+                exit 1
+            fi
+        fi
+        
+        # 6. MÉTODO MEJORADO: Reiniciar Waybar UNA SOLA VEZ
+        log "📱 PASO 5: Reiniciando Waybar una sola vez..."
+        
+        # Variable de control para evitar reinicio doble
+        if [[ "${WAYBAR_ALREADY_RESTARTED:-}" == "true" ]]; then
+            log "ℹ️ Waybar ya fue reiniciado anteriormente, omitiendo paso..."
+        else
+            # Marcar waybar como ya reiniciado
+            WAYBAR_ALREADY_RESTARTED="true"
+            
+            # Verificar si waybar está ejecutándose
+            waybar_count=$(pgrep -x waybar | wc -l)
+            log "🔍 Instancias de waybar detectadas: $waybar_count"
+            
+            if [[ $waybar_count -gt 0 ]]; then
+                log "🛑 Cerrando todas las instancias de waybar..."
+                # Cerrar waybar limpiamente
+                pkill -TERM waybar 2>/dev/null || true
+                
+                # Método ultra-rápido: matar inmediatamente y reiniciar
+                log "🛑 Cerrando todas las instancias de waybar rápido..."
+                pkill -KILL waybar 2>/dev/null || true
+                sleep 0.1  # Solo esperar 0.1 segundos
+            fi
+            
+            # Iniciar waybar inmediatamente
+            log "🚀 Iniciando nueva instancia de waybar..."
+            nohup waybar > /dev/null 2>&1 &
+            waybar_pid=$!
+            
+            # Esperar mínimo para que inicie - reducido drásticamente
+            sleep 0.8  # Reducido de 3 a 0.8 segundos
+            
+            if pgrep -x waybar > /dev/null; then
+                log "✅ Waybar reiniciado exitosamente (PID: $waybar_pid)"
+                
+                # Verificación rápida de workspaces - sin sleep adicional
+                log "🔍 Verificando módulo de workspaces..."
+                if hyprctl workspaces | grep -q "workspace ID"; then
+                    log "✅ Módulo de workspaces funcionando correctamente"
+                else
+                    log "⚠️ Advertencia: No se pudo verificar el estado de workspaces"
+                fi
+            else
+                log "❌ Error: Waybar no se inició correctamente"
+                notify "⚠️ Error: Waybar no se inició después de aplicar colores"
+            fi
+        fi
+        
+        # 7. Configurar temas GTK (después de pywal) - sin delay
+        log "🎨 PASO 6: Configurando temas GTK..."
+        
+        # Aplicar tema Arc-Dark
+        if gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null; then
+            log "✅ Tema GTK Arc-Dark aplicado"
+        else
+            log "⚠️ No se pudo aplicar Arc-Dark, usando tema predeterminado"
+        fi
+        
+        # Aplicar iconos Tela circle black
+        if gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null; then
+            log "✅ Tema de iconos Tela-circle-black-dark aplicado"
+        else
+            log "⚠️ No se pudo aplicar Tela-circle-black-dark, usando tema predeterminado"
+        fi
+        
+        # Exportar variables de entorno
+        export GTK_THEME="Arc-Dark"
+        
+        log "✅ Temas GTK configurados correctamente"
+        
+        # 8. OPTIMIZADO: Reinicio UNA SOLA VEZ de nm-applet
+        log "🌐 PASO 7: Reinicio único de nm-applet..."
+        
+        # Variable de control para evitar reinicio doble
+        if [[ "${NM_APPLET_ALREADY_RESTARTED:-}" == "true" ]]; then
+            log "ℹ️ nm-applet ya fue reiniciado anteriormente, omitiendo paso..."
+        else
+            # Marcar nm-applet como ya reiniciado
+            NM_APPLET_ALREADY_RESTARTED="true"
+            
+            # Método ultra-rápido: matar inmediatamente y reiniciar
+            if pgrep -x nm-applet > /dev/null; then
+                log "🔄 Cerrando nm-applet existente..."
+                pkill -9 nm-applet 2>/dev/null || true
+                sleep 0.2  # Solo 0.2 segundos
+            fi
+            
+            # Iniciar nm-applet inmediatamente con --indicator para máxima velocidad
+            log "🚀 Iniciando nm-applet optimizado..."
+            nm-applet --indicator > /dev/null 2>&1 &
+            nm_pid=$!
+            
+            # Verificación ultra-rápida - solo 0.2 segundos total
+            sleep 0.2
+            
+            if pgrep -x nm-applet > /dev/null; then
+                log "✅ nm-applet reiniciado rápidamente (PID: $nm_pid)"
+            else
+                log "⚠️ Reintentando nm-applet..."
+                nm-applet --indicator &
+                sleep 0.3
+                pgrep -x nm-applet > /dev/null && log "✅ nm-applet iniciado en segundo intento" || log "❌ nm-applet falló"
+            fi
+        fi
+        
+        # 9. NUEVO: Sincronizar terminales (Kitty + Oh My Posh + P10k)
+        log "🖥️ PASO 8: Sincronizando terminales con pywal..."
+        
+        if [[ -x "$HOME/.local/bin/sync-terminals-pywal" ]]; then
+            log "🔄 Ejecutando sync-terminals-pywal..."
+            if "$HOME/.local/bin/sync-terminals-pywal"; then
+                log "✅ Terminales sincronizados exitosamente"
+            else
+                log "⚠️ Advertencia: Error en sync-terminals-pywal"
+            fi
+        else
+            log "⚠️ Script sync-terminals-pywal no encontrado"
+            
+            # Fallback: sincronizar solo Kitty básicamente
+            if [[ -f "$HOME/.cache/wal/colors-kitty.conf" ]]; then
+                log "🐱 Fallback: Kitty ya tiene colores de pywal"
+            fi
+        fi
+        
+        # 10. NUEVO: Sincronización con pywalfox
+        log "🦊 PASO 9: Sincronizando con pywalfox..."
+        
+        if command -v pywalfox > /dev/null 2>&1; then
+            log "🎨 Ejecutando pywalfox update..."
+            if pywalfox update > /dev/null 2>&1; then
+                log "✅ pywalfox sincronizado exitosamente"
+            else
+                log "⚠️ Advertencia: Error en pywalfox update"
+            fi
+        else
+            log "⚠️ pywalfox no está disponible en PATH"
+        fi
+        
+        # 11. NUEVO: Sincronización automática con pywal-auto-sync
+        log "🔄 PASO 10: Sincronizando con pywal-auto-sync..."
+        
+        if [[ -x "$HOME/.local/bin/pywal-auto-sync" ]]; then
+            log "🎨 Ejecutando pywal-auto-sync sync..."
+            if "$HOME/.local/bin/pywal-auto-sync" sync; then
+                log "✅ pywal-auto-sync sincronizado exitosamente"
+            else
+                log "⚠️ Advertencia: Error en pywal-auto-sync"
+            fi
+        else
+            log "⚠️ Script pywal-auto-sync no encontrado en $HOME/.local/bin/"
+        fi
+        
+        # 12. NUEVO: Sincronización de hyprlock con pywal
+        log "🔒 PASO 11: Sincronizando hyprlock con pywal..."
+        
+        # Generar colores mejorados para Hyprland/hyprlock
+        if [[ -x "$HOME/.local/bin/hyprland-pywal-colors" ]]; then
+            log "🎨 Generando colores para hyprlock..."
+            if "$HOME/.local/bin/hyprland-pywal-colors"; then
+                log "✅ Colores de hyprlock generados exitosamente"
+                
+                # Verificar que el archivo se creó correctamente
+                if [[ -f "$HOME/.cache/wal/colors-hyprland-enhanced.conf" ]]; then
+                    log "✅ Archivo colors-hyprland-enhanced.conf confirmado"
+                    # Opcional: recargar hyprlock si está activo (solo si es necesario)
+                    if pgrep -x hyprlock > /dev/null; then
+                        log "ℹ️ hyprlock está activo, los nuevos colores se aplicarán en el próximo bloqueo"
+                    fi
+                else
+                    log "⚠️ Advertencia: No se pudo crear colors-hyprland-enhanced.conf"
+                fi
+            else
+                log "⚠️ Advertencia: Error al generar colores para hyprlock"
+            fi
+        else
+            log "⚠️ Script hyprland-pywal-colors no encontrado"
+        fi
+        
+        notify "🎨 ¡Wallpaper y sistema completamente sincronizado!"
+        log "🔒 hyprlock sincronizado: Los colores se aplicarán en el próximo bloqueo de pantalla"
+        
+    else
+        log "❌ Error: Pywal falló"
+        notify "⚠️ Error en pywal - wallpaper aplicado parcialmente"
+    fi
+else
+    log "ℹ️ Pywal no disponible, solo se aplicó el wallpaper"
+    notify "ℹ️ Solo wallpaper aplicado (pywal no disponible)"
+fi
+
+# VERIFICACIÓN FINAL DE WAYBAR - OPTIMIZADA
+if ! pgrep -x waybar > /dev/null; then
+    log "❌ CRÍTICO: Waybar no está ejecutándose al finalizar. Iniciando respaldo..."
+    notify "🔧 Iniciando waybar de respaldo..."
+    
+    # Intentar iniciar waybar de respaldo
+    nohup waybar > /dev/null 2>&1 &
+    waybar_fallback_pid=$!
+    
+    # Verificación RÁPIDA - solo 0.5 segundos
+    sleep 0.5
+    
+    if pgrep -x waybar > /dev/null; then
+        log "✅ RESPALDO EXITOSO: Waybar iniciado correctamente (PID: $waybar_fallback_pid)"
+        notify "✅ Waybar restaurado exitosamente"
+    else
+        log "❌ FALLO CRÍTICO: No se pudo iniciar waybar incluso con respaldo"
+        notify "❌ Error crítico: No se pudo iniciar waybar"
+        
+        # Intentar un último intento con método diferente
+        log "🔄 ÚLTIMO INTENTO: Intentando con systemctl o método alternativo..."
+        
+        # Verificar si hay un servicio de waybar
+        if systemctl --user is-active --quiet waybar.service 2>/dev/null; then
+            log "🔄 Reiniciando servicio waybar..."
+            systemctl --user restart waybar.service
+        else
+            log "🔄 Último intento directo..."
+            waybar &
+            sleep 1
+        fi
+        
+        # Verificación final
+        if pgrep -x waybar > /dev/null; then
+            log "✅ ÚLTIMO INTENTO EXITOSO: Waybar finalmente iniciado"
+        else
+            log "❌ FALLO TOTAL: Waybar no se pudo iniciar. Puede requerir intervención manual."
+            notify "⚠️ Waybar falló - inicia manualmente: waybar &"
+        fi
+    fi
+else
+    log "✅ VERIFICACIÓN EXITOSA: Waybar está ejecutándose correctamente"
+fi
+
+log "🎉 === CAMBIO DE WALLPAPER COMPLETADO ==="
+log "📸 Wallpaper: $(basename "$selected_file")"
+log "🎨 Sistema sincronizado exitosamente con waybar reiniciado"
+
+exit 0

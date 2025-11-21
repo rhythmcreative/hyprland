@@ -1,0 +1,207 @@
+#!/bin/bash
+
+# Notificaciones de volumen estilo interfaz de audio profesional
+# Inspirado en mezcladores y DAWs profesionales
+
+TIMEOUT=1800
+URGENT="low"
+
+# Generar VU meter profesional
+generate_vu_meter() {
+    local percent=$1
+    local segments=20
+    local filled=$((percent * segments / 100))
+    
+    local meter=""
+    local green_limit=12   # 60%
+    local yellow_limit=16  # 80%
+    
+    for ((i=0; i<segments; i++)); do
+        if [ $i -lt $filled ]; then
+            if [ $i -lt $green_limit ]; then
+                meter+="█"  # Verde (bajo)
+            elif [ $i -lt $yellow_limit ]; then
+                meter+="█"  # Amarillo (medio)
+            else
+                meter+="█"  # Rojo (alto)
+            fi
+        else
+            meter+="░"  # Vacío
+        fi
+    done
+    
+    echo "$meter"
+}
+
+# Generar nivel dB aproximado
+generate_db_level() {
+    local percent=$1
+    
+    if [ "$percent" -eq 0 ]; then
+        echo "-∞"
+    elif [ "$percent" -le 5 ]; then
+        echo "-30"
+    elif [ "$percent" -le 10 ]; then
+        echo "-24"
+    elif [ "$percent" -le 20 ]; then
+        echo "-18"
+    elif [ "$percent" -le 35 ]; then
+        echo "-12"
+    elif [ "$percent" -le 50 ]; then
+        echo "-6"
+    elif [ "$percent" -le 70 ]; then
+        echo "-3"
+    elif [ "$percent" -le 85 ]; then
+        echo "-1"
+    elif [ "$percent" -le 95 ]; then
+        echo "+0"
+    else
+        echo "+3"
+    fi
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo limpio
+get_clean_device() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-18)
+    if [ -z "$device" ]; then
+        echo "Master Output"
+    else
+        echo "$device"
+    fi
+}
+
+# Notificación estilo mezclador profesional
+show_pro_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        # Mute con diseño profesional
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "🔇 MUTED" \
+                   "┌────────────────────┐
+│       MASTER       │
+│ ░░░░░░░░░░░░░░░░░░░░ │
+│        -∞ dB       │
+└────────────────────┘
+
+$device"
+    else
+        local meter="$(generate_vu_meter $volume)"
+        local db_level="$(generate_db_level $volume)"
+        local status_icon=""
+        
+        # Determinar estado por nivel
+        if [ "$volume" -le 60 ]; then
+            status_icon="🟢"  # Verde - nivel seguro
+        elif [ "$volume" -le 80 ]; then
+            status_icon="🟡"  # Amarillo - nivel medio
+        else
+            status_icon="🔴"  # Rojo - nivel alto
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$status_icon MASTER $volume%" \
+                   "┌────────────────────┐
+│ $meter │
+│       ${db_level} dB        │
+└────────────────────┘
+
+$device"
+    fi
+}
+
+# Notificación de audio estilo estudio
+show_pro_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_clean_device)"
+    local meter="$(generate_vu_meter $volume)"
+    local db_level="$(generate_db_level $volume)"
+    
+    local icon="🎵"
+    local clean_title=$(echo "$title" | cut -c1-12)
+    
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon $clean_title" \
+               "$message
+
+┌────────────────────┐
+│ $meter │
+│  MASTER: $volume% ${db_level}dB  │
+└────────────────────┘
+
+$device"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_pro_audio_notification "${2:-Audio}" "${3:-Now Playing}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing professional audio interface style..."
+        echo "Testing low volume (25%)..."
+        show_pro_notification "25" "false" "$(get_clean_device)"
+        sleep 2.5
+        echo "Testing medium volume (65%)..."
+        show_pro_notification "65" "false" "$(get_clean_device)"
+        sleep 2.5
+        echo "Testing high volume (90%)..."
+        show_pro_notification "90" "false" "$(get_clean_device)"
+        sleep 2.5
+        echo "Testing muted..."
+        show_pro_notification "0" "true" "$(get_clean_device)"
+        sleep 2.5
+        echo "Testing audio notification..."
+        show_pro_audio_notification "Spotify" "♪ Playing: Professional Audio Track"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_clean_device)"
+
+show_pro_notification "$volume" "$muted" "$device"
+exit 0

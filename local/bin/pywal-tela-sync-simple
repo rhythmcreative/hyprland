@@ -1,0 +1,170 @@
+#!/bin/bash
+
+# PywalSync-Tela Simple: Genera tema de iconos Tela Circle con colores de Pywal
+# Versión simplificada y robusta
+
+set -e
+
+# Configuración
+PYWAL_COLORS_FILE="$HOME/.cache/wal/colors"
+SOURCE_THEME="/usr/share/icons/Tela-circle"
+TARGET_THEME="$HOME/.local/share/icons/PywalSync-Tela"
+
+# Función para leer colores de Pywal
+read_pywal_colors() {
+    echo "Leyendo colores de Pywal..."
+    
+    if [[ ! -f "$PYWAL_COLORS_FILE" ]]; then
+        echo "Error: Archivo de colores de Pywal no encontrado."
+        echo "Ejecuta 'wal' primero para generar los colores"
+        exit 1
+    fi
+    
+    # Leer colores
+    colors=($(grep -E '^#[0-9a-fA-F]{6}' "$PYWAL_COLORS_FILE" | head -8))
+    
+    if [[ ${#colors[@]} -lt 8 ]]; then
+        echo "Error: No se pudieron leer suficientes colores"
+        exit 1
+    fi
+    
+    # Asignar colores
+    COLOR_0="${colors[0]}"  # Background
+    COLOR_1="${colors[1]}"  # Primary
+    COLOR_2="${colors[2]}"  # Secondary
+    COLOR_3="${colors[3]}"  # Alt Primary
+    COLOR_4="${colors[4]}"  # Alt Secondary
+    COLOR_7="${colors[7]}"  # Accent
+    
+    echo "Colores seleccionados:"
+    echo "  Primary: $COLOR_1"
+    echo "  Secondary: $COLOR_2"
+    echo "  Accent: $COLOR_7"
+}
+
+# Función principal
+main() {
+    echo "PywalSync-Tela Simple: Generando tema de iconos"
+    echo "=============================================="
+    
+    # Verificar que existe el tema base
+    if [[ ! -d "$SOURCE_THEME" ]]; then
+        echo "Error: Tema base Tela-circle no encontrado"
+        exit 1
+    fi
+    
+    # Leer colores
+    read_pywal_colors
+    
+    # Limpiar tema anterior si existe
+    if [[ -d "$TARGET_THEME" ]]; then
+        echo "Removiendo tema anterior..."
+        rm -rf "$TARGET_THEME"
+    fi
+    
+    # Crear directorio de destino
+    mkdir -p "$(dirname "$TARGET_THEME")"
+    
+    echo "Copiando tema base..."
+    cp -r "$SOURCE_THEME" "$TARGET_THEME"
+    
+    # Crear index.theme personalizado
+    echo "Creando index.theme..."
+    cat > "$TARGET_THEME/index.theme" << EOF
+[Icon Theme]
+Name=PywalSync Tela
+Comment=Tela Circle icon theme synchronized with Pywal colors
+Inherits=hicolor,Adwaita,breeze
+Example=folder
+
+# KDE/Plasma Stuff
+DisplayDepth=32
+LinkOverlay=link_overlay
+LockOverlay=lock_overlay
+ZipOverlay=zip_overlay
+DesktopDefault=48
+DesktopSizes=16,22,32,48,64,96,128,256
+ToolbarDefault=22
+ToolbarSizes=16,22,32,48
+MainToolbarDefault=22
+MainToolbarSizes=16,22,32,48
+SmallDefault=16
+SmallSizes=16,22,32,48
+PanelDefault=48
+PanelSizes=16,22,32,48,64,96,128,256
+DialogDefault=32
+DialogSizes=16,22,32,48,64,128,256
+FollowsColorScheme=true
+
+KDE-Extensions=.svg
+
+EOF
+    
+    # Copiar el resto de la configuración del tema original
+    grep -A 1000 "# Directory list" "$SOURCE_THEME/index.theme" >> "$TARGET_THEME/index.theme"
+    
+    # Procesar solo iconos más importantes para rapidez
+    echo "Aplicando colores a iconos principales..."
+    
+    # Directorios a procesar
+    dirs_to_process=(
+        "scalable/apps"
+        "scalable/places"
+        "48/apps"
+        "32/apps"
+    )
+    
+    for dir in "${dirs_to_process[@]}"; do
+        if [[ -d "$TARGET_THEME/$dir" ]]; then
+            echo "  Procesando: $dir"
+            # Usar find con xargs para mejor rendimiento
+            find "$TARGET_THEME/$dir" -name "*.svg" -print0 | \
+            xargs -0 -I {} -P 4 sed -i \
+                -e "s/#71aa75/$COLOR_1/g" \
+                -e "s/#8bc891/$COLOR_2/g" \
+                -e "s/#4f9cf9/$COLOR_1/g" \
+                -e "s/#74b9ff/$COLOR_2/g" \
+                -e "s/#fd5d5d/$COLOR_1/g" \
+                -e "s/#ff7675/$COLOR_2/g" \
+                -e "s/#fd9353/$COLOR_1/g" \
+                -e "s/#fdcb6e/$COLOR_2/g" \
+                -e "s/#f1c40f/$COLOR_1/g" \
+                -e "s/#a29bfe/$COLOR_1/g" \
+                -e "s/#5f6368/$COLOR_3/g" \
+                -e "s/#9aa0a6/$COLOR_4/g" \
+                -e "s/#dadce0/$COLOR_7/g" \
+                {}
+        fi
+    done
+    
+    # Aplicar el tema
+    if [[ "$1" != "--no-apply" ]]; then
+        echo "Aplicando tema..."
+        
+        # GTK
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.desktop.interface icon-theme "PywalSync Tela"
+            echo "  Aplicado en GTK"
+        fi
+        
+        # KDE
+        if command -v kwriteconfig5 >/dev/null 2>&1; then
+            kwriteconfig5 --file kdeglobals --group Icons --key Theme "PywalSync Tela"
+            echo "  Aplicado en KDE"
+        fi
+        
+        # Actualizar cache
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -f -t "$TARGET_THEME" 2>/dev/null || true
+            echo "  Cache actualizado"
+        fi
+    fi
+    
+    echo "=============================================="
+    echo "¡Tema PywalSync-Tela generado exitosamente!"
+    echo "Ubicación: $TARGET_THEME"
+    echo "=============================================="
+}
+
+# Ejecutar
+main "$@"

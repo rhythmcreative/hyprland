@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Script to toggle nwg-dock-hyprland visibility
+
+# Check if nwg-dock-hyprland is running
+if pgrep -x "nwg-dock-hyprland" > /dev/null; then
+    echo "nwg-dock-hyprland is running, hiding it..."
+    # Use signal to hide the dock
+    pkill -SIGRTMIN+3 nwg-dock-hyprland
+    
+    # If signals don't work, kill the process
+    if pgrep -x "nwg-dock-hyprland" > /dev/null; then
+        sleep 0.1
+        pkill -x nwg-dock-hyprland
+        echo "nwg-dock-hyprland closed"
+    else
+        echo "nwg-dock-hyprland hidden"
+    fi
+else
+    echo "nwg-dock-hyprland is not running, starting it..."
+    # Start nwg-dock-hyprland in the background
+    cd ~/.config/nwg-dock-hyprland
+    nohup nwg-dock-hyprland -p bottom -i 48 -s simple.css -x > /dev/null 2>&1 &
+    echo "nwg-dock-hyprland started"
+fi

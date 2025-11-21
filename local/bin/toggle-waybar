@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Script para alternar waybar - Super + Shift + W
+# Oculta waybar si está visible, lo muestra si está oculto
+
+if pgrep -x waybar > /dev/null; then
+    # Si waybar está corriendo, lo matamos
+    pkill waybar
+    notify-send "Waybar" "Waybar ocultado" -t 2000
+else
+    # Si waybar no está corriendo, lo iniciamos
+    waybar &
+    notify-send "Waybar" "Waybar mostrado" -t 2000
+fi

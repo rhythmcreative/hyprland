@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🚀 WALLPAPER LOADER - ULTRA FAST VERSION 🚀
+# ═══════════════════════════════════════════════════════════════════════════════
+# Optimizado para inicio ultra rápido de Hyprland
+# Reducidos timeouts, eliminados sleeps innecesarios, lógica simplificada
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging rápida (sin timestamp para reducir overhead)
+log() {
+    echo "$1" >> "$LOG_FILE"
+}
+
+# Verificación instantánea de swww-daemon
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🔧 swww-daemon no detectado, aplicando fallback directo"
+    exit 0
+fi
+
+# Carga directa del wallpaper sin verificaciones pesadas
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    WALLPAPER_PATH=$(cat "$HOME/.cache/current-wallpaper")
+    
+    if [[ -f "$WALLPAPER_PATH" ]]; then
+        # GIF detection - ultra light check
+        if [[ "${WALLPAPER_PATH,,}" == *.gif ]]; then
+            log "⚡ GIF skipped for speed - fallback solid"
+            swww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null || true
+        else
+            log "⚡ Loading: $(basename "$WALLPAPER_PATH")"
+            # Ultra fast transition - no fancy effects
+            swww img "$WALLPAPER_PATH" --transition-type none 2>/dev/null || true
+        fi
+    fi
+elif [[ -f "$HOME/.cache/wal/wal" ]]; then
+    # Fallback directo a pywal sin verificaciones
+    FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
+    log "⚡ Pywal fallback: $(basename "$FALLBACK_WALLPAPER")"
+    swww img "$FALLBACK_WALLPAPER" --transition-type none 2>/dev/null || true
+fi
+
+log "✅ Fast wallpaper load complete"

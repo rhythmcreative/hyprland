@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""
+PywalSync - Synchronize GTK themes with pywal colors
+Automatically updates GTK theme colors based on pywal color scheme
+"""
+
+import json
+import os
+import sys
+import argparse
+import shutil
+from pathlib import Path
+
+def load_pywal_colors():
+    """Load colors from pywal's colors.json file"""
+    colors_file = Path.home() / '.cache/wal/colors.json'
+    
+    if not colors_file.exists():
+        print("Error: pywal colors.json not found. Run 'wal -i /path/to/image' first.")
+        sys.exit(1)
+    
+    with open(colors_file, 'r') as f:
+        data = json.load(f)
+    
+    return data
+
+def update_gtk3_theme(colors):
+    """Update GTK 3.0 theme with pywal colors"""
+    theme_dir = Path.home() / '.themes/PywalSync/gtk-3.0'
+    gtk_css_template = theme_dir / 'gtk.css'
+    
+    if not gtk_css_template.exists():
+        print("Error: GTK 3.0 theme template not found")
+        return False
+    
+    # Read template
+    with open(gtk_css_template, 'r') as f:
+        content = f.read()
+    
+    # Replace color placeholders
+    special = colors['special']
+    color_map = colors['colors']
+    
+    replacements = {
+        '{{background}}': special['background'],
+        '{{foreground}}': special['foreground'],
+        '{{cursor}}': special['cursor'],
+        '{{color0}}': color_map['color0'],
+        '{{color1}}': color_map['color1'],
+        '{{color2}}': color_map['color2'],
+        '{{color3}}': color_map['color3'],
+        '{{color4}}': color_map['color4'],
+        '{{color5}}': color_map['color5'],
+        '{{color6}}': color_map['color6'],
+        '{{color7}}': color_map['color7'],
+        '{{color8}}': color_map['color8'],
+        '{{color9}}': color_map['color9'],
+        '{{color10}}': color_map['color10'],
+        '{{color11}}': color_map['color11'],
+        '{{color12}}': color_map['color12'],
+        '{{color13}}': color_map['color13'],
+        '{{color14}}': color_map['color14'],
+        '{{color15}}': color_map['color15'],
+    }
+    
+    # Apply replacements
+    for placeholder, color in replacements.items():
+        content = content.replace(placeholder, color)
+    
+    # Write updated theme
+    with open(gtk_css_template, 'w') as f:
+        f.write(content)
+    
+    return True
+
+def update_gtk2_theme(colors):
+    """Update GTK 2.0 theme with pywal colors"""
+    theme_dir = Path.home() / '.themes/PywalSync/gtk-2.0'
+    gtkrc_template = theme_dir / 'gtkrc'
+    
+    if not gtkrc_template.exists():
+        print("Error: GTK 2.0 theme template not found")
+        return False
+    
+    # Read template
+    with open(gtkrc_template, 'r') as f:
+        content = f.read()
+    
+    # Replace color placeholders
+    special = colors['special']
+    color_map = colors['colors']
+    
+    replacements = {
+        '{{background}}': special['background'],
+        '{{foreground}}': special['foreground'],
+        '{{cursor}}': special['cursor'],
+        '{{color0}}': color_map['color0'],
+        '{{color1}}': color_map['color1'],
+        '{{color2}}': color_map['color2'],
+        '{{color3}}': color_map['color3'],
+        '{{color4}}': color_map['color4'],
+        '{{color5}}': color_map['color5'],
+        '{{color6}}': color_map['color6'],
+        '{{color7}}': color_map['color7'],
+        '{{color8}}': color_map['color8'],
+        '{{color9}}': color_map['color9'],
+        '{{color10}}': color_map['color10'],
+        '{{color11}}': color_map['color11'],
+        '{{color12}}': color_map['color12'],
+        '{{color13}}': color_map['color13'],
+        '{{color14}}': color_map['color14'],
+        '{{color15}}': color_map['color15'],
+    }
+    
+    # Apply replacements
+    for placeholder, color in replacements.items():
+        content = content.replace(placeholder, color)
+    
+    # Write updated theme
+    with open(gtkrc_template, 'w') as f:
+        f.write(content)
+    
+    return True
+
+def create_template_backup():
+    """Create backup of original template files"""
+    theme_dir = Path.home() / '.themes/PywalSync'
+    
+    # Backup GTK 3.0 template
+    gtk3_css = theme_dir / 'gtk-3.0/gtk.css'
+    gtk3_template = theme_dir / 'gtk-3.0/gtk.css.template'
+    
+    if gtk3_css.exists() and not gtk3_template.exists():
+        # Check if this is already a processed file (contains actual hex colors)
+        with open(gtk3_css, 'r') as f:
+            content = f.read()
+        
+        # If it contains placeholders, it's a template - copy it
+        if '{{' in content:
+            shutil.copy2(gtk3_css, gtk3_template)
+    
+    # Backup GTK 2.0 template
+    gtk2_gtkrc = theme_dir / 'gtk-2.0/gtkrc'
+    gtk2_template = theme_dir / 'gtk-2.0/gtkrc.template'
+    
+    if gtk2_gtkrc.exists() and not gtk2_template.exists():
+        # Check if this is already a processed file
+        with open(gtk2_gtkrc, 'r') as f:
+            content = f.read()
+        
+        # If it contains placeholders, it's a template - copy it
+        if '{{' in content:
+            shutil.copy2(gtk2_gtkrc, gtk2_template)
+
+def restore_templates():
+    """Restore template files from backup"""
+    theme_dir = Path.home() / '.themes/PywalSync'
+    
+    # Restore GTK 3.0 template
+    gtk3_template = theme_dir / 'gtk-3.0/gtk.css.template'
+    gtk3_css = theme_dir / 'gtk-3.0/gtk.css'
+    
+    if gtk3_template.exists():
+        if gtk3_css.exists():
+            gtk3_css.unlink()
+        gtk3_template.rename(gtk3_css)
+    
+    # Restore GTK 2.0 template
+    gtk2_template = theme_dir / 'gtk-2.0/gtkrc.template'
+    gtk2_gtkrc = theme_dir / 'gtk-2.0/gtkrc'
+    
+    if gtk2_template.exists():
+        if gtk2_gtkrc.exists():
+            gtk2_gtkrc.unlink()
+        gtk2_template.rename(gtk2_gtkrc)
+
+def main():
+    parser = argparse.ArgumentParser(description='Synchronize GTK themes with pywal colors')
+    parser.add_argument('--restore-templates', action='store_true', 
+                       help='Restore original template files')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose output')
+    
+    args = parser.parse_args()
+    
+    if args.restore_templates:
+        restore_templates()
+        print("Template files restored")
+        return
+    
+    # Create template backups if needed
+    create_template_backup()
+    
+    # Load pywal colors
+    try:
+        colors = load_pywal_colors()
+        if args.verbose:
+            print(f"Loaded colors from: {colors['wallpaper']}")
+            print(f"Background: {colors['special']['background']}")
+            print(f"Foreground: {colors['special']['foreground']}")
+    except Exception as e:
+        print(f"Error loading pywal colors: {e}")
+        sys.exit(1)
+    
+    # Update themes
+    success_gtk3 = update_gtk3_theme(colors)
+    success_gtk2 = update_gtk2_theme(colors)
+    
+    if success_gtk3 and success_gtk2:
+        print("✓ PywalSync theme updated successfully!")
+        print("You can now apply the 'PywalSync' theme in nwg-look or your preferred theme selector.")
+        if args.verbose:
+            print("Theme location: ~/.themes/PywalSync")
+    else:
+        print("✗ Error updating theme files")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

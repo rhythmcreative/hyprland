@@ -1,0 +1,280 @@
+#!/bin/bash
+
+# GTK-PyWal Synchronization Script
+# Sincroniza automáticamente los temas GTK3/GTK4 con los colores de pywal
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/gtk-pywal-sync.log"
+LOCK_FILE="/tmp/gtk-pywal-sync.lock"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 GTK Theme Sync" "$1" -t 2000 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Sincronización GTK ya en progreso (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Función de limpieza
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT INT TERM
+
+log "🎨 === INICIANDO SINCRONIZACIÓN GTK-PYWAL ==="
+
+# Verificar que pywal esté instalado y haya generado colores
+if ! command -v wal &> /dev/null; then
+    log "❌ ERROR: pywal no está instalado"
+    notify "❌ Error: pywal no encontrado"
+    exit 1
+fi
+
+# Verificar archivos de colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ ERROR: Archivos de colores de pywal no encontrados"
+    notify "❌ Error: Colores de pywal no encontrados"
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$HOME/.cache/wal/colors.sh"
+
+log "✅ Colores de pywal cargados exitosamente"
+
+# Verificar que las plantillas existan
+GTK3_TEMPLATE="$HOME/.config/wal/templates/gtk3.css"
+GTK4_TEMPLATE="$HOME/.config/wal/templates/gtk4.css"
+
+if [[ ! -f "$GTK3_TEMPLATE" ]]; then
+    log "❌ ERROR: Plantilla GTK3 no encontrada: $GTK3_TEMPLATE"
+    notify "❌ Error: Plantilla GTK3 no encontrada"
+    exit 1
+fi
+
+if [[ ! -f "$GTK4_TEMPLATE" ]]; then
+    log "❌ ERROR: Plantilla GTK4 no encontrada: $GTK4_TEMPLATE"
+    notify "❌ Error: Plantilla GTK4 no encontrada"
+    exit 1
+fi
+
+# Crear directorios necesarios
+mkdir -p "$HOME/.cache/wal"
+mkdir -p "$HOME/.config/gtk-3.0"
+mkdir -p "$HOME/.config/gtk-4.0"
+
+log "🔄 PASO 1: Generando temas GTK dinámicos..."
+
+# Función para procesar plantilla con colores de pywal
+process_template() {
+    local template_file="$1"
+    local output_file="$2"
+    
+    log "🔧 Procesando: $template_file -> $output_file"
+    
+    # Leer plantilla y reemplazar variables
+    local processed_content
+    processed_content=$(sed \
+        -e "s/{background}/$background/g" \
+        -e "s/{foreground}/$foreground/g" \
+        -e "s/{cursor}/$cursor/g" \
+        -e "s/{color0}/$color0/g" \
+        -e "s/{color1}/$color1/g" \
+        -e "s/{color2}/$color2/g" \
+        -e "s/{color3}/$color3/g" \
+        -e "s/{color4}/$color4/g" \
+        -e "s/{color5}/$color5/g" \
+        -e "s/{color6}/$color6/g" \
+        -e "s/{color7}/$color7/g" \
+        -e "s/{color8}/$color8/g" \
+        -e "s/{color9}/$color9/g" \
+        -e "s/{color10}/$color10/g" \
+        -e "s/{color11}/$color11/g" \
+        -e "s/{color12}/$color12/g" \
+        -e "s/{color13}/$color13/g" \
+        -e "s/{color14}/$color14/g" \
+        -e "s/{color15}/$color15/g" \
+        "$template_file")
+    
+    # Escribir archivo procesado
+    echo "$processed_content" > "$output_file"
+    
+    if [[ -f "$output_file" ]]; then
+        log "✅ Tema generado: $output_file"
+        return 0
+    else
+        log "❌ Error generando: $output_file"
+        return 1
+    fi
+}
+
+# Generar GTK3 theme
+if process_template "$GTK3_TEMPLATE" "$HOME/.cache/wal/gtk3.css"; then
+    log "✅ Tema GTK3 generado exitosamente"
+else
+    log "❌ Error generando tema GTK3"
+    exit 1
+fi
+
+# Generar GTK4 theme
+if process_template "$GTK4_TEMPLATE" "$HOME/.cache/wal/gtk4.css"; then
+    log "✅ Tema GTK4 generado exitosamente"
+else
+    log "❌ Error generando tema GTK4"
+    exit 1
+fi
+
+log "🔄 PASO 2: Aplicando configuración GTK..."
+
+# Función para actualizar configuración GTK
+update_gtk_config() {
+    local version="$1"
+    local config_file="$HOME/.config/gtk-${version}.0/settings.ini"
+    
+    log "🔧 Actualizando configuración GTK${version}: $config_file"
+    
+    # Backup del archivo original
+    if [[ -f "$config_file" ]]; then
+        cp "$config_file" "$config_file.backup"
+    fi
+    
+    # Crear configuración actualizada
+    cat > "$config_file" << EOF
+[Settings]
+gtk-theme-name=Adwaita
+gtk-icon-theme-name=Tela-circle-black-dark
+gtk-font-name=Adwaita Sans 11
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+gtk-toolbar-style=GTK_TOOLBAR_ICONS
+gtk-toolbar-icon-size=GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-button-images=0
+gtk-menu-images=0
+gtk-enable-event-sounds=1
+gtk-enable-input-feedback-sounds=0
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+gtk-application-prefer-dark-theme=1
+# PyWal integration enabled
+EOF
+    
+    log "✅ Configuración GTK${version} actualizada"
+}
+
+# Actualizar configuraciones
+update_gtk_config 3
+update_gtk_config 4
+
+log "🔄 PASO 3: Aplicando cambios al sistema..."
+
+# Recargar configuración GTK
+if command -v gsettings &> /dev/null; then
+    log "🔧 Aplicando configuraciones con gsettings..."
+    
+    # Configurar tema GTK
+    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Classic" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface cursor-size 24 2>/dev/null || true
+    
+    # Configurar tema oscuro
+    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+    
+    log "✅ Configuraciones gsettings aplicadas"
+else
+    log "⚠️ gsettings no disponible, omitiendo configuración automática"
+fi
+
+# Exportar variables de entorno para aplicaciones actuales
+export GTK_THEME="Adwaita:dark"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+
+log "🔄 PASO 4: Sincronizando con aplicaciones del sistema..."
+
+# Función para reiniciar aplicaciones GTK si están ejecutándose
+restart_gtk_apps() {
+    local apps=("nm-applet" "blueman-applet" "pa-applet" "volumeicon")
+    
+    for app in "${apps[@]}"; do
+        if pgrep -x "$app" > /dev/null; then
+            log "🔄 Reiniciando $app para aplicar nuevos colores..."
+            
+            # Cerrar aplicación
+            pkill -TERM "$app" 2>/dev/null || true
+            sleep 1
+            
+            # Si sigue ejecutándose, forzar cierre
+            if pgrep -x "$app" > /dev/null; then
+                pkill -KILL "$app" 2>/dev/null || true
+                sleep 0.5
+            fi
+            
+            # Reiniciar aplicación
+            case "$app" in
+                "nm-applet")
+                    nm-applet --indicator > /dev/null 2>&1 &
+                    log "✅ nm-applet reiniciado"
+                    ;;
+                "blueman-applet")
+                    blueman-applet > /dev/null 2>&1 &
+                    log "✅ blueman-applet reiniciado"
+                    ;;
+                "pa-applet")
+                    pa-applet > /dev/null 2>&1 &
+                    log "✅ pa-applet reiniciado"
+                    ;;
+                "volumeicon")
+                    volumeicon > /dev/null 2>&1 &
+                    log "✅ volumeicon reiniciado"
+                    ;;
+            esac
+        fi
+    done
+}
+
+# Reiniciar aplicaciones de sistema
+restart_gtk_apps
+
+log "🔄 PASO 5: Verificando integración con waybar..."
+
+# Verificar que waybar esté usando los colores correctos
+if pgrep -x waybar > /dev/null; then
+    log "📱 Waybar detectado - colores GTK sincronizados automáticamente"
+    
+    # Opcional: Señal a waybar para recargar estilos
+    pkill -SIGUSR2 waybar 2>/dev/null || true
+    
+    log "✅ Waybar sincronizado con nuevos colores GTK"
+else
+    log "⚠️ Waybar no está ejecutándose"
+fi
+
+# Crear archivo de estado para indicar que la sincronización fue exitosa
+echo "$(date): GTK sync completed successfully" > "$HOME/.cache/gtk-pywal-sync-status"
+
+log "✅ === SINCRONIZACIÓN GTK-PYWAL COMPLETADA ==="
+log "🎨 Temas GTK3/GTK4 sincronizados con pywal"
+log "📱 nm-applet y aplicaciones del sistema actualizadas"
+log "🌈 Waybar integrado con nuevos colores"
+
+notify "🎨 ¡Temas GTK sincronizados exitosamente con pywal!"
+
+exit 0

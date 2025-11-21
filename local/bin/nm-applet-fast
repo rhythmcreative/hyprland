@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Script optimizado para iniciar nm-applet rápidamente
+# Creado para solucionar problemas de lentitud en el inicio
+
+# Matar cualquier instancia existente de nm-applet
+pkill -f nm-applet
+
+# Esperar un momento para asegurar que se cierre completamente
+sleep 0.3
+
+# Variables de entorno para optimizar el rendimiento
+export NM_APPLET_HIDE_POLICY_ITEMS=1
+export GTK_THEME=Adwaita:dark
+export GDK_BACKEND=wayland
+
+# Iniciar nm-applet en segundo plano con optimizaciones
+nohup nm-applet --indicator > /dev/null 2>&1 &
+
+# Opcional: mostrar notificación de que se ha reiniciado
+if command -v notify-send >/dev/null 2>&1; then
+    notify-send "Network Manager" "nm-applet reiniciado" -t 2000 -i network-wireless
+fi

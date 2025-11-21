@@ -1,0 +1,151 @@
+#!/bin/bash
+
+# Gestión de scripts de sincronización de Waybar
+# Evita conflictos entre múltiples scripts
+
+DAEMON_NAME="waybar-colors-sync"
+LOG_FILE="/tmp/waybar-sync-manager.log"
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') [SYNC-MANAGER] - $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar ayuda
+show_help() {
+    cat << EOF
+Uso: waybar-sync-manager [OPCIÓN]
+
+OPCIONES:
+  start      Inicia la gestión limpia de sincronización
+  stop       Detiene todos los scripts de sincronización
+  status     Muestra el estado actual
+  fix        Ejecuta corrección inmediata de colores
+  help       Muestra esta ayuda
+
+EOF
+}
+
+# Función para detener todos los scripts relacionados
+stop_all_sync_scripts() {
+    log "🛑 Deteniendo todos los scripts de sincronización..."
+    
+    # Lista de scripts y daemons que pueden estar interfiriendo
+    local scripts=(
+        "waybar-pywal-sync"
+        "waybar-master-sync"
+        "waybar-colors-sync"
+        "waybar-fix-wallpaper-sync"
+        "waybar-pywal-universal-sync"
+        "waybar-pywal-auto-sync"
+    )
+    
+    for script in "${scripts[@]}"; do
+        local pids=$(pgrep -f "$script" 2>/dev/null || true)
+        if [[ -n "$pids" ]]; then
+            log "⚡ Deteniendo $script (PIDs: $pids)"
+            echo "$pids" | xargs kill -TERM 2>/dev/null || true
+            sleep 0.5
+            # Si aún siguen ejecutándose, forzar
+            local remaining=$(pgrep -f "$script" 2>/dev/null || true)
+            if [[ -n "$remaining" ]]; then
+                echo "$remaining" | xargs kill -KILL 2>/dev/null || true
+            fi
+        fi
+    done
+    
+    # Limpiar archivos de lock
+    rm -f /tmp/waybar_*.lock 2>/dev/null || true
+    rm -f /tmp/waybar-*.lock 2>/dev/null || true
+    
+    log "✅ Scripts de sincronización detenidos"
+}
+
+# Función para mostrar estado actual
+show_status() {
+    log "📊 Estado actual de sincronización:"
+    
+    # Verificar waybar
+    local waybar_pids=$(pgrep -x waybar 2>/dev/null || true)
+    if [[ -n "$waybar_pids" ]]; then
+        log "✅ Waybar ejecutándose (PID: $waybar_pids)"
+    else
+        log "❌ Waybar NO está ejecutándose"
+    fi
+    
+    # Verificar scripts activos
+    local scripts=(
+        "waybar-pywal-sync"
+        "waybar-master-sync"
+        "waybar-colors-sync"
+    )
+    
+    for script in "${scripts[@]}"; do
+        local pids=$(pgrep -f "$script" 2>/dev/null || true)
+        if [[ -n "$pids" ]]; then
+            log "🔄 $script ejecutándose (PID: $pids)"
+        else
+            log "⏹️ $script detenido"
+        fi
+    done
+    
+    # Verificar archivos de colores
+    if [[ -f "$HOME/.config/waybar/colors-pywal.css" ]]; then
+        local color_timestamp=$(stat -c %Y "$HOME/.config/waybar/colors-pywal.css" 2>/dev/null || echo "0")
+        local current_time=$(date +%s)
+        local age=$((current_time - color_timestamp))
+        log "🎨 Archivo de colores: $(date -d @$color_timestamp '+%H:%M:%S') (hace ${age}s)"
+    else
+        log "❌ Archivo de colores no encontrado"
+    fi
+}
+
+# Función principal de gestión
+start_clean_management() {
+    log "🎯 Iniciando gestión limpia de sincronización..."
+    
+    # Detener scripts conflictivos
+    stop_all_sync_scripts
+    
+    # Esperar estabilidad
+    sleep 2
+    
+    # Ejecutar corrección inicial
+    if [[ -x "$HOME/.local/bin/waybar-color-fix" ]]; then
+        log "🔧 Ejecutando corrección inicial..."
+        "$HOME/.local/bin/waybar-color-fix"
+    else
+        log "⚠️ Script waybar-color-fix no encontrado"
+    fi
+    
+    log "✅ Gestión limpia iniciada"
+}
+
+# Procesamiento de argumentos
+case "${1:-}" in
+    "start")
+        start_clean_management
+        ;;
+    "stop")
+        stop_all_sync_scripts
+        ;;
+    "status")
+        show_status
+        ;;
+    "fix")
+        if [[ -x "$HOME/.local/bin/waybar-color-fix" ]]; then
+            "$HOME/.local/bin/waybar-color-fix"
+        else
+            log "❌ Script waybar-color-fix no encontrado"
+            exit 1
+        fi
+        ;;
+    "help"|"--help"|"-h"|"")
+        show_help
+        ;;
+    *)
+        echo "Opción desconocida: $1"
+        show_help
+        exit 1
+        ;;
+esac

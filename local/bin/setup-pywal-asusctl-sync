@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# setup-pywal-asusctl-sync
+# Script de configuración para sincronizar pywal con teclado ASUS
+# Autor: Sistema automático
+
+set -e
+
+echo "🎨 Configurando sincronización pywal -> ASUS keyboard..."
+echo
+
+# Verificar dependencias
+echo "🔍 Verificando dependencias..."
+
+if ! command -v wal &> /dev/null; then
+    echo "❌ Error: pywal no está instalado"
+    echo "   Instalar con: pip install pywal"
+    exit 1
+fi
+
+if ! command -v asusctl &> /dev/null; then
+    echo "❌ Error: asusctl no está instalado"
+    echo "   Instalar con: pacman -S asusctl"
+    exit 1
+fi
+
+echo "✅ Dependencias verificadas"
+
+# Habilitar servicios systemd
+echo
+echo "🔧 Habilitando servicios systemd..."
+
+systemctl --user daemon-reload
+
+if systemctl --user enable pywal-asusctl-sync.path; then
+    echo "✅ Servicio habilitado"
+else
+    echo "⚠️  Advertencia: No se pudo habilitar el servicio automáticamente"
+fi
+
+if systemctl --user start pywal-asusctl-sync.path; then
+    echo "✅ Servicio iniciado"
+else
+    echo "⚠️  Advertencia: No se pudo iniciar el servicio"
+fi
+
+# Probar la sincronización
+echo
+echo "🧪 Probando sincronización inicial..."
+
+if "$HOME/.local/bin/pywal-asusctl-sync"; then
+    echo "✅ Sincronización exitosa!"
+else
+    echo "⚠️  La sincronización falló, pero los archivos están configurados"
+fi
+
+# Información adicional
+echo
+echo "📋 Configuración completada!"
+echo
+echo "📁 Archivos creados:"
+echo "   • ~/.local/bin/pywal-asusctl-sync (script principal)"
+echo "   • ~/.config/wal/postrun (hook de pywal)"
+echo "   • ~/.config/systemd/user/pywal-asusctl-sync.{service,path}"
+echo
+echo "🎯 Uso:"
+echo "   • Los colores se sincronizarán automáticamente cuando uses pywal"
+echo "   • Para sincronizar manualmente: pywal-asusctl-sync"
+echo "   • Para ver logs: tail -f ~/.local/share/pywal-asusctl/sync.log"
+echo
+echo "⚙️  Personalización:"
+echo "   • Edita ~/.local/bin/pywal-asusctl-sync para cambiar qué color usar"
+echo "   • Por defecto usa color1, luego color2, luego foreground"
+echo
+echo "🔧 Gestión del servicio:"
+echo "   • Estado: systemctl --user status pywal-asusctl-sync.path"
+echo "   • Detener: systemctl --user stop pywal-asusctl-sync.path"
+echo "   • Iniciar: systemctl --user start pywal-asusctl-sync.path"
+echo
+echo "¡Disfruta de tu teclado sincronizado! 🌈⌨️"

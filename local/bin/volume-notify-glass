@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# Notificaciones estilo cristal/neomorfismo
+# Diseño suave y elegante con espacios y efectos visuales
+
+TIMEOUT=2200
+URGENT="low"
+
+# Crear efecto de ondas de sonido
+generate_sound_waves() {
+    local volume=$1
+    local waves=""
+    
+    if [ "$volume" -eq 0 ]; then
+        waves="◦ ◦ ◦"
+    elif [ "$volume" -le 25 ]; then
+        waves="● ◦ ◦"
+    elif [ "$volume" -le 50 ]; then
+        waves="● ● ◦"
+    elif [ "$volume" -le 75 ]; then
+        waves="● ● ●"
+    else
+        waves="● ● ● ●"
+    fi
+    
+    echo "$waves"
+}
+
+# Crear indicador de cristal suave
+generate_glass_indicator() {
+    local volume=$1
+    local width=12
+    local filled=$((volume * width / 100))
+    
+    local indicator=""
+    for ((i=0; i<width; i++)); do
+        if [ $i -lt $filled ]; then
+            if [ $((i % 3)) -eq 0 ]; then
+                indicator+="◆"  # Diamante lleno
+            else
+                indicator+="◇"  # Diamante vacío
+            fi
+        else
+            indicator+="◦"  # Punto suave
+        fi
+    done
+    
+    echo "$indicator"
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo elegante
+get_elegant_device() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-16)
+    if [ -z "$device" ]; then
+        echo "Audio Device"
+    else
+        echo "$device"
+    fi
+}
+
+# Notificación estilo cristal
+show_glass_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        # Mute con estilo cristal
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "🔇  Silenciado" \
+                   "
+
+        ◦ ◦ ◦ ◦ ◦ ◦ ◦ ◦ ◦ ◦ ◦ ◦
+        
+        $device"
+    else
+        local waves="$(generate_sound_waves $volume)"
+        local indicator="$(generate_glass_indicator $volume)"
+        local intensity=""
+        local icon="🔊"
+        
+        # Determinar intensidad del sonido
+        if [ "$volume" -le 30 ]; then
+            intensity="Suave"
+            icon="🔈"
+        elif [ "$volume" -le 60 ]; then
+            intensity="Medio"
+            icon="🔉"
+        elif [ "$volume" -le 85 ]; then
+            intensity="Alto"
+            icon="🔊"
+        else
+            intensity="Fuerte"
+            icon="🔊"
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$icon  Volume $intensity" \
+                   "
+        $volume%
+        
+        $waves
+        
+        $indicator
+        
+        $device"
+    fi
+}
+
+# Notificación de audio estilo cristal
+show_glass_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_elegant_device)"
+    local waves="$(generate_sound_waves $volume)"
+    local indicator="$(generate_glass_indicator $volume)"
+    
+    local icon="🎵"
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon  $title" \
+               "$message
+
+        Volume: $volume%
+        
+        $waves
+        
+        $indicator
+        
+        $device"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_glass_audio_notification "${2:-Audio}" "${3:-♪ Now playing ♪}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing glass/neumorphism style..."
+        echo "Testing soft volume (30%)..."
+        show_glass_notification "30" "false" "$(get_elegant_device)"
+        sleep 2.5
+        echo "Testing medium volume (60%)..."
+        show_glass_notification "60" "false" "$(get_elegant_device)"
+        sleep 2.5
+        echo "Testing high volume (90%)..."
+        show_glass_notification "90" "false" "$(get_elegant_device)"
+        sleep 2.5
+        echo "Testing muted..."
+        show_glass_notification "0" "true" "$(get_elegant_device)"
+        sleep 2.5
+        echo "Testing audio notification..."
+        show_glass_audio_notification "Spotify" "♪ Crystal Clear Audio Experience ♪"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_elegant_device)"
+
+show_glass_notification "$volume" "$muted" "$device"
+exit 0

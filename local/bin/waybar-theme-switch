@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Waybar Theme Switcher - Cambia entre temas standard y varied
+# Uso: waybar-theme-switch [standard|varied]
+
+THEME_FILE="$HOME/.config/waybar/.current_theme"
+CACHE_DIR="$HOME/.cache/wal"
+
+show_usage() {
+    echo "🎨 Waybar Theme Switcher"
+    echo "Uso: waybar-theme-switch [standard|varied]"
+    echo ""
+    echo "Temas disponibles:"
+    echo "  standard  - Colores pywal estándar en todos los módulos"
+    echo "  varied    - Colores distribuidos + color fijo para clima (recomendado)"
+    echo ""
+    echo "Tema actual: $(cat "$THEME_FILE" 2>/dev/null || echo 'desconocido')"
+}
+
+apply_theme() {
+    local theme="$1"
+    
+    # Guardar preferencia
+    echo "$theme" > "$THEME_FILE"
+    
+    # Aplicar tema inmediatamente
+    if [[ "$theme" == "varied" && -f "$CACHE_DIR/waybar-style-varied.css" ]]; then
+        cp "$CACHE_DIR/waybar-style-varied.css" "$HOME/.config/waybar/style.css"
+        echo "✅ Aplicado tema varied - Colores distribuidos + clima fijo"
+    elif [[ -f "$CACHE_DIR/waybar-style.css" ]]; then
+        cp "$CACHE_DIR/waybar-style.css" "$HOME/.config/waybar/style.css"
+        echo "✅ Aplicado tema standard - Todos los módulos con colores pywal"
+    else
+        echo "❌ Error: Archivos de tema no encontrados. Ejecuta 'wal -R' primero."
+        exit 1
+    fi
+    
+    # Recargar waybar
+    if pgrep -x waybar > /dev/null; then
+        pkill -USR1 waybar 2>/dev/null || {
+            pkill waybar
+            sleep 0.5
+            nohup waybar > /dev/null 2>&1 &
+        }
+        echo "🔄 Waybar recargado con el nuevo tema!"
+    else
+        nohup waybar > /dev/null 2>&1 &
+        echo "🚀 Waybar iniciado con el nuevo tema!"
+    fi
+}
+
+# Procesar argumentos
+case "$1" in
+    "standard")
+        apply_theme "standard"
+        ;;
+    "varied")
+        apply_theme "varied"
+        ;;
+    "")
+        show_usage
+        ;;
+    *)
+        echo "❌ Tema desconocido: $1"
+        show_usage
+        exit 1
+        ;;
+esac

@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# Script para configurar nwg-look con integración completa de wal
+
+echo "🔧 Configurando nwg-look con integración wal"
+echo "============================================="
+
+# Crear configuración de nwg-look si no existe
+NWG_CONFIG="$HOME/.config/nwg-look"
+mkdir -p "$NWG_CONFIG"
+
+# Configurar nwg-look para que detecte nuestros temas
+cat > "$NWG_CONFIG/config" << 'EOF'
+# Configuración nwg-look con integración wal
+gtk-theme=wal-gtk-auto
+icon-theme=Papirus
+cursor-theme=Adwaita
+font-name=Sans 10
+cursor-size=24
+
+# Directorios adicionales de temas
+themes-dir=/home/$USER/.themes
+icons-dir=/usr/share/icons
+cursor-dir=/usr/share/icons
+EOF
+
+# Verificar que el tema actual está aplicado
+echo "Verificando configuración GTK..."
+
+# Aplicar tema en todas las configuraciones GTK
+gsettings set org.gnome.desktop.interface gtk-theme "wal-gtk-auto"
+gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+
+# Configurar también para aplicaciones Flatpak
+if command -v flatpak >/dev/null 2>&1; then
+    echo "Configurando tema para aplicaciones Flatpak..."
+    flatpak --user override --env=GTK_THEME=wal-gtk-auto
+fi
+
+# Configurar variables de entorno para la sesión
+if [ ! -f "$HOME/.profile" ] || ! grep -q "GTK_THEME" "$HOME/.profile"; then
+    echo "" >> "$HOME/.profile"
+    echo "# Tema GTK automático desde wal" >> "$HOME/.profile"
+    echo "export GTK_THEME=wal-gtk-auto" >> "$HOME/.profile"
+fi
+
+echo ""
+echo "✓ nwg-look configurado"
+echo "✓ Tema GTK aplicado globalmente"
+echo "✓ Configuración Flatpak actualizada"
+echo ""
+echo "🎨 Para usar el sistema:"
+echo "   1. Cambia wallpaper: wal-auto -i imagen.jpg"
+echo "   2. Abre nwg-look para ver/cambiar temas"
+echo "   3. El tema 'wal-gtk-auto' se actualiza automáticamente"
+echo ""
+echo "📂 Temas disponibles en: ~/.themes/"
+echo "🔧 Configuración nwg-look: ~/.config/nwg-look/"

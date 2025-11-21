@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Script de emergencia para limpiar waybar duplicado
+# Uso: ~/.local/bin/fix-waybar-emergency
+
+echo "🔍 Verificando waybar..."
+
+# Obtener PIDs de waybar
+waybar_pids=($(pgrep -x waybar))
+pid_count=${#waybar_pids[@]}
+
+echo "📊 Instancias de waybar encontradas: $pid_count"
+
+if [[ $pid_count -eq 0 ]]; then
+    echo "❌ No hay instancias de waybar ejecutándose"
+    echo "🚀 Iniciando waybar..."
+    waybar &
+    echo "✅ Waybar iniciado"
+    exit 0
+elif [[ $pid_count -eq 1 ]]; then
+    echo "✅ Una sola instancia de waybar (PID: ${waybar_pids[0]}) - Todo correcto"
+    exit 0
+else
+    echo "⚠️ Múltiples instancias detectadas: ${waybar_pids[*]}"
+    
+    # Terminar todas las instancias
+    echo "🔄 Terminando todas las instancias..."
+    for pid in "${waybar_pids[@]}"; do
+        echo "   - Terminando PID: $pid"
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+    
+    sleep 2
+    
+    # Verificar que se hayan terminado
+    remaining_pids=($(pgrep -x waybar))
+    if [[ ${#remaining_pids[@]} -gt 0 ]]; then
+        echo "💥 Forzando terminación de PIDs restantes: ${remaining_pids[*]}"
+        pkill -9 waybar 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Iniciar una nueva instancia
+    echo "🚀 Iniciando nueva instancia de waybar..."
+    waybar &
+    new_pid=$!
+    
+    echo "✅ Waybar limpiado y reiniciado (nuevo PID: $new_pid)"
+    
+    # Mostrar notificación
+    notify-send "🧹 Waybar Limpio" "Duplicados eliminados - Una sola instancia activa" -t 3000
+fi

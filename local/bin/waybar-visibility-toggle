@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Script toggle para mostrar/ocultar Waybar
+# Si está visible, lo oculta. Si está oculto, lo muestra.
+
+# Archivo para guardar el estado actual
+STATE_FILE="$HOME/.cache/waybar_visibility_state"
+
+# Función para ocultar Waybar
+hide_waybar() {
+    pkill -SIGUSR1 waybar 2>/dev/null
+    echo "hidden" > "$STATE_FILE"
+    notify-send "📱 Waybar" "Ocultado" -t 1500
+}
+
+# Función para mostrar Waybar
+show_waybar() {
+    pkill -SIGUSR2 waybar 2>/dev/null
+    echo "visible" > "$STATE_FILE"
+    notify-send "📱 Waybar" "Mostrado" -t 1500
+}
+
+# Crear directorio cache si no existe
+mkdir -p "$(dirname "$STATE_FILE")"
+
+# Leer el estado actual (por defecto visible si no existe el archivo)
+if [ -f "$STATE_FILE" ]; then
+    CURRENT_STATE=$(cat "$STATE_FILE")
+else
+    CURRENT_STATE="visible"
+fi
+
+# Toggle del estado
+if [ "$CURRENT_STATE" = "visible" ]; then
+    hide_waybar
+else
+    show_waybar
+fi

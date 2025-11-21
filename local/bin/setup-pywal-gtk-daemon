@@ -1,0 +1,237 @@
+#!/bin/bash
+
+# Script de configuración para el daemon de sincronización pywal-gtk-auto
+# Este script configura todo lo necesario para la sincronización automática
+
+set -e
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Función para logging con colores
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Verificar dependencias
+check_dependencies() {
+    log_info "Verificando dependencias..."
+    
+    local missing_deps=()
+    
+    # Verificar pywal
+    if ! command -v wal &> /dev/null; then
+        missing_deps+=("pywal")
+    fi
+    
+    # Verificar python-watchdog
+    if ! python3 -c "import watchdog" &> /dev/null; then
+        missing_deps+=("python-watchdog")
+    fi
+    
+    # Verificar gsettings (parte de glib2)
+    if ! command -v gsettings &> /dev/null; then
+        missing_deps+=("glib2")
+    fi
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        log_error "Dependencias faltantes: ${missing_deps[*]}"
+        log_info "Instala con: sudo pacman -S ${missing_deps[*]}"
+        exit 1
+    fi
+    
+    log_success "Todas las dependencias están disponibles"
+}
+
+# Verificar configuración de pywal
+check_pywal_setup() {
+    log_info "Verificando configuración de pywal..."
+    
+    if [ ! -d "$HOME/.cache/wal" ]; then
+        log_error "Directorio de pywal no encontrado"
+        log_info "Ejecuta 'wal -i /path/to/image' para configurar pywal primero"
+        exit 1
+    fi
+    
+    if [ ! -f "$HOME/.cache/wal/colors.json" ]; then
+        log_warning "No se encontraron colores de pywal"
+        log_info "Ejecuta 'wal -i /path/to/image' para generar colores"
+    else
+        log_success "Configuración de pywal encontrada"
+    fi
+}
+
+# Verificar tema wal-gtk-auto
+check_theme() {
+    log_info "Verificando tema wal-gtk-auto..."
+    
+    if [ ! -d "$HOME/.themes/wal-gtk-auto" ]; then
+        log_error "Tema wal-gtk-auto no encontrado en ~/.themes/"
+        log_info "Asegúrate de tener el tema instalado"
+        exit 1
+    fi
+    
+    if [ ! -d "$HOME/.themes/wal-gtk-auto/gtk-3.0" ]; then
+        log_warning "Directorio GTK3 no encontrado, creando..."
+        mkdir -p "$HOME/.themes/wal-gtk-auto/gtk-3.0"
+    fi
+    
+    if [ ! -d "$HOME/.themes/wal-gtk-auto/gtk-4.0" ]; then
+        log_warning "Directorio GTK4 no encontrado, creando..."
+        mkdir -p "$HOME/.themes/wal-gtk-auto/gtk-4.0"
+    fi
+    
+    log_success "Tema wal-gtk-auto verificado"
+}
+
+# Habilitar y iniciar el servicio systemd
+setup_systemd_service() {
+    log_info "Configurando servicio systemd..."
+    
+    # Recargar configuración de systemd
+    systemctl --user daemon-reload
+    
+    # Habilitar el servicio
+    systemctl --user enable pywal-gtk-daemon.service
+    log_success "Servicio habilitado para inicio automático"
+    
+    # Verificar si el servicio ya está ejecutándose
+    if systemctl --user is-active --quiet pywal-gtk-daemon.service; then
+        log_info "Reiniciando servicio existente..."
+        systemctl --user restart pywal-gtk-daemon.service
+    else
+        log_info "Iniciando servicio..."
+        systemctl --user start pywal-gtk-daemon.service
+    fi
+    
+    # Verificar estado del servicio
+    if systemctl --user is-active --quiet pywal-gtk-daemon.service; then
+        log_success "Servicio iniciado exitosamente"
+    else
+        log_error "Error al iniciar el servicio"
+        log_info "Verifica el estado con: systemctl --user status pywal-gtk-daemon.service"
+        exit 1
+    fi
+}
+
+# Crear script de prueba
+create_test_script() {
+    log_info "Creando script de prueba..."
+    
+    cat > "$HOME/.local/bin/test-pywal-gtk-sync" << 'EOF'
+#!/bin/bash
+
+# Script de prueba para verificar la sincronización automática
+
+echo "🧪 Probando sincronización automática de pywal-gtk..."
+
+# Verificar que el daemon está ejecutándose
+if ! systemctl --user is-active --quiet pywal-gtk-daemon.service; then
+    echo "❌ El daemon no está ejecutándose"
+    echo "   Inicia con: systemctl --user start pywal-gtk-daemon.service"
+    exit 1
+fi
+
+echo "✅ Daemon ejecutándose"
+
+# Simular cambio ejecutando wal -R
+if [ -f "$HOME/.cache/wal/wal" ]; then
+    echo "🔄 Ejecutando wal -R para recargar colores..."
+    wal -R
+    
+    echo "⏳ Esperando sincronización automática (5 segundos)..."
+    sleep 5
+    
+    # Verificar si los archivos CSS fueron actualizados recientemente
+    css_gtk3="$HOME/.themes/wal-gtk-auto/gtk-3.0/gtk.css"
+    css_gtk4="$HOME/.themes/wal-gtk-auto/gtk-4.0/gtk.css"
+    
+    if [ -f "$css_gtk3" ] && [ $(find "$css_gtk3" -mtime -1 | wc -l) -gt 0 ]; then
+        echo "✅ Tema GTK3 actualizado automáticamente"
+    else
+        echo "❌ Tema GTK3 no se actualizó"
+    fi
+    
+    if [ -f "$css_gtk4" ] && [ $(find "$css_gtk4" -mtime -1 | wc -l) -gt 0 ]; then
+        echo "✅ Tema GTK4 actualizado automáticamente"
+    else
+        echo "❌ Tema GTK4 no se actualizó"
+    fi
+    
+    echo ""
+    echo "📋 Estado del daemon:"
+    systemctl --user status pywal-gtk-daemon.service --no-pager -l
+    
+    echo ""
+    echo "📝 Últimas líneas del log:"
+    tail -n 10 "$HOME/.cache/wal/daemon.log" 2>/dev/null || echo "Log no disponible"
+    
+else
+    echo "❌ No se encontró configuración de pywal"
+    echo "   Ejecuta 'wal -i /path/to/image' primero"
+    exit 1
+fi
+
+echo ""
+echo "🎉 Prueba completada"
+EOF
+    
+    chmod +x "$HOME/.local/bin/test-pywal-gtk-sync"
+    log_success "Script de prueba creado: ~/.local/bin/test-pywal-gtk-sync"
+}
+
+# Función principal
+main() {
+    echo "🚀 Configurando daemon de sincronización pywal-gtk-auto"
+    echo "=================================================="
+    echo ""
+    
+    check_dependencies
+    echo ""
+    
+    check_pywal_setup
+    echo ""
+    
+    check_theme
+    echo ""
+    
+    setup_systemd_service
+    echo ""
+    
+    create_test_script
+    echo ""
+    
+    log_success "✅ Configuración completada exitosamente!"
+    echo ""
+    echo "📋 Comandos útiles:"
+    echo "   • Ver estado: systemctl --user status pywal-gtk-daemon.service"
+    echo "   • Ver logs: journalctl --user -u pywal-gtk-daemon.service -f"
+    echo "   • Detener: systemctl --user stop pywal-gtk-daemon.service"
+    echo "   • Reiniciar: systemctl --user restart pywal-gtk-daemon.service"
+    echo "   • Probar sync: test-pywal-gtk-sync"
+    echo "   • Control manual: pywal-gtk-daemon {start|stop|restart|status}"
+    echo ""
+    echo "🎯 ¡Ahora tu tema wal-gtk-auto se sincronizará automáticamente con pywal!"
+    echo "   Prueba ejecutando 'wal -R' o 'wal -i /path/to/image'"
+}
+
+# Ejecutar si es llamado directamente
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

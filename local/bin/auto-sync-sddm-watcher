@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# Script de automatización para sincronizar SDDM automáticamente cuando cambia el wallpaper
+# Autor: rhythmcreative
+# Funciona como servicio o daemon que monitorea cambios en pywal/swww
+
+USER_HOME="/home/rhythmcreative"
+SYNC_SCRIPT="$USER_HOME/.local/bin/sddm-auto-sync-local"
+PYWAL_FILE="$USER_HOME/.cache/wal/wal"
+SWWW_FILE="$USER_HOME/.cache/current-wallpaper"
+LAST_WALLPAPER_FILE="/tmp/sddm-last-wallpaper"
+LOG_FILE="/tmp/sddm-watcher.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Watcher" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    if [[ -f "$PYWAL_FILE" ]]; then
+        cat "$PYWAL_FILE" 2>/dev/null
+        return 0
+    fi
+    
+    if [[ -f "$SWWW_FILE" ]]; then
+        cat "$SWWW_FILE" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+check_wallpaper_changed() {
+    local current_wallpaper
+    local last_wallpaper=""
+    
+    current_wallpaper=$(get_current_wallpaper)
+    
+    if [[ -z "$current_wallpaper" ]]; then
+        return 1  # No hay wallpaper
+    fi
+    
+    if [[ -f "$LAST_WALLPAPER_FILE" ]]; then
+        last_wallpaper=$(cat "$LAST_WALLPAPER_FILE" 2>/dev/null)
+    fi
+    
+    if [[ "$current_wallpaper" != "$last_wallpaper" ]]; then
+        echo "$current_wallpaper" > "$LAST_WALLPAPER_FILE"
+        return 0  # Ha cambiado
+    fi
+    
+    return 1  # No ha cambiado
+}
+
+watch_mode() {
+    log "🎯 Iniciando modo de vigilancia automática..."
+    echo "🎯 SDDM Auto-Sync Watcher iniciado"
+    echo "👁️ Monitoreando cambios de wallpaper..."
+    echo "🔄 Presiona Ctrl+C para detener"
+    echo ""
+    
+    while true; do
+        if check_wallpaper_changed; then
+            local current_wallpaper=$(get_current_wallpaper)
+            log "🔄 Wallpaper cambiado a: $(basename "$current_wallpaper")"
+            echo "🔄 Detectado cambio de wallpaper: $(basename "$current_wallpaper")"
+            
+            # Ejecutar sincronización automática
+            if "$SYNC_SCRIPT" >/dev/null 2>&1; then
+                log "✅ SDDM sincronizado automáticamente"
+                echo "✅ SDDM sincronizado con $(basename "$current_wallpaper")"
+                notify_user "✅ SDDM sincronizado con $(basename "$current_wallpaper")"
+            else
+                log "❌ Error en sincronización automática"
+                echo "❌ Error al sincronizar SDDM"
+                notify_user "❌ Error al sincronizar SDDM"
+            fi
+        fi
+        
+        sleep 5  # Verificar cada 5 segundos
+    done
+}
+
+single_check() {
+    if check_wallpaper_changed; then
+        local current_wallpaper=$(get_current_wallpaper)
+        log "🔄 Ejecutando sincronización única para: $(basename "$current_wallpaper")"
+        
+        if "$SYNC_SCRIPT"; then
+            log "✅ Sincronización única completada"
+            return 0
+        else
+            log "❌ Error en sincronización única"
+            return 1
+        fi
+    else
+        echo "✅ SDDM ya está sincronizado con el wallpaper actual"
+        return 0
+    fi
+}
+
+install_systemd_service() {
+    local service_file="$USER_HOME/.config/systemd/user/sddm-auto-sync.service"
+    
+    mkdir -p "$USER_HOME/.config/systemd/user"
+    
+    cat > "$service_file" << EOF
+[Unit]
+Description=SDDM Auto-Sync Watcher
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=$USER_HOME/.local/bin/auto-sync-sddm-watcher --watch
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+
+    echo "✅ Servicio systemd creado: $service_file"
+    echo ""
+    echo "Para habilitar el servicio automático:"
+    echo "  systemctl --user daemon-reload"
+    echo "  systemctl --user enable sddm-auto-sync.service"
+    echo "  systemctl --user start sddm-auto-sync.service"
+    echo ""
+    echo "Para verificar el estado:"
+    echo "  systemctl --user status sddm-auto-sync.service"
+    echo ""
+}
+
+show_help() {
+    echo "SDDM Auto-Sync Watcher - Automatización completa"
+    echo "================================================"
+    echo ""
+    echo "Uso:"
+    echo "  $0                    - Verificación única y sincronización"
+    echo "  $0 --watch           - Modo de vigilancia continua"
+    echo "  $0 --install-service - Instalar servicio systemd"
+    echo "  $0 --help            - Mostrar esta ayuda"
+    echo ""
+    echo "El modo watch monitorea continuamente cambios en:"
+    echo "  • ~/.cache/wal/wal (pywal)"
+    echo "  • ~/.cache/current-wallpaper (swww)"
+    echo ""
+}
+
+case "$1" in
+    --watch)
+        watch_mode
+        ;;
+    --install-service)
+        install_systemd_service
+        ;;
+    --help|-h)
+        show_help
+        ;;
+    *)
+        single_check
+        ;;
+esac

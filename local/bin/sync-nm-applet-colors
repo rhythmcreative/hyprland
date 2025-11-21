@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Script simple para sincronizar nm-applet con colores de waybar
+# Versión optimizada que no se cuelga
+
+echo "🎨 Sincronizando nm-applet con waybar..."
+
+# Verificar que pywal tiene colores
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No hay colores de pywal disponibles"
+    exit 1
+fi
+
+# Cargar colores de forma segura
+source "$HOME/.cache/wal/colors.sh"
+
+# Crear directorio GTK si no existe  
+mkdir -p "$HOME/.config/gtk-3.0"
+mkdir -p "$HOME/.config/gtk-4.0"
+
+echo "🎨 Generando CSS con colores: BG=$background, FG=$foreground, Accent=$color4"
+
+# Crear CSS para nm-applet con colores exactos de waybar
+cat > "$HOME/.config/gtk-3.0/nm-applet-waybar.css" <<EOF
+/* nm-applet sincronizado con waybar - $(date) */
+
+/* Aplicar a todos los elementos de nm-applet */
+.nm-applet *,
+window.background *,
+popover *,
+menu *,
+menuitem * {
+    background-color: $background !important;
+    color: $foreground !important;
+}
+
+/* Elementos hover */
+menuitem:hover,
+.nm-applet menuitem:hover {
+    background-color: $color8 !important;
+    color: $foreground !important;
+}
+
+/* Elementos seleccionados/activos */
+menuitem:selected,
+.nm-applet menuitem:selected,
+.connection-active {
+    background-color: $color4 !important;
+    color: $background !important;
+    font-weight: bold;
+}
+
+/* Botones */
+button {
+    background-color: $color4 !important;
+    color: $background !important;
+    border: none !important;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: $color8 !important;
+    color: $foreground !important;
+}
+
+/* Campos de entrada */
+entry {
+    background-color: $background !important;
+    color: $foreground !important;
+    border: 1px solid $color8 !important;
+    border-radius: 4px;
+}
+
+/* Separadores */
+separator {
+    background-color: $color8 !important;
+    opacity: 0.5;
+}
+EOF
+
+# Copiar a GTK4
+cp "$HOME/.config/gtk-3.0/nm-applet-waybar.css" "$HOME/.config/gtk-4.0/nm-applet-waybar.css"
+
+# Actualizar gtk.css principal si existe o crearlo
+if [[ -f "$HOME/.config/gtk-3.0/gtk.css" ]]; then
+    if ! grep -q "nm-applet-waybar.css" "$HOME/.config/gtk-3.0/gtk.css"; then
+        sed -i '1i@import "nm-applet-waybar.css";' "$HOME/.config/gtk-3.0/gtk.css"
+    fi
+else
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-3.0/gtk.css"
+fi
+
+# Lo mismo para GTK4
+if [[ -f "$HOME/.config/gtk-4.0/gtk.css" ]]; then
+    if ! grep -q "nm-applet-waybar.css" "$HOME/.config/gtk-4.0/gtk.css"; then
+        sed -i '1i@import "nm-applet-waybar.css";' "$HOME/.config/gtk-4.0/gtk.css"
+    fi
+else
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-4.0/gtk.css"
+fi
+
+echo "📄 CSS generado y configurado"
+
+# Reiniciar nm-applet de forma simple
+echo "🔄 Reiniciando nm-applet..."
+pkill nm-applet 2>/dev/null || true
+sleep 1
+
+# Reiniciar en background
+nohup nm-applet >/dev/null 2>&1 &
+sleep 2
+
+# Verificar que está corriendo
+if pgrep -x nm-applet >/dev/null; then
+    echo "✅ nm-applet sincronizado con waybar exitosamente"
+    notify-send "🎨 Sincronizado" "nm-applet ahora usa colores de waybar" -t 2000 2>/dev/null || true
+else
+    echo "⚠️ nm-applet puede no haberse reiniciado correctamente"
+fi
+
+echo "🎉 Sincronización completada"

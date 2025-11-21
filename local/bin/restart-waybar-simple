@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Script simple para reiniciar waybar cuando se necesite
+# Útil como alternativa rápida cuando waybar se cierra inesperadamente
+
+echo "🔄 Reiniciando waybar..."
+
+# Matar procesos existentes de waybar
+if pgrep -x waybar > /dev/null; then
+    echo "⏹️ Deteniendo waybar existente..."
+    pkill waybar
+    sleep 1
+fi
+
+# Verificar que se detuvo
+remaining=$(pgrep -x waybar || true)
+if [[ -n "$remaining" ]]; then
+    echo "🔨 Forzando cierre de waybar..."
+    pkill -9 waybar
+    sleep 0.5
+fi
+
+# Iniciar waybar
+echo "🚀 Iniciando waybar..."
+waybar > /dev/null 2>&1 &
+
+# Verificar que se inició correctamente
+sleep 1
+if pgrep -x waybar > /dev/null; then
+    echo "✅ Waybar iniciado correctamente"
+    notify-send "🎨 Waybar Reiniciado" "Waybar iniciado correctamente" -t 2000 2>/dev/null || true
+else
+    echo "❌ ERROR: No se pudo iniciar waybar"
+    notify-send "❌ Error Waybar" "No se pudo iniciar waybar" -u critical 2>/dev/null || true
+    exit 1
+fi
+
+echo "🎉 Waybar reiniciado exitosamente"

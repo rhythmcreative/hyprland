@@ -1,5 +1,7 @@
 @import "colors-pywal.css";
 
+@import "colors-pywal.css";
+
 /* --- Global Styles --- */
 * {
   font-family: 'JetBrainsMono Nerd Font', 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
@@ -39,8 +41,8 @@
 /* System info group - Seamless bar with varied colors */
 #cpu,
 #memory,
-#temperature.cpu,
-#temperature.package {
+#temperature,
+#custom-nvidia-temp {
   background-color: @background;
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
@@ -60,7 +62,7 @@
 }
 
 /* Last element of system info group - rounded right */
-#temperature.package {
+#custom-nvidia-temp {
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
   border-right: none;
@@ -76,8 +78,8 @@
 /* Hover effects for system info modules */
 #cpu:hover,
 #memory:hover,
-#temperature.cpu:hover,
-#temperature.package:hover {
+#temperature:hover,
+#custom-nvidia-temp:hover {
   background-color: @color8; /* Brighter highlight */
 }
 
@@ -108,6 +110,19 @@
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
   border-radius: 6px; /* This module is always rounded */
+  box-shadow: 0 1px 3px alpha(@color4, 0.38);
+  min-width: 0;
+  border: none;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  color: @color4;
+  font-weight: 700;
+}
+
+#custom-cava {
+  background-color: @background;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
+  border-radius: 6px;
   box-shadow: 0 1px 3px alpha(@color4, 0.38);
   min-width: 0;
   border: none;
@@ -263,6 +278,24 @@
   color: @color1;
 }
 
+/* Dual battery styles */
+#custom-dual-battery {
+  color: @color4;
+}
+
+#custom-dual-battery.normal {
+  color: @color4;
+}
+
+#custom-dual-battery.warning {
+  color: @color3;
+}
+
+#custom-dual-battery.critical {
+  color: @color1;
+  animation: pulse 2s infinite;
+}
+
 /* Tray gets foreground color */
 #tray {
   color: @foreground;
@@ -270,10 +303,6 @@
 
 /* --- Privacy Module Colors --- */
 /* Privacy gets color7 - neutral but important color */
-#privacy {
-  color: @color7;
-  font-size: 16px;
-}
 
 /* Privacy module when active (showing indicators) */
 #privacy.screenshare {
@@ -288,21 +317,52 @@
   color: @color6; /* Cool color for audio output */
 }
 
-/* --- Temperature Module Colors - Different colors for CPU and Package --- */
+/* --- Temperature Module Colors --- */
+/* CPU Temperature - uses temperature#cpu ID */
 #temperature.cpu {
   color: @color3; /* Warm color for CPU temperature */
 }
 
-#temperature.package {
-  color: @color2; /* Cool color for Package temperature */
+/* NVIDIA GPU Temperature - custom module */
+#custom-nvidia-temp {
+  color: @color2; /* Cool color for GPU temperature */
 }
 
-#temperature.cpu.critical {
-  color: @color1; /* Red for critical CPU temperature */
+/* NVIDIA temperature states */
+#custom-nvidia-temp.critical {
+  color: @color1; /* Red for critical temperature */
+  animation: pulse 2s infinite;
 }
 
-#temperature.package.critical {
-  color: @color1; /* Red for critical Package temperature */
+#custom-nvidia-temp.warning {
+  color: #f9e2af; /* Yellow for warning temperature */
+}
+
+#custom-nvidia-temp.error {
+  color: @color1; /* Red for error state */
+}
+
+/* Critical and warning states for temperature modules */
+#temperature.critical {
+  color: @color1; /* Red for critical temperature */
+  animation: pulse 2s infinite;
+}
+
+#temperature.warning {
+  color: #f9e2af; /* Yellow for warning temperature */
+}
+
+/* Pulse animation for critical temperatures */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* --- Weather Module - MANTIENE SU COLOR ORIGINAL --- */

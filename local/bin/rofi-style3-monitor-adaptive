@@ -1,0 +1,263 @@
+#!/bin/bash
+
+# Script de rofi launcher con detección automática de monitor
+# Usa style-3.rasi y se adapta a cada monitor
+# Autor: rhythmcreative
+
+# Log file para depuración
+LOG_FILE="$HOME/.cache/rofi-style3-launcher.log"
+
+# Función de logging
+log_debug() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función para detectar el monitor activo basado en posición del cursor
+get_active_monitor() {
+    # PRIORIDAD 1: Detectar por posición del cursor
+    local cursor_info=$(hyprctl cursorpos 2>/dev/null)
+    if [ -n "$cursor_info" ]; then
+        local cursor_x=$(echo "$cursor_info" | cut -d',' -f1 | tr -d ' ')
+        local cursor_y=$(echo "$cursor_info" | cut -d',' -f2 | tr -d ' ')
+        
+        log_debug "Cursor en coordenadas: ($cursor_x, $cursor_y)"
+        
+        # Obtener información de todos los monitores
+        local monitors=$(hyprctl monitors -j 2>/dev/null)
+        
+        if [ -n "$monitors" ]; then
+            local cursor_monitor=$(echo "$monitors" | jq -r --arg cx "$cursor_x" --arg cy "$cursor_y" '
+                .[] | select(
+                    ($cx | tonumber) >= .x and 
+                    ($cx | tonumber) < (.x + .width) and 
+                    ($cy | tonumber) >= .y and 
+                    ($cy | tonumber) < (.y + .height)
+                ) | .name' 2>/dev/null | head -n1)
+            
+            if [ -n "$cursor_monitor" ] && [ "$cursor_monitor" != "null" ]; then
+                log_debug "Monitor detectado por cursor: $cursor_monitor"
+                echo "$cursor_monitor"
+                return
+            fi
+        fi
+    fi
+    
+    # FALLBACK 1: usar el monitor con la ventana activa
+    local active_window=$(hyprctl activewindow -j 2>/dev/null)
+    
+    if [ -n "$active_window" ] && [ "$active_window" != "Invalid" ]; then
+        # Extraer coordenadas de la ventana activa
+        local window_x=$(echo "$active_window" | jq -r '.at[0]' 2>/dev/null)
+        local window_y=$(echo "$active_window" | jq -r '.at[1]' 2>/dev/null)
+        
+        log_debug "Ventana activa en coordenadas: ($window_x, $window_y)"
+        
+        if [ -n "$window_x" ] && [ "$window_x" != "null" ] && [ "$window_x" != "0" ] || [ -n "$window_y" ] && [ "$window_y" != "null" ]; then
+            # Obtener información de todos los monitores
+            local monitors=$(hyprctl monitors -j 2>/dev/null)
+            
+            if [ -n "$monitors" ]; then
+                # Encontrar el monitor que contiene las coordenadas de la ventana
+                local active_monitor=$(echo "$monitors" | jq -r --arg wx "$window_x" --arg wy "$window_y" '
+                    .[] | select(
+                        ($wx | tonumber) >= .x and 
+                        ($wx | tonumber) < (.x + .width) and 
+                        ($wy | tonumber) >= .y and 
+                        ($wy | tonumber) < (.y + .height)
+                    ) | .name' 2>/dev/null | head -n1)
+                
+                if [ -n "$active_monitor" ] && [ "$active_monitor" != "null" ]; then
+                    log_debug "Monitor detectado por ventana activa: $active_monitor"
+                    echo "$active_monitor"
+                    return
+                fi
+            fi
+        fi
+    fi
+    
+    # Último fallback: usar el monitor principal/focused
+    local focused_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null)
+    if [ -n "$focused_monitor" ] && [ "$focused_monitor" != "null" ]; then
+        log_debug "Monitor detectado como focused: $focused_monitor"
+        echo "$focused_monitor"
+        return
+    fi
+    
+    # Fallback final: usar el primer monitor disponible
+    local first_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
+    if [ -n "$first_monitor" ] && [ "$first_monitor" != "null" ]; then
+        log_debug "Usando primer monitor disponible: $first_monitor"
+        echo "$first_monitor"
+        return
+    fi
+    
+    # Último recurso
+    log_debug "No se pudo detectar monitor, usando eDP-1 por defecto"
+    echo "eDP-1"
+}
+
+# Función para ocultar Waybar
+hide_waybar() {
+    log_debug "Ocultando Waybar..."
+    pkill -SIGUSR1 waybar 2>/dev/null || true
+    sleep 0.1
+}
+
+# Función para mostrar Waybar
+show_waybar() {
+    log_debug "Mostrando Waybar..."
+    pkill -SIGUSR2 waybar 2>/dev/null || true
+    sleep 0.1
+}
+
+# Función de cleanup al salir
+cleanup() {
+    log_debug "Ejecutando cleanup..."
+    show_waybar
+    exit 0
+}
+
+# Configurar trap para cleanup
+trap cleanup EXIT INT TERM
+
+# Crear directorio de cache si no existe
+mkdir -p "$(dirname "$LOG_FILE")"
+
+log_debug "=== Iniciando rofi-style3-monitor-adaptive ==="
+log_debug "DISPLAY: $DISPLAY"
+log_debug "WAYLAND_DISPLAY: $WAYLAND_DISPLAY"
+
+# Detectar monitor activo
+ACTIVE_MONITOR=$(get_active_monitor)
+log_debug "Monitor activo detectado: $ACTIVE_MONITOR"
+
+# Función para seleccionar el mejor tema disponible
+select_best_theme() {
+    local monitor="$1"
+    local theme_file=""
+    
+    # PRIORIDAD 1: Tema pywal si está disponible y colores han sido generados
+    if [[ -f "$HOME/.config/rofi/colors-pywal.rasi" ]] && [[ -f "$HOME/.config/rofi/style-3-pywal.rasi" ]]; then
+        theme_file="$HOME/.config/rofi/style-3-pywal.rasi"
+        log_debug "Usando tema con colores pywal: $theme_file"
+        echo "$theme_file"
+        return
+    fi
+    
+    # PRIORIDAD 2: Tema específico para el monitor con pywal
+    if [[ -f "$HOME/.config/rofi/colors-pywal.rasi" ]] && [[ -f "$HOME/.config/rofi/style-3-pywal-${monitor}.rasi" ]]; then
+        theme_file="$HOME/.config/rofi/style-3-pywal-${monitor}.rasi"
+        log_debug "Usando tema pywal específico para monitor $monitor: $theme_file"
+        echo "$theme_file"
+        return
+    fi
+    
+    # PRIORIDAD 3: Tema base en Downloads
+    if [[ -f "$HOME/Downloads/style-3.rasi" ]]; then
+        theme_file="$HOME/Downloads/style-3.rasi"
+        log_debug "Usando tema base desde Downloads: $theme_file"
+        echo "$theme_file"
+        return
+    fi
+    
+    # PRIORIDAD 4: Tema en cache si existe
+    if [[ -f "$HOME/.cache/rofi-style3-themes/style-3-powermenu-fonts.rasi" ]]; then
+        theme_file="$HOME/.cache/rofi-style3-themes/style-3-powermenu-fonts.rasi"
+        log_debug "Usando tema en cache: $theme_file"
+        echo "$theme_file"
+        return
+    fi
+    
+    # Si no encontramos ningún tema
+    log_debug "ERROR: No se encontró ningún tema disponible"
+    echo ""
+}
+
+# Seleccionar el mejor tema disponible
+BASE_STYLE=$(select_best_theme "$ACTIVE_MONITOR")
+
+if [[ -z "$BASE_STYLE" ]]; then
+    log_debug "ERROR: No se encontró ningún tema disponible"
+    notify-send "Error" "No se encontraron temas de rofi disponibles" -u critical
+    exit 1
+fi
+
+log_debug "Tema seleccionado: $BASE_STYLE"
+
+# Crear directorio temporal para el tema adaptado
+TEMP_DIR="$HOME/.cache/rofi-style3-themes"
+mkdir -p "$TEMP_DIR"
+
+# Determinar si necesitamos crear una versión adaptada
+if [[ "$BASE_STYLE" == *"-pywal.rasi" ]]; then
+    # Ya es un tema pywal, usar directamente
+    ADAPTED_STYLE="$BASE_STYLE"
+    log_debug "Usando tema pywal directamente: $ADAPTED_STYLE"
+else
+    # Crear versión del tema con fuentes del powermenu
+    ADAPTED_STYLE="${TEMP_DIR}/style-3-powermenu-fonts.rasi"
+    
+    log_debug "Creando versión adaptada con fuentes del powermenu: $ADAPTED_STYLE"
+    
+    # Copiar el archivo original y modificar solo las fuentes
+    cp "$BASE_STYLE" "$ADAPTED_STYLE"
+    
+    # Reemplazar las fuentes con versiones más gruesas y anchas
+    sed -i 's/"JetBrainsMono Nerd Font 16"/"JetBrainsMono Nerd Font ExtraBold 18"/g' "$ADAPTED_STYLE"
+    sed -i 's/"JetBrainsMono Nerd Font 15"/"JetBrainsMono Nerd Font ExtraBold 17"/g' "$ADAPTED_STYLE"
+    
+    # Si hay colores pywal disponibles, añadir importación
+    if [[ -f "$HOME/.config/rofi/colors-pywal.rasi" ]] && ! grep -q '@import "colors-pywal.rasi"' "$ADAPTED_STYLE"; then
+        # Crear archivo temporal con la importación
+        local temp_file="$(mktemp)"
+        echo '@import "colors-pywal.rasi"' > "$temp_file"
+        echo '' >> "$temp_file"
+        cat "$ADAPTED_STYLE" >> "$temp_file"
+        mv "$temp_file" "$ADAPTED_STYLE"
+        
+        log_debug "Importación de colores pywal añadida al tema adaptado"
+    fi
+    
+    log_debug "Fuentes actualizadas en el tema adaptado"
+fi
+
+# NUEVA FUNCIÓN: Sincronizar automáticamente colores de rofi con pywal
+sync_rofi_colors() {
+    log_debug "Sincronizando colores de rofi con pywal..."
+    
+    # Ejecutar sincronización de colores de rofi
+    if [[ -x "$HOME/.local/bin/sync-rofi-pywal" ]]; then
+        "$HOME/.local/bin/sync-rofi-pywal" > /dev/null 2>&1
+        log_debug "Colores de rofi sincronizados con pywal"
+        return 0
+    else
+        log_debug "Script sync-rofi-pywal no encontrado"
+        return 1
+    fi
+}
+
+# Función principal para lanzar rofi
+launch_rofi() {
+    # NUEVO: Sincronizar colores de rofi con pywal antes de mostrar rofi
+    sync_rofi_colors
+    
+    # Ocultar waybar para una experiencia más limpia
+    hide_waybar
+    
+    log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
+    log_debug "Tema: $ADAPTED_STYLE"
+    
+    # Lanzar rofi con el tema adaptado
+    rofi -show drun \
+         -theme "$ADAPTED_STYLE" \
+         -monitor "$ACTIVE_MONITOR"
+    
+    log_debug "Rofi cerrado"
+}
+
+# Ejecutar rofi
+launch_rofi
+
+log_debug "=== Finalizando rofi-style3-monitor-adaptive ==="
+
+# Al salir del script, el trap ejecutará cleanup automáticamente

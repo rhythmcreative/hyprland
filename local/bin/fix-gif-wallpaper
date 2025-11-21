@@ -1,0 +1,76 @@
+#!/bin/bash
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "Iniciando script de reparación de GIF wallpaper"
+
+# Limpiar archivos temporales que puedan estar interfiriendo
+log "Limpiando archivos temporales de GIFs"
+rm -f /tmp/gif_frame_for_wal*.png 2>/dev/null || true
+rm -f "$HOME/.cache/gif_frame_for_wal"*.png 2>/dev/null || true
+
+# Verificar si hay un GIF configurado como wallpaper actual
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    CURRENT_WALLPAPER=$(cat "$HOME/.cache/current-wallpaper")
+    
+    if [[ -f "$CURRENT_WALLPAPER" && "${CURRENT_WALLPAPER,,}" == *.gif ]]; then
+        log "Detectado GIF como wallpaper actual: $CURRENT_WALLPAPER"
+        
+        # Verificar que swww-daemon está corriendo
+        if ! pgrep -x "swww-daemon" > /dev/null; then
+            log "Iniciando swww-daemon"
+            swww-daemon --format xrgb &
+            sleep 2
+        fi
+        
+        # Reaplicar el GIF con configuraciones optimizadas
+        log "Reaplicando GIF wallpaper con configuraciones optimizadas"
+        swww img "$CURRENT_WALLPAPER" --transition-type none --transition-duration 0.1 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            log "GIF wallpaper reaplicado exitosamente"
+            
+            # También resincronizar pywal si está disponible
+            if command -v wal > /dev/null 2>&1; then
+                log "Resincronizando pywal con GIF"
+                # Extraer primer frame para pywal
+                gif_frame_temp="/tmp/gif_frame_for_wal_fix_$$.png"
+                
+                if convert "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
+                    wal -i "$gif_frame_temp" -n
+                    rm -f "$gif_frame_temp" 2>/dev/null || true
+                    
+                    # Recargar hyprland para aplicar colores
+                    hyprctl reload > /dev/null 2>&1 || true
+                    sleep 0.5
+                    
+                    # Reconfirmar el GIF después de recargar
+                    swww img "$CURRENT_WALLPAPER" --transition-type none --transition-duration 0.1 > /dev/null 2>&1 || true
+                    
+                    log "Pywal resincronizado con éxito"
+                fi
+            fi
+            
+            notify-send "🎬 GIF + Pywal Reparado" "$(basename "$CURRENT_WALLPAPER") animado y sincronizado correctamente"
+        else
+            log "ERROR: Fallo al reaplicar GIF wallpaper"
+            notify-send "❌ Error" "No se pudo reaplicar el GIF wallpaper"
+        fi
+        
+        # Verificar el estado actual
+        swww query
+    else
+        log "El wallpaper actual no es un GIF o no existe"
+        notify-send "ℹ️ Info" "No se detectó un GIF como wallpaper actual"
+    fi
+else
+    log "No se encontró archivo de wallpaper actual"
+    notify-send "⚠️ Advertencia" "No se encontró información del wallpaper actual"
+fi
+
+log "Script de reparación de GIF wallpaper completado"

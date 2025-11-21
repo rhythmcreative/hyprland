@@ -1,0 +1,517 @@
+#!/bin/bash
+# Script para actualizar el tema GTK con colores de pywal
+# Se ejecuta automáticamente cuando cambian los colores
+
+# Leer colores de pywal
+source ~/.cache/wal/colors.sh
+
+# Directorio del tema
+THEME_DIR="$HOME/.themes/pywal-mono"
+
+# Función para calcular colores intermedios
+hex_to_rgb() {
+    hex=${1#"#"}
+    printf "%d %d %d\n" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+rgb_to_hex() {
+    printf "#%02x%02x%02x\n" "$1" "$2" "$3"
+}
+
+darken_color() {
+    local color=$1
+    local factor=${2:-0.8}
+    IFS=' ' read -r r g b <<< "$(hex_to_rgb "$color")"
+    r=$(echo "$r * $factor" | bc | cut -d. -f1)
+    g=$(echo "$g * $factor" | bc | cut -d. -f1)
+    b=$(echo "$b * $factor" | bc | cut -d. -f1)
+    rgb_to_hex "$r" "$g" "$b"
+}
+
+lighten_color() {
+    local color=$1
+    local factor=${2:-1.2}
+    IFS=' ' read -r r g b <<< "$(hex_to_rgb "$color")"
+    r=$(echo "($r * $factor)" | bc | cut -d. -f1)
+    g=$(echo "($g * $factor)" | bc | cut -d. -f1)
+    b=$(echo "($b * $factor)" | bc | cut -d. -f1)
+    # Limitar a 255
+    r=$([ "$r" -gt 255 ] && echo 255 || echo "$r")
+    g=$([ "$g" -gt 255 ] && echo 255 || echo "$g")
+    b=$([ "$b" -gt 255 ] && echo 255 || echo "$b")
+    rgb_to_hex "$r" "$g" "$b"
+}
+
+# Colores derivados
+BORDER_COLOR=$(darken_color "$background" 1.5)
+HOVER_COLOR=$(lighten_color "$background" 2.5)
+ACTIVE_COLOR=$(lighten_color "$background" 3.0)
+CARD_COLOR=$(lighten_color "$background" 1.2)
+
+# Actualizar GTK3
+cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Pywal Mono Theme - GTK3 (Auto-generated)
+ * A minimalist, monochromatic theme based on pywal colors
+ */
+
+/* Colors from pywal */
+@define-color bg_color $background;
+@define-color fg_color $foreground;
+@define-color base_color $background;
+@define-color text_color $foreground;
+@define-color selected_bg_color $color8;
+@define-color selected_fg_color $foreground;
+@define-color tooltip_bg_color $background;
+@define-color tooltip_fg_color $foreground;
+
+/* Additional colors for better integration */
+@define-color accent_color $color8;
+@define-color border_color $BORDER_COLOR;
+@define-color hover_color $HOVER_COLOR;
+@define-color active_color $ACTIVE_COLOR;
+@define-color warning_color $color1;
+@define-color success_color $color6;
+@define-color error_color $color5;
+
+/* Global styles */
+* {
+    background-image: none;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+    box-shadow: none;
+    outline: none;
+}
+
+/* Window */
+window {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+/* Headers and titlebars */
+headerbar, .titlebar {
+    background-color: @bg_color;
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    color: @fg_color;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+headerbar button, .titlebar button {
+    background-color: transparent;
+    border: 1px solid @border_color;
+    color: @fg_color;
+    border-radius: 3px;
+    padding: 4px 8px;
+}
+
+headerbar button:hover, .titlebar button:hover {
+    background-color: @hover_color;
+    border-color: @accent_color;
+}
+
+headerbar button:active, .titlebar button:active {
+    background-color: @active_color;
+}
+
+/* Buttons */
+button {
+    background-color: @bg_color;
+    background-image: none;
+    border: 1px solid @border_color;
+    color: @fg_color;
+    border-radius: 3px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: @hover_color;
+    border-color: @accent_color;
+}
+
+button:active, button:checked {
+    background-color: @active_color;
+    border-color: @accent_color;
+}
+
+button.suggested-action {
+    background-color: @accent_color;
+    border-color: @accent_color;
+    color: @fg_color;
+}
+
+button.destructive-action {
+    background-color: @error_color;
+    border-color: @error_color;
+    color: @bg_color;
+}
+
+/* Entry fields */
+entry {
+    background-color: @base_color;
+    border: 1px solid @border_color;
+    color: @text_color;
+    border-radius: 3px;
+    padding: 6px 8px;
+}
+
+entry:focus {
+    border-color: @accent_color;
+    background-color: @hover_color;
+}
+
+/* Notebooks and tabs */
+notebook {
+    background-color: @bg_color;
+}
+
+notebook tab {
+    background-color: @bg_color;
+    border: 1px solid @border_color;
+    color: @fg_color;
+    padding: 6px 12px;
+}
+
+notebook tab:checked {
+    background-color: @accent_color;
+}
+
+/* Lists and treeviews */
+treeview {
+    background-color: @base_color;
+    color: @text_color;
+}
+
+treeview:selected {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: @bg_color;
+}
+
+scrollbar slider {
+    background-color: @accent_color;
+    border-radius: 3px;
+    min-width: 8px;
+    min-height: 8px;
+}
+
+scrollbar slider:hover {
+    background-color: @hover_color;
+}
+
+/* Menus */
+menu, .menu {
+    background-color: @bg_color;
+    border: 1px solid @border_color;
+    color: @fg_color;
+    padding: 2px;
+}
+
+menuitem, .menuitem {
+    padding: 4px 8px;
+    border-radius: 2px;
+}
+
+menuitem:hover, .menuitem:hover {
+    background-color: @hover_color;
+}
+
+/* Popover */
+popover {
+    background-color: @bg_color;
+    border: 1px solid @border_color;
+    color: @fg_color;
+}
+
+/* Toolbars */
+toolbar {
+    background-color: @bg_color;
+    border: none;
+    color: @fg_color;
+}
+
+/* Progressbars */
+progressbar {
+    background-color: @border_color;
+}
+
+progressbar progress {
+    background-color: @accent_color;
+    border-radius: 2px;
+}
+
+/* Switches */
+switch {
+    background-color: @border_color;
+    border: 1px solid @border_color;
+    border-radius: 12px;
+}
+
+switch:checked {
+    background-color: @accent_color;
+}
+
+switch slider {
+    background-color: @fg_color;
+    border-radius: 50%;
+}
+
+/* Checkboxes and radio buttons */
+checkbutton check, radiobutton radio {
+    background-color: @base_color;
+    border: 1px solid @border_color;
+    color: @text_color;
+}
+
+checkbutton check:checked, radiobutton radio:checked {
+    background-color: @accent_color;
+    border-color: @accent_color;
+}
+
+/* Tooltips */
+tooltip {
+    background-color: @tooltip_bg_color;
+    color: @tooltip_fg_color;
+    border: 1px solid @border_color;
+    border-radius: 3px;
+    padding: 4px 8px;
+}
+
+/* Separators */
+separator {
+    background-color: @border_color;
+    min-width: 1px;
+    min-height: 1px;
+}
+
+/* Frames */
+frame {
+    border: 1px solid @border_color;
+}
+
+/* Selection */
+selection {
+    background-color: @selected_bg_color;
+    color: @selected_fg_color;
+}
+
+/* Dialogs */
+dialog {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+/* Sidebars */
+sidebar {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+sidebar row:selected {
+    background-color: @selected_bg_color;
+}
+
+/* Panes */
+paned separator {
+    background-color: @border_color;
+}
+
+/* Scale/Range */
+scale {
+    background-color: transparent;
+}
+
+scale trough {
+    background-color: @border_color;
+    border-radius: 3px;
+    min-height: 6px;
+}
+
+scale highlight {
+    background-color: @accent_color;
+    border-radius: 3px;
+}
+
+scale slider {
+    background-color: @fg_color;
+    border: 1px solid @accent_color;
+    border-radius: 50%;
+    min-width: 16px;
+    min-height: 16px;
+}
+
+scale slider:hover {
+    background-color: @accent_color;
+    border-color: @fg_color;
+}
+EOF
+
+# Actualizar GTK4
+cat > "$THEME_DIR/gtk-4.0/gtk.css" << EOF
+/* Pywal Mono Theme - GTK4 (Auto-generated)
+ * A minimalist, monochromatic theme based on pywal colors
+ */
+
+/* Colors from pywal */
+@define-color window_bg_color $background;
+@define-color window_fg_color $foreground;
+@define-color view_bg_color $background;
+@define-color view_fg_color $foreground;
+@define-color headerbar_bg_color $background;
+@define-color headerbar_fg_color $foreground;
+@define-color popover_bg_color $background;
+@define-color popover_fg_color $foreground;
+@define-color card_bg_color $CARD_COLOR;
+@define-color card_fg_color $foreground;
+@define-color sidebar_bg_color $background;
+@define-color sidebar_fg_color $foreground;
+@define-color accent_bg_color $color8;
+@define-color accent_fg_color $foreground;
+@define-color accent_color $color8;
+@define-color destructive_bg_color $color5;
+@define-color destructive_fg_color $background;
+@define-color success_bg_color $color6;
+@define-color success_fg_color $background;
+@define-color warning_bg_color $color1;
+@define-color warning_fg_color $background;
+@define-color error_bg_color $color5;
+@define-color error_fg_color $background;
+
+/* Border and shadow colors */
+@define-color border_color $BORDER_COLOR;
+@define-color shade_color rgba(19,12,30,0.36);
+@define-color scrollbar_outline_color rgba(0,0,0,0.5);
+
+/* Additional colors for consistency */
+@define-color hover_color $HOVER_COLOR;
+@define-color active_color $ACTIVE_COLOR;
+
+/* [El resto del CSS para GTK4 permanece igual que antes] */
+/* Global styles */
+* {
+    outline: none;
+}
+
+/* Windows */
+window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+
+/* Headers */
+headerbar {
+    background-color: @headerbar_bg_color;
+    color: @headerbar_fg_color;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+/* Buttons */
+button {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    border: 1px solid @border_color;
+    border-radius: 3px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: @hover_color;
+    border-color: @accent_color;
+}
+
+button:active {
+    background-color: @active_color;
+}
+
+/* Entry fields */
+entry {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+    border: 1px solid @border_color;
+    border-radius: 3px;
+    padding: 6px 8px;
+}
+
+entry:focus {
+    border-color: @accent_color;
+    background-color: @hover_color;
+}
+
+/* Lists */
+listview {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+
+row {
+    background-color: transparent;
+    color: @view_fg_color;
+    padding: 8px;
+}
+
+row:hover {
+    background-color: @hover_color;
+}
+
+row:selected {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: transparent;
+}
+
+scrollbar slider {
+    background-color: @accent_color;
+    border-radius: 3px;
+    min-width: 8px;
+    min-height: 8px;
+}
+
+scrollbar slider:hover {
+    background-color: @hover_color;
+}
+
+/* Menus and popovers */
+popover {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px @shade_color;
+    padding: 4px;
+}
+
+menu {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 2px;
+}
+
+menuitem {
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+menuitem:hover {
+    background-color: @hover_color;
+}
+EOF
+
+# Aplicar el tema
+gsettings set org.gnome.desktop.interface gtk-theme "pywal-mono"
+gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+
+echo "Tema GTK actualizado con colores de pywal"

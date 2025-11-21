@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# Script automático para mantener nm-applet sincronizado con waybar
+# Se ejecuta cada vez que cambian los colores de pywal
+
+set -euo pipefail
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$HOME/.cache/nm-applet-waybar-sync.log"
+}
+
+log "🔄 Iniciando sincronización automática nm-applet ↔ waybar"
+
+# Verificar que existen los archivos necesarios
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$HOME/.cache/wal/colors.sh"
+
+# Extraer colores limpios
+WAYBAR_BG=$(echo "$background" | tr -d "'\"")
+WAYBAR_FG=$(echo "$foreground" | tr -d "'\"")
+WAYBAR_ACCENT=$(echo "$color4" | tr -d "'\"")
+WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'\"")
+WAYBAR_WARNING=$(echo "$color3" | tr -d "'\"")
+WAYBAR_URGENT=$(echo "$color1" | tr -d "'\"")
+
+log "✅ Colores extraídos: BG=$WAYBAR_BG, FG=$WAYBAR_FG, Accent=$WAYBAR_ACCENT"
+
+# Actualizar archivo GTK CSS
+gtk3_css="$HOME/.config/gtk-3.0/gtk.css"
+gtk4_css="$HOME/.config/gtk-4.0/gtk.css"
+
+mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+
+# Crear CSS actualizado para nm-applet
+cat > "$gtk3_css" << EOF
+@import "nm-applet-waybar.css";
+/* Force nm-applet colors - Auto-generated $(date) */
+
+/* Import any existing theme */
+@import url("file:///usr/share/themes/PywalGTK-Auto/gtk-3.0/gtk.css");
+
+/* Override ALL possible nm-applet selectors with exact colors */
+* {
+  -gtk-icon-palette: success $WAYBAR_ACCENT, warning $WAYBAR_HIGHLIGHT, error $WAYBAR_URGENT;
+}
+
+/* NetworkManager applet - ALL possible selectors */
+.nm-applet,
+.nm-applet *,
+#nm-applet,
+#nm-applet *,
+window[title*="NetworkManager"],
+window[title*="NetworkManager"] *,
+window[title*="Network"],
+window[title*="Network"] *,
+window.background,
+window.background *,
+.background,
+.background * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border-color: $WAYBAR_ACCENT !important;
+}
+
+/* Menu items */
+menuitem,
+menuitem *,
+.menu,
+.menu *,
+menu,
+menu * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: none !important;
+}
+
+menuitem:hover,
+menuitem:hover *,
+.menu:hover,
+.menu:hover *,
+menu:hover,
+menu:hover * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+}
+
+/* Buttons */
+button,
+button *,
+.button,
+.button * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+    border: none !important;
+}
+
+button:hover,
+button:hover *,
+.button:hover,
+.button:hover * {
+    background-color: $WAYBAR_HIGHLIGHT !important;
+    color: $WAYBAR_FG !important;
+    opacity: 0.9 !important;
+}
+
+/* Entry fields */
+entry,
+entry *,
+.entry,
+.entry * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+/* Lists and treeview */
+treeview,
+treeview *,
+listbox,
+listbox *,
+list,
+list *,
+listview,
+listview * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+}
+
+treeview:hover,
+treeview:hover *,
+listbox:hover,
+listbox:hover *,
+list:hover,
+list:hover *,
+listview:hover,
+listview:hover * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+}
+
+/* Popover and tooltips */
+popover,
+popover *,
+tooltip,
+tooltip *,
+.tooltip,
+.tooltip * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+/* Separators */
+separator,
+.separator {
+    background-color: $WAYBAR_ACCENT !important;
+    opacity: 0.3 !important;
+}
+
+/* Labels */
+label,
+.label {
+    color: $WAYBAR_FG !important;
+}
+
+/* Icons - override system tray colors */
+image {
+    color: $WAYBAR_FG !important;
+    -gtk-icon-palette: success $WAYBAR_ACCENT, warning $WAYBAR_HIGHLIGHT, error $WAYBAR_URGENT;
+}
+
+@import "nm-applet.css";
+EOF
+
+# Copiar a GTK4
+cp "$gtk3_css" "$gtk4_css"
+
+log "📄 Archivos CSS actualizados"
+
+# Aplicar cambios de tema
+gsettings set org.gnome.desktop.interface gtk-theme 'Default' 2>/dev/null || true
+sleep 0.5
+gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto' 2>/dev/null || true
+
+# Reiniciar nm-applet si está ejecutándose
+if pgrep -x nm-applet > /dev/null; then
+    log "🔄 Reiniciando nm-applet..."
+    pkill nm-applet
+    sleep 2
+fi
+
+# Iniciar nm-applet con configuración correcta
+GTK_THEME=PywalGTK-Auto \
+GTK2_RC_FILES="$HOME/.gtkrc-2.0" \
+GDK_BACKEND=wayland,x11 \
+nohup nm-applet > /dev/null 2>&1 &
+
+sleep 2
+
+if pgrep -x nm-applet > /dev/null; then
+    log "✅ nm-applet sincronizado exitosamente con waybar"
+    
+    # Enviar notificación
+    if command -v notify-send > /dev/null; then
+        notify-send "🎨 Sincronización Completada" "nm-applet ahora usa los colores de waybar" -t 2000 -i network-wireless 2>/dev/null || true
+    fi
+else
+    log "❌ Error: no se pudo reiniciar nm-applet"
+    exit 1
+fi
+
+log "🎉 Sincronización completada exitosamente"

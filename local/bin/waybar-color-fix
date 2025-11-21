@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# Script mejorado para sincronización de colores Waybar con pywal
+# Soluciona problemas de sincronización cuando se hace clic
+
+# Variables
+WAYBAR_CONFIG_DIR="$HOME/.config/waybar"
+COLORS_FILE="$WAYBAR_CONFIG_DIR/colors-pywal.css"
+LOG_FILE="/tmp/waybar-color-fix.log"
+LOCK_FILE="/tmp/waybar_color_fix.lock"
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') [COLOR-FIX] - $1" | tee -a "$LOG_FILE"
+}
+
+# Verificar si ya hay una instancia ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    existing_pid=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+        log "⏳ Ya hay una instancia ejecutándose (PID: $existing_pid)"
+        exit 0
+    else
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+trap "rm -f '$LOCK_FILE'" EXIT
+
+log "🎨 Iniciando corrección de sincronización de colores..."
+
+# Verificar que existan los colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Cargar colores actuales de pywal
+source "$HOME/.cache/wal/colors.sh"
+
+log "🔄 Actualizando archivo de colores..."
+
+# Regenerar archivo de colores con timestamp para forzar recarga
+cat > "$COLORS_FILE" << EOF
+/* Colores generados por waybar-color-fix - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+
+log "✅ Archivo de colores actualizado"
+
+# Función para forzar recarga completa de Waybar
+force_waybar_reload() {
+    local waybar_pids=$(pgrep -x waybar)
+    
+    if [[ -z "$waybar_pids" ]]; then
+        log "🚀 Waybar no está ejecutándose, iniciando..."
+        waybar > /dev/null 2>&1 &
+        sleep 2
+        return 0
+    fi
+    
+    log "🔄 Forzando recarga completa de Waybar..."
+    
+    # Método 1: Intentar recarga suave primero
+    if kill -USR2 $waybar_pids 2>/dev/null; then
+        sleep 1
+        # Verificar si la recarga fue efectiva tocando el archivo CSS
+        touch "$WAYBAR_CONFIG_DIR/style.css"
+        sleep 0.5
+        
+        if kill -0 $waybar_pids 2>/dev/null; then
+            log "✅ Recarga suave completada"
+            return 0
+        fi
+    fi
+    
+    # Método 2: Recarga completa con SIGHUP
+    log "🔄 Intentando recarga completa con SIGHUP..."
+    if kill -HUP $waybar_pids 2>/dev/null; then
+        sleep 1.5
+        if kill -0 $waybar_pids 2>/dev/null; then
+            log "✅ Recarga con SIGHUP completada"
+            return 0
+        fi
+    fi
+    
+    # Método 3: Reinicio completo como último recurso
+    log "⚠️ Reinicio completo necesario..."
+    kill -TERM $waybar_pids 2>/dev/null || true
+    sleep 2
+    
+    # Verificar que se cerró
+    if pgrep -x waybar > /dev/null; then
+        pkill -KILL waybar 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Iniciar Waybar
+    waybar > /dev/null 2>&1 &
+    sleep 2
+    
+    if pgrep -x waybar > /dev/null; then
+        log "✅ Waybar reiniciado correctamente"
+        return 0
+    else
+        log "❌ Error al reiniciar Waybar"
+        return 1
+    fi
+}
+
+# Método adicional: Invalidar cache de GTK CSS
+invalidate_gtk_cache() {
+    log "🧹 Invalidando cache de GTK..."
+    
+    # Limpiar cache de GTK CSS
+    for cache_dir in "$HOME/.cache/gtk-3.0" "$HOME/.cache/gtk-4.0"; do
+        if [[ -d "$cache_dir" ]]; then
+            rm -rf "$cache_dir"/* 2>/dev/null || true
+        fi
+    done
+    
+    # Forzar recarga de temas GTK
+    if command -v gsettings >/dev/null 2>&1; then
+        current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "")
+        if [[ -n "$current_theme" ]]; then
+            gsettings set org.gnome.desktop.interface gtk-theme "$current_theme"
+        fi
+    fi
+}
+
+# Ejecutar corrección
+invalidate_gtk_cache
+force_waybar_reload
+
+# Notificación final
+log "🎉 Corrección de colores completada"
+
+# Verificar que los colores se aplicaron correctamente
+sleep 1
+if pgrep -x waybar >/dev/null; then
+    notify-send "🎨 Waybar Color Fix" "Colores sincronizados correctamente" -t 2000 2>/dev/null || true
+    log "✅ Waybar ejecutándose con nuevos colores"
+else
+    notify-send "❌ Waybar Error" "Problema con la sincronización" -u critical -t 3000 2>/dev/null || true
+    log "❌ Waybar no está ejecutándose después de la corrección"
+fi
+
+log "📋 Corrección finalizada"

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Alternar mute
+if command -v wpctl >/dev/null 2>&1; then
+    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+elif command -v pactl >/dev/null 2>&1; then
+    pactl set-sink-mute @DEFAULT_SINK@ toggle
+fi
+
+# Mostrar notificación
+~/.local/bin/volume-notify

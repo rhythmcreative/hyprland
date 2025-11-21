@@ -1,0 +1,407 @@
+#!/bin/bash
+
+# Script de sincronización COMPLETA OPTIMIZADA: Wallpaper + Waybar + Pywal + P10k + nm-applet
+# Versión optimizada que EVITA reinicios múltiples y minimiza interrupciones
+# Ejecutado por: Super + Shift + W en Hyprland
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/complete-wallpaper-sync-optimized.log"
+LOCK_FILE="/tmp/complete-wallpaper-sync-optimized.lock"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 Sincronización Optimizada" "$1" -t 3000 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Sincronización ya en progreso (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Cleanup function
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+log "🚀 === INICIANDO SINCRONIZACIÓN COMPLETA OPTIMIZADA ==="
+notify "Iniciando sincronización optimizada (sin reinicios múltiples)..."
+
+# Verificar prerrequisitos
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "❌ ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify "❌ Error: Directorio de wallpapers no encontrado"
+    exit 1
+fi
+
+if ! command -v swww &> /dev/null; then
+    log "❌ ERROR: swww no está instalado"
+    notify "❌ Error: swww no está instalado"
+    exit 1
+fi
+
+# Verificar e iniciar swww-daemon si es necesario
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Iniciando swww-daemon..."
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# PASO 1: Mostrar selector de wallpapers (SIN ocultar waybar)
+log "📸 PASO 1: Mostrando selector de wallpapers..."
+
+cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
+
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "❌ ERROR: No se encontraron imágenes"
+    notify "❌ Error: No se encontraron imágenes"
+    exit 1
+fi
+
+# Crear lista simple para rofi sin previews para mayor velocidad
+TEMP_FILE="/tmp/rofi_wallpaper_optimized_$$"
+printf '%s\n' "${images[@]}" | sed 's/\.[^.]*$//' > "$TEMP_FILE"
+
+# Mostrar rofi SIN ocultar waybar para evitar reinicios
+selected=$(rofi -dmenu -i -p "🖼️ Wallpaper Optimizado" < "$TEMP_FILE" || true)
+
+rm -f "$TEMP_FILE"
+
+if [[ -z "$selected" ]]; then
+    log "ℹ️ No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+# Buscar el archivo correspondiente
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    log "❌ ERROR: Archivo no encontrado: $selected"
+    notify "❌ Error: Archivo no encontrado"
+    exit 1
+fi
+
+log "✅ Seleccionado: $selected_file"
+
+# PASO 2: Aplicar wallpaper
+log "🖼️ PASO 2: Aplicando wallpaper..."
+if swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+    log "✅ Wallpaper aplicado con swww"
+    echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+else
+    log "❌ Error al aplicar wallpaper con swww"
+    exit 1
+fi
+
+# PASO 3: Aplicar pywal y esperar a que genere todos los archivos
+log "🎨 PASO 3: Aplicando colores con pywal..."
+if command -v wal > /dev/null 2>&1; then
+    if wal -i "$selected_file" -n -q; then
+        log "✅ Pywal aplicado exitosamente"
+        # Esperar a que pywal genere TODOS los archivos necesarios
+        sleep 2
+        
+        # Verificar que los archivos principales existen
+        if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+            log "✅ Archivos pywal generados correctamente"
+        else
+            log "⚠️ Archivos pywal incompletos, esperando más..."
+            sleep 1
+        fi
+    else
+        log "❌ Error: Pywal falló"
+        notify "❌ Error: Pywal falló"
+        exit 1
+    fi
+else
+    log "❌ ERROR: Pywal no está instalado"
+    notify "❌ Error: Pywal no está instalado"
+    exit 1
+fi
+
+# PASO 4: Recargar Hyprland PRIMERO (antes de tocar waybar)
+log "🔄 PASO 4: Recargando configuración Hyprland..."
+hyprctl reload > /dev/null 2>&1 || log "⚠️ No se pudo recargar Hyprland"
+
+# PASO 5: Sincronizar waybar SIN REINICIAR EL PROCESO
+log "📱 PASO 5: Sincronizando Waybar (SIN reiniciar proceso)..."
+
+waybar_pids=$(pgrep -x waybar || true)
+if [[ -n "$waybar_pids" ]]; then
+    # Método 1: Intentar recarga suave de CSS (SIGUSR2)
+    if kill -USR2 $waybar_pids 2>/dev/null; then
+        log "✅ Waybar CSS recargado sin reiniciar proceso (SIGUSR2)"
+        sleep 1
+    elif kill -HUP $waybar_pids 2>/dev/null; then
+        log "✅ Waybar recargado completamente sin reiniciar proceso (SIGHUP)"  
+        sleep 1
+    else
+        # ÚLTIMO RECURSO: reinicio único y controlado
+        log "🔄 Waybar requiere reinicio (último recurso)..."
+        kill -TERM $waybar_pids 2>/dev/null
+        sleep 2
+        waybar > /dev/null 2>&1 &
+        sleep 1
+        if pgrep -x waybar > /dev/null; then
+            log "✅ Waybar reiniciado exitosamente (último recurso)"
+        else
+            log "❌ ERROR: No se pudo reiniciar waybar"
+        fi
+    fi
+else
+    # Si waybar no está corriendo, iniciarlo
+    log "🚀 Waybar no estaba corriendo, iniciándolo..."
+    waybar > /dev/null 2>&1 &
+    sleep 1
+fi
+
+# PASO 6: Sincronizar nm-applet SIN MATARLO (método CSS únicamente)
+log "📶 PASO 6: Sincronizando nm-applet (método CSS sin reiniciar)..."
+
+# Verificar estado actual de nm-applet
+nm_applet_was_running=false
+nm_applet_original_pid=""
+
+if pgrep -x nm-applet > /dev/null; then
+    nm_applet_was_running=true
+    nm_applet_original_pid=$(pgrep -x nm-applet | head -1)
+    log "✅ nm-applet detectado corriendo (PID: $nm_applet_original_pid)"
+else
+    log "ℹ️ nm-applet no está corriendo actualmente"
+fi
+
+# Crear CSS actualizado para nm-applet
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+    
+    # Limpiar colores
+    WAYBAR_BG=$(echo "$background" | tr -d "'\"")
+    WAYBAR_FG=$(echo "$foreground" | tr -d "'\"")
+    WAYBAR_ACCENT=$(echo "$color4" | tr -d "'\"")
+    WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'\"")
+    
+    log "🎨 Actualizando CSS de nm-applet con colores: $WAYBAR_BG, $WAYBAR_FG, $WAYBAR_ACCENT"
+    
+    # Crear directorios GTK
+    mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+    
+    # CSS para nm-applet
+    css_file="$HOME/.config/gtk-3.0/nm-applet-pywal.css"
+    
+    cat > "$css_file" << EOF
+/* nm-applet optimizado CSS - Generado $(date) */
+/* Colores: BG=$WAYBAR_BG, FG=$WAYBAR_FG, ACCENT=$WAYBAR_ACCENT */
+
+.nm-applet, .nm-applet-window, window.background, #NetworkManager {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+menu, menuitem {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: none;
+    padding: 8px 12px;
+}
+
+menuitem:hover, menuitem:selected {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+button {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_HIGHLIGHT;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+entry {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+    border-radius: 4px;
+    padding: 6px;
+}
+EOF
+    
+    # Copiar a GTK4
+    cp "$css_file" "$HOME/.config/gtk-4.0/nm-applet-pywal.css"
+    
+    # Actualizar imports GTK
+    for gtk_css in "$HOME/.config/gtk-3.0/gtk.css" "$HOME/.config/gtk-4.0/gtk.css"; do
+        if [[ ! -f "$gtk_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk_css" 2>/dev/null; then
+            echo '@import "nm-applet-pywal.css";' >> "$gtk_css"
+        fi
+    done
+    
+    # Aplicar configuraciones GTK SIN REINICIAR nm-applet
+    export GTK_THEME="Arc-Dark"
+    export GDK_BACKEND="wayland,x11"
+    
+    if command -v gsettings &> /dev/null; then
+        gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+        log "✅ gsettings aplicado sin reiniciar nm-applet"
+    fi
+    
+    # Enviar señales D-Bus para actualizar tema SIN REINICIAR
+    if command -v dbus-send &> /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+            string:"gtk-theme-name" string:"Arc-Dark" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        log "✅ Señales D-Bus enviadas para actualizar tema"
+    fi
+    
+    # Verificar si nm-applet sigue corriendo (NO debería haberse reiniciado)
+    if $nm_applet_was_running; then
+        if pgrep -x nm-applet > /dev/null; then
+            current_pid=$(pgrep -x nm-applet | head -1)
+            if [[ "$current_pid" == "$nm_applet_original_pid" ]]; then
+                log "✅ nm-applet mantuvo su proceso original (PID: $current_pid) - CSS aplicado exitosamente"
+            else
+                log "⚠️ nm-applet se reinició inesperadamente (PID: $nm_applet_original_pid -> $current_pid)"
+            fi
+        else
+            log "⚠️ nm-applet se cerró inesperadamente, reiniciando..."
+            env GTK_THEME="Arc-Dark" GDK_BACKEND="wayland,x11" nohup nm-applet > /dev/null 2>&1 &
+            sleep 2
+        fi
+    else
+        # nm-applet no estaba corriendo, iniciarlo
+        log "🚀 Iniciando nm-applet con nuevos colores..."
+        env GTK_THEME="Arc-Dark" GDK_BACKEND="wayland,x11" nohup nm-applet > /dev/null 2>&1 &
+        sleep 2
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado exitosamente con colores de pywal"
+        fi
+    fi
+    
+    log "✅ PASO 6 completado: nm-applet CSS actualizado SIN reinicios"
+else
+    log "❌ ERROR: Archivo colors.sh de pywal no encontrado"
+fi
+
+# PASO 7: Aplicar temas GTK finales (Arc + Tela circle black)
+log "🎭 PASO 7: Aplicando temas Arc + Tela circle black..."
+if command -v gsettings &> /dev/null; then
+    # Tema de widgets Arc-Dark
+    if gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null; then
+        log "✅ Tema Arc-Dark aplicado"
+    elif gsettings set org.gnome.desktop.interface gtk-theme "Arc" 2>/dev/null; then
+        log "✅ Tema Arc aplicado (fallback)"
+    fi
+    
+    # Tema de iconos Tela circle black
+    if gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null; then
+        log "✅ Iconos Tela-circle-black-dark aplicados"
+    elif gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black" 2>/dev/null; then
+        log "✅ Iconos Tela-circle-black aplicados (fallback)"
+    fi
+    
+    # Cursor
+    gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
+fi
+
+# PASO 8: Sincronizar otros componentes EN SEGUNDO PLANO (no bloquear)
+log "🔧 PASO 8: Sincronizando componentes adicionales en segundo plano..."
+
+# P10k sync (en segundo plano)
+if [[ -x "$HOME/.local/bin/p10k-auto-sync" ]]; then
+    "$HOME/.local/bin/p10k-auto-sync" &
+    disown
+    log "✅ P10k sync iniciado en segundo plano"
+fi
+
+# Oh My Posh sync (en segundo plano)
+if [[ -x "$HOME/.local/bin/sync-omp-pywal" ]]; then
+    "$HOME/.local/bin/sync-omp-pywal" &
+    disown
+    log "✅ Oh My Posh sync iniciado en segundo plano"
+fi
+
+# Dunst restart (rápido)
+if command -v dunst > /dev/null; then
+    pkill dunst 2>/dev/null || true
+    sleep 0.5
+    dunst > /dev/null 2>&1 &
+    log "✅ Dunst reiniciado con nuevos colores"
+fi
+
+# SDDM sync (en segundo plano)
+if [[ -x "$HOME/.local/bin/sddm-auto-sync-local" ]]; then
+    "$HOME/.local/bin/sddm-auto-sync-local" &
+    disown
+    log "✅ SDDM sync iniciado en segundo plano"
+fi
+
+# PASO 9: Verificación final
+log "🔍 PASO 9: Verificación final..."
+
+components_ok=true
+
+# Verificar Waybar
+if pgrep -x waybar > /dev/null; then
+    log "✅ Waybar funcionando"
+else
+    log "⚠️ Waybar no está corriendo"
+    components_ok=false
+fi
+
+# Verificar nm-applet
+if pgrep -x nm-applet > /dev/null; then
+    log "✅ nm-applet funcionando"
+else
+    log "⚠️ nm-applet no está corriendo"
+    components_ok=false
+fi
+
+# Verificar archivos pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "✅ Colores pywal disponibles"
+else
+    log "⚠️ Archivos pywal no encontrados"
+    components_ok=false
+fi
+
+# Resultado final
+if $components_ok; then
+    log "🎉 === SINCRONIZACIÓN OPTIMIZADA COMPLETADA EXITOSAMENTE ==="
+    notify "🎉 Sincronización optimizada completada! (sin reinicios múltiples)"
+    
+    current_wallpaper=$(basename "$selected_file")
+    log "📸 Wallpaper: $current_wallpaper"
+    log "🎨 Todos los componentes sincronizados SIN reinicios múltiples"
+    log "📱 Waybar y nm-applet funcionando estables"
+else
+    log "⚠️ === SINCRONIZACIÓN PARCIAL ===" 
+    notify "⚠️ Sincronización parcial - algunos componentes fallaron"
+fi
+
+log "📋 Log disponible en: $LOG_FILE"
+exit 0

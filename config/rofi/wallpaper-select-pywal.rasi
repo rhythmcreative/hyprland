@@ -1,0 +1,111 @@
+@import "colors-pywal.rasi"
+
+/* config - Wallpaper select - Versión pywal completamente optimizada */
+
+configuration {
+    modi:                        "drun";
+    show-icons:                  true;
+  	drun-display-format:         "{name}";
+    hover-select:                true;
+    font:                        "JetBrains Mono Nerd Font 10";
+}
+
+/* Los colores se importan automáticamente desde colors-pywal.rasi */
+* {
+    /* Usar transparencias dinámicas combinando pywal con transparencia manual */
+    bgcolor:                     rgba(0, 0, 0, 0.6);
+    /* Todos los demás colores se heredan automáticamente de colors-pywal.rasi */
+}
+
+/* Main Window ------------------------------------------------ */
+window {
+    transparency:                "real";
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  true;
+    width:                       100%;
+    height:                      100%;
+    x-offset:                    0px;
+    y-offset:                    0px;
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    cursor:                      "default";
+}
+
+/* Main Box --------------------------------------------------- */
+mainbox {
+    children:                    [ "listview" ];
+    background-color:            transparent;
+
+    spacing:                     24px;
+    margin:                      0px;
+    padding:                     64px;
+}
+
+/* ---- List ---- */
+listview {
+    columns:                     4;
+    lines:                       4;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+
+    background-color:           transparent;
+    text-color:                 @foreground;
+
+    spacing:                     0px;
+    margin:                      0px;
+    padding:                     0px;
+}
+
+/* Elements --------------------------------------------------- */
+element {
+    cursor:                      pointer;
+    border-radius:               15px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    spacing:                     15px;
+    margin:                      8px;
+    padding:                     20px 15px;
+    border:                      0px solid;
+    border-color:                @selected;
+}
+
+element normal.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+element selected.normal {
+    background-color:            rgba(255, 255, 255, 0.1);
+    text-color:                  @selected;
+    border:                      1px solid;
+    border-color:                @selected;
+}
+
+element-icon {
+    expand:                      false;
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        200px;
+    cursor:                      inherit;
+}
+
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   inherit;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}

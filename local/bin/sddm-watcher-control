@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# Script de control para el servicio de sincronización automática de SDDM wallpaper
+# Uso: sddm-watcher-control [start|stop|restart|status|logs|sync-now]
+
+SERVICE_NAME="sddm-wallpaper-watcher.service"
+LOG_FILE="$HOME/.cache/sddm-wallpaper-watcher.log"
+
+case "${1:-status}" in
+    "start")
+        echo "🚀 Iniciando servicio de sincronización automática de SDDM..."
+        systemctl --user start "$SERVICE_NAME"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Servicio iniciado exitosamente"
+        else
+            echo "❌ Error al iniciar el servicio"
+            exit 1
+        fi
+        ;;
+        
+    "stop")
+        echo "🛑 Deteniendo servicio de sincronización automática de SDDM..."
+        systemctl --user stop "$SERVICE_NAME"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Servicio detenido exitosamente"
+        else
+            echo "❌ Error al detener el servicio"
+            exit 1
+        fi
+        ;;
+        
+    "restart")
+        echo "🔄 Reiniciando servicio de sincronización automática de SDDM..."
+        systemctl --user restart "$SERVICE_NAME"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Servicio reiniciado exitosamente"
+        else
+            echo "❌ Error al reiniciar el servicio"
+            exit 1
+        fi
+        ;;
+        
+    "status")
+        echo "📊 Estado del servicio de sincronización automática de SDDM:"
+        echo ""
+        systemctl --user status "$SERVICE_NAME" --no-pager
+        ;;
+        
+    "logs")
+        echo "📝 Logs del servicio (últimas 20 líneas):"
+        echo ""
+        if [[ -f "$LOG_FILE" ]]; then
+            tail -20 "$LOG_FILE"
+        else
+            echo "❌ No se encontró el archivo de log: $LOG_FILE"
+        fi
+        ;;
+        
+    "sync-now")
+        echo "⚡ Ejecutando sincronización manual de SDDM wallpaper..."
+        "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Sincronización manual completada"
+        else
+            echo "❌ Error en la sincronización manual"
+            exit 1
+        fi
+        ;;
+        
+    "enable")
+        echo "🔧 Habilitando servicio para inicio automático..."
+        systemctl --user enable "$SERVICE_NAME"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Servicio habilitado para inicio automático"
+        else
+            echo "❌ Error al habilitar el servicio"
+            exit 1
+        fi
+        ;;
+        
+    "disable")
+        echo "🔧 Deshabilitando servicio de inicio automático..."
+        systemctl --user disable "$SERVICE_NAME"
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Servicio deshabilitado del inicio automático"
+        else
+            echo "❌ Error al deshabilitar el servicio"
+            exit 1
+        fi
+        ;;
+        
+    "help"|"-h"|"--help")
+        echo "Script de control para el servicio de sincronización automática de SDDM wallpaper"
+        echo ""
+        echo "Uso: sddm-watcher-control [comando]"
+        echo ""
+        echo "Comandos disponibles:"
+        echo "  start      - Iniciar el servicio"
+        echo "  stop       - Detener el servicio"
+        echo "  restart    - Reiniciar el servicio"
+        echo "  status     - Mostrar estado del servicio (default)"
+        echo "  logs       - Mostrar logs del servicio"
+        echo "  sync-now   - Ejecutar sincronización manual inmediata"
+        echo "  enable     - Habilitar inicio automático del servicio"
+        echo "  disable    - Deshabilitar inicio automático del servicio"
+        echo "  help       - Mostrar esta ayuda"
+        echo ""
+        echo "El servicio monitorea automáticamente cambios en tu wallpaper"
+        echo "y sincroniza SDDM para que use el mismo fondo de pantalla."
+        ;;
+        
+    *)
+        echo "❌ Comando desconocido: $1"
+        echo "Usa 'sddm-watcher-control help' para ver comandos disponibles"
+        exit 1
+        ;;
+esac

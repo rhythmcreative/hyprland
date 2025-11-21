@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# Selector de Wallpaper Simplificado
+# Optimizado para Auto-Sync con pywal
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+LOG_FILE="$HOME/.cache/wallpaper-selector-auto.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Verificar directorio
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -t 3000
+    exit 1
+fi
+
+log "Iniciando selector de wallpaper"
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" -o -iname "*.gif" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes"
+    notify-send "❌ Error" "No se encontraron imágenes" -t 3000
+    exit 1
+fi
+
+log "Encontradas ${#images[@]} imágenes"
+
+# Generar lista para rofi
+log "Generando lista para rofi"
+image_list=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_ext="${img##*.}"
+    file_ext_upper="${file_ext^^}"
+    
+    # Preparar entrada para rofi
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎬 ${basename_img%.*} | $file_ext_upper"
+    else
+        display_name="🖼️ ${basename_img%.*} | $file_ext_upper"
+    fi
+    
+    image_list="$image_list$display_name\n"
+done
+
+# Mostrar selector usando el tema de HyprNova
+log "Mostrando selector rofi"
+selected=$(echo -e "$image_list" | rofi -dmenu -i -p "🎨 Selecciona Wallpaper:" \
+    -theme "$HOME/.config/rofi/themes/wallpaper-select.rasi")
+
+# Si no se seleccionó nada
+if [[ -z "$selected" ]]; then
+    log "No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "Seleccionado: $selected"
+
+# Encontrar archivo seleccionado
+selected_path=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_ext="${img##*.}"
+    file_ext_upper="${file_ext^^}"
+    
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎬 ${basename_img%.*} | $file_ext_upper"
+    else
+        display_name="🖼️ ${basename_img%.*} | $file_ext_upper"
+    fi
+    
+    if [[ "$display_name" == "$selected" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    log "ERROR: No se encontró el archivo seleccionado"
+    notify-send "❌ Error" "No se encontró el archivo seleccionado" -t 3000
+    exit 1
+fi
+
+log "Aplicando wallpaper: $selected_path"
+
+# Verificar swww-daemon
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "Iniciando swww-daemon..."
+    notify-send "🔄 Iniciando swww-daemon..." -t 2000
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# Aplicar wallpaper según tipo
+if [[ "${selected_path,,}" == *.gif ]]; then
+    log "Aplicando GIF animado"
+    swww img "$selected_path" --transition-type fade --transition-duration 0.8
+    notify-send "🎬 GIF Wallpaper" "$(basename "$selected_path") aplicado - pywal se sincronizará automáticamente" -t 3000
+else
+    log "Aplicando imagen estática"
+    swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.2
+    notify-send "🖼️ Wallpaper" "$(basename "$selected_path") aplicado - pywal se sincronizará automáticamente" -t 3000
+fi
+
+# Guardar wallpaper actual - ESTO DISPARARÁ LA SINCRONIZACIÓN AUTOMÁTICA
+echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+log "Wallpaper guardado en cache - sincronización automática iniciada"
+
+log "Proceso completado exitosamente"
+
+# El daemon pywal-auto-sync-daemon detectará el cambio y aplicará pywal automáticamente

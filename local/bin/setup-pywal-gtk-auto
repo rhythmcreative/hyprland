@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Script de configuración para PywalGTK-Auto
+# Configura la sincronización automática entre pywal y GTK
+
+echo "🚀 Configurando PywalGTK-Auto..."
+echo ""
+
+# Verificar dependencias
+echo "📋 Verificando dependencias..."
+MISSING_DEPS=()
+
+if ! command -v wal >/dev/null 2>&1; then
+    MISSING_DEPS+=("pywal")
+fi
+
+if ! command -v nwg-look >/dev/null 2>&1; then
+    echo "⚠️  nwg-look no está instalado. Puedes instalarlo con: yay -S nwg-look"
+fi
+
+if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+    echo "❌ Faltan dependencias: ${MISSING_DEPS[*]}"
+    echo "Por favor instala las dependencias faltantes y vuelve a ejecutar este script."
+    exit 1
+fi
+
+echo "✅ Todas las dependencias están instaladas"
+echo ""
+
+# Generar el tema inicial
+echo "🎨 Generando tema inicial..."
+if [ -f "$HOME/.cache/wal/colors.json" ]; then
+    "$HOME/.local/bin/generate-pywal-gtk-theme"
+else
+    echo "⚠️  No se encontraron colores de pywal. Ejecutando pywal con un wallpaper por defecto..."
+    # Buscar un wallpaper en directorios comunes
+    WALLPAPER=""
+    for dir in "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "/usr/share/pixmaps" "/usr/share/wallpapers"; do
+        if [ -d "$dir" ]; then
+            WALLPAPER=$(find "$dir" -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | head -1)
+            if [ -n "$WALLPAPER" ]; then
+                break
+            fi
+        fi
+    done
+    
+    if [ -n "$WALLPAPER" ]; then
+        echo "Usando wallpaper: $WALLPAPER"
+        wal -i "$WALLPAPER"
+        "$HOME/.local/bin/generate-pywal-gtk-theme"
+    else
+        echo "❌ No se encontró ningún wallpaper. Por favor ejecuta 'wal -i /ruta/a/tu/wallpaper.jpg' primero."
+        exit 1
+    fi
+fi
+
+echo ""
+
+# Configurar el hook automático
+echo "🔧 Configurando hook automático..."
+
+# Verificar si ya existe un hook
+HOOK_FILE="$HOME/.cache/wal/pywal-gtk-auto-hook.sh"
+if [ -f "$HOOK_FILE" ]; then
+    echo "✅ Hook ya existe en $HOOK_FILE"
+else
+    echo "❌ Hook no encontrado"
+    exit 1
+fi
+
+# Configurar pywal para usar el hook
+echo "📝 Configurando pywal para usar el hook..."
+
+# Verificar configuración de pywal
+PYWAL_CONFIG="$HOME/.config/wal/templates"
+mkdir -p "$PYWAL_CONFIG"
+
+# Crear configuración para que pywal ejecute el hook automáticamente
+cat > "$HOME/.config/wal/templates/done.sh" << 'EOF'
+#!/bin/bash
+# Este archivo se ejecuta automáticamente después de que pywal genere los colores
+
+# Ejecutar el hook de PywalGTK-Auto
+if [ -x "$HOME/.cache/wal/pywal-gtk-auto-hook.sh" ]; then
+    "$HOME/.cache/wal/pywal-gtk-auto-hook.sh"
+fi
+
+# Ejecutar otros hooks existentes
+for hook in "$HOME/.cache/wal/"*-hook.sh; do
+    if [ -f "$hook" ] && [ -x "$hook" ] && [ "$hook" != "$HOME/.cache/wal/pywal-gtk-auto-hook.sh" ]; then
+        "$hook"
+    fi
+done
+EOF
+
+chmod +x "$HOME/.config/wal/templates/done.sh"
+
+echo "✅ Hook configurado correctamente"
+echo ""
+
+# Aplicar el tema
+echo "🎯 Aplicando tema PywalGTK-Auto..."
+gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto'
+gsettings set org.gnome.desktop.wm.preferences theme 'PywalGTK-Auto'
+
+# También aplicarlo para aplicaciones flatpak
+if command -v flatpak >/dev/null 2>&1; then
+    flatpak --user override --env=GTK_THEME=PywalGTK-Auto 2>/dev/null || true
+fi
+
+echo "✅ Tema aplicado"
+echo ""
+
+# Información final
+echo "🎉 ¡PywalGTK-Auto configurado exitosamente!"
+echo ""
+echo "📖 Información importante:"
+echo "   • Tema creado: ~/.themes/PywalGTK-Auto"
+echo "   • Generador: ~/.local/bin/generate-pywal-gtk-theme"
+echo "   • Hook automático: ~/.cache/wal/pywal-gtk-auto-hook.sh"
+echo ""
+echo "🔄 Uso:"
+echo "   • El tema se actualizará automáticamente cada vez que uses pywal"
+echo "   • Para cambiar wallpaper y colores: wal -i /ruta/a/imagen.jpg"
+echo "   • Para regenerar manualmente: generate-pywal-gtk-theme"
+echo "   • Para usar con nwg-look: selecciona 'PywalGTK-Auto' en la lista de temas"
+echo ""
+echo "✨ ¡Disfruta de tu tema GTK sincronizado con pywal!"

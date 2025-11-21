@@ -1,0 +1,192 @@
+@import "colors-pywal.rasi"
+
+/**
+ *
+ * Author : Aditya Shakya (adi1090x)
+ * Github : @adi1090x
+ * 
+ * Rofi Theme File - Sincronizado con Pywal
+ * Rofi Version: 1.7.3
+ **/
+
+/*****----- Configuration -----*****/
+configuration {
+	modi:                       "drun";
+    show-icons:                 true;
+    display-drun:               "";
+	drun-display-format:        "{name}";
+}
+
+/*****----- Global Properties -----*****/
+/* @import                          "shared/fonts.rasi" */
+* {
+    font: "JetBrainsMono Nerd Font Light 12";
+    /* Los colores se importan dinámicamente desde colors-pywal.rasi */
+}
+*{
+  bgcolor:                        rgba(0, 0, 0, 0.6);
+  selected:                       @color6;
+  background-alt:                 @color8;
+}
+/*****----- Main Window -----*****/
+window {
+    transparency:                "real";
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  true;
+    width:                       1920px;
+    height:                      1080px;
+    x-offset:                    0px;
+    y-offset:                    0px;
+
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    cursor:                      "default";
+}
+
+/*****----- Main Box -----*****/
+mainbox {
+    enabled:                     true;
+    spacing:                     60px;
+    margin:                      0px;
+    padding:                     160px 225px 100px 225px;
+    border:                      0px solid;
+    border-radius:               0px 0px 0px 0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    children:                    [ "inputbar", "listview" ];
+}
+
+/*****----- Inputbar -----*****/
+inputbar {
+    enabled:                     true;
+    spacing:                     0px;
+    margin:                      0% 28%;
+    padding:                     3px;
+    border:                      1px solid;
+    border-radius:               16px;
+    border-color:                rgba(255, 255, 255, 0.12);
+    background-color:            rgba(0, 0, 0, 0.15);
+    text-color:                  @foreground;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+
+prompt {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  inherit;
+}
+textbox-prompt-colon {
+    enabled:                     true;
+    expand:                      false;
+    str:                         "";
+    background-color:            transparent;
+    text-color:                  @color6;
+    font:                        "JetBrainsMono Nerd Font Light 16";
+    padding:                     18px 8px 18px 22px;
+    vertical-align:              0.5;
+}
+entry {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      text;
+    placeholder:                 "Search apps";
+    placeholder-color:           rgba(255, 255, 255, 0.5);
+    padding:                     18px 22px 18px 8px;
+    border:                      0px;
+    border-color:                transparent;
+    font:                        "JetBrainsMono Nerd Font Light 15";
+    vertical-align:              0.5;
+}
+
+/*****----- Listview -----*****/
+listview {
+    enabled:                     true;
+    columns:                     7;
+    lines:                       4;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    
+    spacing:                     0px;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      "default";
+}
+scrollbar {
+    handle-width:                5px ;
+    handle-color:                @selected;
+    border-radius:               0px;
+    background-color:            @background-alt;
+}
+
+/*****----- Elements -----*****/
+element {
+    enabled:                     true;
+    spacing:                     15px;
+    margin:                      3px;
+    padding:                     35px 10px;
+    border:                      0px solid;
+    border-radius:               15px;
+    border-color:                @color6;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    cursor:                      pointer;
+}
+element normal.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+element selected.normal {
+    background-color:            rgba(255, 255, 255, 0.1);
+    text-color:                  @color6;
+    border:                      1px solid;
+    border-color:                @color6;
+}
+element-icon {
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        72px;
+    cursor:                      inherit;
+}
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   inherit;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}
+
+/*****----- Message -----*****/
+error-message {
+    padding:                     100px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            black / 10%;
+    text-color:                  @foreground;
+}
+textbox {
+    background-color:            transparent;
+    text-color:                  @foreground;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   none;
+}

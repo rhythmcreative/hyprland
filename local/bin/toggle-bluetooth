@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Script para alternar el estado del bluetooth
+# Creado para usar con Hyprland
+
+# Función para mostrar notificación
+notify() {
+    if command -v notify-send &> /dev/null; then
+        notify-send -i bluetooth -t 3000 "Bluetooth" "$1"
+    fi
+}
+
+# Verificar si bluetoothctl está disponible
+if ! command -v bluetoothctl &> /dev/null; then
+    notify "Error: bluetoothctl no está instalado"
+    exit 1
+fi
+
+# Obtener el estado actual del bluetooth
+bt_status=$(bluetoothctl show | grep -i "powered" | awk '{print $2}')
+
+if [ "$bt_status" = "yes" ]; then
+    # Bluetooth está encendido, apagarlo
+    bluetoothctl power off
+    notify "Bluetooth desactivado 📴"
+    echo "Bluetooth desactivado"
+else
+    # Bluetooth está apagado, encenderlo
+    bluetoothctl power on
+    notify "Bluetooth activado 📶"
+    echo "Bluetooth activado"
+fi

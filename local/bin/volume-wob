@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# Script para controlar el volumen con wob (rueda circular)
+
+# Función para obtener el volumen actual
+get_volume() {
+    pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\d+(?=%)' | head -n1
+}
+
+# Función para verificar si está muteado
+is_muted() {
+    pactl get-sink-mute @DEFAULT_SINK@ | grep -q "yes"
+}
+
+# Función para enviar a wob
+send_to_wob() {
+    local volume=$1
+    local muted=$2
+    
+    if [ "$muted" = "true" ]; then
+        # Para volumen muteado, enviar 0 con fondo rojo
+        echo "0" > /tmp/wob
+    else
+        # Enviar el porcentaje de volumen
+        echo "$volume" > /tmp/wob
+    fi
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        pactl set-sink-volume @DEFAULT_SINK@ +5%
+        # Asegurar que no exceda 100%
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            pactl set-sink-volume @DEFAULT_SINK@ 100%
+        fi
+        ;;
+    down)
+        pactl set-sink-volume @DEFAULT_SINK@ -5%
+        ;;
+    mute)
+        pactl set-sink-mute @DEFAULT_SINK@ toggle
+        ;;
+    *)
+        echo "Uso: $0 {up|down|mute}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado actual
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+
+# Enviar a wob
+send_to_wob "$volume" "$muted"
+
+exit 0

@@ -1,0 +1,96 @@
+#!/bin/bash
+# Script maestro para sincronizar todos los componentes con pywal
+# Actualiza Kitty, Oh My Posh, y otros elementos automáticamente
+
+echo "🎨 Sincronizando todos los componentes con pywal..."
+
+# Verificar que pywal esté configurado
+if [ ! -f ~/.cache/wal/colors.sh ]; then
+    echo "❌ Error: pywal no está configurado correctamente"
+    echo "   Ejecuta: wal -i /ruta/a/tu/imagen"
+    exit 1
+fi
+
+# Cargar colores de pywal
+source ~/.cache/wal/colors.sh
+
+echo "📦 Actualizando componentes..."
+
+# 1. Actualizar Oh My Posh
+echo "  • Oh My Posh..."
+/home/rhythmcreative/.local/bin/update-omp-pywal > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "    ✓ Oh My Posh actualizado"
+else
+    echo "    ❌ Error actualizando Oh My Posh"
+fi
+
+# 2. Kitty ya se actualiza automáticamente con ~/.cache/wal/colors-kitty.conf
+echo "  • Kitty..."
+if [ -f ~/.cache/wal/colors-kitty.conf ]; then
+    echo "    ✓ Kitty configurado (usa colors-kitty.conf automáticamente)"
+else
+    echo "    ❌ Error: archivo colors-kitty.conf no encontrado"
+fi
+
+# 3. Recargar configuración de zsh si estamos en una sesión interactiva
+echo "  • Terminal ZSH..."
+if [ -n "$ZSH_VERSION" ] && [ -t 0 ]; then
+    # Recargar configuración
+    source ~/.zshrc > /dev/null 2>&1
+    echo "    ✓ Configuración ZSH recargada"
+else
+    echo "    ⏭  ZSH será actualizado en la próxima sesión"
+fi
+
+# 4. Actualizar aplicaciones que soportan pywal
+echo "  • Aplicaciones adicionales..."
+
+# Hyprland (si existe)
+if [ -f ~/.cache/wal/colors-hyprland.conf ]; then
+    echo "    ✓ Hyprland configurado"
+fi
+
+# Rofi (si está instalado)
+if command -v rofi &> /dev/null; then
+    if [ -f ~/.cache/wal/colors-rofi-dark.rasi ]; then
+        echo "    ✓ Rofi configurado"
+    fi
+fi
+
+# Qt/KDE Apps (Dolphin, etc.)
+if [ -x ~/.local/bin/sync-qt-pywal ]; then
+    echo "  • Qt/KDE (Dolphin, aplicaciones Qt)..."
+    ~/.local/bin/sync-qt-pywal > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "    ✓ Qt/KDE sincronizado con PyWal"
+    else
+        echo "    ✗ Error sincronizando Qt/KDE"
+    fi
+fi
+
+# 5. Notificar el cambio
+if command -v notify-send &> /dev/null; then
+    notify-send "🎨 Pywal Sync" "Todos los componentes actualizados con el nuevo tema" -t 3000
+fi
+
+echo ""
+echo "🎉 ¡Sincronización completa!"
+echo "   Colores principales:"
+echo "   • Fondo: $background"
+echo "   • Texto: $foreground"
+echo "   • Acento: $color6"
+echo "   • Éxito: $color2"
+echo "   • Advertencia: $color3"
+echo "   • Error: $color1"
+echo ""
+echo "💡 Para aplicar cambios completos:"
+echo "   • Reinicia Kitty: Ctrl+Shift+F5"
+echo "   • Nueva terminal: Ctrl+Shift+Enter"
+echo "   • Recarga manual: source ~/.zshrc"
+echo ""
+echo "🚀 Las sugerencias inteligentes están activas:"
+echo "   • Autocompletado: Escribe y ve sugerencias automáticas"
+echo "   • Búsqueda fuzzy: Ctrl+T (archivos) / Ctrl+R (historia)"
+echo "   • Historia inteligente: Flechas ↑↓ buscan en comandos previos"
+echo "   • Syntax highlighting: Los comandos se colorean automáticamente"

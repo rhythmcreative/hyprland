@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+PyWal GTK Daemon - Sincronización automática de wal-gtk-auto con pywal
+Monitorea cambios en archivos de pywal y actualiza automáticamente el tema wal-gtk-auto
+"""
+
+import os
+import sys
+import time
+import signal
+import logging
+import subprocess
+from pathlib import Path
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+# Configuración
+HOME = Path.home()
+CACHE_DIR = HOME / ".cache" / "wal"
+THEME_NAME = "wal-gtk-auto"
+THEME_DIR = HOME / ".themes" / THEME_NAME
+UPDATE_SCRIPT = HOME / ".local" / "bin" / "update-wal-gtk-auto"
+LOG_FILE = HOME / ".cache" / "wal" / "daemon.log"
+PID_FILE = HOME / ".cache" / "wal" / "daemon.pid"
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('pywal-gtk-daemon')
+
+class PywalChangeHandler(FileSystemEventHandler):
+    """Handler para cambios en archivos de pywal"""
+    
+    def __init__(self):
+        self.last_update = 0
+        self.debounce_time = 2  # segundos
+        
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+            
+        # Solo procesar archivos relevantes
+        filename = os.path.basename(event.src_path)
+        if filename in ['colors.json', 'colors', 'colors.sh', 'wal']:
+            current_time = time.time()
+            if current_time - self.last_update > self.debounce_time:
+                self.last_update = current_time
+                logger.info(f"Detectado cambio en {filename}")
+                self.update_theme()
+    
+    def on_created(self, event):
+        if event.is_directory:
+            return
+            
+        filename = os.path.basename(event.src_path)
+        if filename in ['colors.json', 'colors', 'colors.sh', 'wal']:
+            logger.info(f"Archivo creado: {filename}")
+            time.sleep(1)  # Esperar a que el archivo se escriba completamente
+            self.update_theme()
+    
+    def update_theme(self):
+        """Actualizar el tema wal-gtk-auto"""
+        try:
+            if not UPDATE_SCRIPT.exists():
+                logger.error(f"Script de actualización no encontrado: {UPDATE_SCRIPT}")
+                return
+            
+            logger.info("Actualizando tema wal-gtk-auto...")
+            result = subprocess.run(
+                [str(UPDATE_SCRIPT)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                logger.info("✓ Tema actualizado correctamente")
+                # Notificar cambios GTK
+                self.notify_gtk_changes()
+            else:
+                logger.error(f"Error al actualizar tema: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            logger.error("Timeout al actualizar tema")
+        except Exception as e:
+            logger.error(f"Error inesperado: {e}")
+    
+    def notify_gtk_changes(self):
+        """Notificar a GTK sobre cambios en el tema"""
+        try:
+            # Actualizar cache de iconos si existe
+            if THEME_DIR.exists():
+                gtk3_dir = THEME_DIR / "gtk-3.0"
+                if gtk3_dir.exists():
+                    subprocess.run(
+                        ["gtk-update-icon-cache", "-f", str(gtk3_dir)],
+                        capture_output=True
+                    )
+            
+            # Recargar tema GTK (enviar señal a aplicaciones GTK)
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Default"],
+                capture_output=True
+            )
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", THEME_NAME],
+                capture_output=True
+            )
+            
+        except Exception as e:
+            logger.warning(f"Error al notificar cambios GTK: {e}")
+
+class PywalDaemon:
+    """Daemon principal"""
+    
+    def __init__(self):
+        self.observer = None
+        self.running = False
+        
+    def create_pid_file(self):
+        """Crear archivo PID"""
+        try:
+            PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(PID_FILE, 'w') as f:
+                f.write(str(os.getpid()))
+        except Exception as e:
+            logger.error(f"Error creando archivo PID: {e}")
+    
+    def remove_pid_file(self):
+        """Eliminar archivo PID"""
+        try:
+            if PID_FILE.exists():
+                PID_FILE.unlink()
+        except Exception as e:
+            logger.error(f"Error eliminando archivo PID: {e}")
+    
+    def signal_handler(self, signum, frame):
+        """Manejador de señales"""
+        logger.info(f"Recibida señal {signum}, cerrando daemon...")
+        self.stop()
+    
+    def start(self):
+        """Iniciar el daemon"""
+        if self.is_running():
+            logger.error("El daemon ya está ejecutándose")
+            return False
+        
+        logger.info("Iniciando PyWal GTK Daemon...")
+        
+        # Configurar manejadores de señales
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        
+        # Crear archivo PID
+        self.create_pid_file()
+        
+        try:
+            # Verificar que el directorio de cache existe
+            if not CACHE_DIR.exists():
+                logger.error(f"Directorio de cache no encontrado: {CACHE_DIR}")
+                return False
+            
+            # Crear observador
+            self.observer = Observer()
+            event_handler = PywalChangeHandler()
+            
+            # Monitorear el directorio de cache de pywal
+            self.observer.schedule(event_handler, str(CACHE_DIR), recursive=False)
+            
+            # Iniciar observador
+            self.observer.start()
+            self.running = True
+            
+            logger.info(f"✓ Daemon iniciado, monitoreando: {CACHE_DIR}")
+            logger.info(f"Logs en: {LOG_FILE}")
+            
+            # Bucle principal
+            try:
+                while self.running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+            
+        except Exception as e:
+            logger.error(f"Error al iniciar daemon: {e}")
+            return False
+        finally:
+            self.stop()
+        
+        return True
+    
+    def stop(self):
+        """Detener el daemon"""
+        self.running = False
+        if self.observer:
+            logger.info("Deteniendo observador...")
+            self.observer.stop()
+            self.observer.join()
+        
+        self.remove_pid_file()
+        logger.info("✓ Daemon detenido")
+    
+    def is_running(self):
+        """Verificar si el daemon está ejecutándose"""
+        if not PID_FILE.exists():
+            return False
+        
+        try:
+            with open(PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            
+            # Verificar si el proceso existe
+            os.kill(pid, 0)
+            return True
+        except (OSError, ValueError):
+            # Proceso no existe, limpiar archivo PID
+            self.remove_pid_file()
+            return False
+    
+    def get_status(self):
+        """Obtener estado del daemon"""
+        if self.is_running():
+            try:
+                with open(PID_FILE, 'r') as f:
+                    pid = f.read().strip()
+                return f"Daemon ejecutándose (PID: {pid})"
+            except:
+                return "Daemon ejecutándose"
+        else:
+            return "Daemon detenido"
+
+def main():
+    """Función principal"""
+    daemon = PywalDaemon()
+    
+    if len(sys.argv) > 1:
+        command = sys.argv[1].lower()
+        
+        if command == "start":
+            if daemon.is_running():
+                print("El daemon ya está ejecutándose")
+                sys.exit(1)
+            daemon.start()
+            
+        elif command == "stop":
+            if not daemon.is_running():
+                print("El daemon no está ejecutándose")
+                sys.exit(1)
+            
+            try:
+                with open(PID_FILE, 'r') as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, signal.SIGTERM)
+                print("✓ Daemon detenido")
+            except Exception as e:
+                print(f"Error deteniendo daemon: {e}")
+                sys.exit(1)
+                
+        elif command == "restart":
+            if daemon.is_running():
+                try:
+                    with open(PID_FILE, 'r') as f:
+                        pid = int(f.read().strip())
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(2)
+                except:
+                    pass
+            daemon.start()
+            
+        elif command == "status":
+            print(daemon.get_status())
+            
+        else:
+            print("Uso: pywal-gtk-daemon {start|stop|restart|status}")
+            sys.exit(1)
+    else:
+        # Modo daemon por defecto
+        daemon.start()
+
+if __name__ == "__main__":
+    main()

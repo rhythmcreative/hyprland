@@ -71,16 +71,14 @@ AUDIO_BLUETOOTH=(
 APPLICATIONS=(
     kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     asusctl rog-control-center prismlauncher minecraft-launcher balena-etcher-bin
-    telegram-desktop
+    telegram-desktop curseforge-client-bin visual-studio-code-bin libreoffice-fresh
+    obsidian obs-studio
 )
 
 # List of applications to be installed via Flatpak
 FLATPAK_APPS=(
-    com.visualstudio.code
-    org.libreoffice.LibreOffice
-    md.obsidian.Obsidian
-    com.obsproject.Studio
-    io.curseforge.CurseForge
+    com.heroicgameslauncher.hgl
+    org.vinegarhq.Sober
 )
 
 

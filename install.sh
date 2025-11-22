@@ -225,39 +225,15 @@ copy_configs() {
 }
 
 setup_sddm() {
-    info "Configuring SDDM..."
+    info "Enabling SDDM service..."
 
     if ! command -v sddm &> /dev/null; then
-        error "SDDM was not found after installation. Aborting SDDM setup."
+        error "SDDM was not found after installation. Cannot enable service."
         return 1
     fi
 
-    local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    # The actual theme files are now in a local directory.
-    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme"
-    local CONFIG_SRC_FILE="$SCRIPT_DIR/sddm/sddm.conf.d/astronaut.conf"
-
-    if [ ! -d "$THEME_SRC_DIR" ]; then
-        error "SDDM theme source directory not found at '$THEME_SRC_DIR'. It may be a submodule issue. Aborting SDDM setup."
-        return 1
-    fi
-    if [ ! -f "$CONFIG_SRC_FILE" ]; then
-        error "SDDM config source file not found. Aborting SDDM setup."
-        return 1
-    fi
-
-    info "Installing SDDM theme and configuration..."
-    # Ensure the target directory exists
-    sudo mkdir -p "/usr/share/sddm/themes"
-    # Copy the inner theme directory to the correct location
-    sudo cp -r "$THEME_SRC_DIR" "/usr/share/sddm/themes/"
-    
-    sudo mkdir -p "/etc/sddm.conf.d"
-    sudo cp "$CONFIG_SRC_FILE" "/etc/sddm.conf.d/"
-
-    info "Enabling SDDM service..."
     sudo systemctl enable sddm.service
-    success "SDDM configured and enabled."
+    success "SDDM service enabled. It will start on the next boot with the default theme."
 }
 
 final_setup() {
@@ -267,7 +243,8 @@ final_setup() {
     warning "1. A REBOOT is highly recommended for all changes to take effect."
     warning "2. Run Pywal to generate your initial color scheme. Find a wallpaper you like and run:"
     echo "   wal -i /path/to/your/wallpaper.jpg"
-    warning "3. After rebooting, you should be greeted by the new SDDM login screen."
+    warning "3. After rebooting, SDDM will start with its default theme."
+    warning "4. The custom astronaut theme was removed from the setup due to persistent permission issues. You can attempt to install it manually later."
     echo ""
 }
 

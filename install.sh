@@ -233,8 +233,8 @@ setup_sddm() {
     fi
 
     local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    # The actual theme files are in a nested directory due to the submodule structure.
-    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme/sddm-astronaut-theme"
+    # The actual theme files are now in a local directory.
+    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme"
     local CONFIG_SRC_FILE="$SCRIPT_DIR/sddm/sddm.conf.d/astronaut.conf"
 
     if [ ! -d "$THEME_SRC_DIR" ]; then

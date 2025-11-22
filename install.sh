@@ -164,8 +164,8 @@ setup_bluetooth() {
     success "Bluetooth service has been enabled."
 }
 
-create_symlinks() {
-    info "Creating symbolic links for dotfiles..."
+copy_configs() {
+    info "Copying configuration files to their final destination..."
 
     local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
     local DOTFILES_DIR="$SCRIPT_DIR"
@@ -178,42 +178,41 @@ create_symlinks() {
     mkdir -p "$HOME/.local"
     mkdir -p "$HOME/Pictures"
 
-    link_item() {
+    copy_item() {
         local src=$1
         local dest=$2
         
-        if [ -L "$dest" ] && [ "$(readlink -f "$dest")" = "$src" ]; then
-            info "✔ Link already exists: $dest"
-            return
-        fi
-
         if [ -e "$dest" ]; then
             warning "Backing up existing file/directory: $dest"
-            mkdir -p "$(dirname "$BACKUP_DIR/$dest")"
-            mv "$dest" "$BACKUP_DIR/$dest"
+            local backup_path="$BACKUP_DIR/${dest#$HOME}"
+            mkdir -p "$(dirname "$backup_path")"
+            mv "$dest" "$backup_path"
         fi
         
-        info "🔗 Linking $dest -> $src"
-        ln -s "$src" "$dest"
+        info "🚚 Copying $src -> $dest"
+        cp -r "$src" "$dest"
     }
 
+    # Copy .config directories
     for dir in "${CONFIG_DIRS[@]}"; do
         local src="$DOTFILES_DIR/config/$dir"
         local dest="$HOME/.config/$dir"
-        [ -d "$src" ] && link_item "$src" "$dest"
+        [ -d "$src" ] && copy_item "$src" "$dest"
     done
 
+    # Copy .local directories
     for dir in "${LOCAL_DIRS[@]}"; do
         local src="$DOTFILES_DIR/local/$dir"
         local dest="$HOME/.local/$dir"
-        [ -d "$src" ] && link_item "$src" "$dest"
+        [ -d "$src" ] && copy_item "$src" "$dest"
     done
 
+    # Copy Wallpapers directory
     local WALLPAPERS_SRC="$DOTFILES_DIR/Pictures/Wallpapers"
     local WALLPAPERS_DEST="$HOME/Pictures/Wallpapers"
-    [ -d "$WALLPAPERS_SRC" ] && link_item "$WALLPAPERS_SRC" "$WALLPAPERS_DEST"
+    [ -d "$WALLPAPERS_SRC" ] && copy_item "$WALLPAPERS_SRC" "$WALLPAPERS_DEST"
     
-    success "Symbolic links created."
+    success "Configuration files copied."
 }
 
 setup_sddm() {
@@ -271,7 +270,7 @@ main() {
     install_yay_packages
     install_flatpak_and_apps
     setup_bluetooth
-    create_symlinks
+    copy_configs
     setup_sddm
     final_setup
 }

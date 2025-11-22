@@ -225,11 +225,12 @@ setup_sddm() {
     fi
 
     local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme"
+    # The actual theme files are in a nested directory due to the submodule structure.
+    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme/sddm-astronaut-theme"
     local CONFIG_SRC_FILE="$SCRIPT_DIR/sddm/sddm.conf.d/astronaut.conf"
 
     if [ ! -d "$THEME_SRC_DIR" ]; then
-        error "SDDM theme source directory not found. Aborting SDDM setup."
+        error "SDDM theme source directory not found at '$THEME_SRC_DIR'. It may be a submodule issue. Aborting SDDM setup."
         return 1
     fi
     if [ ! -f "$CONFIG_SRC_FILE" ]; then
@@ -238,8 +239,11 @@ setup_sddm() {
     fi
 
     info "Installing SDDM theme and configuration..."
+    # Ensure the target directory exists
     sudo mkdir -p "/usr/share/sddm/themes"
+    # Copy the inner theme directory to the correct location
     sudo cp -r "$THEME_SRC_DIR" "/usr/share/sddm/themes/"
+    
     sudo mkdir -p "/etc/sddm.conf.d"
     sudo cp "$CONFIG_SRC_FILE" "/etc/sddm.conf.d/"
 

@@ -93,6 +93,15 @@ detect_os() {
     fi
 }
 
+init_submodules() {
+    info "Initializing and updating Git submodules..."
+    if ! git submodule update --init --recursive; then
+        error "Failed to update submodules. Please check your Git configuration and network."
+        exit 1
+    fi
+    success "Submodules updated successfully."
+}
+
 install_aur_helper() {
     if ! command -v yay &> /dev/null; then
         info "'yay' not found. Installing it now..."
@@ -265,6 +274,7 @@ final_setup() {
 # --- Main Execution ---
 main() {
     detect_os
+    init_submodules
     install_aur_helper
     detect_gpu_and_install_drivers
     install_yay_packages

@@ -147,7 +147,7 @@ install_yay_packages() {
 install_flatpak_and_apps() {
     info "Installing Flatpak and setting up Flathub..."
     yay -S --needed --noconfirm flatpak
-    sudo flatpak remote-add-if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
     info "Installing applications via Flatpak..."
     sudo flatpak install -y --noninteractive flathub "${FLATPAK_APPS[@]}"

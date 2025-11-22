@@ -110,14 +110,19 @@ install_aur_helper() {
 detect_gpu_and_install_drivers() {
     if lspci | grep -Ei 'NVIDIA|3D controller' | grep -q NVIDIA; then
         info "NVIDIA GPU detected."
-        read -p "Do you want to install the NVIDIA drivers? (y/N): " response
-        if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-            info "Installing NVIDIA drivers..."
-            yay -S --needed --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver egl-wayland
-            success "NVIDIA drivers installed."
-            warning "A reboot is required to load the new drivers."
+        if [[ -t 0 ]]; then # Check if running in an interactive terminal
+            read -p "Do you want to install the NVIDIA drivers? (y/N): " response
+            if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+                info "Installing NVIDIA drivers..."
+                yay -S --needed --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver egl-wayland
+                success "NVIDIA drivers installed."
+                warning "A reboot is required to load the new drivers."
+            else
+                warning "Skipping NVIDIA driver installation."
+            fi
         else
-            warning "Skipping NVIDIA driver installation."
+            warning "Running in a non-interactive shell. Skipping NVIDIA driver installation by default."
+            warning "To install NVIDIA drivers, run this script in an interactive shell."
         fi
     else
         info "No NVIDIA GPU detected. Skipping NVIDIA driver installation."

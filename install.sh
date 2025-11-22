@@ -49,7 +49,7 @@ BUILD_TOOLS=(
 
 # Hyprland and its core ecosystem components
 HYPRLAND_ECOSYSTEM=(
-    hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
+    sddm hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
     waybar rofi python-pywal swww mako grim slurp swappy
     dolphin thunar
 )

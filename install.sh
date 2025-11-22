@@ -1,160 +1,242 @@
 #!/bin/bash
-# Script de instalación para los dotfiles de rhythmcreative
+#
+# install.sh
+#
+# Comprehensive installation script for rhythmcreative's dotfiles.
+# This script installs packages, drivers, applications, and sets up the system
+# configuration for a complete Hyprland desktop environment on Arch Linux.
+#
 
-echo "Iniciando la instalación de los dotfiles..."
+# --- Colors for output ---
+COLOR_RED='\033[0;31m'
+COLOR_GREEN='\033[0;32m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_BLUE='\033[0;34m'
+COLOR_RESET='\033[0m'
 
-# --- Detección del Sistema Operativo ---
-OS=""
-if [ -f /etc/arch-release ]; then
-    OS="Arch"
-elif [ -f /etc/debian_version ]; then
-    OS="Debian"
-else
-    echo "Sistema operativo no soportado. Este script solo funciona en Arch Linux y distribuciones basadas en Debian (como Ubuntu)."
-    exit 1
-fi
-
-echo "Sistema operativo detectado: $OS"
-
-# --- Funciones de Instalación de Paquetes ---
-install_packages_arch() {
-    echo "Instalando paquetes para Arch Linux..."
-    # Asegúrate de tener un ayudante de AUR como 'yay' o 'paru' instalado.
-    yay -S --needed \
-        sddm \
-        hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland \
-        waybar rofi python-pywal swww mako nwg-dock-hyprland nwg-displays \
-        asusctl \
-        kitty ulauncher dolphin thunar network-manager-applet grim slurp swappy \
-        jq polkit-kde-agent qt5ct pipewire wireplumber pipewire-audio pipewire-pulse \
-        wpctl brightnessctl playerctl noto-fonts noto-fonts-cjk noto-fonts-emoji \
-        ttf-font-awesome bibata-cursor-theme adwaita-icon-theme \
-        git gcc go rust cargo meson cmake gettext gtk3 gtk4 cairo pango gdk-pixbuf2 glib2
-
-    # Nota: warp-terminal requiere un instalador separado que debes descargar y ejecutar.
-    echo "Recuerda instalar warp-terminal por separado."
+# --- Log functions ---
+info() {
+    echo -e "${COLOR_BLUE}[INFO]${COLOR_RESET} $1"
 }
 
-install_packages_debian() {
-    echo "Instalando paquetes para Debian/Ubuntu..."
-    sudo apt update
-    sudo apt install -y \
-        sddm \
-        waybar rofi python3-pywal kitty ulauncher dolphin thunar network-manager-gnome \
-        grim slurp swappy jq polkit-kde-agent-1 qt5ct pipewire wireplumber \
-        pipewire-audio-client-libraries libspa-0.2-bluetooth libpipewire-0.3-0 \
-        brightnessctl playerctl fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
-        fonts-font-awesome adwaita-icon-theme git build-essential golang rustc cargo \
-        meson cmake gettext libgtk-3-dev libgtk-4-dev libcairo2-dev libpango1.0-dev \
-        libgdk-pixbuf2.0-dev libglib2.0-dev
-
-    # --- AVISO IMPORTANTE ---
-    # La mayoría de los componentes de Hyprland y Asus no están en los repositorios de Ubuntu.
-    # Deberás compilarlos o instalarlos manualmente. Aquí hay una guía general:
-    #
-    # 1. Hyprland: Sigue la guía oficial en el wiki de Hyprland.
-    #    https://wiki.hypr.land/Getting-Started/Installation/#ubuntu
-    #
-    # 2. Asusctl: La instalación recomendada es a través de las guías en asus-linux.org.
-    #    Puede requerir añadir un PPA o compilar desde el código fuente.
-    #    https://asus-linux.org/wiki/arch-guide/
-    #
-    # 3. swww, hyprlock, hyprpicker, nwg-dock-hyprland, nwg-displays:
-    #    Generalmente, el proceso es:
-    #    a) Clona el repositorio de GitHub del proyecto.
-    #    b) Entra en el directorio del proyecto.
-    #    c) Sigue las instrucciones de compilación (usualmente 'meson build', 'ninja -C build', etc.).
-    #
-    # 4. warp-terminal: Descarga el instalador .deb desde su sitio web oficial.
-    echo "¡ACCIÓN REQUERIDA! Varios paquetes clave (Hyprland, asusctl, swww, etc.) deben ser instalados manualmente en Ubuntu."
+success() {
+    echo -e "${COLOR_GREEN}[SUCCESS]${COLOR_RESET} $1"
 }
 
-# --- Ejecución de la Instalación ---
-if [ "$OS" = "Arch" ]; then
-    install_packages_arch
-elif [ "$OS" = "Debian" ]; then
-    install_packages_debian
-fi
+warning() {
+    echo -e "${COLOR_YELLOW}[WARNING]${COLOR_RESET} $1"
+}
 
-echo "Instalación de paquetes base completada."
+error() {
+    echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $1"
+}
 
-# --- Creación de Enlaces Simbólicos ---
+# --- Script setup ---
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+# --- Package Lists for Arch Linux ---
+
+# Essential packages for system utilities, building, etc.
+BASE_PACKAGES=(
+    git curl wget unzip btop stow jq polkit-kde-agent qt5ct playerctl brightnessctl
+)
+
+# Build tools required for AUR packages and other software
+BUILD_TOOLS=(
+    base-devel cmake meson go rust cargo gettext cairo pango gdk-pixbuf2 glib2
+)
+
+# Hyprland and its core ecosystem components
+HYPRLAND_ECOSYSTEM=(
+    hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
+    waybar rofi python-pywal swww mako grim slurp swappy
+    dolphin thunar
+)
+
+# Theming, fonts, icons, and cursors
+THEMING_PACKAGES=(
+    nwg-look nwg-displays
+    noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-font-awesome
+    bibata-cursor-theme adwaita-icon-theme
+)
+
+# Audio (Pipewire) and Bluetooth support
+AUDIO_BLUETOOTH=(
+    pipewire wireplumber pipewire-audio pipewire-pulse pavucontrol
+    bluez bluez-utils blueman network-manager-applet
+)
+
+# Main applications from official repos and the AUR
+APPLICATIONS=(
+    kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
+    asusctl rog-control-center prismlauncher minecraft-launcher balena-etcher-bin
+    telegram-desktop
+)
+
+# List of applications to be installed via Flatpak
+FLATPAK_APPS=(
+    com.visualstudio.code
+    org.libreoffice.LibreOffice
+    md.obsidian.Obsidian
+    com.obsproject.Studio
+    io.curseforge.CurseForge
+)
+
+
+# --- Function Declarations ---
+
+detect_os() {
+    if [ -f /etc/arch-release ]; then
+        info "Arch Linux detected. Proceeding with installation."
+    else
+        error "This script is designed for Arch Linux. Aborting."
+        exit 1
+    fi
+}
+
+install_aur_helper() {
+    if ! command -v yay &> /dev/null; then
+        info "'yay' not found. Installing it now..."
+        if ! command -v git &> /dev/null; then
+            sudo pacman -S --needed --noconfirm git
+        fi
+        git clone https://aur.archlinux.org/yay.git /tmp/yay
+        (cd /tmp/yay && makepkg -si --noconfirm)
+        success "'yay' has been installed."
+    else
+        info "'yay' is already installed."
+    fi
+}
+
+detect_gpu_and_install_drivers() {
+    if lspci | grep -Ei 'NVIDIA|3D controller' | grep -q NVIDIA; then
+        info "NVIDIA GPU detected."
+        read -p "Do you want to install the NVIDIA drivers? (y/N): " response
+        if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+            info "Installing NVIDIA drivers..."
+            yay -S --needed --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver egl-wayland
+            success "NVIDIA drivers installed."
+            warning "A reboot is required to load the new drivers."
+        else
+            warning "Skipping NVIDIA driver installation."
+        fi
+    else
+        info "No NVIDIA GPU detected. Skipping NVIDIA driver installation."
+    fi
+}
+
+install_yay_packages() {
+    info "Installing all required packages from official repositories and AUR..."
+    warning "This process may take a long time."
+
+    # Combine all package lists
+    local all_packages=(
+        "${BASE_PACKAGES[@]}"
+        "${BUILD_TOOLS[@]}"
+        "${HYPRLAND_ECOSYSTEM[@]}"
+        "${THEMING_PACKAGES[@]}"
+        "${AUDIO_BLUETOOTH[@]}"
+        "${APPLICATIONS[@]}"
+    )
+
+    yay -S --needed --noconfirm "${all_packages[@]}"
+    success "All packages have been installed."
+}
+
+install_flatpak_and_apps() {
+    info "Installing Flatpak and setting up Flathub..."
+    yay -S --needed --noconfirm flatpak
+    sudo flatpak remote-add-if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+    info "Installing applications via Flatpak..."
+    sudo flatpak install -y --noninteractive flathub "${FLATPAK_APPS[@]}"
+    success "Flatpak applications installed."
+    warning "Note on other apps: 'Twitter'/'X' does not have an official Linux client. Use the web version. 'zapzap' is likely WhatsApp; you can search for a client like 'whatsie' on the AUR or use a web wrapper."
+}
+
+setup_bluetooth() {
+    info "Enabling and starting Bluetooth service..."
+    sudo systemctl enable --now bluetooth.service
+    success "Bluetooth service has been enabled."
+}
+
 create_symlinks() {
-    echo "Creando enlaces simbólicos..."
+    info "Creating symbolic links for dotfiles..."
 
-    # Directorio donde se encuentra este script
     local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
     local DOTFILES_DIR="$SCRIPT_DIR"
     local BACKUP_DIR="$HOME/.config_backup_$(date +%Y%m%d_%H%M%S)"
 
-    # Lista de directorios de configuración para enlazar
-    local CONFIG_DIRS=("hypr" "waybar" "rofi" "wal")
-    # Lista de directorios locales para enlazar
+    local CONFIG_DIRS=("hypr" "waybar" "rofi" "wal" "kitty")
     local LOCAL_DIRS=("bin")
 
-    # Asegurarse de que el directorio de destino existe
     mkdir -p "$HOME/.config"
     mkdir -p "$HOME/.local"
-    mkdir -p "$HOME/Pictures" # Asegurar que el directorio Pictures existe
+    mkdir -p "$HOME/Pictures"
 
-    # Función para crear un enlace, haciendo backup si es necesario
     link_item() {
         local src=$1
         local dest=$2
         
         if [ -L "$dest" ] && [ "$(readlink -f "$dest")" = "$src" ]; then
-            echo "✔ Enlace ya existe y es correcto: $dest"
+            info "✔ Link already exists: $dest"
             return
         fi
 
         if [ -e "$dest" ]; then
-            echo "Haciendo backup de $dest en $BACKUP_DIR"
+            warning "Backing up existing file/directory: $dest"
             mkdir -p "$(dirname "$BACKUP_DIR/$dest")"
             mv "$dest" "$BACKUP_DIR/$dest"
         fi
         
-        echo "🔗 Creando enlace: $dest -> $src"
+        info "🔗 Linking $dest -> $src"
         ln -s "$src" "$dest"
     }
 
-    # Enlazar directorios de .config
     for dir in "${CONFIG_DIRS[@]}"; do
         local src="$DOTFILES_DIR/config/$dir"
         local dest="$HOME/.config/$dir"
-        if [ -d "$src" ]; then
-            link_item "$src" "$dest"
-        fi
+        [ -d "$src" ] && link_item "$src" "$dest"
     done
 
-    # Enlazar directorios de .local
     for dir in "${LOCAL_DIRS[@]}"; do
         local src="$DOTFILES_DIR/local/$dir"
         local dest="$HOME/.local/$dir"
-        if [ -d "$src" ]; then
-            link_item "$src" "$dest"
-        fi
+        [ -d "$src" ] && link_item "$src" "$dest"
     done
 
-    # Enlazar el directorio de Wallpapers
     local WALLPAPERS_SRC="$DOTFILES_DIR/Pictures/Wallpapers"
     local WALLPAPERS_DEST="$HOME/Pictures/Wallpapers"
-    if [ -d "$WALLPAPERS_SRC" ]; then
-        link_item "$WALLPAPERS_SRC" "$WALLPAPERS_DEST"
-    fi
+    [ -d "$WALLPAPERS_SRC" ] && link_item "$WALLPAPERS_SRC" "$WALLPAPERS_DEST"
     
-    echo "Creación de enlaces simbólicos completada."
+    success "Symbolic links created."
 }
 
-# --- Ejecución Final ---
-create_symlinks
+final_setup() {
+    success "✅ Installation complete!"
+    echo ""
+    info "--- NEXT STEPS ---"
+    warning "1. A REBOOT is highly recommended, especially if you installed NVIDIA drivers."
+    warning "2. Run Pywal to generate your initial color scheme. Find a wallpaper you like and run:"
+    echo "   wal -i /path/to/your/wallpaper.jpg"
+    warning "3. Log out and select Hyprland from your login manager (like SDDM)."
+    warning "4. For SDDM theming, run the dedicated script:"
+    echo "   sudo ./setup_sddm.sh"
+    echo ""
+}
 
-echo "✅ ¡Instalación de dotfiles completada!"
-echo "Por favor, reinicia tu sesión de Hyprland para que todos los cambios surtan efecto."
+# --- Main Execution ---
+main() {
+    detect_os
+    install_aur_helper
+    detect_gpu_and_install_drivers
+    install_yay_packages
+    install_flatpak_and_apps
+    setup_bluetooth
+    create_symlinks
+    final_setup
+}
 
-echo ""
-echo "--- 🚀 PASO FINAL REQUERIDO: Configurar SDDM ---"
-echo "Para configurar el gestor de inicio de sesión (SDDM) con tu tema personalizado, ejecuta el siguiente comando:"
-echo ""
-echo "    sudo ./setup_sddm.sh"
-echo ""
-echo "Esto copiará el tema y la configuración a las carpetas del sistema y habilitará SDDM en el arranque."
+# Run the script
+main

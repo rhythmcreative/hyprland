@@ -216,16 +216,46 @@ create_symlinks() {
     success "Symbolic links created."
 }
 
+setup_sddm() {
+    info "Configuring SDDM..."
+
+    if ! command -v sddm &> /dev/null; then
+        error "SDDM was not found after installation. Aborting SDDM setup."
+        return 1
+    fi
+
+    local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+    local THEME_SRC_DIR="$SCRIPT_DIR/sddm/themes/sddm-astronaut-theme"
+    local CONFIG_SRC_FILE="$SCRIPT_DIR/sddm/sddm.conf.d/astronaut.conf"
+
+    if [ ! -d "$THEME_SRC_DIR" ]; then
+        error "SDDM theme source directory not found. Aborting SDDM setup."
+        return 1
+    fi
+    if [ ! -f "$CONFIG_SRC_FILE" ]; then
+        error "SDDM config source file not found. Aborting SDDM setup."
+        return 1
+    fi
+
+    info "Installing SDDM theme and configuration..."
+    sudo mkdir -p "/usr/share/sddm/themes"
+    sudo cp -r "$THEME_SRC_DIR" "/usr/share/sddm/themes/"
+    sudo mkdir -p "/etc/sddm.conf.d"
+    sudo cp "$CONFIG_SRC_FILE" "/etc/sddm.conf.d/"
+
+    info "Enabling SDDM service..."
+    sudo systemctl enable sddm.service
+    success "SDDM configured and enabled."
+}
+
 final_setup() {
     success "✅ Installation complete!"
     echo ""
     info "--- NEXT STEPS ---"
-    warning "1. A REBOOT is highly recommended, especially if you installed NVIDIA drivers."
+    warning "1. A REBOOT is highly recommended for all changes to take effect."
     warning "2. Run Pywal to generate your initial color scheme. Find a wallpaper you like and run:"
     echo "   wal -i /path/to/your/wallpaper.jpg"
-    warning "3. Log out and select Hyprland from your login manager (like SDDM)."
-    warning "4. For SDDM theming, run the dedicated script:"
-    echo "   sudo ./setup_sddm.sh"
+    warning "3. After rebooting, you should be greeted by the new SDDM login screen."
     echo ""
 }
 
@@ -238,6 +268,7 @@ main() {
     install_flatpak_and_apps
     setup_bluetooth
     create_symlinks
+    setup_sddm
     final_setup
 }
 

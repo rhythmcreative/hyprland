@@ -282,6 +282,23 @@ copy_configs() {
     success "Configuration files copied."
 }
 
+setup_pywal() {
+    info "Setting initial color scheme with Pywal..."
+    local wallpaper_dir="$HOME/Pictures/Wallpapers"
+    local default_wallpaper="$wallpaper_dir/01. Animated.gif"
+
+    if [ -f "$default_wallpaper" ]; then
+        info "Found default wallpaper: $default_wallpaper"
+        # The -a flag sets the alpha transparency for the terminal
+        wal -i "$default_wallpaper" -a 85
+        success "Pywal color scheme generated."
+    else
+        warning "Default wallpaper not found at $default_wallpaper."
+        warning "Skipping initial Pywal setup. Please run 'wal' manually."
+    fi
+}
+
+
 
 
 setup_sddm() {
@@ -342,6 +359,7 @@ main() {
     setup_bluetooth
     setup_pywalfox
     copy_configs
+    setup_pywal
     setup_sddm
     final_setup
 }

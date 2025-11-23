@@ -175,12 +175,12 @@ configuration {
 
 * {
     mainbox-spacing: ${spacing_main}px;
-    mainbox-margin: ${margin_v}px ${margin};
-    message-margin: 0px ${margin};
+    mainbox-margin: ${margin_v} ${margin};
+    message-margin: 0 ${margin};
     message-padding: 20px;
     message-border-radius: 15px;
     listview-spacing: ${spacing_list}px;
-    element-padding: ${padding_v}px 3%;
+    element-padding: ${padding_v} 3%;
     element-border-radius: 25px;
 
     prompt-font: "JetBrainsMono Nerd Font Bold ${font_prompt}";

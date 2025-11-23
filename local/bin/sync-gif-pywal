@@ -61,8 +61,14 @@ else
     
     # Extraer primer frame del GIF
     gif_frame_temp="/tmp/gif_frame_for_pywal_sync_$$.png"
+
+    # Usar magick en lugar de convert para ImageMagick v7
+    convert_cmd="magick"
+    if ! command -v magick &> /dev/null; then
+        convert_cmd="convert"
+    fi
     
-    if convert "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
+    if $convert_cmd "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
         log "Frame extraído exitosamente: $gif_frame_temp"
         
         # Aplicar pywal usando el primer frame

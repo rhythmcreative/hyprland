@@ -38,10 +38,15 @@ convert_gif_to_jpg() {
     local output_file="$2"
     
     echo "🔄 Convirtiendo GIF a JPG para SDDM..."
+
+    local convert_cmd="magick"
+    if ! command -v magick &> /dev/null; then
+        convert_cmd="convert"
+    fi
     
     if [[ "$input_file" == *.gif ]]; then
         # Convertir primer frame del GIF a JPG
-        if convert "$input_file[0]" -quality 90 "$output_file" 2>/dev/null; then
+        if $convert_cmd "$input_file[0]" -quality 90 "$output_file" 2>/dev/null; then
             echo "✅ GIF convertido a JPG: $(basename "$output_file")"
             return 0
         else

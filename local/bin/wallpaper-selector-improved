@@ -44,10 +44,17 @@ if [[ ! -d "$WALLPAPER_DIR" ]]; then
 fi
 
 # Verificar dependencias
-if ! command -v convert >/dev/null 2>&1; then
-    notify-send "❌ Error" "ImageMagick no está instalado (se requiere 'convert')" -u critical
+if ! command -v convert >/dev/null 2>&1 && ! command -v magick >/dev/null 2>&1; then
+    notify-send "❌ Error" "ImageMagick no está instalado" -u critical
     exit 1
 fi
+
+# Usar magick en lugar de convert para ImageMagick v7
+convert_cmd="magick"
+if ! command -v magick &> /dev/null; then
+    convert_cmd="convert"
+fi
+
 
 # Buscar imágenes
 cd "$WALLPAPER_DIR" || exit 1
@@ -75,9 +82,9 @@ for img in "${images[@]}"; do
     if [[ ! -f "$preview_file" ]]; then
         echo "Generando preview para: $img"
         if [[ "$img" == *.gif ]]; then
-            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
+            $convert_cmd "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
         else
-            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
+            $convert_cmd "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
         fi
     fi
     
@@ -146,7 +153,7 @@ if command -v wal > /dev/null 2>&1; then
         gif_frame_temp="/tmp/gif_frame_for_wal_$$.png"
         
         # Extraer primer frame del GIF
-        if convert "$selected_file[0]" "$gif_frame_temp" 2>/dev/null; then
+        if $convert_cmd "$selected_file[0]" "$gif_frame_temp" 2>/dev/null; then
             # Aplicar pywal usando el primer frame
             wal -i "$gif_frame_temp" -n
             

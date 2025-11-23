@@ -48,6 +48,12 @@ if pgrep -x waybar > /dev/null; then
     pkill -SIGUSR1 waybar 2>/dev/null || true
 fi
 
+# Usar magick en lugar de convert para ImageMagick v7
+convert_cmd="magick"
+if ! command -v magick &> /dev/null; then
+    convert_cmd="convert"
+fi
+
 # Generar opciones para rofi
 options=""
 valid_images=()
@@ -61,9 +67,9 @@ for img in "${images[@]}"; do
     # Generar preview si no existe
     if [[ ! -f "$preview_file" ]]; then
         if [[ "$img" == *.gif ]]; then
-            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+            $convert_cmd "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
         else
-            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+            $convert_cmd "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
         fi
     fi
     
@@ -133,7 +139,7 @@ echo "$selected_file" > ~/.cache/current-wallpaper
 # 3. Aplicar pywal
 if [[ "${selected_file,,}" == *.gif ]]; then
     gif_frame_temp="/tmp/wal_gif_$$.png"
-    convert "$selected_file[0]" "$gif_frame_temp" 2>/dev/null
+    $convert_cmd "$selected_file[0]" "$gif_frame_temp" 2>/dev/null
     wal -i "$gif_frame_temp" -n > /dev/null 2>&1
     rm -f "$gif_frame_temp" 2>/dev/null || true
 else

@@ -41,7 +41,12 @@ if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
                 # Extraer primer frame para pywal
                 gif_frame_temp="/tmp/gif_frame_for_wal_fix_$$.png"
                 
-                if convert "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
+                convert_cmd="magick"
+                if ! command -v magick &> /dev/null; then
+                    convert_cmd="convert"
+                fi
+
+                if $convert_cmd "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
                     wal -i "$gif_frame_temp" -n
                     rm -f "$gif_frame_temp" 2>/dev/null || true
                     

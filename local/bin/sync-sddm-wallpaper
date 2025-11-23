@@ -4,9 +4,9 @@
 # Autor: rhythmcreative
 # Fecha: $(date '+%Y-%m-%d')
 
+USER_HOME=$(getent passwd 1000 | cut -d: -f6)
 LOG_FILE="/tmp/sddm-wallpaper-sync.log"
-CURRENT_WALLPAPER_FILE="/home/rhythmcreative/.cache/current-wallpaper"
-USER_HOME="/home/rhythmcreative"
+CURRENT_WALLPAPER_FILE="$USER_HOME/.cache/current-wallpaper"
 SDDM_THEME_DIR="/usr/share/sddm/themes/SilentSDDM"
 SDDM_WALLPAPER_DIR="/usr/share/sddm/themes/SilentSDDM/backgrounds"
 
@@ -56,8 +56,14 @@ if [[ "$EXTENSION_LOWER" == "gif" ]]; then
     log "Convirtiendo GIF a imagen estática para SDDM"
     DEST_FILE="$SDDM_WALLPAPER_DIR/current_wallpaper.jpg"
     
+    # Usar magick en lugar de convert para ImageMagick v7
+    convert_cmd="magick"
+    if ! command -v magick &> /dev/null; then
+        convert_cmd="convert"
+    fi
+
     # Extraer el primer frame del GIF y convertir a JPG
-    convert "$WALLPAPER_PATH[0]" -quality 95 "$DEST_FILE" 2>/dev/null
+    $convert_cmd "$WALLPAPER_PATH[0]" -quality 95 "$DEST_FILE" 2>/dev/null
     
     if [[ $? -eq 0 ]]; then
         log "GIF convertido exitosamente a: $DEST_FILE"

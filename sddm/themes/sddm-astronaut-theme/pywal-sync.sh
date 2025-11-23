@@ -1,0 +1,270 @@
+#!/bin/bash
+
+# Script para sincronizar el tema SDDM astronaut con pywal
+# Autor: rhythmcreative
+# Este script debe ejecutarse después de cambiar el wallpaper o cuando se ejecute pywal
+
+set -e
+
+# Detectar dinámicamente el directorio del tema con base en la ubicación de este script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+THEME_DIR="${SCRIPT_DIR}"
+BACKGROUNDS_DIR="$THEME_DIR/Backgrounds"
+PROCESSED_DIR="$BACKGROUNDS_DIR/processed"
+
+# Determinar el HOME del usuario real (no root) si se ejecuta con sudo
+if [[ $(id -u) -eq 0 ]] && [[ -n "$SUDO_USER" ]]; then
+    USER_HOME="/home/$SUDO_USER"
+else
+    USER_HOME="$HOME"
+fi
+
+# Colores por defecto en caso de que pywal no esté disponible
+DEFAULT_BG_COLOR="#1a1a1a"
+DEFAULT_TEXT_COLOR="#ffffff"
+DEFAULT_HIGHLIGHT_COLOR="#4a90e2"
+
+# Crear directorio processed si no existe
+mkdir -p "$PROCESSED_DIR"
+
+# Función para obtener el wallpaper actual
+get_current_wallpaper() {
+    # Intentar diferentes métodos para obtener el wallpaper
+    local wallpaper=""
+    
+    # Método 1: wal cache (pywal) - preferido por fiabilidad
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        wallpaper=$(cat "$USER_HOME/.cache/wal/wal")
+    fi
+
+    # Método 2: nitrogen (si está disponible)
+    if [[ -z "$wallpaper" ]] && command -v nitrogen > /dev/null 2> /dev/null; then
+        wallpaper=$(grep "file=" "$USER_HOME/.config/nitrogen/bg-saved.cfg" 2> /dev/null | head -n1 | cut -d'=' -f2-)
+    fi
+    
+    # Método 3: feh (si está disponible y nitrogen no funcionó)
+    if [[ -z "$wallpaper" ]] && command -v feh > /dev/null 2> /dev/null; then
+        wallpaper=$(cat "$USER_HOME/.fehbg" 2> /dev/null | grep -o "'[^']*'" | head -n1 | tr -d "'")
+    fi
+    
+    # Método 4: gsettings para GNOME (puede fallar bajo sudo)
+    if [[ -z "$wallpaper" ]] && command -v gsettings > /dev/null 2> /dev/null; then
+        wallpaper=$(gsettings get org.gnome.desktop.background picture-uri 2> /dev/null | tr -d "'")
+        # Remover file:// si está presente
+        wallpaper="${wallpaper#file://}"
+    fi
+    
+    # Método 5: xfconf-query para XFCE
+    if [[ -z "$wallpaper" ]] && command -v xfconf-query > /dev/null 2> /dev/null; then
+        wallpaper=$(xfconf-query -c xfce4-desktop -l 2> /dev/null | grep last-image | head -n1 | xargs xfconf-query -c xfce4-desktop -p)
+    fi
+    
+    echo "$wallpaper"
+}
+
+# Función para procesar el background
+process_background() {
+    local input_image="$1"
+    local output_image="$PROCESSED_DIR/current_bg_80_50.png"
+    
+    echo "Procesando background: $input_image"
+    
+    if [[ ! -f "$input_image" ]]; then
+        echo "Error: No se encontró la imagen: $input_image"
+        return 1
+    fi
+    
+    # Usar ImageMagick para procesar la imagen
+    if command -v magick >/dev/null 2>&1; then
+        # IM v7
+        magick "$input_image" -resize 1920x1080^ -gravity center -extent 1920x1080 -quality 85 "$output_image"
+        echo "Background procesado y guardado en: $output_image"
+    elif command -v convert >/dev/null 2>&1; then
+        # IM v6 (convert)
+        convert "$input_image" -resize 1920x1080^ -gravity center -extent 1920x1080 -quality 85 "$output_image"
+        echo "Background procesado y guardado en: $output_image"
+    else
+        # Si no hay ImageMagick, simplemente copiar la imagen
+        cp "$input_image" "$output_image"
+        echo "ImageMagick no disponible. Imagen copiada sin procesar."
+    fi
+}
+
+# Función para obtener colores de pywal
+get_pywal_colors() {
+    if [[ ! -f "$USER_HOME/.cache/wal/colors" ]]; then
+        echo "Pywal no está configurado. Usando colores por defecto."
+        return 1
+    fi
+    
+    # Leer colores de pywal
+    colors=($(cat "$USER_HOME/.cache/wal/colors"))
+    
+    # Asignar colores
+    bg_color="${colors[0]:-$DEFAULT_BG_COLOR}"
+    text_color="${colors[15]:-$DEFAULT_TEXT_COLOR}"  # Color más claro para texto
+    highlight_color="${colors[1]:-$DEFAULT_HIGHLIGHT_COLOR}"
+    placeholder_color="${colors[8]:-#bbbbbb}"  # Color gris medio
+    
+    echo "Colores obtenidos de pywal:"
+    echo "  Background: $bg_color"
+    echo "  Text: $text_color"
+    echo "  Highlight: $highlight_color"
+    echo "  Placeholder: $placeholder_color"
+}
+
+# Función para generar la configuración del tema
+generate_theme_config() {
+    local config_file="$THEME_DIR/theme.conf"
+    
+    cat > "$config_file" << EOF
+[General]
+#################### General ####################
+
+ScreenWidth="1920"
+ScreenHeight="1080"
+ScreenPadding=""
+
+Font="Open Sans"
+FontSize=""
+
+KeyboardSize="0.4"
+RoundCorners="20"
+
+Locale=""
+HourFormat="HH:mm"
+DateFormat="dddd d MMMM"
+
+HeaderText=""
+
+#################### Background ####################
+
+Background=Backgrounds/processed/current_bg_80_50.png
+DimBackground="0.1"
+CropBackground="true"
+BackgroundHorizontalAlignment="center"
+BackgroundVerticalAlignment="center"
+
+#################### Colors (Generated by pywal) ####################
+
+HighlightColor="$highlight_color"
+BackgroundColor="$bg_color"
+TextColor="$text_color"
+PlaceholderColor="$placeholder_color"
+SystemButtonsIconColor="$text_color"
+
+HighlightTextColor="$text_color"
+LoginButtonTextColor=""
+LoginButtonBackgroundColor=""
+BackgroundListColor=""
+HoverSessionAndVirtualKeyboard="$highlight_color"
+
+#################### Form ####################
+
+PartialBlur="no"
+FullBlur="true"
+BlurMax="64"
+Blur="1.0"
+
+HaveFormBackground="true"
+FormPosition="center"
+
+#################### Virtual Keyboard ####################
+
+VirtualKeyboardPosition="center"
+
+#################### Interface Behavior ####################
+
+HideVirtualKeyboard="false"
+HideSystemButtons="false"
+HideLoginButton="true"
+
+ForceLastUser="true"
+PasswordFocus="true"
+HideCompletePassword="true"
+AllowEmptyPassword="false"
+AllowUppercaseLettersInUsernames="false"
+RightToLeftLayout="false"
+
+#################### Translation ####################
+
+TranslatePlaceholderUsername=""
+TranslatePlaceholderPassword=""
+TranslateLogin=""
+TranslateLoginFailedWarning=""
+TranslateCapslockWarning=""
+TranslateSuspend=""
+TranslateHibernate=""
+TranslateReboot=""
+TranslateShutdown=""
+TranslateSessionSelection=""
+TranslateVirtualKeyboardButtonOn=""
+TranslateVirtualKeyboardButtonOff=""
+EOF
+    
+    echo "Configuración del tema actualizada: $config_file"
+}
+
+# Función principal
+main() {
+    echo "=== Sincronización de tema SDDM con pywal ==="
+    echo "Directorio del tema: $THEME_DIR"
+    
+    # Obtener wallpaper actual
+    current_wallpaper=$(get_current_wallpaper)
+    
+    if [[ -z "$current_wallpaper" ]] || [[ ! -f "$current_wallpaper" ]]; then
+        echo "Error: No se pudo detectar el wallpaper actual."
+        echo "Por favor, especifica la ruta del wallpaper como argumento:"
+        echo "  $0 /ruta/al/wallpaper.jpg"
+        
+        # Si se pasó un argumento, usarlo como wallpaper
+        if [[ -n "$1" ]] && [[ -f "$1" ]]; then
+            current_wallpaper="$1"
+            echo "Usando wallpaper especificado: $current_wallpaper"
+        else
+            exit 1
+        fi
+    else
+        echo "Wallpaper detectado: $current_wallpaper"
+    fi
+    
+    # Generar colores con pywal si se especifica wallpaper
+    if [[ -n "$1" ]] && [[ -f "$1" ]]; then
+        echo "Generando colores con pywal..."
+        if command -v wal >/dev/null 2>&1; then
+            wal -i "$current_wallpaper" -n
+            echo "Colores generados con pywal."
+        else
+            echo "Advertencia: pywal no está instalado. Usando colores por defecto."
+        fi
+    fi
+    
+    # Obtener colores de pywal
+    get_pywal_colors || {
+        echo "Usando colores por defecto."
+        bg_color="$DEFAULT_BG_COLOR"
+        text_color="$DEFAULT_TEXT_COLOR"
+        highlight_color="$DEFAULT_HIGHLIGHT_COLOR"
+        placeholder_color="#bbbbbb"
+    }
+    
+    # Procesar background
+    process_background "$current_wallpaper"
+    
+    # Generar configuración
+    generate_theme_config
+    
+    echo ""
+    echo "=== Sincronización completada ==="
+    echo "Para aplicar los cambios:"
+    echo "1. Copia el tema al directorio de SDDM si no lo has hecho:"
+    echo "   sudo cp -r '$THEME_DIR' /usr/share/sddm/themes/sddm-astronaut-theme"
+    echo "2. Configura SDDM para usar este tema en /etc/sddm.conf o /usr/lib/sddm/sddm.conf.d/:"
+    echo "   Current=sddm-astronaut-theme"
+    echo "3. Reinicia el servicio SDDM:"
+    echo "   sudo systemctl restart sddm"
+}
+
+# Ejecutar función principal
+main "$@"

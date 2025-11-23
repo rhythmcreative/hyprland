@@ -290,7 +290,26 @@ setup_pywal_and_theming() {
 }
 
 setup_sddm() {
-    info "Enabling SDDM service..."
+    info "Enabling SDDM service and configuring theme..."
+
+    # Copy the SDDM theme
+    info "Copying SDDM theme..."
+    if [ -d "$DOTFILES_DIR/sddm/themes/sddm-astronaut-theme" ]; then
+        sudo cp -r "$DOTFILES_DIR/sddm/themes/sddm-astronaut-theme" "/usr/share/sddm/themes/"
+    else
+        warning "SDDM astronaut theme not found in repository. Skipping theme setup."
+        return
+    fi
+
+    # Copy the SDDM configuration
+    info "Copying SDDM configuration..."
+    if [ -f "$DOTFILES_DIR/config/sddm.conf.d/theme.conf" ]; then
+        sudo mkdir -p "/etc/sddm.conf.d"
+        sudo cp "$DOTFILES_DIR/config/sddm.conf.d/theme.conf" "/etc/sddm.conf.d/"
+    else
+        warning "SDDM theme configuration not found. Skipping theme setup."
+        return
+    fi
 
     if ! command -v sddm &> /dev/null; then
         error "SDDM was not found after installation. Cannot enable service."
@@ -298,7 +317,7 @@ setup_sddm() {
     fi
 
     sudo systemctl enable sddm.service
-    success "SDDM service enabled. It will start on the next boot with the default theme."
+    success "SDDM service enabled and configured with the astronaut theme."
 }
 
 final_setup() {

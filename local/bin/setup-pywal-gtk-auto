@@ -79,18 +79,24 @@ mkdir -p "$PYWAL_CONFIG"
 cat > "$HOME/.config/wal/templates/done.sh" << 'EOF'
 #!/bin/bash
 # Este archivo se ejecuta automáticamente después de que pywal genere los colores
+echo "--- WAL POST-RUN HOOK (done.sh) ---"
 
 # Ejecutar el hook de PywalSync-Mono
+echo "Checking for PywalSync-Mono hook..."
 if [ -x "$HOME/.cache/wal/pywal-gtk-auto-hook.sh" ]; then
+    echo "Executing pywal-gtk-auto-hook.sh"
     "$HOME/.cache/wal/pywal-gtk-auto-hook.sh"
 fi
 
 # Ejecutar otros hooks existentes
+echo "Checking for other hooks in ~/.cache/wal/..."
 for hook in "$HOME/.cache/wal/"*-hook.sh; do
     if [ -f "$hook" ] && [ -x "$hook" ] && [ "$hook" != "$HOME/.cache/wal/pywal-gtk-auto-hook.sh" ]; then
+        echo "Executing hook: $hook"
         "$hook"
     fi
 done
+echo "--- END WAL POST-RUN HOOK ---"
 EOF
 
 chmod +x "$HOME/.config/wal/templates/done.sh"

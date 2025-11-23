@@ -70,7 +70,7 @@ AUDIO_BLUETOOTH=(
 # Main applications from official repos and the AUR
 APPLICATIONS=(
     kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
-    asusctl rog-control-center prismlauncher minecraft-launcher balena-etcher-bin
+    prismlauncher minecraft-launcher balena-etcher-bin
     telegram-desktop curseforge-client-bin visual-studio-code-bin libreoffice-fresh
     obsidian obs-studio partitionmanager antigravity
 )
@@ -135,6 +135,31 @@ detect_gpu_and_install_drivers() {
         fi
     else
         info "No NVIDIA GPU detected. Skipping NVIDIA driver installation."
+    fi
+}
+
+detect_and_install_asus_tools() {
+    if ! command -v dmidecode &> /dev/null; then
+        info "'dmidecode' not found. Installing it for hardware detection..."
+        yay -S --needed --noconfirm dmidecode
+    fi
+
+    if sudo dmidecode -s system-manufacturer | grep -q "ASUSTeK"; then
+        info "ASUS hardware detected."
+        if [[ -t 0 ]]; then # Check if running in an interactive terminal
+            read -p "Do you want to install ASUS-specific tools (asusctl, rog-control-center)? (y/N): " response
+            if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+                info "Installing ASUS tools..."
+                yay -S --needed --noconfirm asusctl rog-control-center
+                success "ASUS tools installed."
+            else
+                warning "Skipping ASUS tools installation."
+            fi
+        else
+            warning "Running in a non-interactive shell. Skipping ASUS tools installation by default."
+        fi
+    else
+        info "No ASUS hardware detected. Skipping ASUS tools installation."
     fi
 }
 
@@ -292,6 +317,7 @@ main() {
     init_submodules
     install_aur_helper
     detect_gpu_and_install_drivers
+    detect_and_install_asus_tools
     install_yay_packages
     install_flatpak_and_apps
     setup_bluetooth

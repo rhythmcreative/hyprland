@@ -290,7 +290,7 @@ setup_pywal() {
     if [ -f "$default_wallpaper" ]; then
         info "Found default wallpaper: $default_wallpaper"
         # The -a flag sets the alpha transparency for the terminal
-        wal -i "$default_wallpaper" -a 85
+        wal -i "$default_wallpaper" -a 85 --backend colorz
         success "Pywal color scheme generated."
     else
         warning "Default wallpaper not found at $default_wallpaper."

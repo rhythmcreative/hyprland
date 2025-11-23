@@ -92,7 +92,7 @@ sync_rofi_with_pywal() {
         log "📋 Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
         
         # Generar versiones optimizadas con colores pywal para temas existentes
-        for theme_file in "$HOME/Downloads/style-3.rasi" "$HOME/Downloads/wallpaper-select.rasi"; do
+        for theme_file in "$HOME/.config/rofi/style-3.rasi" "$HOME/.config/rofi/wallpaper-select.rasi"; do
             if [[ -f "$theme_file" ]]; then
                 local theme_name=$(basename "$theme_file" .rasi)
                 local pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
@@ -261,7 +261,7 @@ fallback_rofi_setup() {
     fi
     
     # Fallback 1: Usar tema original
-    if [[ -f "$HOME/Downloads/wallpaper-select.rasi" ]]; then
+    if [[ -f "$HOME/.config/rofi/wallpaper-select.rasi" ]]; then
         log "⚠️ Usando tema original como fallback"
         return 0
     fi
@@ -480,7 +480,7 @@ EOF
             log "📋 Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
             
             # Generar versiones con colores pywal para temas existentes
-            for theme_file in "$HOME/Downloads/style-3.rasi" "$HOME/Downloads/wallpaper-select.rasi"; do
+            for theme_file in "$HOME/.config/rofi/style-3.rasi" "$HOME/.config/rofi/wallpaper-select.rasi"; do
                 if [[ -f "$theme_file" ]]; then
                     local theme_name=$(basename "$theme_file" .rasi)
                     local pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
@@ -567,7 +567,7 @@ configure_rofi_theme() {
     local rofi_config=""
     local theme_name="wallpaper-select"
     local pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
-    local fallback_theme="$HOME/Downloads/${theme_name}.rasi"
+    local fallback_theme="$HOME/.config/rofi/${theme_name}.rasi"
     
     # Prioridad 1: Usar tema sincronizado con pywal si existe y pywal está activo
     if [[ -f "$pywal_theme" ]] && [[ -f "$HOME/.cache/wal/colors-rofi.rasi" ]] && command -v wal > /dev/null 2>&1; then

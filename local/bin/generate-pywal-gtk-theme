@@ -3,7 +3,7 @@
 # Script para generar automáticamente un tema GTK basado en los colores de pywal
 # Uso: generate-pywal-gtk-theme
 
-THEME_NAME="PywalGTK-Auto"
+THEME_NAME="PywalSync-Mono"
 THEME_DIR="$HOME/.themes/$THEME_NAME"
 WAL_COLORS="$HOME/.cache/wal/colors.json"
 WAL_CSS="$HOME/.cache/wal/colors.css"
@@ -29,7 +29,7 @@ echo "  Cursor: $cursor"
 
 # Generar CSS para GTK 3.0
 cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
-/* PywalGTK-Auto - Tema GTK generado automáticamente desde pywal */
+/* PywalSync-Mono - Tema GTK generado automáticamente desde pywal */
 /* Generado el: $(date) */
 
 @define-color theme_bg_color $background;
@@ -289,7 +289,7 @@ EOF
 
 # Generar CSS para GTK 4.0 (compatible con GTK 3.0 pero con algunas mejoras)
 cat > "$THEME_DIR/gtk-4.0/gtk.css" << EOF
-/* PywalGTK-Auto GTK 4.0 - Tema generado automáticamente desde pywal */
+/* PywalSync-Mono GTK 4.0 - Tema generado automáticamente desde pywal */
 /* Generado el: $(date) */
 
 @define-color accent_color $color1;
@@ -567,9 +567,9 @@ echo "✓ CSS para GTK 4.0: $THEME_DIR/gtk-4.0/gtk.css"
 
 # Opcional: aplicar el tema inmediatamente si nwg-look está disponible
 if command -v nwg-look >/dev/null 2>&1; then
-    echo "Para aplicar el tema, usa: nwg-look y selecciona 'PywalGTK-Auto'"
+    echo "Para aplicar el tema, usa: nwg-look y selecciona 'PywalSync-Mono'"
 else
     echo "Para aplicar el tema manualmente:"
-    echo "  gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto'"
-    echo "  gsettings set org.gnome.desktop.wm.preferences theme 'PywalGTK-Auto'"
+    echo "  gsettings set org.gnome.desktop.interface gtk-theme 'PywalSync-Mono'"
+    echo "  gsettings set org.gnome.desktop.wm.preferences theme 'PywalSync-Mono'"
 fi

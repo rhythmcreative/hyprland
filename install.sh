@@ -58,7 +58,7 @@ HYPRLAND_ECOSYSTEM=(
 THEMING_PACKAGES=(
     nwg-look nwg-displays
     noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-font-awesome
-    bibata-cursor-theme adwaita-icon-theme
+    bibata-cursor-theme adwaita-icon-theme tela-circle-icon-theme-all
 )
 
 # Audio (Pipewire) and Bluetooth support
@@ -72,7 +72,7 @@ APPLICATIONS=(
     kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     asusctl rog-control-center prismlauncher minecraft-launcher balena-etcher-bin
     telegram-desktop curseforge-client-bin visual-studio-code-bin libreoffice-fresh
-    obsidian obs-studio
+    obsidian obs-studio partitionmanager antigravity
 )
 
 # List of applications to be installed via Flatpak
@@ -182,6 +182,7 @@ copy_configs() {
 
     local CONFIG_DIRS=("hypr" "waybar" "rofi" "wal" "kitty")
     local LOCAL_DIRS=("bin")
+    local HOME_FILES=(".zshrc") # New array for files directly in HOME
 
     mkdir -p "$HOME/.config"
     mkdir -p "$HOME/.local"
@@ -216,12 +217,51 @@ copy_configs() {
         [ -d "$src" ] && copy_item "$src" "$dest"
     done
 
+    # Copy files directly to HOME
+    for file in "${HOME_FILES[@]}"; do
+        local src="$DOTFILES_DIR/$file"
+        local dest="$HOME/$file"
+        [ -f "$src" ] && copy_item "$src" "$dest"
+    done
+
     # Copy Wallpapers directory
     local WALLPAPERS_SRC="$DOTFILES_DIR/Pictures/Wallpapers"
     local WALLPAPERS_DEST="$HOME/Pictures/Wallpapers"
     [ -d "$WALLPAPERS_SRC" ] && copy_item "$WALLPAPERS_SRC" "$WALLPAPERS_DEST"
     
     success "Configuration files copied."
+}
+
+setup_pywal_and_theming() {
+    info "Setting up initial theme with Pywal..."
+
+    # Find a default wallpaper to use for the initial theme
+    local default_wallpaper=""
+    if [ -d "$HOME/Pictures/Wallpapers" ] && [ "$(ls -A $HOME/Pictures/Wallpapers)" ]; then
+        default_wallpaper=$(find "$HOME/Pictures/Wallpapers" -type f | shuf -n 1)
+    fi
+
+    if [ -z "$default_wallpaper" ]; then
+        warning "No wallpapers found in ~/Pictures/Wallpapers. Using a solid color for initial theme."
+        wal -i "#1a1b26" -n -q
+    else
+        info "Using '$default_wallpaper' for initial theme."
+        wal -i "$default_wallpaper" -n -q
+    fi
+
+    info "Generating Pywal-based GTK theme..."
+    if [ -x "$HOME/.local/bin/setup-pywal-gtk-auto" ]; then
+        # The script needs to be run as the user, not root
+        sudo -u "$(logname)" -- "$HOME/.local/bin/setup-pywal-gtk-auto"
+    else
+        error "Could not find setup-pywal-gtk-auto script."
+    fi
+
+    info "Setting default GTK and icon themes..."
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono"
+    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-dark"
+    
+    success "Initial theme and Pywal integration complete."
 }
 
 setup_sddm() {
@@ -241,10 +281,8 @@ final_setup() {
     echo ""
     info "--- NEXT STEPS ---"
     warning "1. A REBOOT is highly recommended for all changes to take effect."
-    warning "2. Run Pywal to generate your initial color scheme. Find a wallpaper you like and run:"
-    echo "   wal -i /path/to/your/wallpaper.jpg"
-    warning "3. After rebooting, SDDM will start with its default theme."
-    warning "4. The custom astronaut theme was removed from the setup due to persistent permission issues. You can attempt to install it manually later."
+    warning "2. Your system is pre-themed, but you can change the wallpaper and colors anytime by pressing SUPER + SHIFT + W."
+    warning "3. The GTK theme 'PywalSync-Mono' and 'Tela-circle' icons are now installed and set."
     echo ""
 }
 
@@ -258,6 +296,7 @@ main() {
     install_flatpak_and_apps
     setup_bluetooth
     copy_configs
+    setup_pywal_and_theming
     setup_sddm
     final_setup
 }

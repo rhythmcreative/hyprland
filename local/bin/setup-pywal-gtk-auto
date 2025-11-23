@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Script de configuración para PywalGTK-Auto
+# Script de configuración para PywalSync-Mono
 # Configura la sincronización automática entre pywal y GTK
 
-echo "🚀 Configurando PywalGTK-Auto..."
+echo "🚀 Configurando PywalSync-Mono..."
 echo ""
 
 # Verificar dependencias
@@ -80,7 +80,7 @@ cat > "$HOME/.config/wal/templates/done.sh" << 'EOF'
 #!/bin/bash
 # Este archivo se ejecuta automáticamente después de que pywal genere los colores
 
-# Ejecutar el hook de PywalGTK-Auto
+# Ejecutar el hook de PywalSync-Mono
 if [ -x "$HOME/.cache/wal/pywal-gtk-auto-hook.sh" ]; then
     "$HOME/.cache/wal/pywal-gtk-auto-hook.sh"
 fi
@@ -99,23 +99,23 @@ echo "✅ Hook configurado correctamente"
 echo ""
 
 # Aplicar el tema
-echo "🎯 Aplicando tema PywalGTK-Auto..."
-gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto'
-gsettings set org.gnome.desktop.wm.preferences theme 'PywalGTK-Auto'
+echo "🎯 Aplicando tema PywalSync-Mono..."
+gsettings set org.gnome.desktop.interface gtk-theme 'PywalSync-Mono'
+gsettings set org.gnome.desktop.wm.preferences theme 'PywalSync-Mono'
 
 # También aplicarlo para aplicaciones flatpak
 if command -v flatpak >/dev/null 2>&1; then
-    flatpak --user override --env=GTK_THEME=PywalGTK-Auto 2>/dev/null || true
+    flatpak --user override --env=GTK_THEME=PywalSync-Mono 2>/dev/null || true
 fi
 
 echo "✅ Tema aplicado"
 echo ""
 
 # Información final
-echo "🎉 ¡PywalGTK-Auto configurado exitosamente!"
+echo "🎉 ¡PywalSync-Mono configurado exitosamente!"
 echo ""
 echo "📖 Información importante:"
-echo "   • Tema creado: ~/.themes/PywalGTK-Auto"
+echo "   • Tema creado: ~/.themes/PywalSync-Mono"
 echo "   • Generador: ~/.local/bin/generate-pywal-gtk-theme"
 echo "   • Hook automático: ~/.cache/wal/pywal-gtk-auto-hook.sh"
 echo ""
@@ -123,6 +123,6 @@ echo "🔄 Uso:"
 echo "   • El tema se actualizará automáticamente cada vez que uses pywal"
 echo "   • Para cambiar wallpaper y colores: wal -i /ruta/a/imagen.jpg"
 echo "   • Para regenerar manualmente: generate-pywal-gtk-theme"
-echo "   • Para usar con nwg-look: selecciona 'PywalGTK-Auto' en la lista de temas"
+echo "   • Para usar con nwg-look: selecciona 'PywalSync-Mono' en la lista de temas"
 echo ""
 echo "✨ ¡Disfruta de tu tema GTK sincronizado con pywal!"

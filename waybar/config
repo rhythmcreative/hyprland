@@ -14,7 +14,7 @@
   ],
 
   "custom/cava": {
-    "exec": "/home/rhythmcreative/waybar-cava/cava.sh",
+    "exec": "$HOME/waybar-cava/cava.sh",
     "format": "{}"
   },
 

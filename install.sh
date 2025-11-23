@@ -45,26 +45,28 @@ BASE_PACKAGES=(
 # Build tools required for AUR packages and other software
 BUILD_TOOLS=(
     base-devel cmake meson go rust cargo gettext cairo pango gdk-pixbuf2 glib2
+    python-pip
 )
 
 # Hyprland and its core ecosystem components
 HYPRLAND_ECOSYSTEM=(
     sddm hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
     waybar rofi python-pywal swww mako grim slurp swappy
-    dolphin thunar
+    dolphin thunar network-manager-applet
 )
 
 # Theming, fonts, icons, and cursors
 THEMING_PACKAGES=(
     nwg-look nwg-displays
     noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-font-awesome
+    ttf-jetbrains-mono-nerd imagemagick
     bibata-cursor-theme adwaita-icon-theme tela-circle-icon-theme-all
 )
 
 # Audio (Pipewire) and Bluetooth support
 AUDIO_BLUETOOTH=(
     pipewire wireplumber pipewire-audio pipewire-pulse pavucontrol
-    bluez bluez-utils blueman network-manager-applet
+    bluez bluez-utils blueman
 )
 
 # Main applications from official repos and the AUR
@@ -72,7 +74,7 @@ APPLICATIONS=(
     kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     prismlauncher minecraft-launcher balena-etcher-bin
     telegram-desktop curseforge-client-bin visual-studio-code-bin libreoffice-fresh
-    obsidian obs-studio partitionmanager antigravity
+    obsidian obs-studio partitionmanager antigravity pywalfox-git
 )
 
 # List of applications to be installed via Flatpak
@@ -192,10 +194,28 @@ install_flatpak_and_apps() {
     warning "Note on other apps: 'Twitter'/'X' does not have an official Linux client. Use the web version. 'zapzap' is likely WhatsApp; you can search for a client like 'whatsie' on the AUR or use a web wrapper."
 }
 
+setup_audio() {
+    info "Setting up PipeWire audio service..."
+    systemctl --user enable --now pipewire.socket
+    systemctl --user enable --now pipewire-pulse.socket
+    systemctl --user enable --now wireplumber.service
+    success "PipeWire audio service enabled."
+}
+
 setup_bluetooth() {
     info "Enabling and starting Bluetooth service..."
     sudo systemctl enable --now bluetooth.service
     success "Bluetooth service has been enabled."
+}
+
+setup_pywalfox() {
+    info "Setting up Pywalfox for Librewolf..."
+    if command -v pywalfox &> /dev/null; then
+        pywalfox install
+        success "Pywalfox native messaging host installed."
+    else
+        warning "pywalfox command not found. Skipping setup."
+    fi
 }
 
 copy_configs() {
@@ -305,6 +325,7 @@ final_setup() {
     echo "   wal -i /path/to/your/wallpaper.jpg"
     warning "3. After rebooting, SDDM will start with its default theme."
     warning "4. The custom astronaut theme was removed from the setup due to persistent permission issues. You can attempt to install it manually later."
+    warning "5. For Pywalfox to work, you need to install the addon in Librewolf from the Firefox addon store."
     echo ""
 }
 
@@ -317,7 +338,9 @@ main() {
     detect_and_install_asus_tools
     install_yay_packages
     install_flatpak_and_apps
+    setup_audio
     setup_bluetooth
+    setup_pywalfox
     copy_configs
     setup_sddm
     final_setup

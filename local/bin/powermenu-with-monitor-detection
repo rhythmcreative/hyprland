@@ -139,7 +139,7 @@ MONITOR_HEIGHT=$(echo "$MONITOR_INFO" | jq -r '.height' 2>/dev/null)
 log_debug "Resolución del monitor $ACTIVE_MONITOR: ${MONITOR_WIDTH}x${MONITOR_HEIGHT}"
 
 # Crear directorio temporal para el tema dinámico
-TEMP_DIR="$HOME/.cache/powermenu-themes"
+TEMP_DIR="$HOME/.config/rofi/powermenu-themes"
 mkdir -p "$TEMP_DIR"
 
 # Configurar escalado según resolución del monitor activo
@@ -318,7 +318,6 @@ confirm_cmd() {
     rofi -dmenu \
         -p 'Confirmation' \
         -mesg 'Are you Sure?' \
-        -theme "$HOME/rofi/files/powermenu/type-4/shared/confirm.rasi" \
         -monitor "$ACTIVE_MONITOR"
 }
 

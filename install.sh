@@ -290,7 +290,8 @@ setup_pywal_and_theming() {
 }
 
 setup_sddm() {
-    info "Enabling SDDM service and configuring theme..."
+    info "Ensuring SDDM is installed and configuring theme..."
+    yay -S --needed --noconfirm sddm
 
     # Copy the SDDM theme
     info "Copying SDDM theme..."

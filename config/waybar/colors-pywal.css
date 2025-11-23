@@ -1,20 +1,22 @@
-@define-color foreground #c3c8c8;
-@define-color background #102325;
-@define-color cursor #c3c8c8;
+/* Default fallback colors for Waybar. This file will be overwritten by pywal. */
 
-@define-color color0 #102325;
-@define-color color1 #576970;
-@define-color color2 #71817E;
-@define-color color3 #6F7C84;
-@define-color color4 #78848B;
-@define-color color5 #889298;
-@define-color color6 #98A0A6;
-@define-color color7 #c3c8c8;
-@define-color color8 #5f7374;
-@define-color color9 #576970;
-@define-color color10 #71817E;
-@define-color color11 #6F7C84;
-@define-color color12 #78848B;
-@define-color color13 #889298;
-@define-color color14 #98A0A6;
-@define-color color15 #c3c8c8;
+@define-color background #2E3440;
+@define-color foreground #D8DEE9;
+@define-color cursor #D8DEE9;
+
+@define-color color0 #3B4252;
+@define-color color1 #BF616A;
+@define-color color2 #A3BE8C;
+@define-color color3 #EBCB8B;
+@define-color color4 #81A1C1;
+@define-color color5 #B48EAD;
+@define-color color6 #88C0D0;
+@define-color color7 #E5E9F0;
+@define-color color8 #4C566A;
+@define-color color9 #BF616A;
+@define-color color10 #A3BE8C;
+@define-color color11 #EBCB8B;
+@define-color color12 #81A1C1;
+@define-color color13 #B48EAD;
+@define-color color14 #88C0D0;
+@define-color color15 #ECEFF4;

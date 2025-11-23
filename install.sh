@@ -205,7 +205,7 @@ copy_configs() {
     local DOTFILES_DIR="$SCRIPT_DIR"
     local BACKUP_DIR="$HOME/.config_backup_$(date +%Y%m%d_%H%M%S)"
 
-    local CONFIG_DIRS=("hypr" "waybar" "rofi" "wal" "kitty")
+    local CONFIG_DIRS=("hypr" "rofi" "wal" "kitty")
     local LOCAL_DIRS=("bin")
     local HOME_FILES=(".zshrc") # New array for files directly in HOME
 
@@ -234,6 +234,11 @@ copy_configs() {
         local dest="$HOME/.config/$dir"
         [ -d "$src" ] && copy_item "$src" "$dest"
     done
+
+    # Copy Waybar config separately from the root
+    local WAYBAR_SRC="$DOTFILES_DIR/waybar"
+    local WAYBAR_DEST="$HOME/.config/waybar"
+    [ -d "$WAYBAR_SRC" ] && copy_item "$WAYBAR_SRC" "$WAYBAR_DEST"
 
     # Copy .local directories
     for dir in "${LOCAL_DIRS[@]}"; do
@@ -287,8 +292,8 @@ setup_sddm() {
         return 1
     fi
 
-    sudo systemctl enable sddm.service
-    success "SDDM service enabled and configured with the astronaut theme."
+    sudo systemctl enable --now sddm.service
+    success "SDDM service enabled, configured with the astronaut theme, and started."
 }
 
 final_setup() {

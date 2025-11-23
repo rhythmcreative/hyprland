@@ -51,7 +51,7 @@ BUILD_TOOLS=(
 # Hyprland and its core ecosystem components
 HYPRLAND_ECOSYSTEM=(
     sddm hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
-    waybar rofi python-pywal swww mako grim slurp swappy
+    waybar rofi python-pywal python-colorz python-haishoku swww mako grim slurp swappy
     dolphin thunar network-manager-applet
 )
 

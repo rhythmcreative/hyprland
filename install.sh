@@ -183,16 +183,6 @@ install_yay_packages() {
     success "All packages have been installed."
 }
 
-install_pywal_backends() {
-    info "Installing Pywal backends via pip..."
-    if ! sudo pip install colorz haishoku; then
-        error "Failed to install Pywal backends. Please check your pip configuration and network."
-        warning "Attempting to continue without backends, but Pywal may fail."
-    else
-        success "Pywal backends (colorz, haishoku) installed successfully."
-    fi
-}
-
 install_flatpak_and_apps() {
     info "Installing Flatpak and setting up Flathub..."
     yay -S --needed --noconfirm flatpak
@@ -300,7 +290,7 @@ setup_pywal() {
     if [ -f "$default_wallpaper" ]; then
         info "Found default wallpaper: $default_wallpaper"
         # The -a flag sets the alpha transparency for the terminal
-        wal -i "$default_wallpaper" -a 85 --backend colorz
+        wal -i "$default_wallpaper" -a 85
         success "Pywal color scheme generated."
     else
         warning "Default wallpaper not found at $default_wallpaper."
@@ -364,7 +354,6 @@ main() {
     detect_gpu_and_install_drivers
     detect_and_install_asus_tools
     install_yay_packages
-    install_pywal_backends
     install_flatpak_and_apps
     setup_audio
     setup_bluetooth

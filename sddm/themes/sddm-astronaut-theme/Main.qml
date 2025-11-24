@@ -244,7 +244,7 @@ Pane {
             ]
         }
 
-        Image {
+        AnimatedImage {
             id: backgroundImage
 
             height: parent.height
@@ -272,7 +272,6 @@ Pane {
             asynchronous: true
             cache: true
             clip: true
-            mipmap: true
         }
 
         MouseArea {

@@ -208,6 +208,12 @@ setup_bluetooth() {
     success "Bluetooth service has been enabled."
 }
 
+setup_network() {
+    info "Setting up NetworkManager..."
+    sudo systemctl enable --now NetworkManager.service
+    success "NetworkManager service enabled and started."
+}
+
 setup_pywalfox() {
     info "Setting up Pywalfox for Librewolf..."
     if command -v pywalfox &> /dev/null; then
@@ -303,14 +309,15 @@ setup_pywal() {
 
 setup_sddm() {
     info "Ensuring SDDM is installed and configuring theme..."
-    yay -S --needed --noconfirm sddm
+    yay -S --needed --noconfirm sddm qt6-5compat qt6-declarative qt6-svg qt6-virtualkeyboard
 
     # Copy the SDDM theme
     info "Copying SDDM theme..."
     if [ -d "$DOTFILES_DIR/sddm/themes/sddm-astronaut-theme" ]; then
         sudo cp -r "$DOTFILES_DIR/sddm/themes/sddm-astronaut-theme" "/usr/share/sddm/themes/"
+        success "SDDM astronaut theme copied to /usr/share/sddm/themes/."
     else
-        warning "SDDM astronaut theme not found in repository. Skipping theme setup."
+        warning "SDDM astronaut theme not found in repository at $DOTFILES_DIR/sddm/themes/. Skipping theme setup."
         return
     fi
 
@@ -319,9 +326,11 @@ setup_sddm() {
     if [ -f "$DOTFILES_DIR/config/sddm.conf.d/theme.conf" ]; then
         sudo mkdir -p "/etc/sddm.conf.d"
         sudo cp "$DOTFILES_DIR/config/sddm.conf.d/theme.conf" "/etc/sddm.conf.d/"
+        success "SDDM configuration copied."
     else
-        warning "SDDM theme configuration not found. Skipping theme setup."
-        return
+        warning "SDDM theme configuration not found at $DOTFILES_DIR/config/sddm.conf.d/theme.conf. Skipping theme configuration."
+        # If the theme config is missing, a default one should be generated or instruct the user.
+        # For now, let's assume the user will handle it manually if the dotfile is missing.
     fi
 
     if ! command -v sddm &> /dev/null; then
@@ -340,9 +349,8 @@ final_setup() {
     warning "1. A REBOOT is highly recommended for all changes to take effect."
     warning "2. Run Pywal to generate your initial color scheme. Find a wallpaper you like and run:"
     echo "   wal -i /path/to/your/wallpaper.jpg"
-    warning "3. After rebooting, SDDM will start with its default theme."
-    warning "4. The custom astronaut theme was removed from the setup due to persistent permission issues. You can attempt to install it manually later."
-    warning "5. For Pywalfox to work, you need to install the addon in Librewolf from the Firefox addon store."
+    warning "3. After rebooting, SDDM should start with the astronaut theme."
+    warning "4. For Pywalfox to work, you need to install the addon in Librewolf from the Firefox addon store."
     echo ""
 }
 
@@ -356,6 +364,7 @@ main() {
     install_yay_packages
     install_flatpak_and_apps
     setup_audio
+    setup_network
     setup_bluetooth
     setup_pywalfox
     copy_configs

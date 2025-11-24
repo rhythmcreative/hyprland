@@ -54,7 +54,7 @@ BUILD_TOOLS=(
 
 # Hyprland and its core ecosystem components
 HYPRLAND_ECOSYSTEM=(
-    sddm hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
+    sddm hyprland hyprlock hyprpicker xdg-desktop-portal-hyprland
     waybar rofi python-pywal swww grim slurp swappy
     dolphin thunar network-manager-applet
 )
@@ -76,9 +76,9 @@ AUDIO_BLUETOOTH=(
 # Main applications from official repos and the AUR
 APPLICATIONS=(
     kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
-    prismlauncher minecraft-launcher balena-etcher-bin
-    telegram-desktop curseforge-client-bin visual-studio-code-bin libreoffice-fresh
-    obsidian obs-studio partitionmanager antigravity pywalfox-git
+    prismlauncher minecraft-launcher balena-etcher
+    telegram-desktop curseforge visual-studio-code-bin libreoffice-fresh
+    obsidian obs-studio partitionmanager antigravity python-pywalfox
 )
 
 # List of applications to be installed via Flatpak

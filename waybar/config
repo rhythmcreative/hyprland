@@ -5,30 +5,22 @@
   "margin-bottom": 0,
   "margin-left": 0,
   "margin-right": 0,
-  "spacing" : 0,
+  "spacing": 0,
   "exclusive": true,
   "modules-left": [
-  "hyprland/workspaces",
-  "group/system-info",
-  "custom/cava"
+    "hyprland/workspaces",
+    "group/system-info"
   ],
-
-  "custom/cava": {
-    "exec": "$HOME/waybar-cava/cava.sh",
-    "format": "{}"
-  },
-
-
-  "modules-center": ["clock"],
-
+  "modules-center": [
+    "clock"
+  ],
   "modules-right": [
     "bluetooth",
     "tray",
-    "pulseaudio", 
+    "pulseaudio",
     "backlight",
     "custom/dual-battery"
   ],
-
   "hyprland/workspaces": {
     "format": "{name} {icon}",
     "format-icons": {
@@ -36,7 +28,6 @@
       "default": ""
     }
   },
-
   "group/system-info": {
     "orientation": "horizontal",
     "modules": [
@@ -46,28 +37,24 @@
       "custom/nvidia-temp"
     ]
   },
-
-
-
   "bluetooth": {
     "format": "{icon}",
     "format-on": "{icon}",
-    "format-off": "{icon}", 
+    "format-off": "{icon}",
     "format-connected": "{icon} {num_connections}",
     "format-disabled": "{icon}",
     "format-icons": {
-        "enabled": "󰂯",
-        "disabled": "󰂲",
-        "off": "󰂲",
-        "on": "󰂯",
-        "connected": "󰂱"
+      "enabled": "󰂯",
+      "disabled": "󰂲",
+      "off": "󰂲",
+      "on": "󰂯",
+      "connected": "󰂱"
     },
     "on-click": "blueman-manager",
     "tooltip-format": "{status}",
     "tooltip-format-connected": "{device_enumerate}",
     "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
   },
-
   "custom/music": {
     "format": "  {}",
     "escape": true,
@@ -77,25 +64,22 @@
     "on-click": "playerctl play-pause",
     "max-length": 50
   },
-
   "clock": {
     "timezone": "Europe/Madrid",
     "tooltip": false,
     "format": "{:%H:%M:%S  -  %A, %d}",
     "interval": 1
   },
-
   "custom/weather": {
-    "exec": "$HOME/dotfiles/waybar/scripts/weather.sh",
+    "exec": "$HOME/.config/waybar/scripts/weather.sh",
     "return-type": "json",
     "format": "{}",
     "interval": 300,
     "tooltip": true,
-    "on-click": "rm -f /tmp/weather_cache.json && $HOME/dotfiles/waybar/scripts/weather.sh",
+    "on-click": "rm -f /tmp/weather_cache.json && $HOME/.config/waybar/scripts/weather.sh",
     "signal": 8,
     "restart-interval": 30
   },
-
   "network": {
     "format-wifi": "󰤢 {signalStrength}%",
     "format-ethernet": "󰈀 Connected",
@@ -109,45 +93,87 @@
     "on-click": "nm-connection-editor",
     "on-click-right": "nm-applet"
   },
-
   "cpu": {
     "interval": 2,
     "format": "󰍛 {icon0}{icon1}{icon2}{icon3} {usage:>2}%",
-    "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+    "format-icons": [
+      "▁",
+      "▂",
+      "▃",
+      "▄",
+      "▅",
+      "▆",
+      "▇",
+      "█"
+    ],
     "on-click": "ghostty -e htop"
   },
-
   "memory": {
     "interval": 5,
     "format": "󰘚 {used:0.1f}G/{total:0.1f}G",
     "tooltip-format": "Memory"
   },
-
   "custom/uptime": {
     "format": "{}",
-    "format-icon": [""], 
+    "format-icon": [
+      ""
+    ],
     "tooltip": false,
     "interval": 1600,
     "exec": "$HOME/.config/waybar/scripts/uptime.sh"
   },
-  
   "backlight": {
-        "format": "{icon}  {percent}%",
-        "format-icons": ["","󰃜", "󰃛", "󰃞","󰃝","󰃟","󰃠"],
-        "tooltip": false
+    "format": "{icon}  {percent}%",
+    "format-icons": [
+      "",
+      "󰃜",
+      "󰃛",
+      "󰃞",
+      "󰃝",
+      "󰃟",
+      "󰃠"
+    ],
+    "tooltip": false
   },
-  
   "pulseaudio": {
     "format": "{icon}  {volume}%",
     "format-muted": "󰝟",
     "format-icons": {
-      "headphone": ["󰋋", "󰋋", "󰋋"],
-      "hands-free": ["󰋋", "󰋋", "󰋋"],
-      "headset": ["󰋋", "󰋋", "󰋋"],
-      "phone": ["󰏲", "󰏲", "󰏲"],
-      "portable": ["󰦢", "󰦢", "󰦢"],
-      "car": ["󰄋", "󰄋", "󰄋"],
-      "default": ["󰕿", "󰖀", "󰕾"]
+      "headphone": [
+        "󰋋",
+        "󰋋",
+        "󰋋"
+      ],
+      "hands-free": [
+        "󰋋",
+        "󰋋",
+        "󰋋"
+      ],
+      "headset": [
+        "󰋋",
+        "󰋋",
+        "󰋋"
+      ],
+      "phone": [
+        "󰏲",
+        "󰏲",
+        "󰏲"
+      ],
+      "portable": [
+        "󰦢",
+        "󰦢",
+        "󰦢"
+      ],
+      "car": [
+        "󰄋",
+        "󰄋",
+        "󰄋"
+      ],
+      "default": [
+        "󰕿",
+        "󰖀",
+        "󰕾"
+      ]
     },
     "on-click": "pavucontrol",
     "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +2%",
@@ -156,7 +182,6 @@
     "scroll-step": 2,
     "max-volume": 100
   },
-
   "custom/dual-battery": {
     "format": "{}",
     "return-type": "json",
@@ -164,21 +189,18 @@
     "interval": 30,
     "tooltip": true
   },
-  
   "custom/lock": {
-  "tooltip": false,
-  "on-click": "sh -c '(sleep 0s; hyprlock)' & disown",
-  "format" : ""
+    "tooltip": false,
+    "on-click": "sh -c '(sleep 0s; hyprlock)' & disown",
+    "format": ""
   },
-
   "custom/pomodoro": {
-	"format": "{}",
-	"return-type": "json",
-	"exec": "waybar-module-pomodoro --no-work-icons",
-	"on-click": "waybar-module-pomodoro toggle",
-	"on-click-right": "waybar-module-pomodoro reset"
+    "format": "{}",
+    "return-type": "json",
+    "exec": "waybar-module-pomodoro --no-work-icons",
+    "on-click": "waybar-module-pomodoro toggle",
+    "on-click-right": "waybar-module-pomodoro reset"
   },
-
   "temperature#cpu": {
     "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
     "critical-threshold": 85,
@@ -188,7 +210,6 @@
     "tooltip-format": "CPU Temperature: {temperatureC}°C",
     "interval": 10
   },
-
   "custom/nvidia-temp": {
     "format": "{}",
     "return-type": "json",
@@ -196,10 +217,8 @@
     "interval": 10,
     "tooltip": true
   },
-
   "tray": {
     "icon-size": 18,
     "spacing": 10
   }
-
 }

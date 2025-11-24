@@ -4,6 +4,12 @@
 # Basado en rofi-with-monitor-detection para mantener consistencia
 # Autor: rhythmcreative
 
+# Check for bc dependency
+if ! command -v bc &> /dev/null; then
+    notify-send "Error" "Package 'bc' is missing. Please install it."
+    exit 1
+fi
+
 # Log file para depuración
 LOG_FILE="$HOME/.cache/powermenu-waybar-toggle.log"
 
@@ -175,7 +181,7 @@ configuration {
 
 * {
     mainbox-spacing: ${spacing_main}px;
-    mainbox-margin: ${margin_v} ${margin};
+    mainbox-margin: ${margin_v}px ${margin};
     message-margin: 0 ${margin};
     message-padding: 20px;
     message-border-radius: 15px;

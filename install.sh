@@ -39,7 +39,7 @@ set -e
 
 # Essential packages for system utilities, building, etc.
 BASE_PACKAGES=(
-    git curl wget unzip btop stow jq polkit-kde-agent qt5ct playerctl brightnessctl
+    git curl wget unzip btop stow jq polkit-kde-agent qt5ct playerctl brightnessctl bc
 )
 
 # Build tools required for AUR packages and other software
@@ -51,7 +51,7 @@ BUILD_TOOLS=(
 # Hyprland and its core ecosystem components
 HYPRLAND_ECOSYSTEM=(
     sddm hyprland hyprpm hyprlock hyprpicker xdg-desktop-portal-hyprland
-    waybar rofi python-pywal swww mako grim slurp swappy
+    waybar rofi python-pywal swww grim slurp swappy
     dolphin thunar network-manager-applet
 )
 

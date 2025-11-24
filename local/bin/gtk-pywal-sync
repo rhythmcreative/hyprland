@@ -158,7 +158,7 @@ update_gtk_config() {
     cat > "$config_file" << EOF
 [Settings]
 gtk-theme-name=Adwaita
-gtk-icon-theme-name=Tela-circle-black-dark
+gtk-icon-theme-name=Tela-circle
 gtk-font-name=Adwaita Sans 11
 gtk-cursor-theme-name=Bibata-Modern-Classic
 gtk-cursor-theme-size=24
@@ -191,7 +191,7 @@ if command -v gsettings &> /dev/null; then
     
     # Configurar tema GTK
     gsettings set org.gnome.desktop.interface gtk-theme "Adwaita" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Classic" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-size 24 2>/dev/null || true
     

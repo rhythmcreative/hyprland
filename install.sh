@@ -35,6 +35,10 @@ error() {
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# --- Global Variables ---
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+DOTFILES_DIR="$SCRIPT_DIR"
+
 # --- Package Lists for Arch Linux ---
 
 # Essential packages for system utilities, building, etc.
@@ -227,8 +231,6 @@ setup_pywalfox() {
 copy_configs() {
     info "Copying configuration files to their final destination..."
 
-    local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    local DOTFILES_DIR="$SCRIPT_DIR"
     local BACKUP_DIR="$HOME/.config_backup_$(date +%Y%m%d_%H%M%S)"
 
     local CONFIG_DIRS=("hypr" "rofi" "wal" "kitty")

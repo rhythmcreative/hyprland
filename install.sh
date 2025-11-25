@@ -221,11 +221,21 @@ setup_network() {
 setup_pywalfox() {
     info "Setting up Pywalfox for Librewolf..."
     if command -v pywalfox &> /dev/null; then
-        # Fix permissions for pywalfox daemon script
-        if [ -f "/usr/lib/python3.13/site-packages/pywalfox/bin/main.sh" ]; then
-            info "Fixing permissions for pywalfox daemon..."
+        # Fix permissions for pywalfox daemon script (System Path as requested)
+        # We use 'sudo' to ensure we can fix it even if owned by root.
+        if [ -e "/usr/lib/python3.13/site-packages/pywalfox/bin/main.sh" ]; then
+            info "Fixing permissions for system pywalfox daemon..."
             sudo chmod +x /usr/lib/python3.13/site-packages/pywalfox/bin/main.sh
         fi
+
+        # Aggressively find and fix permissions for ANY pywalfox main.sh found
+        # This handles pipx, local pip, or other python version paths.
+        info "Ensuring all pywalfox daemon scripts are executable..."
+        find "$HOME/.local" /usr/lib /usr/local/lib -type f -path "*/pywalfox/bin/main.sh" 2>/dev/null | while read -r script; do
+            info "Fixing permissions for: $script"
+            sudo chmod +x "$script"
+        done
+
         pywalfox install
         success "Pywalfox native messaging host installed."
     else

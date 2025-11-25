@@ -221,6 +221,11 @@ setup_network() {
 setup_pywalfox() {
     info "Setting up Pywalfox for Librewolf..."
     if command -v pywalfox &> /dev/null; then
+        # Fix permissions for pywalfox daemon script
+        if [ -f "/usr/lib/python3.13/site-packages/pywalfox/bin/main.sh" ]; then
+            info "Fixing permissions for pywalfox daemon..."
+            sudo chmod +x /usr/lib/python3.13/site-packages/pywalfox/bin/main.sh
+        fi
         pywalfox install
         success "Pywalfox native messaging host installed."
     else

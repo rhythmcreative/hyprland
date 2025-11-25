@@ -346,6 +346,65 @@ setup_pywal() {
         # The -a flag sets the alpha transparency for the terminal
         wal -i "$default_wallpaper" -a 85
         success "Pywal color scheme generated."
+        
+        # --- NEW: Generate and Apply GTK Theme & Icons ---
+        info "Generating and applying Pywal GTK Theme..."
+        
+        # 1. Generate the theme using our script
+        if [ -x "$HOME/.local/bin/generate-pywal-gtk-theme" ]; then
+            "$HOME/.local/bin/generate-pywal-gtk-theme"
+        else
+            warning "generate-pywal-gtk-theme script not found or not executable."
+        fi
+        
+        local GTK_THEME="PywalSync-Mono"
+        local ICON_THEME="Tela-circle"
+
+        # 2. Apply via gsettings (GNOME/GTK4)
+        if command -v gsettings &> /dev/null; then
+            gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME"
+            gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME"
+            success "Applied GTK theme ($GTK_THEME) and Icons ($ICON_THEME) via gsettings."
+        fi
+
+        # 3. Update gtk-3.0 settings.ini (GTK3 apps & nwg-look)
+        local gtk3_settings="$HOME/.config/gtk-3.0/settings.ini"
+        mkdir -p "$(dirname "$gtk3_settings")"
+        if [ ! -f "$gtk3_settings" ]; then
+            echo -e "[Settings]\ngtk-theme-name=$GTK_THEME\ngtk-icon-theme-name=$ICON_THEME" > "$gtk3_settings"
+        else
+            # Update GTK Theme
+            if grep -q "gtk-theme-name" "$gtk3_settings"; then
+                sed -i "s/gtk-theme-name=.*/gtk-theme-name=$GTK_THEME/" "$gtk3_settings"
+            else
+                sed -i "/\[Settings\]/a gtk-theme-name=$GTK_THEME" "$gtk3_settings"
+            fi
+            # Update Icon Theme
+            if grep -q "gtk-icon-theme-name" "$gtk3_settings"; then
+                sed -i "s/gtk-icon-theme-name=.*/gtk-icon-theme-name=$ICON_THEME/" "$gtk3_settings"
+            else
+                sed -i "/\[Settings\]/a gtk-icon-theme-name=$ICON_THEME" "$gtk3_settings"
+            fi
+        fi
+        success "Updated $gtk3_settings"
+
+        # 4. Update .gtkrc-2.0 (Legacy GTK2 apps)
+        local gtk2_rc="$HOME/.gtkrc-2.0"
+        touch "$gtk2_rc"
+        # Update GTK Theme
+        if grep -q "gtk-theme-name" "$gtk2_rc"; then
+            sed -i "s/gtk-theme-name=.*/gtk-theme-name=\"$GTK_THEME\"/" "$gtk2_rc"
+        else
+            echo "gtk-theme-name=\"$GTK_THEME\"" >> "$gtk2_rc"
+        fi
+        # Update Icon Theme
+        if grep -q "gtk-icon-theme-name" "$gtk2_rc"; then
+            sed -i "s/gtk-icon-theme-name=.*/gtk-icon-theme-name=\"$ICON_THEME\"/" "$gtk2_rc"
+        else
+            echo "gtk-icon-theme-name=\"$ICON_THEME\"" >> "$gtk2_rc"
+        fi
+        success "Updated $gtk2_rc"
+
     else
         warning "Default wallpaper not found at $default_wallpaper."
         warning "Skipping initial Pywal setup. Please run 'wal' manually."
@@ -399,42 +458,7 @@ setup_sddm() {
     success "SDDM service enabled, configured with the astronaut theme, and started."
 }
 
-setup_icon_theme() {
-    info "Configuring 'Tela-circle-black-dark' as the default icon theme..."
 
-    # 1. Apply via gsettings (for GNOME/GTK4 apps)
-    if command -v gsettings &> /dev/null; then
-        gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark"
-        success "Applied icon theme via gsettings."
-    fi
-
-    # 2. Update gtk-3.0 settings.ini (for GTK3 apps and nwg-look)
-    local gtk3_settings="$HOME/.config/gtk-3.0/settings.ini"
-    mkdir -p "$(dirname "$gtk3_settings")"
-    if [ -f "$gtk3_settings" ]; then
-        if grep -q "gtk-icon-theme-name" "$gtk3_settings"; then
-            sed -i 's/gtk-icon-theme-name=.*/gtk-icon-theme-name=Tela-circle-black-dark/' "$gtk3_settings"
-        else
-            sed -i '/\[Settings\]/a gtk-icon-theme-name=Tela-circle-black-dark' "$gtk3_settings"
-        fi
-    else
-        echo -e "[Settings]\ngtk-icon-theme-name=Tela-circle-black-dark" > "$gtk3_settings"
-    fi
-    success "Updated $gtk3_settings"
-
-    # 3. Update .gtkrc-2.0 (for legacy apps)
-    local gtk2_rc="$HOME/.gtkrc-2.0"
-    if [ -f "$gtk2_rc" ]; then
-        if grep -q "gtk-icon-theme-name" "$gtk2_rc"; then
-            sed -i 's/gtk-icon-theme-name=.*/gtk-icon-theme-name="Tela-circle-black-dark"/' "$gtk2_rc"
-        else
-            echo 'gtk-icon-theme-name="Tela-circle-black-dark"' >> "$gtk2_rc"
-        fi
-    else
-        echo 'gtk-icon-theme-name="Tela-circle-black-dark"' > "$gtk2_rc"
-    fi
-    success "Updated $gtk2_rc"
-}
 
 final_setup() {
     success "✅ Installation complete!"
@@ -464,7 +488,6 @@ main() {
     copy_configs
     setup_pywal
     setup_sddm
-    setup_icon_theme
     final_setup
 }
 

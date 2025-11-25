@@ -221,23 +221,54 @@ setup_network() {
 setup_pywalfox() {
     info "Setting up Pywalfox for Librewolf..."
     if command -v pywalfox &> /dev/null; then
-        # Fix permissions for pywalfox daemon script (System Path as requested)
-        # We use 'sudo' to ensure we can fix it even if owned by root.
+        local PYWALFOX_BIN=""
+        
+        # Search for the main.sh script
         if [ -e "/usr/lib/python3.13/site-packages/pywalfox/bin/main.sh" ]; then
-            info "Fixing permissions for system pywalfox daemon..."
-            sudo chmod +x /usr/lib/python3.13/site-packages/pywalfox/bin/main.sh
+             PYWALFOX_BIN="/usr/lib/python3.13/site-packages/pywalfox/bin/main.sh"
+        elif [ -e "$HOME/.local/bin/pywalfox" ]; then
+             # Try to resolve symlink or find relative main.sh if strictly needed, 
+             # but usually we need the actual python script path for the manifest.
+             # Let's search deeper.
+             PYWALFOX_BIN=$(find "$HOME/.local" /usr/lib /usr/local/lib -type f -path "*/pywalfox/bin/main.sh" 2>/dev/null | head -n 1)
         fi
 
-        # Aggressively find and fix permissions for ANY pywalfox main.sh found
-        # This handles pipx, local pip, or other python version paths.
-        info "Ensuring all pywalfox daemon scripts are executable..."
-        find "$HOME/.local" /usr/lib /usr/local/lib -type f -path "*/pywalfox/bin/main.sh" 2>/dev/null | while read -r script; do
-            info "Fixing permissions for: $script"
-            sudo chmod +x "$script"
-        done
+        if [ -z "$PYWALFOX_BIN" ]; then
+             # Fallback search
+             PYWALFOX_BIN=$(find "$HOME/.local" /usr/lib /usr/local/lib -type f -path "*/pywalfox/bin/main.sh" 2>/dev/null | head -n 1)
+        fi
 
-        pywalfox install
-        success "Pywalfox native messaging host installed."
+        if [ -n "$PYWALFOX_BIN" ]; then
+            info "Found Pywalfox daemon at: $PYWALFOX_BIN"
+            info "Fixing permissions..."
+            sudo chmod +x "$PYWALFOX_BIN"
+
+            # Manually install the manifest to avoid 'operation not permitted' errors from the tool itself
+            local MANIFEST_CONTENT='{
+  "name": "pywalfox",
+  "description": "Pywalfox",
+  "path": "'"$PYWALFOX_BIN"'",
+  "type": "stdio",
+  "allowed_extensions": [ "pywalfox@frewacom.org" ]
+}'
+            
+            # Install for Librewolf
+            local LIBREWOLF_DIR="$HOME/.librewolf/native-messaging-hosts"
+            mkdir -p "$LIBREWOLF_DIR"
+            echo "$MANIFEST_CONTENT" > "$LIBREWOLF_DIR/pywalfox.json"
+            info "Installed Pywalfox manifest for Librewolf."
+
+            # Install for Firefox (Mozilla)
+            local MOZILLA_DIR="$HOME/.mozilla/native-messaging-hosts"
+            mkdir -p "$MOZILLA_DIR"
+            echo "$MANIFEST_CONTENT" > "$MOZILLA_DIR/pywalfox.json"
+            info "Installed Pywalfox manifest for Firefox."
+
+            success "Pywalfox native messaging host configured manually."
+        else
+            warning "Could not locate 'main.sh' for Pywalfox. Attempting standard install..."
+            pywalfox install
+        fi
     else
         warning "pywalfox command not found. Skipping setup."
     fi

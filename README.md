@@ -1,91 +1,72 @@
-# ╔══════════════════════════════════════════════════════╗
-# ║  Dotfiles de Hyprland por rhythmcreative 🚀  ║
-# ╚══════════════════════════════════════════════════════╝
+<div align="center">
 
-¡Bienvenido a mi configuración personal para Hyprland! Este repositorio contiene todos los archivos de configuración y scripts necesarios para replicar mi entorno de escritorio, un sistema altamente personalizado, dinámico y con una estética cuidada, gestionado principalmente por Pywal.
+# HYPRLAND DOTFILES
 
-## ✨ Vista Previa
+![preview](assets/preview.png)
 
-*Un vistazo a cómo se ve el escritorio en acción.*
+*A highly customized, performance-driven environment for Arch Linux.*
 
-![Desktop Preview](https://i.imgur.com/placeholder.png)
-
-**(Para añadir tu propia vista previa, haz una captura de pantalla, súbela a un servicio como Imgur y reemplaza el enlace de arriba. O si prefieres guardarla localmente, nómbrala `PREVIEW.png` y colócala en la raíz del repositorio.)**
+</div>
 
 ---
 
-## 🔧 Componentes Principales
+## ⛩️ Overview
 
-| Componente          | Software Utilizado                               |
-| ------------------- | -------------------------------------------------- |
-| **Distribución**    | Arch Linux (pero compatible con Ubuntu/Debian)   |
-| **Compositor**      | [Hyprland](https://hypr.land/)                     |
-| **Barra de Estado** | [Waybar](https://github.com/Alexays/Waybar)        |
-| **Lanzador**        | [Rofi](https://github.com/davatorium/rofi) y [Ulauncher](https://ulauncher.io/) |
-| **Terminal**        | [Kitty](https://sw.kovidgoyal.net/kitty/) y [Warp](https://www.warp.dev/) |
-| **Gestor de Sesión**| [SDDM](https://github.com/sddm/sddm) con tema `sddm-astronaut-theme` |
-| **Tematización**    | [Pywal](https://github.com/dylanaraps/pywal) (colores dinámicos a partir del wallpaper) |
-| **Dock**            | [nwg-dock-hyprland](https://github.com/nwg-piotr/nwg-dock-hyprland) |
-| **Notificaciones**  | [Mako](https://github.com/emersion/mako)           |
-| **Soporte Hardware**| [asusctl](https://asus-linux.org/) para control de teclado Asus |
+Welcome to my personal configuration. This setup is built around **Hyprland**, focusing on a keyboard-centric workflow, dynamic aesthetics, and minimal resource usage. Every component has been hand-picked and tuned for a cohesive experience.
 
----
+## 🍙 Rice Details
 
-## ⚙️ Instalación
+| Component | Specification |
+| :--- | :--- |
+| **OS** | Arch Linux |
+| **Window Manager** | Hyprland |
+| **Bar** | Waybar |
+| **Terminal** | Kitty |
+| **Shell** | Zsh + Starship |
+| **Launcher** | Rofi |
+| **Compositor** | Hyprland |
+| **Colorscheme** | Pywal (Dynamic) |
 
-1.  **Clona este repositorio:**
-    ```bash
-    git clone <URL_DE_TU_REPOSITORIO>
-    cd dotfiles
-    ```
+## ✨ Features
 
-2.  **Ejecuta el script de instalación principal:**
-    Este script instalará todos los paquetes necesarios (usando `yay` en Arch o `apt` en Ubuntu/Debian) y creará los enlaces simbólicos para tu configuración personal.
-    ```bash
-    ./install.sh
-    ```
-    *Nota: En Ubuntu, el script te avisará sobre los paquetes que necesitas compilar manualmente (como Hyprland).*
+*   **Dynamic Theming**: The entire system adapts to your wallpaper using `pywal`.
+*   **Smooth Animations**: Fluid motion for windows and workspaces.
+*   **Productivity**: Optimized keybindings for rapid multitasking.
+*   **Minimalism**: No bloat, just the essentials.
 
-3.  **(Opcional) Configura el Gestor de Sesión (SDDM):**
-    Para instalar y configurar el tema de SDDM, necesitarás ejecutar un script por separado con privilegios de administrador.
-    ```bash
-    sudo ./setup_sddm.sh
-    ```
+## 💾 Installation
 
-4.  **(Opcional) Instala tus aplicaciones adicionales:**
-    He creado una guía para ayudarte a instalar tus aplicaciones de usuario (como navegadores, Steam, etc.) de forma controlada. Consulta las instrucciones en:
-    ```
-    MANUAL_PACKAGES.md
-    ```
+To replicate this setup on your machine:
 
-5.  **Reinicia:**
-    Para que todos los cambios surtan efecto, reinicia tu sistema.
+```bash
+# 1. Clone the repository
+git clone https://github.com/rhythmcreative/hyprland.git
+cd dotfiles
 
----
+# 2. Run the installation script
+./install.sh
+```
 
-## ⌨️ Atajos de Teclado Esenciales
+## 🎹 Keybindings
 
-La tecla `SUPER` es la tecla "Windows".
+The `SUPER` key is your command center.
 
-| Atajo                    | Acción                                      |
-| ------------------------ | ------------------------------------------- |
-| `SUPER + Return`         | Abrir terminal (Kitty)                      |
-| `SUPER + Shift + Return` | Abrir terminal (Warp)                       |
-| `SUPER + Q`              | Cerrar ventana activa                       |
-| `SUPER + A`              | Abrir lanzador de aplicaciones (Rofi)       |
-| `SUPER + R`              | Abrir Rofi en modo "run" (para comandos)    |
-| `SUPER + E`              | Abrir gestor de archivos (Thunar)           |
-| `SUPER + L`              | Bloquear pantalla (hyprlock)                |
-| `SUPER + Backspace`      | Menú de apagado/reinicio (Powermenu)        |
-| `SUPER + P`              | Hacer captura de pantalla (seleccionar área)|
-| `SUPER + W`              | Ventana flotante (activar/desactivar)       |
-| `SUPER + D`              | Mostrar/Ocultar dock (nwg-dock)             |
-| `SUPER + Space`          | Abrir Ulauncher                             |
-| `SUPER + Tab`            | Vista de todos los escritorios (overview)   |
-| `SUPER + Flechas`        | Mover foco entre ventanas                   |
-| `SUPER + [0-9]`          | Cambiar a un escritorio virtual             |
-| `SUPER + Shift + [0-9]`  | Mover ventana activa a un escritorio virtual|
+| Key | Action |
+| :--- | :--- |
+| `SUPER + Return` | Open Terminal |
+| `SUPER + A` | Application Launcher |
+| `SUPER + Q` | Close Window |
+| `SUPER + F` | Toggle Fullscreen |
+| `SUPER + Space` | Toggle Floating |
+| `SUPER + [1-9]` | Switch Workspace |
+| `SUPER + Shift + [1-9]` | Move Window to Workspace |
+| `SUPER + Backspace` | Power Menu |
+| `SUPER + L` | Lock Screen |
+| `F11 / F12` | Volume Down / Up |
+| `SUPER + P` | Screenshot |
 
 ---
 
-¡Disfruta de la configuración!
+<div align="center">
+    <i>Maintained by rhythmcreative</i>
+</div>

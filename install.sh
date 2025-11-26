@@ -74,8 +74,14 @@ AUDIO_BLUETOOTH=(
 )
 
 # Main applications from official repos and the AUR
-APPLICATIONS=(
-    kitty librewolf-bin chromium vesktop-bin steam virtualbox virtualbox-host-dkms
+# Essential applications (Terminal and Browser)
+ESSENTIAL_APPS=(
+    kitty librewolf-bin
+)
+
+# Extra applications (Games, Social, Tools, etc.)
+EXTRA_APPS=(
+    chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     prismlauncher minecraft-launcher balena-etcher
     telegram-desktop curseforge visual-studio-code-bin libreoffice-fresh
     obsidian obs-studio partitionmanager antigravity python-pywalfox
@@ -173,21 +179,48 @@ install_yay_packages() {
     info "Installing all required packages from official repositories and AUR..."
     warning "This process may take a long time."
 
-    # Combine all package lists
+    # Ask user for installation mode
+    local install_mode="essential"
+    if [[ -t 0 ]]; then
+        echo ""
+        info "--- Installation Options ---"
+        echo "1) Essential (Base system, Hyprland, Theming, Audio, Kitty, Librewolf)"
+        echo "2) Full (Everything above + Chromium, Discord/Vesktop, Steam, VirtualBox, Minecraft, Telegram, VSCode, LibreOffice, Obsidian, OBS, etc.)"
+        read -p "Select installation mode [1/2] (default: 1): " choice
+        if [[ "$choice" == "2" ]]; then
+            install_mode="full"
+        fi
+    fi
+
+    # Combine package lists based on mode
     local all_packages=(
         "${BASE_PACKAGES[@]}"
         "${BUILD_TOOLS[@]}"
         "${HYPRLAND_ECOSYSTEM[@]}"
         "${THEMING_PACKAGES[@]}"
         "${AUDIO_BLUETOOTH[@]}"
-        "${APPLICATIONS[@]}"
+        "${ESSENTIAL_APPS[@]}"
     )
 
+    if [[ "$install_mode" == "full" ]]; then
+        info "Selected: Full Installation"
+        all_packages+=("${EXTRA_APPS[@]}")
+        INSTALL_MODE="full" # Export for other functions
+    else
+        info "Selected: Essential Installation"
+        INSTALL_MODE="essential"
+    fi
+
     yay -S --needed --noconfirm "${all_packages[@]}"
-    success "All packages have been installed."
+    success "Selected packages have been installed."
 }
 
 install_flatpak_and_apps() {
+    if [[ "$INSTALL_MODE" != "full" ]]; then
+        info "Skipping Flatpak applications (Essential mode selected)."
+        return
+    fi
+
     info "Installing Flatpak and setting up Flathub..."
     yay -S --needed --noconfirm flatpak
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo

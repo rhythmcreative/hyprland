@@ -8,7 +8,7 @@
 
 LOG_FILE="$HOME/.cache/wallpaper-theme.log"
 
-# Función de logging rápida (sin timestamp para reducir overhead)
+# Función de logging rápida
 log() {
     echo "$1" >> "$LOG_FILE"
 }
@@ -19,26 +19,25 @@ if ! pgrep -x "swww-daemon" > /dev/null; then
     exit 0
 fi
 
-# Carga directa del wallpaper sin verificaciones pesadas
-if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
-    WALLPAPER_PATH=$(cat "$HOME/.cache/current-wallpaper")
+# Force specific wallpaper as requested
+WALLPAPER_PATH="$HOME/Pictures/Wallpapers/10. Animated.gif"
+
+if [[ -f "$WALLPAPER_PATH" ]]; then
+    log "⚡ Loading requested wallpaper: $(basename "$WALLPAPER_PATH")"
     
-    if [[ -f "$WALLPAPER_PATH" ]]; then
-        # GIF detection - ultra light check
-        if [[ "${WALLPAPER_PATH,,}" == *.gif ]]; then
-            log "⚡ GIF skipped for speed - fallback solid"
-            swww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null || true
-        else
-            log "⚡ Loading: $(basename "$WALLPAPER_PATH")"
-            # Ultra fast transition - no fancy effects
-            swww img "$WALLPAPER_PATH" --transition-type none 2>/dev/null || true
-        fi
-    fi
-elif [[ -f "$HOME/.cache/wal/wal" ]]; then
-    # Fallback directo a pywal sin verificaciones
-    FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
-    log "⚡ Pywal fallback: $(basename "$FALLBACK_WALLPAPER")"
-    swww img "$FALLBACK_WALLPAPER" --transition-type none 2>/dev/null || true
+    # Generate pywal colors (skip wallpaper set by wal, we use swww)
+    # We use -n to skip setting wallpaper, -s to skip changing terminal colors if desired (optional)
+    # -t to skip tty
+    wal -i "$WALLPAPER_PATH" -n -t > /dev/null 2>&1
+    
+    # Update current wallpaper cache
+    echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
+    echo "$WALLPAPER_PATH" > "$HOME/.cache/wal/wal"
+    
+    # Load wallpaper with swww (supports GIFs)
+    swww img "$WALLPAPER_PATH" --transition-type none 2>/dev/null || true
+else
+    log "❌ Wallpaper not found: $WALLPAPER_PATH"
 fi
 
 log "✅ Fast wallpaper load complete"

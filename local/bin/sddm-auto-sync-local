@@ -203,13 +203,15 @@ sync_wallpaper() {
 
     echo "📁 Wallpaper encontrado: $CURRENT_WALLPAPER"
 
-    # Generar nombre para el archivo SDDM (siempre JPG)
+    # Detectar extensión
     WALLPAPER_NAME=$(basename "$CURRENT_WALLPAPER")
-    WALLPAPER_BASE="${WALLPAPER_NAME%.*}"
-    SDDM_WALLPAPER="$WALLPAPER_DIR/${WALLPAPER_BASE}.jpg"
+    EXTENSION="${WALLPAPER_NAME##*.}"
+    
+    # Preparar destino local
+    SDDM_WALLPAPER="$WALLPAPER_DIR/current_wallpaper.${EXTENSION}"
 
-    # Convertir/copiar wallpaper
-    if convert_gif_to_jpg "$CURRENT_WALLPAPER" "$SDDM_WALLPAPER"; then
+    # Copiar wallpaper (manteniendo formato original, especialmente para GIFs)
+    if cp "$CURRENT_WALLPAPER" "$SDDM_WALLPAPER"; then
         echo "✅ Wallpaper preparado en: $SDDM_WALLPAPER"
     else
         echo "❌ Error al preparar wallpaper"
@@ -217,7 +219,10 @@ sync_wallpaper() {
     fi
 
     # Copiar al directorio del tema con sudo
-    if sudo cp "$SDDM_WALLPAPER" "$BACKGROUNDS_DIR/current_wallpaper.jpg"; then
+    # Usamos el mismo nombre de archivo para mantener la extensión correcta
+    TARGET_NAME="current_wallpaper.${EXTENSION}"
+    
+    if sudo cp "$SDDM_WALLPAPER" "$BACKGROUNDS_DIR/$TARGET_NAME"; then
         echo "✅ Wallpaper aplicado al tema SDDM"
     else
         echo "❌ Error al aplicar wallpaper al tema"
@@ -225,7 +230,8 @@ sync_wallpaper() {
     fi
 
     # Actualizar configuración del tema para usar el nuevo wallpaper
-    sudo sed -i 's|^Background=.*|Background="Backgrounds/current_wallpaper.jpg"|' "$SDDM_THEME_DIR/Themes/theme1.conf"
+    # Usamos comillas dobles para permitir la expansión de variables en sed
+    sudo sed -i "s|^Background=.*|Background=\"Backgrounds/$TARGET_NAME\"|" "$SDDM_THEME_DIR/Themes/theme1.conf"
 
     echo "🎨 Wallpaper SDDM sincronizado exitosamente!"
 }

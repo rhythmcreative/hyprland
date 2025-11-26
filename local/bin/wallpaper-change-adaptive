@@ -1087,12 +1087,12 @@ EOF
         
         # NUEVO: Sincronización automática con SDDM
         log "🏠 PASO 9: Sincronizando con SDDM automáticamente..."
-        if [[ -x "$HOME/.local/bin/sddm-sync-wrapper" ]]; then
+        if [[ -x "$HOME/.local/bin/sddm-auto-sync-local" ]]; then
             # Ejecutar en segundo plano y modo no bloqueante para no retrasar Hyprland ni el flujo del script
-            nohup env HYPRLAND_STARTUP=1 "$HOME/.local/bin/sddm-sync-wrapper" >/dev/null 2>&1 &
+            nohup "$HOME/.local/bin/sddm-auto-sync-local" >/dev/null 2>&1 &
             log "▶️ Lanzada sincronización SDDM en background"
         else
-            log "⚠️ sddm-sync-wrapper no encontrado o no ejecutable"
+            log "⚠️ sddm-auto-sync-local no encontrado o no ejecutable"
         fi
         
         notify "🎨 ¡Wallpaper adaptativo y sistema completamente sincronizado!"
@@ -1106,12 +1106,12 @@ else
     
     # NUEVO: Sincronización automática con SDDM incluso sin pywal
     log "🏠 Sincronizando con SDDM automáticamente (sin pywal)..."
-    if [[ -x "$HOME/.local/bin/sddm-sync-wrapper" ]]; then
+    if [[ -x "$HOME/.local/bin/sddm-auto-sync-local" ]]; then
         # Ejecutar en segundo plano para no bloquear
-        nohup env HYPRLAND_STARTUP=1 "$HOME/.local/bin/sddm-sync-wrapper" >/dev/null 2>&1 &
+        nohup "$HOME/.local/bin/sddm-auto-sync-local" >/dev/null 2>&1 &
         log "▶️ Lanzada sincronización SDDM en background (sin pywal)"
     else
-        log "⚠️ sddm-sync-wrapper no encontrado o no ejecutable"
+        log "⚠️ sddm-auto-sync-local no encontrado o no ejecutable"
     fi
     
     notify "ℹ️ Wallpaper aplicado y SDDM sincronizado"

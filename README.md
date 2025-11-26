@@ -25,11 +25,13 @@ Welcome to my personal configuration. This setup is built around **Hyprland**, f
 | **Shell** | Zsh + Starship |
 | **Launcher** | Rofi |
 | **Compositor** | Hyprland |
+| **Login Manager** | SDDM (Astronaut Theme) |
 | **Colorscheme** | Pywal (Dynamic) |
 
 ## ✨ Features
 
 *   **Dynamic Theming**: The entire system adapts to your wallpaper using `pywal`.
+*   **SDDM Synchronization**: Login screen automatically syncs wallpaper, colors, cursor, and monitor config.
 *   **Smooth Animations**: Fluid motion for windows and workspaces.
 *   **Productivity**: Optimized keybindings for rapid multitasking.
 *   **Minimalism**: No bloat, just the essentials.

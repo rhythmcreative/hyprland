@@ -459,6 +459,28 @@ setup_sddm() {
 }
 
 
+setup_sddm_sudoers() {
+    info "Configuring sudoers for SDDM wallpaper sync..."
+    local SUDOERS_FILE="/etc/sudoers.d/sddm-wallpaper-sync"
+    local USER_NAME=$(whoami)
+    
+    # Paths to allow
+    local SCRIPT_1="/usr/share/sddm/themes/sddm-astronaut-theme/pywal-sync.sh"
+    local SCRIPT_2="/home/$USER_NAME/.local/bin/sync-sddm-wallpaper"
+    
+    # Create temporary file content
+    # We use a temporary file to validate syntax if possible, but here we just write it.
+    # Note: We use tee to write to /etc/sudoers.d/ which requires root.
+    
+    echo "$USER_NAME ALL=(ALL) NOPASSWD: $SCRIPT_1, $SCRIPT_2" | sudo tee "$SUDOERS_FILE" > /dev/null
+    
+    # Set correct permissions
+    sudo chmod 0440 "$SUDOERS_FILE"
+    
+    success "Sudoers configured for SDDM sync."
+}
+
+
 
 final_setup() {
     success "✅ Installation complete!"
@@ -488,6 +510,7 @@ main() {
     copy_configs
     setup_pywal
     setup_sddm
+    setup_sddm_sudoers
     final_setup
 }
 

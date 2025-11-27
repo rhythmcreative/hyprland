@@ -583,6 +583,7 @@ final_setup() {
 # --- Main Execution ---
 main() {
     detect_os
+    configure_battery
     install_aur_helper
     detect_and_install_asus_tools
     install_yay_packages
@@ -596,7 +597,6 @@ main() {
     setup_pywal
     setup_sddm
     setup_sddm_sudoers
-    configure_battery
     final_setup
 }
 

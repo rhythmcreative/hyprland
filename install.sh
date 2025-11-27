@@ -76,7 +76,7 @@ AUDIO_BLUETOOTH=(
 # Main applications from official repos and the AUR
 # Essential applications (Terminal and Browser)
 ESSENTIAL_APPS=(
-    kitty librewolf-bin
+    kitty librewolf-bin python-pywalfox
 )
 
 # Extra applications (Games, Social, Tools, etc.)
@@ -84,7 +84,7 @@ EXTRA_APPS=(
     chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     prismlauncher minecraft-launcher balena-etcher
     telegram-desktop curseforge visual-studio-code-bin libreoffice-fresh
-    obsidian obs-studio partitionmanager antigravity python-pywalfox
+    obsidian obs-studio partitionmanager antigravity
 )
 
 # List of applications to be installed via Flatpak

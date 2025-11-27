@@ -342,6 +342,16 @@ copy_configs() {
     local WAYBAR_DEST="$HOME/.config/waybar"
     [ -d "$WAYBAR_SRC" ] && copy_item "$WAYBAR_SRC" "$WAYBAR_DEST"
 
+    # Ensure colors-pywal.css is a symlink to the cache
+    if [ -f "$WAYBAR_DEST/colors-pywal.css" ] && [ ! -L "$WAYBAR_DEST/colors-pywal.css" ]; then
+        warning "Replacing static colors-pywal.css with symlink..."
+        rm "$WAYBAR_DEST/colors-pywal.css"
+    fi
+    if [ ! -e "$WAYBAR_DEST/colors-pywal.css" ]; then
+        ln -sf "$HOME/.cache/wal/colors-waybar.css" "$WAYBAR_DEST/colors-pywal.css"
+        success "Linked Waybar colors to Pywal cache."
+    fi
+
     # Copy .local directories
     for dir in "${LOCAL_DIRS[@]}"; do
         local src="$DOTFILES_DIR/local/$dir"

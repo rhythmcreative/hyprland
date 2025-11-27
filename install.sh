@@ -515,10 +515,23 @@ setup_pywal() {
     local wallpaper_dir="$HOME/Pictures/Wallpapers"
     local default_wallpaper="$wallpaper_dir/10. Animated.gif"
 
+    # Ensure ~/.local/bin is in PATH for pipx installed tools
+    export PATH="$HOME/.local/bin:$PATH"
+
+    local WAL_BIN="wal"
+    if ! command -v wal &> /dev/null; then
+        if [ -f "$HOME/.local/bin/wal" ]; then
+            WAL_BIN="$HOME/.local/bin/wal"
+        else
+            warning "wal command not found. Skipping initial Pywal setup."
+            return
+        fi
+    fi
+
     if [ -f "$default_wallpaper" ]; then
         info "Found default wallpaper: $default_wallpaper"
         # The -a flag sets the alpha transparency for the terminal
-        wal -i "$default_wallpaper" -a 85
+        "$WAL_BIN" -i "$default_wallpaper" -a 85
         success "Pywal color scheme generated."
         
         # --- NEW: Generate and Apply GTK Theme & Icons ---

@@ -343,7 +343,7 @@ install_packages() {
         
         info "Installing Swappy from source (not in apt repos)..."
         if ! command -v swappy &> /dev/null; then
-             git clone https://github.com/jomo/swappy.git /tmp/swappy
+             git clone https://github.com/jtheoof/swappy.git /tmp/swappy
              (cd /tmp/swappy && meson setup build && ninja -C build && sudo ninja -C build install)
              success "Swappy installed from source."
         else

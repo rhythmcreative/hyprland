@@ -42,25 +42,25 @@ DOTFILES_DIR="$SCRIPT_DIR"
 # --- Package Lists for Arch Linux ---
 
 # Essential packages for system utilities, building, etc.
-ARCH_BASE_PACKAGES=(
+BASE_PACKAGES=(
     git curl wget unzip btop stow jq polkit-kde-agent qt5ct playerctl brightnessctl bc
 )
 
 # Build tools required for AUR packages and other software
-ARCH_BUILD_TOOLS=(
+BUILD_TOOLS=(
     base-devel cmake meson go rust cargo gettext cairo pango gdk-pixbuf2 glib2
     python-pip
 )
 
 # Hyprland and its core ecosystem components
-ARCH_HYPRLAND_ECOSYSTEM=(
+HYPRLAND_ECOSYSTEM=(
     sddm hyprland hyprlock hyprpicker xdg-desktop-portal-hyprland
     waybar rofi python-pywal swww grim slurp swappy
     dolphin thunar network-manager-applet
 )
 
 # Theming, fonts, icons, and cursors
-ARCH_THEMING_PACKAGES=(
+THEMING_PACKAGES=(
     nwg-look nwg-displays
     noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-font-awesome
     ttf-jetbrains-mono-nerd imagemagick
@@ -68,73 +68,23 @@ ARCH_THEMING_PACKAGES=(
 )
 
 # Audio (Pipewire) and Bluetooth support
-ARCH_AUDIO_BLUETOOTH=(
+AUDIO_BLUETOOTH=(
     pipewire wireplumber pipewire-audio pipewire-pulse pavucontrol
     bluez bluez-utils blueman
 )
 
 # Main applications from official repos and the AUR
 # Essential applications (Terminal and Browser)
-ARCH_ESSENTIAL_APPS=(
+ESSENTIAL_APPS=(
     kitty librewolf-bin python-pywalfox
 )
 
 # Extra applications (Games, Social, Tools, etc.)
-ARCH_EXTRA_APPS=(
+EXTRA_APPS=(
     chromium vesktop-bin steam virtualbox virtualbox-host-dkms
     prismlauncher minecraft-launcher balena-etcher
     telegram-desktop curseforge visual-studio-code-bin libreoffice-fresh
     obsidian obs-studio partitionmanager antigravity
-)
-
-# --- Package Lists for Ubuntu/Debian ---
-
-# Essential packages
-UBUNTU_BASE_PACKAGES=(
-    git curl wget unzip btop stow jq policykit-1-gnome qt5ct playerctl brightnessctl bc
-    build-essential cmake meson golang rustc cargo gettext libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev libglib2.0-dev
-    libgtk-3-dev scdoc pipx
-    python3-pip python3-venv
-)
-
-# Hyprland Ecosystem (Note: Hyprland is not in standard Ubuntu repos usually, user might need PPA)
-# We install available tools.
-UBUNTU_HYPRLAND_ECOSYSTEM=(
-    sddm waybar rofi grim slurp
-    thunar network-manager-gnome
-)
-# Missing in standard Ubuntu: hyprland, hyprlock, hyprpicker, swww (might need manual install or PPA)
-# Removed: python3-pywal (install via pip), swappy (needs manual install)
-
-# Theming
-UBUNTU_THEMING_PACKAGES=(
-    fonts-noto fonts-noto-cjk fonts-noto-color-emoji fonts-font-awesome
-    imagemagick
-)
-# Missing: nwg-look, nwg-displays (often AUR or external), ttf-jetbrains-mono-nerd (manual), bibata-cursor-theme, tela-circle...
-
-# Audio/Bluetooth
-UBUNTU_AUDIO_BLUETOOTH=(
-    pipewire wireplumber pipewire-pulse pavucontrol
-    bluez blueman
-)
-
-# Apps
-UBUNTU_ESSENTIAL_APPS=(
-    kitty
-)
-# Missing: librewolf (needs repo), python-pywalfox (pip)
-
-UBUNTU_EXTRA_APPS=(
-    chromium-browser steam virtualbox
-    telegram-desktop code libreoffice
-    obs-studio partitionmanager
-)
-
-# List of applications to be installed via Flatpak
-FLATPAK_APPS=(
-    com.heroicgameslauncher.hgl
-    org.vinegarhq.Sober
 )
 
 
@@ -142,45 +92,10 @@ FLATPAK_APPS=(
 
 detect_os() {
     if [ -f /etc/arch-release ]; then
-        DISTRO="arch"
-        info "Arch Linux detected."
-    elif [ -f /etc/os-release ]; then
-        # Check for Ubuntu or Debian
-        if grep -qE "ID=ubuntu|ID=debian" /etc/os-release; then
-            DISTRO="ubuntu"
-            info "Ubuntu/Debian detected."
-        else
-            error "Unsupported distribution. This script supports Arch Linux and Ubuntu/Debian."
-            exit 1
-        fi
+        info "Arch Linux detected. Proceeding with installation."
     else
-        error "Could not detect OS. Aborting."
+        error "This script is designed for Arch Linux. Aborting."
         exit 1
-    fi
-}
-
-update_repos() {
-    if [ "$DISTRO" == "arch" ]; then
-        info "Updating Arch repositories..."
-        sudo pacman -Sy
-    elif [ "$DISTRO" == "ubuntu" ]; then
-        info "Updating Ubuntu repositories..."
-        sudo apt update
-    fi
-}
-
-install_pkgs() {
-    local pkgs=("$@")
-    if [ ${#pkgs[@]} -eq 0 ]; then
-        return
-    fi
-
-    if [ "$DISTRO" == "arch" ]; then
-        yay -S --needed --noconfirm "${pkgs[@]}"
-    elif [ "$DISTRO" == "ubuntu" ]; then
-        # Filter out packages that might not exist or have different names if not handled
-        # For now, we assume the list passed is correct for the distro
-        sudo apt install -y "${pkgs[@]}"
     fi
 }
 
@@ -194,10 +109,6 @@ init_submodules() {
 }
 
 install_aur_helper() {
-    if [ "$DISTRO" != "arch" ]; then
-        return
-    fi
-
     if ! command -v yay &> /dev/null; then
         info "'yay' not found. Installing it now..."
         if ! command -v git &> /dev/null; then
@@ -218,19 +129,7 @@ detect_gpu_and_install_drivers() {
             read -p "Do you want to install the NVIDIA drivers? (y/N): " response
             if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
                 info "Installing NVIDIA drivers..."
-                if [ "$DISTRO" == "arch" ]; then
-                    yay -S --needed --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver egl-wayland
-                elif [ "$DISTRO" == "ubuntu" ]; then
-                    # Ubuntu usually has a helper 'ubuntu-drivers', but we can try installing a standard meta-package
-                    # or instruct user. 'nvidia-driver-535' is common, but versions change.
-                    # Best to use the auto-install tool if available.
-                    if command -v ubuntu-drivers &> /dev/null; then
-                        sudo ubuntu-drivers autoinstall
-                    else
-                        warning "ubuntu-drivers tool not found. Installing generic nvidia-driver."
-                        sudo apt install -y nvidia-driver-535
-                    fi
-                fi
+                yay -S --needed --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver egl-wayland
                 success "NVIDIA drivers installed."
                 warning "A reboot is required to load the new drivers."
             else
@@ -248,7 +147,7 @@ detect_gpu_and_install_drivers() {
 detect_and_install_asus_tools() {
     if ! command -v dmidecode &> /dev/null; then
         info "'dmidecode' not found. Installing it for hardware detection..."
-        install_pkgs dmidecode
+        yay -S --needed --noconfirm dmidecode
     fi
 
     if sudo dmidecode -s system-manufacturer | grep -q "ASUSTeK"; then
@@ -257,13 +156,8 @@ detect_and_install_asus_tools() {
             read -p "Do you want to install ASUS-specific tools (asusctl, rog-control-center)? (y/N): " response
             if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
                 info "Installing ASUS tools..."
-                if [ "$DISTRO" == "arch" ]; then
-                    yay -S --needed --noconfirm asusctl rog-control-center
-                    success "ASUS tools installed."
-                else
-                    warning "ASUS tools (asusctl) installation is not automated for Ubuntu in this script."
-                    warning "Please check https://asus-linux.org/ for Ubuntu installation instructions."
-                fi
+                yay -S --needed --noconfirm asusctl rog-control-center
+                success "ASUS tools installed."
             else
                 warning "Skipping ASUS tools installation."
             fi
@@ -275,8 +169,8 @@ detect_and_install_asus_tools() {
     fi
 }
 
-install_packages() {
-    info "Installing all required packages..."
+install_yay_packages() {
+    info "Installing all required packages from official repositories and AUR..."
     warning "This process may take a long time."
 
     # Ask user for installation mode
@@ -292,65 +186,26 @@ install_packages() {
         fi
     fi
 
-    # Combine package lists based on mode and distro
-    local all_packages=()
-    if [ "$DISTRO" == "arch" ]; then
-        all_packages+=(
-            "${ARCH_BASE_PACKAGES[@]}"
-            "${ARCH_BUILD_TOOLS[@]}"
-            "${ARCH_HYPRLAND_ECOSYSTEM[@]}"
-            "${ARCH_THEMING_PACKAGES[@]}"
-            "${ARCH_AUDIO_BLUETOOTH[@]}"
-            "${ARCH_ESSENTIAL_APPS[@]}"
-        )
-        if [[ "$install_mode" == "full" ]]; then
-            all_packages+=("${ARCH_EXTRA_APPS[@]}")
-        fi
-    elif [ "$DISTRO" == "ubuntu" ]; then
-        all_packages+=(
-            "${UBUNTU_BASE_PACKAGES[@]}"
-            "${UBUNTU_HYPRLAND_ECOSYSTEM[@]}"
-            "${UBUNTU_THEMING_PACKAGES[@]}"
-            "${UBUNTU_AUDIO_BLUETOOTH[@]}"
-            "${UBUNTU_ESSENTIAL_APPS[@]}"
-        )
-        if [[ "$install_mode" == "full" ]]; then
-            all_packages+=("${UBUNTU_EXTRA_APPS[@]}")
-        fi
-    fi
+    # Combine package lists based on mode
+    local all_packages=(
+        "${BASE_PACKAGES[@]}"
+        "${BUILD_TOOLS[@]}"
+        "${HYPRLAND_ECOSYSTEM[@]}"
+        "${THEMING_PACKAGES[@]}"
+        "${AUDIO_BLUETOOTH[@]}"
+        "${ESSENTIAL_APPS[@]}"
+    )
 
     if [[ "$install_mode" == "full" ]]; then
         info "Selected: Full Installation"
+        all_packages+=("${EXTRA_APPS[@]}")
         INSTALL_MODE="full" # Export for other functions
     else
         info "Selected: Essential Installation"
         INSTALL_MODE="essential"
     fi
 
-    install_pkgs "${all_packages[@]}"
-    
-    # Post-package installation steps for Ubuntu
-    if [ "$DISTRO" == "ubuntu" ]; then
-        info "Installing Pywal and Pywalfox via pipx (to avoid PEP 668 errors)..."
-        
-        # Ensure pipx path is available in current session
-        pipx ensurepath
-        export PATH="$HOME/.local/bin:$PATH"
-
-        pipx install pywal
-        pipx install pywalfox
-        success "Pywal and Pywalfox installed via pipx."
-        
-        info "Installing Swappy from source (not in apt repos)..."
-        if ! command -v swappy &> /dev/null; then
-             git clone https://github.com/jtheoof/swappy.git /tmp/swappy
-             (cd /tmp/swappy && meson setup build && ninja -C build && sudo ninja -C build install)
-             success "Swappy installed from source."
-        else
-             info "Swappy is already installed."
-        fi
-    fi
-
+    yay -S --needed --noconfirm "${all_packages[@]}"
     success "Selected packages have been installed."
 }
 
@@ -361,7 +216,7 @@ install_flatpak_and_apps() {
     fi
 
     info "Installing Flatpak and setting up Flathub..."
-    install_pkgs flatpak
+    yay -S --needed --noconfirm flatpak
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
     info "Installing applications via Flatpak..."
@@ -515,23 +370,16 @@ setup_pywal() {
     local wallpaper_dir="$HOME/Pictures/Wallpapers"
     local default_wallpaper="$wallpaper_dir/10. Animated.gif"
 
-    # Ensure ~/.local/bin is in PATH for pipx installed tools
-    export PATH="$HOME/.local/bin:$PATH"
-
     local WAL_BIN="wal"
     if ! command -v wal &> /dev/null; then
-        if [ -f "$HOME/.local/bin/wal" ]; then
-            WAL_BIN="$HOME/.local/bin/wal"
-        else
-            warning "wal command not found. Skipping initial Pywal setup."
-            return
-        fi
+        warning "wal command not found. Skipping initial Pywal setup."
+        return
     fi
 
     if [ -f "$default_wallpaper" ]; then
         info "Found default wallpaper: $default_wallpaper"
         # The -a flag sets the alpha transparency for the terminal
-        "$WAL_BIN" -i "$default_wallpaper" -a 85
+        wal -i "$default_wallpaper" -a 85
         success "Pywal color scheme generated."
         
         # --- NEW: Generate and Apply GTK Theme & Icons ---
@@ -603,14 +451,7 @@ setup_pywal() {
 
 setup_sddm() {
     info "Ensuring SDDM is installed and configuring theme..."
-    if [ "$DISTRO" == "arch" ]; then
-        install_pkgs sddm qt6-5compat qt6-declarative qt6-svg qt6-virtualkeyboard
-    elif [ "$DISTRO" == "ubuntu" ]; then
-        install_pkgs sddm qml-module-qtquick-layouts qml-module-qtquick-controls2 qml-module-qtquick-window2
-        # Ubuntu might need more specific qt6 packages if the theme uses qt6, 
-        # but sddm in ubuntu repos might still be qt5 based or have different deps.
-        # We install basic sddm.
-    fi
+    yay -S --needed --noconfirm sddm qt6-5compat qt6-declarative qt6-svg qt6-virtualkeyboard
 
     # Copy the SDDM theme
     info "Copying SDDM theme..."
@@ -691,12 +532,8 @@ final_setup() {
 # --- Main Execution ---
 main() {
     detect_os
-    update_repos
-    init_submodules
-    install_aur_helper
-    detect_gpu_and_install_drivers
     detect_and_install_asus_tools
-    install_packages
+    install_yay_packages
     install_flatpak_and_apps
     setup_audio
     setup_network

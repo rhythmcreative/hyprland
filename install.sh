@@ -93,7 +93,7 @@ ARCH_EXTRA_APPS=(
 UBUNTU_BASE_PACKAGES=(
     git curl wget unzip btop stow jq policykit-1-gnome qt5ct playerctl brightnessctl bc
     build-essential cmake meson golang rustc cargo gettext libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev libglib2.0-dev
-    libgtk-3-dev scdoc
+    libgtk-3-dev scdoc pipx
     python3-pip python3-venv
 )
 
@@ -331,13 +331,15 @@ install_packages() {
     
     # Post-package installation steps for Ubuntu
     if [ "$DISTRO" == "ubuntu" ]; then
-        info "Installing Pywal via pip (not in apt repos)..."
-        # Ensure pip is installed (should be from UBUNTU_BASE_PACKAGES)
-        # We use --break-system-packages if on newer python versions, or just pip3
-        # To be safe and avoid breaking system python, we should use pipx or user install, 
-        # but for dotfiles script, user install is often preferred.
-        pip3 install --user pywal
-        success "Pywal installed via pip."
+        info "Installing Pywal and Pywalfox via pipx (to avoid PEP 668 errors)..."
+        
+        # Ensure pipx path is available in current session
+        pipx ensurepath
+        export PATH="$HOME/.local/bin:$PATH"
+
+        pipx install pywal
+        pipx install pywalfox
+        success "Pywal and Pywalfox installed via pipx."
         
         info "Installing Swappy from source (not in apt repos)..."
         if ! command -v swappy &> /dev/null; then

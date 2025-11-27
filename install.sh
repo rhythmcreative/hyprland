@@ -494,6 +494,41 @@ setup_sddm() {
 }
 
 
+setup_waybar_battery() {
+    info "Configuring Waybar battery module..."
+    
+    local SCRIPT_DIR="$HOME/.config/waybar/scripts"
+    local SINGLE_SCRIPT="$SCRIPT_DIR/single_battery.sh"
+    local DUAL_SCRIPT="$SCRIPT_DIR/dual_battery_real.sh"
+    local CURRENT_LINK="$SCRIPT_DIR/current_battery.sh"
+    local SWITCH_SCRIPT="$SCRIPT_DIR/switch_battery.sh"
+
+    # Ensure scripts are executable
+    chmod +x "$SINGLE_SCRIPT" "$DUAL_SCRIPT" "$SWITCH_SCRIPT" 2>/dev/null
+
+    if [[ -t 0 ]]; then
+        echo ""
+        info "--- Battery Configuration ---"
+        echo "1) Single Battery (Default)"
+        echo "2) Dual Battery (e.g., ThinkPad)"
+        read -p "Select your battery configuration [1/2] (default: 1): " choice
+        
+        if [[ "$choice" == "2" ]]; then
+            info "Selected: Dual Battery"
+            ln -sf "$DUAL_SCRIPT" "$CURRENT_LINK"
+        else
+            info "Selected: Single Battery"
+            ln -sf "$SINGLE_SCRIPT" "$CURRENT_LINK"
+        fi
+    else
+        # Default to single battery in non-interactive mode
+        info "Non-interactive mode: Defaulting to Single Battery configuration."
+        ln -sf "$SINGLE_SCRIPT" "$CURRENT_LINK"
+    fi
+    
+    success "Waybar battery module configured."
+}
+
 setup_sddm_sudoers() {
     info "Configuring sudoers for SDDM wallpaper sync..."
     local SUDOERS_FILE="/etc/sudoers.d/sddm-wallpaper-sync"
@@ -540,6 +575,7 @@ main() {
     setup_bluetooth
     setup_pywalfox
     copy_configs
+    setup_waybar_battery
     setup_pywal
     setup_sddm
     setup_sddm_sudoers

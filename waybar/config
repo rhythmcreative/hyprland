@@ -19,7 +19,7 @@
     "tray",
     "pulseaudio",
     "backlight",
-    "custom/battery"
+    "battery"
   ],
   "hyprland/workspaces": {
     "format": "{name} {icon}",
@@ -182,13 +182,28 @@
     "scroll-step": 2,
     "max-volume": 100
   },
-  "custom/battery": {
-    "format": "{}",
-    "return-type": "json",
-    "exec": "$HOME/.config/waybar/scripts/current_battery.sh",
-    "on-click": "$HOME/.config/waybar/scripts/switch_battery.sh",
-    "interval": 30,
-    "tooltip": true
+  "battery": {
+    "states": {
+      "good": 95,
+      "warning": 30,
+      "critical": 15
+    },
+    "format": "{icon} {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": "󰂄 {capacity}%",
+    "format-alt": "{icon} {time}",
+    "format-icons": [
+      "󰁺",
+      "󰁻",
+      "󰁼",
+      "󰁽",
+      "󰁾",
+      "󰁿",
+      "󰂀",
+      "󰂁",
+      "󰂂",
+      "󰁹"
+    ]
   },
   "custom/lock": {
     "tooltip": false,

@@ -518,6 +518,56 @@ setup_sddm_sudoers() {
 
 
 
+configure_battery() {
+    info "Configuring Battery Module for Waybar..."
+    
+    if [[ -t 0 ]]; then
+        echo ""
+        info "--- Battery Configuration ---"
+        echo "1) Single Battery (Default)"
+        echo "2) Dual Battery (e.g., ThinkPad T480 - BAT0 & BAT1)"
+        read -p "Select battery configuration [1/2] (default: 1): " choice
+    else
+        choice="1"
+    fi
+
+    local WAYBAR_CONFIG="$HOME/.config/waybar/config"
+
+    if [ ! -f "$WAYBAR_CONFIG" ]; then
+        warning "Waybar config not found at $WAYBAR_CONFIG. Skipping battery configuration."
+        return
+    fi
+
+    if [[ "$choice" == "2" ]]; then
+        info "Applying Dual Battery configuration..."
+        
+        # 1. Add battery#bat2 to modules-right if not present
+        # We assume 'battery' is already there from the default config
+        if ! grep -q "battery#bat2" "$WAYBAR_CONFIG"; then
+             # Use jq to insert battery#bat2 after battery in modules-right
+             # Note: This requires a temp file
+             jq '.["modules-right"] |= map(if . == "battery" then "battery", "battery#bat2" else . end)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        fi
+
+        # 2. Add battery#bat2 configuration
+        # We copy the 'battery' config and add 'bat': 'BAT1'
+        jq '."battery#bat2" = (."battery" + {"bat": "BAT1"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        
+        success "Dual battery configuration applied."
+    else
+        info "Applying Single Battery configuration..."
+        # Ensure we revert to single battery if previously dual
+        
+        # 1. Remove battery#bat2 from modules-right
+        jq '.["modules-right"] -= ["battery#bat2"]' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        
+        # 2. Remove battery#bat2 configuration
+        jq 'del(."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        
+        success "Single battery configuration applied."
+    fi
+}
+
 final_setup() {
     success "✅ Installation complete!"
     echo ""
@@ -546,6 +596,7 @@ main() {
     setup_pywal
     setup_sddm
     setup_sddm_sudoers
+    configure_battery
     final_setup
 }
 

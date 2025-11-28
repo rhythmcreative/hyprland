@@ -201,7 +201,8 @@
 #backlight,
 #battery,
 #battery#bat2,
-#custom-dual-battery {
+#custom-dual-battery,
+#battery#bat1 {
   background-color: @background;
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
@@ -219,7 +220,8 @@
 #backlight:hover,
 #battery:hover,
 #battery#bat2:hover,
-#custom-dual-battery:hover {
+#custom-dual-battery:hover,
+#battery#bat1:hover {
   background-color: @color8;
 }
 
@@ -239,6 +241,21 @@
   border-bottom-right-radius: 6px;
   border-right: none;
   margin-right: 7px;
+}
+
+/* Dual Battery Joined Styles */
+#battery#bat1 {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 1px solid @color8;
+  margin-right: 0;
+}
+
+#battery#bat2 {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 0;
+  /* Inherits right radius from above */
 }
 
 /* Middle elements - no border radius */

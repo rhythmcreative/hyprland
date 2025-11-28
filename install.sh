@@ -551,28 +551,24 @@ configure_battery() {
     if [[ "$choice" == "2" ]]; then
         info "Applying Dual Battery configuration..."
         
-        # 1. Add battery#bat2 to modules-right if not present
-        # We assume 'battery' is already there from the default config
-        if ! grep -q "battery#bat2" "$WAYBAR_CONFIG"; then
-             # Use jq to insert battery#bat2 after battery in modules-right
-             # Note: This requires a temp file
-             jq '.["modules-right"] |= map(if . == "battery" then "battery", "battery#bat2" else . end)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-        fi
+        # 1. Update modules-right: Replace 'battery' with 'battery#bat1', 'battery#bat2' (Preserving position)
+        jq '.["modules-right"] |= (map(if . == "battery" then ["battery#bat1", "battery#bat2"] else [.] end) | flatten)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 
-        # 2. Add battery#bat2 configuration
-        # We copy the 'battery' config and add 'bat': 'BAT1'
+        # 2. Define battery#bat1 (Left battery, BAT0)
+        jq '."battery#bat1" = (."battery" + {"bat": "BAT0"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+
+        # 3. Define battery#bat2 (Right battery, BAT1)
         jq '."battery#bat2" = (."battery" + {"bat": "BAT1"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
         
         success "Dual battery configuration applied."
     else
         info "Applying Single Battery configuration..."
-        # Ensure we revert to single battery if previously dual
         
-        # 1. Remove battery#bat2 from modules-right
-        jq '.["modules-right"] -= ["battery#bat2"]' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        # 1. Update modules-right: Replace 'battery#bat1' with 'battery', remove 'battery#bat2' (Preserving position)
+        jq '.["modules-right"] |= (map(if . == "battery#bat1" then "battery" else . end) | map(select(. != "battery#bat2")))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
         
-        # 2. Remove battery#bat2 configuration
-        jq 'del(."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        # 2. Remove battery#bat1 and battery#bat2 definitions
+        jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
         
         success "Single battery configuration applied."
     fi

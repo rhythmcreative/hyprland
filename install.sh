@@ -593,7 +593,6 @@ final_setup() {
 # --- Main Execution ---
 main() {
     detect_os
-    configure_battery
     install_aur_helper
     detect_and_install_asus_tools
     install_yay_packages
@@ -603,6 +602,7 @@ main() {
     setup_bluetooth
     setup_pywalfox
     copy_configs
+    configure_battery
 
     setup_pywal
     setup_sddm

@@ -247,14 +247,16 @@
 #battery#bat1 {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
-  border-right: 1px solid @color8;
+  border-right: none;
   margin-right: 0;
+  padding-right: 3px;
 }
 
 #battery#bat2 {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   margin-left: 0;
+  padding-left: 3px;
   /* Inherits right radius from above */
 }
 

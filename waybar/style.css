@@ -200,9 +200,9 @@
 #pulseaudio,
 #backlight,
 #battery,
-#battery#bat2,
+#battery-bat2,
 #custom-dual-battery,
-#battery#bat1 {
+#battery-bat1 {
   background-color: @background;
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
@@ -219,9 +219,9 @@
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover,
-#battery#bat2:hover,
+#battery-bat2:hover,
 #custom-dual-battery:hover,
-#battery#bat1:hover {
+#battery-bat1:hover {
   background-color: @color8;
 }
 
@@ -235,7 +235,7 @@
 /* Last element - rounded right */
 /* Last element - rounded right */
 #battery,
-#battery#bat2,
+#battery-bat2,
 #custom-dual-battery {
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
@@ -244,7 +244,7 @@
 }
 
 /* Dual Battery Joined Styles */
-#battery#bat1 {
+#battery-bat1 {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
   border-right: none;
@@ -252,7 +252,7 @@
   padding-right: 3px;
 }
 
-#battery#bat2 {
+#battery-bat2 {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   margin-left: 0;

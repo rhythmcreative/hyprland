@@ -536,7 +536,8 @@ configure_battery() {
         info "--- Battery Configuration ---"
         echo "1) Single Battery (Default)"
         echo "2) Dual Battery (e.g., ThinkPad T480 - BAT0 & BAT1)"
-        read -p "Select battery configuration [1/2] (default: 1): " choice
+        echo "3) PC Mode (No Battery)"
+        read -p "Select battery configuration [1/2/3] (default: 1): " choice
     else
         choice="1"
     fi
@@ -561,6 +562,16 @@ configure_battery() {
         jq '."battery#bat2" = (."battery" + {"bat": "BAT1"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
         
         success "Dual battery configuration applied."
+    elif [[ "$choice" == "3" ]]; then
+        info "Applying PC Mode (No Battery) configuration..."
+
+        # 1. Update modules-right: Remove 'battery', 'battery#bat1', 'battery#bat2'
+        jq '.["modules-right"] |= map(select(. != "battery" and . != "battery#bat1" and . != "battery#bat2"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+
+        # 2. Remove battery definitions (optional, but cleaner)
+        jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+
+        success "PC Mode configuration applied."
     else
         info "Applying Single Battery configuration..."
         
@@ -571,6 +582,40 @@ configure_battery() {
         jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
         
         success "Single battery configuration applied."
+    fi
+}
+
+configure_rofi_powermenu() {
+    info "Configuring Rofi Power Menu..."
+    
+    if [[ -t 0 ]]; then
+        echo ""
+        read -p "Do you want to enable the Rofi Power Menu on Super + Backspace? (Y/n): " response
+        if [[ "$response" =~ ^([nN][oO]|[nN])$ ]]; then
+            info "Disabling Rofi Power Menu keybinding..."
+            local HYPR_CONFIG="$HOME/.config/hypr/hyprland.conf"
+            if [ -f "$HYPR_CONFIG" ]; then
+                # Comment out the keybindings
+                sed -i 's/^bind = $mainMod, BackSpace/# bind = $mainMod, BackSpace/' "$HYPR_CONFIG"
+                sed -i 's/^bind = $mainMod SHIFT, BackSpace/# bind = $mainMod SHIFT, BackSpace/' "$HYPR_CONFIG"
+                success "Rofi Power Menu keybinding disabled."
+            else
+                warning "Hyprland config not found at $HYPR_CONFIG. Skipping."
+            fi
+        else
+            info "Enabling Rofi Power Menu keybinding (Default)..."
+            local HYPR_CONFIG="$HOME/.config/hypr/hyprland.conf"
+            if [ -f "$HYPR_CONFIG" ]; then
+                # Uncomment the keybindings if they were commented out
+                sed -i 's/^# bind = $mainMod, BackSpace/bind = $mainMod, BackSpace/' "$HYPR_CONFIG"
+                sed -i 's/^# bind = $mainMod SHIFT, BackSpace/bind = $mainMod SHIFT, BackSpace/' "$HYPR_CONFIG"
+                success "Rofi Power Menu keybinding enabled."
+            else
+                warning "Hyprland config not found at $HYPR_CONFIG. Skipping."
+            fi
+        fi
+    else
+        info "Running in non-interactive mode. Keeping default Rofi Power Menu configuration (Enabled)."
     fi
 }
 
@@ -599,6 +644,7 @@ main() {
     setup_pywalfox
     copy_configs
     configure_battery
+    configure_rofi_powermenu
 
     setup_pywal
     setup_sddm

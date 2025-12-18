@@ -554,7 +554,7 @@ configure_battery() {
         
         # 1. Update modules-right: Replace 'battery' (or existing battery config) with 'custom/dual-battery'
         # We remove any existing battery modules first to be clean, then add custom/dual-battery
-        jq '.["modules-right"] |= (map(select(. != "battery" and . != "battery#bat1" and . != "battery#bat2")) + ["custom/dual-battery"])' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        jq '.["modules-right"] |= (map(select(. != "battery" and . != "battery#bat1" and . != "battery#bat2" and . != "custom/dual-battery")) + ["custom/dual-battery"])' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 
         # Note: custom/dual-battery is already defined in the base config file.
         

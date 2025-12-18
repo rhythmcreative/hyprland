@@ -40,7 +40,7 @@ cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
 @define-color theme_selected_fg_color $foreground;
 @define-color theme_button_bg_color shade($background, 1.1);
 @define-color theme_button_fg_color $foreground;
-@define-color theme_hover_color alpha($color1, 0.2);
+@define-color theme_hover_color mix($color1, $background, 0.2);
 @define-color theme_active_color $color1;
 
 /* Variables adicionales */
@@ -67,8 +67,8 @@ cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
 @define-color dialog_fg_color $foreground;
 @define-color popover_bg_color $background;
 @define-color popover_fg_color $foreground;
-@define-color shade_color alpha(black, 0.3);
-@define-color scrollbar_outline_color alpha($foreground, 0.2);
+@define-color shade_color mix(black, $background, 0.3);
+@define-color scrollbar_outline_color mix($foreground, $background, 0.2);
 
 /* Estilo base para ventanas */
 window {
@@ -83,7 +83,7 @@ headerbar {
                 @headerbar_bg_color);
     color: @headerbar_fg_color;
     border-bottom: 1px solid @headerbar_border_color;
-    box-shadow: inset 0 1px alpha(white, 0.1);
+    box-shadow: inset 0 1px mix(white, @headerbar_bg_color, 0.1);
 }
 
 headerbar:backdrop {
@@ -108,7 +108,7 @@ button:hover {
                 shade(@theme_button_bg_color, 1.2),
                 shade(@theme_button_bg_color, 1.1));
     border-color: shade(@theme_button_bg_color, 0.8);
-    box-shadow: 0 1px 3px alpha(black, 0.2);
+    box-shadow: 0 1px 3px mix(black, @theme_button_bg_color, 0.2);
 }
 
 button:active, button:checked {
@@ -117,14 +117,14 @@ button:active, button:checked {
                 shade(@theme_active_color, 0.9));
     color: white;
     border-color: shade(@theme_active_color, 0.7);
-    box-shadow: inset 0 1px 2px alpha(black, 0.3);
+    box-shadow: inset 0 1px 2px mix(black, @theme_active_color, 0.3);
 }
 
 /* Entradas de texto */
 entry {
     background-color: @theme_base_color;
     color: @theme_text_color;
-    border: 1px solid alpha(@theme_fg_color, 0.3);
+    border: 1px solid mix(@theme_fg_color, @theme_base_color, 0.3);
     border-radius: 6px;
     padding: 6px 10px;
     transition: all 0.2s ease;
@@ -132,7 +132,7 @@ entry {
 
 entry:focus {
     border-color: @accent_color;
-    box-shadow: 0 0 0 2px alpha(@accent_color, 0.3);
+    box-shadow: 0 0 0 2px mix(@accent_color, @theme_base_color, 0.3);
 }
 
 /* Selecciones */
@@ -147,7 +147,7 @@ scrollbar {
 }
 
 scrollbar slider {
-    background: alpha(@theme_fg_color, 0.3);
+    background: mix(@theme_fg_color, @theme_bg_color, 0.3);
     border-radius: 10px;
     min-width: 12px;
     min-height: 12px;
@@ -155,16 +155,16 @@ scrollbar slider {
 }
 
 scrollbar slider:hover {
-    background: alpha(@theme_fg_color, 0.5);
+    background: mix(@theme_fg_color, @theme_bg_color, 0.5);
 }
 
 /* Menús */
 menu {
     background-color: @popover_bg_color;
     color: @popover_fg_color;
-    border: 1px solid alpha(@theme_fg_color, 0.2);
+    border: 1px solid mix(@theme_fg_color, @popover_bg_color, 0.2);
     border-radius: 8px;
-    box-shadow: 0 4px 12px alpha(black, 0.3);
+    box-shadow: 0 4px 12px mix(black, @popover_bg_color, 0.3);
 }
 
 menuitem {
@@ -205,7 +205,7 @@ notebook {
 
 notebook header {
     background-color: shade(@theme_bg_color, 0.95);
-    border-bottom: 1px solid alpha(@theme_fg_color, 0.2);
+    border-bottom: 1px solid mix(@theme_fg_color, @theme_bg_color, 0.2);
 }
 
 notebook tab {
@@ -225,7 +225,7 @@ notebook tab:checked {
 
 /* Switches y checkboxes */
 switch {
-    background-color: alpha(@theme_fg_color, 0.3);
+    background-color: mix(@theme_fg_color, @theme_bg_color, 0.3);
     border-radius: 12px;
     transition: all 0.2s ease;
 }
@@ -243,7 +243,7 @@ switch slider {
 checkbutton check,
 radiobutton radio {
     background-color: @theme_base_color;
-    border: 2px solid alpha(@theme_fg_color, 0.5);
+    border: 2px solid mix(@theme_fg_color, @theme_base_color, 0.5);
     transition: all 0.2s ease;
 }
 
@@ -256,7 +256,7 @@ radiobutton radio:checked {
 
 /* Barras de progreso */
 progressbar {
-    background-color: alpha(@theme_fg_color, 0.2);
+    background-color: mix(@theme_fg_color, @theme_bg_color, 0.2);
     border-radius: 6px;
 }
 
@@ -270,19 +270,19 @@ progressbar progress {
 tooltip {
     background-color: shade(@theme_bg_color, 0.1);
     color: @theme_fg_color;
-    border: 1px solid alpha(@theme_fg_color, 0.3);
+    border: 1px solid mix(@theme_fg_color, @theme_bg_color, 0.3);
     border-radius: 6px;
     padding: 6px 10px;
-    box-shadow: 0 2px 8px alpha(black, 0.3);
+    box-shadow: 0 2px 8px mix(black, @theme_bg_color, 0.3);
 }
 
 /* Popovers */
 popover {
     background-color: @popover_bg_color;
     color: @popover_fg_color;
-    border: 1px solid alpha(@theme_fg_color, 0.2);
+    border: 1px solid mix(@theme_fg_color, @popover_bg_color, 0.2);
     border-radius: 8px;
-    box-shadow: 0 4px 12px alpha(black, 0.3);
+    box-shadow: 0 4px 12px mix(black, @popover_bg_color, 0.3);
     padding: 8px;
 }
 EOF
@@ -323,8 +323,8 @@ cat > "$THEME_DIR/gtk-4.0/gtk.css" << EOF
 @define-color dialog_fg_color $foreground;
 @define-color popover_bg_color $background;
 @define-color popover_fg_color $foreground;
-@define-color shade_color alpha(black, 0.3);
-@define-color scrollbar_outline_color alpha($foreground, 0.2);
+@define-color shade_color mix(black, $background, 0.3);
+@define-color scrollbar_outline_color mix($foreground, $background, 0.2);
 
 /* Variables de compatibilidad GTK 3 */
 @define-color theme_bg_color @window_bg_color;
@@ -358,7 +358,7 @@ headerbar:backdrop {
 button {
     background: @card_bg_color;
     color: @card_fg_color;
-    border: 1px solid alpha(@window_fg_color, 0.2);
+    border: 1px solid mix(@window_fg_color, @card_bg_color, 0.2);
     border-radius: 8px;
     padding: 8px 16px;
     font-weight: 500;
@@ -366,15 +366,15 @@ button {
 }
 
 button:hover {
-    background: alpha(@accent_color, 0.1);
-    border-color: alpha(@accent_color, 0.3);
+    background: mix(@accent_color, @card_bg_color, 0.1);
+    border-color: mix(@accent_color, @card_bg_color, 0.3);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px alpha(black, 0.2);
+    box-shadow: 0 2px 8px mix(black, @card_bg_color, 0.2);
 }
 
 button:active {
     transform: translateY(0);
-    box-shadow: 0 1px 3px alpha(black, 0.3);
+    box-shadow: 0 1px 3px mix(black, @card_bg_color, 0.3);
 }
 
 button.suggested-action {
@@ -385,7 +385,7 @@ button.suggested-action {
 
 button.suggested-action:hover {
     background: shade(@accent_bg_color, 1.1);
-    box-shadow: 0 2px 12px alpha(@accent_bg_color, 0.4);
+    box-shadow: 0 2px 12px mix(@accent_bg_color, @card_bg_color, 0.4);
 }
 
 button.destructive-action {
@@ -398,7 +398,7 @@ button.destructive-action {
 entry {
     background: @view_bg_color;
     color: @view_fg_color;
-    border: 2px solid alpha(@window_fg_color, 0.2);
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.2);
     border-radius: 8px;
     padding: 10px 12px;
     transition: all 0.2s ease;
@@ -406,7 +406,7 @@ entry {
 
 entry:focus {
     border-color: @accent_color;
-    box-shadow: 0 0 0 3px alpha(@accent_color, 0.2);
+    box-shadow: 0 0 0 3px mix(@accent_color, @view_bg_color, 0.2);
 }
 
 /* Listas modernas */
@@ -423,7 +423,7 @@ listview > row {
 }
 
 listview > row:hover {
-    background: alpha(@accent_color, 0.1);
+    background: mix(@accent_color, @view_bg_color, 0.1);
 }
 
 listview > row:selected {
@@ -433,7 +433,7 @@ listview > row:selected {
 
 /* Switches modernos */
 switch {
-    background: alpha(@window_fg_color, 0.3);
+    background: mix(@window_fg_color, @window_bg_color, 0.3);
     border-radius: 16px;
     min-width: 48px;
     min-height: 24px;
@@ -456,7 +456,7 @@ switch slider {
 /* Checkboxes y radios modernos */
 checkbutton check {
     background: @view_bg_color;
-    border: 2px solid alpha(@window_fg_color, 0.4);
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.4);
     border-radius: 4px;
     min-width: 18px;
     min-height: 18px;
@@ -471,7 +471,7 @@ checkbutton check:checked {
 
 radiobutton radio {
     background: @view_bg_color;
-    border: 2px solid alpha(@window_fg_color, 0.4);
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.4);
     border-radius: 50%;
     min-width: 18px;
     min-height: 18px;
@@ -490,7 +490,7 @@ scrollbar {
 }
 
 scrollbar slider {
-    background: alpha(@window_fg_color, 0.3);
+    background: mix(@window_fg_color, @window_bg_color, 0.3);
     border-radius: 8px;
     min-width: 8px;
     min-height: 8px;
@@ -498,7 +498,7 @@ scrollbar slider {
 }
 
 scrollbar slider:hover {
-    background: alpha(@window_fg_color, 0.5);
+    background: mix(@window_fg_color, @window_bg_color, 0.5);
     min-width: 12px;
 }
 
@@ -506,9 +506,9 @@ scrollbar slider:hover {
 popover {
     background: @popover_bg_color;
     color: @popover_fg_color;
-    border: 1px solid alpha(@window_fg_color, 0.1);
+    border: 1px solid mix(@window_fg_color, @popover_bg_color, 0.1);
     border-radius: 12px;
-    box-shadow: 0 8px 24px alpha(black, 0.3);
+    box-shadow: 0 8px 24px mix(black, @popover_bg_color, 0.3);
     padding: 12px;
 }
 
@@ -518,7 +518,7 @@ tooltip {
     color: @window_fg_color;
     border-radius: 8px;
     padding: 8px 12px;
-    box-shadow: 0 4px 16px alpha(black, 0.3);
+    box-shadow: 0 4px 16px mix(black, @window_bg_color, 0.3);
 }
 
 /* Notebooks (pestañas) */
@@ -527,7 +527,7 @@ notebook {
 }
 
 notebook header {
-    background: alpha(@window_bg_color, 0.5);
+    background: mix(@window_bg_color, @window_fg_color, 0.95);
     border-radius: 8px 8px 0 0;
 }
 
@@ -539,7 +539,7 @@ notebook tab {
 }
 
 notebook tab:hover {
-    background: alpha(@accent_color, 0.1);
+    background: mix(@accent_color, @window_bg_color, 0.1);
 }
 
 notebook tab:checked {
@@ -549,7 +549,7 @@ notebook tab:checked {
 
 /* Barras de progreso */
 progressbar {
-    background: alpha(@window_fg_color, 0.1);
+    background: mix(@window_fg_color, @window_bg_color, 0.1);
     border-radius: 8px;
     overflow: hidden;
 }

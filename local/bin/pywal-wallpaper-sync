@@ -39,6 +39,12 @@ apply_pywal() {
         notify-send "⚠️ Pywal" "Error generando colores para rofi"
         return 1
     fi
+
+    # Generar tema GTK
+    if [ -x "$HOME/.local/bin/generate-pywal-gtk-theme" ]; then
+        echo "🎨 Generando tema GTK..."
+        "$HOME/.local/bin/generate-pywal-gtk-theme"
+    fi
     
     return 0
 }

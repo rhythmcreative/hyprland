@@ -552,14 +552,11 @@ configure_battery() {
     if [[ "$choice" == "2" ]]; then
         info "Applying Dual Battery configuration..."
         
-        # 1. Update modules-right: Replace 'battery' with 'battery#bat1', 'battery#bat2' (Preserving position)
-        jq '.["modules-right"] |= (map(if . == "battery" then ["battery#bat1", "battery#bat2"] else [.] end) | flatten)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        # 1. Update modules-right: Replace 'battery' (or existing battery config) with 'custom/dual-battery'
+        # We remove any existing battery modules first to be clean, then add custom/dual-battery
+        jq '.["modules-right"] |= (map(select(. != "battery" and . != "battery#bat1" and . != "battery#bat2")) + ["custom/dual-battery"])' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 
-        # 2. Define battery#bat1 (Left battery, BAT0)
-        jq '."battery#bat1" = (."battery" + {"bat": "BAT0"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-
-        # 3. Define battery#bat2 (Right battery, BAT1)
-        jq '."battery#bat2" = (."battery" + {"bat": "BAT1"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+        # Note: custom/dual-battery is already defined in the base config file.
         
         success "Dual battery configuration applied."
     elif [[ "$choice" == "3" ]]; then

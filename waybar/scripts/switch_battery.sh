@@ -7,7 +7,7 @@ if [ ! -f "$WAYBAR_CONFIG" ]; then
 fi
 
 # Detect current mode using jq to check modules-right list
-CURRENT_MODE=$(jq -r '.["modules-right"] | if any(. == "battery#bat1") and any(. == "battery#bat2") then "dual" elif any(. == "battery") then "single" else "pcmode" end' "$WAYBAR_CONFIG")
+CURRENT_MODE=$(jq -r '.["modules-right"] | if any(. == "custom/dual-battery") then "dual" elif any(. == "battery") then "single" else "pcmode" end' "$WAYBAR_CONFIG")
 
 echo "Detected mode: $CURRENT_MODE"
 
@@ -18,9 +18,9 @@ if [[ "$CURRENT_MODE" == "single" ]]; then
     notify-send "Waybar" "Switching to Dual Battery Mode..." || true
     
     # Apply Dual Battery
-    jq '.["modules-right"] |= (map(if . == "battery" then ["battery#bat1", "battery#bat2"] else [.] end) | flatten)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-    jq '."battery#bat1" = (."battery" + {"bat": "BAT0"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-    jq '."battery#bat2" = (."battery" + {"bat": "BAT1"})' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+    # Apply Dual Battery
+    jq '.["modules-right"] |= (map(if . == "battery" then ["custom/dual-battery"] else [.] end) | flatten)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+    # Ensure custom/dual-battery is defined (it should be in config already, but just in case we don't need to add dynamic definitions like before)
 
 elif [[ "$CURRENT_MODE" == "dual" ]]; then
     NEXT_MODE="pcmode"
@@ -28,8 +28,8 @@ elif [[ "$CURRENT_MODE" == "dual" ]]; then
     notify-send "Waybar" "Switching to PC Mode (No Battery)..." || true
 
     # Apply PC Mode
-    jq '.["modules-right"] |= map(select(. != "battery" and . != "battery#bat1" and . != "battery#bat2"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-    jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+    jq '.["modules-right"] |= map(select(. != "battery" and . != "custom/dual-battery"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+    # jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 
 else
     NEXT_MODE="single"

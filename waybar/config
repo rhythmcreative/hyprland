@@ -19,8 +19,7 @@
     "tray",
     "pulseaudio",
     "backlight",
-    "battery#bat1",
-    "battery#bat2"
+    "custom/dual-battery"
   ],
   "hyprland/workspaces": {
     "format": "{name} {icon}",
@@ -183,53 +182,12 @@
     "scroll-step": 2,
     "max-volume": 100
   },
-  "battery#bat1": {
-    "bat": "BAT0",
-    "states": {
-      "good": 95,
-      "warning": 30,
-      "critical": 15
-    },
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
-    "format-plugged": "󰂄 {capacity}%",
-    "format-alt": "{icon} {time}",
-    "format-icons": [
-      "󰁺",
-      "󰁻",
-      "󰁼",
-      "󰁽",
-      "󰁾",
-      "󰁿",
-      "󰂀",
-      "󰂁",
-      "󰂂",
-      "󰁹"
-    ]
-  },
-  "battery#bat2": {
-    "bat": "BAT0",
-    "states": {
-      "good": 95,
-      "warning": 30,
-      "critical": 15
-    },
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
-    "format-plugged": "󰂄 {capacity}%",
-    "format-alt": "{icon} {time}",
-    "format-icons": [
-      "󰁺",
-      "󰁻",
-      "󰁼",
-      "󰁽",
-      "󰁾",
-      "󰁿",
-      "󰂀",
-      "󰂁",
-      "󰂂",
-      "󰁹"
-    ]
+  "custom/dual-battery": {
+    "exec": "$HOME/.config/waybar/scripts/dual_battery_real.sh",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 5,
+    "tooltip": true
   },
   "custom/lock": {
     "tooltip": false,

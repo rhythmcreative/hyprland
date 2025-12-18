@@ -33,7 +33,7 @@ else CLASS="normal"; fi
 
 # Output JSON
 # Format: [BAT0] [BAT1]
-TEXT="$BAT0_ICON ${BAT0_CAPACITY}%  $BAT1_ICON ${BAT1_CAPACITY}%"
+TEXT="$BAT0_ICON ${BAT0_CAPACITY}% | $BAT1_ICON ${BAT1_CAPACITY}%"
 TOOLTIP="BAT0: ${BAT0_CAPACITY}% (${BAT0_STATUS})\\nBAT1: ${BAT1_CAPACITY}% (${BAT1_STATUS})"
 
 echo "{\"text\":\"$TEXT\",\"tooltip\":\"$TOOLTIP\",\"class\":\"$CLASS\"}"

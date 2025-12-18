@@ -4,7 +4,7 @@
 # Detecta automáticamente el wallpaper actual y sincroniza todos los temas
 
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-CURRENT_WALLPAPER_FILE="$HOME/.cache/current_wallpaper"
+CURRENT_WALLPAPER_FILE="$HOME/.cache/current-wallpaper"
 
 # Función para obtener el wallpaper actual
 get_current_wallpaper() {

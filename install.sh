@@ -506,24 +506,27 @@ setup_sddm() {
 
 
 setup_sddm_sudoers() {
-    info "Configuring sudoers for SDDM wallpaper sync..."
-    local SUDOERS_FILE="/etc/sudoers.d/sddm-wallpaper-sync"
-    local USER_NAME=$(whoami)
+    info "Configuring SDDM auto-sync permissions..."
     
-    # Paths to allow
-    local SCRIPT_1="/usr/share/sddm/themes/sddm-astronaut-theme/pywal-sync.sh"
-    local SCRIPT_2="/home/$USER_NAME/.local/bin/sync-sddm-wallpaper"
+    # Install root helper
+    if [ -f "$HOME/hyprland/local/bin/sddm-root-helper" ]; then
+        sudo cp "$HOME/hyprland/local/bin/sddm-root-helper" /usr/local/bin/sddm-root-helper
+        sudo chmod +x /usr/local/bin/sddm-root-helper
+        success "SDDM root helper installed."
+    else
+        warn "sddm-root-helper not found, skipping installation."
+        return
+    fi
     
-    # Create temporary file content
-    # We use a temporary file to validate syntax if possible, but here we just write it.
-    # Note: We use tee to write to /etc/sudoers.d/ which requires root.
-    
-    echo "$USER_NAME ALL=(ALL) NOPASSWD: $SCRIPT_1, $SCRIPT_2" | sudo tee "$SUDOERS_FILE" > /dev/null
-    
-    # Set correct permissions
-    sudo chmod 0440 "$SUDOERS_FILE"
-    
-    success "Sudoers configured for SDDM sync."
+    # Configure sudoers
+    SUDOERS_FILE="/etc/sudoers.d/hyprland-sddm"
+    if [ ! -f "$SUDOERS_FILE" ]; then
+        echo "%wheel ALL=(ALL) NOPASSWD: /usr/local/bin/sddm-root-helper" | sudo tee "$SUDOERS_FILE" > /dev/null
+        sudo chmod 440 "$SUDOERS_FILE"
+        success "Sudoers configured for SDDM sync."
+    else
+        info "Sudoers file already exists."
+    fi
 }
 
 

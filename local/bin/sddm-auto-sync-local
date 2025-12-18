@@ -118,7 +118,7 @@ sync_pywal_colors() {
     done < "$THEME_CONFIG" > "$temp_config"
     
     # Aplicar configuración
-    if sudo cp "$temp_config" "$THEME_CONFIG"; then
+    if sudo /usr/local/bin/sddm-root-helper update-theme-colors "$temp_config"; then
         echo "✅ Colores pywal aplicados al tema SDDM astronaut"
         echo "🎨 Colores aplicados:"
         echo "   • Color principal: $color4"
@@ -165,18 +165,11 @@ sync_cursor_theme() {
     fi
     
     # Actualizar configuración de SDDM
-    if sudo sed -i "s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" /etc/sddm.conf && 
-       sudo sed -i "s/^CursorSize=.*/CursorSize=$CURSOR_SIZE/" /etc/sddm.conf; then
+    if sudo /usr/local/bin/sddm-root-helper update-cursor "$CURSOR_THEME" "$CURSOR_SIZE"; then
         echo "✅ Cursor $CURSOR_THEME configurado en SDDM (tamaño: $CURSOR_SIZE)"
     else
         echo "❌ Error al configurar cursor en SDDM"
         return 1
-    fi
-    
-    # También actualizar en el tema específico si existe
-    if [ -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]; then
-        sudo sed -i "/\[General\]/,/^\[/ s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" "$SDDM_THEME_DIR/Themes/theme1.conf" 2>/dev/null || true
-        echo "✅ Cursor también configurado en el tema astronaut"
     fi
     
     return 0
@@ -212,15 +205,12 @@ sync_wallpaper() {
     fi
 
     # Copiar al directorio del tema con sudo
-    if sudo cp "$SDDM_WALLPAPER" "$BACKGROUNDS_DIR/current_wallpaper.jpg"; then
+    if sudo /usr/local/bin/sddm-root-helper update-wallpaper "$SDDM_WALLPAPER"; then
         echo "✅ Wallpaper aplicado al tema SDDM"
     else
         echo "❌ Error al aplicar wallpaper al tema"
         return 1
     fi
-
-    # Actualizar configuración del tema para usar el nuevo wallpaper
-    sudo sed -i 's|^Background=.*|Background="Backgrounds/current_wallpaper.jpg"|' "$SDDM_THEME_DIR/Themes/theme1.conf"
 
     echo "🎨 Wallpaper SDDM sincronizado exitosamente!"
 }
@@ -284,6 +274,7 @@ elif [ "$EDCONNECTED" -eq 1 ]; then
     # Solo laptop eDP-1
     echo "Solo eDP-1 conectado..." >> /var/log/sddm-xsetup.log
     xrandr --output eDP-1 --mode 1920x1080 --primary
+    
 else
     echo "Usando detección automática..." >> /var/log/sddm-xsetup.log
     xrandr --auto
@@ -299,8 +290,7 @@ XSETUP_EOF
 
     # Aplicar configuración
     echo "📝 Actualizando script Xsetup de SDDM..."
-    if sudo cp "$xsetup_temp" "/etc/sddm/Xsetup"; then
-        sudo chmod +x "/etc/sddm/Xsetup"
+    if sudo /usr/local/bin/sddm-root-helper update-monitors "$xsetup_temp"; then
         echo "✅ SDDM configurado con disposición de monitores compatible con nwg-displays"
         rm "$xsetup_temp"
         return 0
@@ -374,7 +364,7 @@ show_current_wallpaper() {
 
 restart_sddm() {
     echo "🔄 Reiniciando SDDM para aplicar cambios..."
-    sudo systemctl restart sddm
+    sudo /usr/local/bin/sddm-root-helper restart-sddm
     echo "✅ SDDM reiniciado"
 }
 

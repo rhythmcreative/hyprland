@@ -1,0 +1,68 @@
+#!/bin/bash
+# Helper script for SDDM operations requiring root privileges
+# This script is intended to be run via sudo without password (configured in sudoers)
+
+set -e
+
+SDDM_THEME_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BACKGROUNDS_DIR="$SDDM_THEME_DIR/Backgrounds"
+THEME_CONFIG="$SDDM_THEME_DIR/Themes/theme1.conf"
+
+case "$1" in
+    "update-wallpaper")
+        SOURCE_FILE="$2"
+        if [ -f "$SOURCE_FILE" ]; then
+            cp "$SOURCE_FILE" "$BACKGROUNDS_DIR/current_wallpaper.jpg"
+            sed -i 's|^Background=.*|Background="Backgrounds/current_wallpaper.jpg"|' "$THEME_CONFIG"
+            echo "✅ Wallpaper updated in SDDM theme"
+        else
+            echo "❌ Source file not found: $SOURCE_FILE"
+            exit 1
+        fi
+        ;;
+    "update-theme-colors")
+        SOURCE_CONFIG="$2"
+        if [ -f "$SOURCE_CONFIG" ]; then
+            cp "$SOURCE_CONFIG" "$THEME_CONFIG"
+            echo "✅ SDDM theme colors updated"
+        else
+            echo "❌ Source config not found: $SOURCE_CONFIG"
+            exit 1
+        fi
+        ;;
+    "update-cursor")
+        CURSOR_THEME="$2"
+        CURSOR_SIZE="$3"
+        if [ -n "$CURSOR_THEME" ] && [ -n "$CURSOR_SIZE" ]; then
+            sed -i "s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" /etc/sddm.conf
+            sed -i "s/^CursorSize=.*/CursorSize=$CURSOR_SIZE/" /etc/sddm.conf
+            
+            if [ -f "$THEME_CONFIG" ]; then
+                sed -i "/\[General\]/,/^\[/ s/^CursorTheme=.*/CursorTheme=$CURSOR_THEME/" "$THEME_CONFIG"
+            fi
+            echo "✅ Cursor updated to $CURSOR_THEME ($CURSOR_SIZE)"
+        else
+            echo "❌ Missing cursor arguments"
+            exit 1
+        fi
+        ;;
+    "update-monitors")
+        SOURCE_XSETUP="$2"
+        if [ -f "$SOURCE_XSETUP" ]; then
+            cp "$SOURCE_XSETUP" "/etc/sddm/Xsetup"
+            chmod +x "/etc/sddm/Xsetup"
+            echo "✅ SDDM Xsetup updated"
+        else
+            echo "❌ Source Xsetup not found: $SOURCE_XSETUP"
+            exit 1
+        fi
+        ;;
+    "restart-sddm")
+        systemctl restart sddm
+        echo "✅ SDDM restarted"
+        ;;
+    *)
+        echo "❌ Unknown command: $1"
+        exit 1
+        ;;
+esac

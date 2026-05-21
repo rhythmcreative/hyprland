@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Script para probar el funcionamiento de las señales de waybar
+# Uso: ~/.local/bin/test-waybar-signals
+
+echo "🧪 Probando señales de waybar..."
+
+if ! pgrep -x waybar > /dev/null; then
+    echo "❌ Waybar no está ejecutándose"
+    exit 1
+fi
+
+echo "✅ Waybar está ejecutándose"
+echo "🔍 PIDs de waybar: $(pgrep -x waybar)"
+
+echo "📱 Probando SIGUSR1 (ocultar waybar)..."
+pkill -SIGUSR1 waybar
+sleep 2
+
+echo "📱 Probando SIGUSR2 (mostrar waybar)..."  
+pkill -SIGUSR2 waybar
+sleep 2
+
+echo "✅ Pruebas completadas. Si waybar desapareció y reapareció, las señales funcionan correctamente."

@@ -1,0 +1,270 @@
+/* PywalSync-Mono GTK 4.0 - Tema generado automáticamente desde pywal */
+/* Generado el: Sun May  3 21:24:08 CEST 2026 */
+
+@define-color accent_color #344356;
+@define-color accent_bg_color #344356;
+@define-color accent_fg_color #b0b8bf;
+@define-color destructive_color #344356;
+@define-color destructive_bg_color #344356;
+@define-color destructive_fg_color white;
+@define-color success_color #3B6353;
+@define-color success_bg_color #3B6353;
+@define-color success_fg_color white;
+@define-color warning_color #384B68;
+@define-color warning_bg_color #384B68;
+@define-color warning_fg_color black;
+@define-color error_color #344356;
+@define-color error_bg_color #344356;
+@define-color error_fg_color white;
+@define-color window_bg_color #0d0e10;
+@define-color window_fg_color #b0b8bf;
+@define-color view_bg_color #0d0e10;
+@define-color view_fg_color #b0b8bf;
+@define-color headerbar_bg_color shade(#0d0e10, 0.9);
+@define-color headerbar_fg_color #b0b8bf;
+@define-color headerbar_border_color shade(#0d0e10, 0.7);
+@define-color headerbar_backdrop_color #0d0e10;
+@define-color headerbar_shade_color shade(#0d0e10, 0.8);
+@define-color card_bg_color shade(#0d0e10, 1.1);
+@define-color card_fg_color #b0b8bf;
+@define-color card_shade_color shade(#0d0e10, 0.9);
+@define-color dialog_bg_color #0d0e10;
+@define-color dialog_fg_color #b0b8bf;
+@define-color popover_bg_color #0d0e10;
+@define-color popover_fg_color #b0b8bf;
+@define-color shade_color mix(black, #0d0e10, 0.3);
+@define-color scrollbar_outline_color mix(#b0b8bf, #0d0e10, 0.2);
+
+/* Variables de compatibilidad GTK 3 */
+@define-color theme_bg_color @window_bg_color;
+@define-color theme_fg_color @window_fg_color;
+@define-color theme_base_color @view_bg_color;
+@define-color theme_text_color @view_fg_color;
+@define-color theme_selected_bg_color @accent_bg_color;
+@define-color theme_selected_fg_color @accent_fg_color;
+
+/* Estilo base */
+window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Headerbar GTK 4 */
+headerbar {
+    background: @headerbar_bg_color;
+    color: @headerbar_fg_color;
+    border-bottom: 1px solid @headerbar_border_color;
+    border-radius: 12px 12px 0 0;
+    padding: 6px;
+}
+
+headerbar:backdrop {
+    background: @headerbar_backdrop_color;
+}
+
+/* Botones modernos */
+button {
+    background: @card_bg_color;
+    color: @card_fg_color;
+    border: 1px solid mix(@window_fg_color, @card_bg_color, 0.2);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover {
+    background: mix(@accent_color, @card_bg_color, 0.1);
+    border-color: mix(@accent_color, @card_bg_color, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px mix(black, @card_bg_color, 0.2);
+}
+
+button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px mix(black, @card_bg_color, 0.3);
+}
+
+button.suggested-action {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+    border-color: @accent_bg_color;
+}
+
+button.suggested-action:hover {
+    background: shade(@accent_bg_color, 1.1);
+    box-shadow: 0 2px 12px mix(@accent_bg_color, @card_bg_color, 0.4);
+}
+
+button.destructive-action {
+    background: @destructive_bg_color;
+    color: @destructive_fg_color;
+    border-color: @destructive_bg_color;
+}
+
+/* Entradas modernas */
+entry {
+    background: @view_bg_color;
+    color: @view_fg_color;
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.2s ease;
+}
+
+entry:focus {
+    border-color: @accent_color;
+    box-shadow: 0 0 0 3px mix(@accent_color, @view_bg_color, 0.2);
+}
+
+/* Listas modernas */
+listview {
+    background: @view_bg_color;
+    border-radius: 12px;
+}
+
+listview > row {
+    padding: 12px;
+    border-radius: 8px;
+    margin: 2px;
+    transition: all 0.2s ease;
+}
+
+listview > row:hover {
+    background: mix(@accent_color, @view_bg_color, 0.1);
+}
+
+listview > row:selected {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Switches modernos */
+switch {
+    background: mix(@window_fg_color, @window_bg_color, 0.3);
+    border-radius: 16px;
+    min-width: 48px;
+    min-height: 24px;
+    transition: all 0.2s ease;
+}
+
+switch:checked {
+    background: @accent_bg_color;
+}
+
+switch slider {
+    background: white;
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 2px;
+    transition: all 0.2s ease;
+}
+
+/* Checkboxes y radios modernos */
+checkbutton check {
+    background: @view_bg_color;
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.4);
+    border-radius: 4px;
+    min-width: 18px;
+    min-height: 18px;
+    transition: all 0.2s ease;
+}
+
+checkbutton check:checked {
+    background: @accent_bg_color;
+    border-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+radiobutton radio {
+    background: @view_bg_color;
+    border: 2px solid mix(@window_fg_color, @view_bg_color, 0.4);
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    transition: all 0.2s ease;
+}
+
+radiobutton radio:checked {
+    background: @accent_bg_color;
+    border-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Scrollbars minimalistas */
+scrollbar {
+    background: transparent;
+}
+
+scrollbar slider {
+    background: mix(@window_fg_color, @window_bg_color, 0.3);
+    border-radius: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    transition: all 0.2s ease;
+}
+
+scrollbar slider:hover {
+    background: mix(@window_fg_color, @window_bg_color, 0.5);
+    min-width: 12px;
+}
+
+/* Popovers modernos */
+popover {
+    background: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid mix(@window_fg_color, @popover_bg_color, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px mix(black, @popover_bg_color, 0.3);
+    padding: 12px;
+}
+
+/* Tooltips */
+tooltip {
+    background: shade(@window_bg_color, 0.1);
+    color: @window_fg_color;
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 4px 16px mix(black, @window_bg_color, 0.3);
+}
+
+/* Notebooks (pestañas) */
+notebook {
+    background: @window_bg_color;
+}
+
+notebook header {
+    background: mix(@window_bg_color, @window_fg_color, 0.95);
+    border-radius: 8px 8px 0 0;
+}
+
+notebook tab {
+    padding: 10px 20px;
+    border-radius: 8px 8px 0 0;
+    margin: 2px;
+    transition: all 0.2s ease;
+}
+
+notebook tab:hover {
+    background: mix(@accent_color, @window_bg_color, 0.1);
+}
+
+notebook tab:checked {
+    background: @window_bg_color;
+    border-bottom: 3px solid @accent_color;
+}
+
+/* Barras de progreso */
+progressbar {
+    background: mix(@window_fg_color, @window_bg_color, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+progressbar progress {
+    background: linear-gradient(90deg, @accent_color, shade(@accent_color, 1.2));
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}

@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Script para sincronizar Mission Center con el tema GTK del sistema
+# Este script asegura que Mission Center use el tema correcto del sistema
+
+echo "🎨 Sincronizando Mission Center con GTK..."
+
+# Obtener el esquema de colores actual
+COLOR_SCHEME=$(gsettings get org.gnome.desktop.interface color-scheme)
+echo "Esquema de colores actual: $COLOR_SCHEME"
+
+# Configurar el tema GTK según el esquema de colores
+if [[ $COLOR_SCHEME == "'prefer-dark'" ]]; then
+    echo "Configurando tema oscuro..."
+    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
+    export GTK_THEME=Adwaita-dark
+else
+    echo "Configurando tema claro..."
+    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+    export GTK_THEME=Adwaita
+fi
+
+# Asegurar que Mission Center use el estilo del sistema
+gsettings set io.missioncenter.MissionCenter window-interface-style 'system'
+
+# Verificar configuraciones
+echo "✅ Configuraciones actuales:"
+echo "  - Tema GTK: $(gsettings get org.gnome.desktop.interface gtk-theme)"
+echo "  - Esquema de colores: $(gsettings get org.gnome.desktop.interface color-scheme)"
+echo "  - Mission Center estilo: $(gsettings get io.missioncenter.MissionCenter window-interface-style)"
+
+echo "🚀 Sincronización completada. Reinicia Mission Center si estaba ejecutándose."

@@ -1,0 +1,314 @@
+#!/bin/bash
+
+# PywalSync-Tela: Genera tema de iconos Tela Circle con colores de Pywal
+# Autor: Script personalizado para rhythmcreative
+
+set -e
+
+# Configuración
+PYWAL_COLORS_FILE="$HOME/.cache/wal/colors"
+SOURCE_THEME="/usr/share/icons/Tela-circle"
+TARGET_THEME="$HOME/.local/share/icons/PywalSync-Tela"
+TEMP_DIR="/tmp/pywal-tela-$$"
+
+# Colores por defecto (fallback)
+DEFAULT_PRIMARY="#71aa75"
+DEFAULT_SECONDARY="#8bc891"
+DEFAULT_ACCENT="#ffffff"
+
+# Función para leer colores de Pywal
+read_pywal_colors() {
+    if [[ ! -f "$PYWAL_COLORS_FILE" ]]; then
+        echo "Error: Archivo de colores de Pywal no encontrado en $PYWAL_COLORS_FILE"
+        echo "Ejecuta 'wal' primero para generar los colores"
+        exit 1
+    fi
+    
+    # Leer colores de Pywal (formato simple con un color por línea)
+    colors=($(grep -E '^#[0-9a-fA-F]{6}' "$PYWAL_COLORS_FILE" | head -16))
+    
+    if [[ ${#colors[@]} -lt 8 ]]; then
+        echo "Error: No se pudieron leer suficientes colores de Pywal (encontrados: ${#colors[@]})"
+        echo "Contenido del archivo:"
+        cat "$PYWAL_COLORS_FILE"
+        exit 1
+    fi
+    
+    # Asignar colores principales (índices empiezan en 0)
+    BACKGROUND="${colors[0]}"
+    PRIMARY="${colors[1]}"
+    SECONDARY="${colors[2]}"
+    ACCENT="${colors[7]}"  # Color claro para texto/detalles
+    ALT_PRIMARY="${colors[3]}"
+    ALT_SECONDARY="${colors[4]}"
+    
+    echo "Colores de Pywal detectados:"
+    echo "  Background: $BACKGROUND"
+    echo "  Primary: $PRIMARY"
+    echo "  Secondary: $SECONDARY"
+    echo "  Accent: $ACCENT"
+    echo "  Alt Primary: $ALT_PRIMARY"
+    echo "  Alt Secondary: $ALT_SECONDARY"
+}
+
+# Función para crear estructura de directorios
+create_theme_structure() {
+    echo "Creando estructura del tema en $TARGET_THEME..."
+    
+    # Limpiar tema anterior si existe
+    if [[ -d "$TARGET_THEME" ]]; then
+        rm -rf "$TARGET_THEME"
+    fi
+    
+    # Crear directorio temporal
+    mkdir -p "$TEMP_DIR"
+    
+    # Copiar estructura completa del tema base
+    cp -r "$SOURCE_THEME" "$TEMP_DIR/theme"
+    
+    echo "Estructura copiada correctamente"
+}
+
+# Función para colorizar un archivo SVG
+colorize_svg() {
+    local svg_file="$1"
+    local temp_file="$2"
+    
+    if [[ ! -f "$svg_file" ]]; then
+        return
+    fi
+    
+    # Leer el contenido del SVG
+    content=$(cat "$svg_file")
+    
+    # Mapeo de colores comunes en Tela Circle a colores de Pywal
+    # Verde principal -> Primary
+    content=$(echo "$content" | sed "s/#71aa75/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#8bc891/$SECONDARY/g")
+    
+    # Azules
+    content=$(echo "$content" | sed "s/#4f9cf9/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#74b9ff/$SECONDARY/g")
+    
+    # Rojos
+    content=$(echo "$content" | sed "s/#fd5d5d/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#ff7675/$SECONDARY/g")
+    
+    # Naranjas
+    content=$(echo "$content" | sed "s/#fd9353/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#fdcb6e/$SECONDARY/g")
+    
+    # Amarillos
+    content=$(echo "$content" | sed "s/#f1c40f/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#fdcb6e/$SECONDARY/g")
+    
+    # Púrpuras
+    content=$(echo "$content" | sed "s/#a29bfe/$PRIMARY/g")
+    content=$(echo "$content" | sed "s/#d63031/$SECONDARY/g")
+    
+    # Grises y colores neutros más dinámicos
+    content=$(echo "$content" | sed "s/#5f6368/$ALT_PRIMARY/g")
+    content=$(echo "$content" | sed "s/#9aa0a6/$ALT_SECONDARY/g")
+    content=$(echo "$content" | sed "s/#dadce0/$ACCENT/g")
+    
+    # Escribir el archivo modificado
+    echo "$content" > "$temp_file"
+}
+
+# Función para procesar todos los iconos SVG
+process_svg_icons() {
+    echo "Colorizando iconos SVG con colores de Pywal..."
+    
+    local theme_dir="$TEMP_DIR/theme"
+    local total_files=0
+    local processed_files=0
+    
+    # Directorios prioritarios para procesar
+    local priority_dirs=(
+        "scalable/apps"
+        "scalable/places"
+        "scalable/devices"
+        "scalable/mimetypes"
+        "48/apps"
+        "32/apps"
+    )
+    
+    echo "Procesando iconos en directorios prioritarios..."
+    
+    # Procesar directorios prioritarios
+    for dir in "${priority_dirs[@]}"; do
+        local full_dir="$theme_dir/$dir"
+        if [[ -d "$full_dir" ]]; then
+            echo "Procesando directorio: $dir"
+            find "$full_dir" -name "*.svg" | while read svg_file; do
+                colorize_svg "$svg_file" "$svg_file"
+                ((processed_files++))
+                
+                if (( processed_files % 100 == 0 )); then
+                    echo "  Procesados: $processed_files iconos"
+                fi
+            done
+        fi
+    done
+    
+    # Procesar el resto usando un enfoque más eficiente
+    echo "Procesando iconos restantes..."
+    
+    # Usar sed en lugar de múltiples llamadas para mejor rendimiento
+    local find_output=$(find "$theme_dir" -name "*.svg" -not -path "*/scalable/apps/*" -not -path "*/32/apps/*" -not -path "*/48/apps/*")
+    
+    if [[ -n "$find_output" ]]; then
+        echo "$find_output" | head -1000 | while read svg_file; do
+            if [[ -f "$svg_file" ]]; then
+                # Proceso más eficiente: usar sed directamente en el archivo
+                sed -i \
+                    -e "s/#71aa75/$PRIMARY/g" \
+                    -e "s/#8bc891/$SECONDARY/g" \
+                    -e "s/#4f9cf9/$PRIMARY/g" \
+                    -e "s/#74b9ff/$SECONDARY/g" \
+                    -e "s/#fd5d5d/$PRIMARY/g" \
+                    -e "s/#ff7675/$SECONDARY/g" \
+                    -e "s/#fd9353/$PRIMARY/g" \
+                    -e "s/#fdcb6e/$SECONDARY/g" \
+                    -e "s/#f1c40f/$PRIMARY/g" \
+                    -e "s/#a29bfe/$PRIMARY/g" \
+                    -e "s/#d63031/$SECONDARY/g" \
+                    -e "s/#5f6368/$ALT_PRIMARY/g" \
+                    -e "s/#9aa0a6/$ALT_SECONDARY/g" \
+                    -e "s/#dadce0/$ACCENT/g" \
+                    "$svg_file"
+                    
+                ((processed_files++))
+            fi
+        done
+    fi
+    
+    echo "Colorización completada: $processed_files archivos procesados"
+}
+
+# Función para crear index.theme personalizado
+create_index_theme() {
+    echo "Creando index.theme personalizado..."
+    
+    cat > "$TEMP_DIR/theme/index.theme" << EOF
+[Icon Theme]
+Name=PywalSync Tela
+Comment=Tela Circle icon theme synchronized with Pywal colors
+Inherits=hicolor,Adwaita,breeze
+Example=folder
+
+# KDE/Plasma Stuff
+DisplayDepth=32
+LinkOverlay=link_overlay
+LockOverlay=lock_overlay
+ZipOverlay=zip_overlay
+DesktopDefault=48
+DesktopSizes=16,22,32,48,64,96,128,256
+ToolbarDefault=22
+ToolbarSizes=16,22,32,48
+MainToolbarDefault=22
+MainToolbarSizes=16,22,32,48
+SmallDefault=16
+SmallSizes=16,22,32,48
+PanelDefault=48
+PanelSizes=16,22,32,48,64,96,128,256
+DialogDefault=32
+DialogSizes=16,22,32,48,64,128,256
+FollowsColorScheme=true
+
+KDE-Extensions=.svg
+
+# Directory list
+Directories=16/actions,16/apps,16/devices,16/mimetypes,16/panel,16/status,16/places,22/actions,22/categories,22/emblems,22/devices,22/mimetypes,22/panel,22/places,24/actions,24/panel,24/animations,24/devices,24/places,32/actions,32/categories,32/devices,32/status,scalable/apps,scalable/devices,scalable/places,scalable/mimetypes,symbolic/apps,symbolic/actions,symbolic/categories,symbolic/devices,symbolic/emblems,symbolic/emotes,symbolic/mimetypes,symbolic/places,symbolic/status
+ScaledDirectories=16@2x/actions,16@2x/apps,16@2x/devices,16@2x/mimetypes,16@2x/panel,16@2x/status,16@2x/places,22@2x/actions,22@2x/categories,22@2x/devices,22@2x/emblems,22@2x/mimetypes,22@2x/panel,22@2x/places,24@2x/actions,24@2x/devices,24@2x/panel,24@2x/animations,24@2x/places,32@2x/actions,32@2x/categories,32@2x/devices,32@2x/status,scalable@2x/apps,scalable@2x/devices,scalable@2x/places,scalable@2x/mimetypes,16@3x/actions,16@3x/apps,16@3x/devices,16@3x/mimetypes,16@3x/panel,16@3x/status,16@3x/places,22@3x/actions,22@3x/devices,22@3x/emblems,22@3x/mimetypes,22@3x/panel,22@3x/places,24@3x/actions,24@3x/devices,24@3x/panel,24@3x/animations,24@3x/places,32@3x/actions,32@3x/categories,32@3x/devices,32@3x/status,scalable@3x/apps,scalable@3x/devices,scalable@3x/places,scalable@3x/mimetypes
+
+EOF
+
+    # Copiar el resto del archivo index.theme original
+    grep -A 1000 "^# 16x16$" "$SOURCE_THEME/index.theme" >> "$TEMP_DIR/theme/index.theme"
+}
+
+# Función para instalar el tema
+install_theme() {
+    echo "Instalando tema PywalSync-Tela..."
+    
+    # Crear directorio de temas de usuario si no existe
+    mkdir -p "$(dirname "$TARGET_THEME")"
+    
+    # Mover tema desde directorio temporal
+    mv "$TEMP_DIR/theme" "$TARGET_THEME"
+    
+    echo "Tema instalado en $TARGET_THEME"
+}
+
+# Función para limpiar archivos temporales
+cleanup() {
+    if [[ -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+# Función para aplicar el tema
+apply_theme() {
+    echo "Aplicando tema PywalSync-Tela..."
+    
+    # Para GTK
+    if command -v gsettings >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface icon-theme "PywalSync Tela"
+        echo "Tema aplicado en GTK via gsettings"
+    fi
+    
+    # Para KDE/Plasma
+    if command -v kwriteconfig5 >/dev/null 2>&1; then
+        kwriteconfig5 --file kdeglobals --group Icons --key Theme "PywalSync Tela"
+        echo "Tema aplicado en KDE via kwriteconfig5"
+    fi
+    
+    # Actualizar cache de iconos
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -f -t "$TARGET_THEME" 2>/dev/null || true
+        echo "Cache de iconos actualizado"
+    fi
+}
+
+# Función principal
+main() {
+    echo "PywalSync-Tela: Generando tema de iconos con colores de Pywal"
+    echo "================================================================"
+    
+    # Verificar dependencias
+    if [[ ! -d "$SOURCE_THEME" ]]; then
+        echo "Error: Tema base Tela-circle no encontrado en $SOURCE_THEME"
+        echo "Instala el tema Tela-circle primero"
+        exit 1
+    fi
+    
+    # Configurar trap para limpiar en caso de error
+    trap cleanup EXIT
+    
+    # Ejecutar pasos principales
+    read_pywal_colors
+    create_theme_structure
+    process_svg_icons
+    create_index_theme
+    install_theme
+    
+    if [[ "$1" != "--no-apply" ]]; then
+        apply_theme
+    fi
+    
+    echo "================================================================"
+    echo "¡Completado! El tema PywalSync-Tela ha sido generado e instalado."
+    echo "Los colores se sincronizarán automáticamente con Pywal."
+    echo ""
+    echo "Para regenerar el tema después de cambiar wallpaper:"
+    echo "  pywal-tela-sync"
+    echo ""
+    echo "Para regenerar sin aplicar automáticamente:"
+    echo "  pywal-tela-sync --no-apply"
+}
+
+# Ejecutar si es llamado directamente
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

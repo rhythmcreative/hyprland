@@ -1,0 +1,41 @@
+/*
+ * Rofi color theme generado automáticamente por pywal
+ * Template para sincronización automática
+ * Generado: Tue May 19 21:28:01 CEST 2026
+ */
+
+* {
+    /* Colores principales de pywal */
+    background:     #070E14;
+    background-alt: #070E14;
+    foreground:     #b1bace;
+    foreground-alt: #7b8290;
+    
+    /* Colores de acento */
+    selected:       #637498;
+    active:         #354B69;
+    urgent:         #30425B;
+    
+    /* Colores adicionales */
+    color0:         #070E14;
+    color1:         #30425B;
+    color2:         #354B69;
+    color3:         #495875;
+    color4:         #3E5C81;
+    color5:         #56698C;
+    color6:         #637498;
+    color7:         #b1bace;
+    color8:         #7b8290;
+    color9:         #30425B;
+    color10:        #354B69;
+    color11:        #495875;
+    color12:        #3E5C81;
+    color13:        #56698C;
+    color14:        #637498;
+    color15:        #b1bace;
+    
+    /* Transparencias dinámicas */
+    background-trans:     #070E14CC;
+    background-alt-trans: #070E14AA;
+    selected-trans:       #637498DD;
+}

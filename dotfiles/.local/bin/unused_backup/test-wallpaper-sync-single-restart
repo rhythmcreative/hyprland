@@ -1,0 +1,137 @@
+#!/bin/bash
+
+# Script de prueba para verificar que waybar solo se reinicia una vez
+# Simula la selección de wallpaper actual para probar la sincronización
+
+echo "🧪 Probando sincronización completa (sin abrir selector)..."
+
+# Verificar wallpaper actual
+current_wallpaper=$(cat ~/.cache/current-wallpaper 2>/dev/null)
+if [[ -z "$current_wallpaper" ]] || [[ ! -f "$current_wallpaper" ]]; then
+    echo "❌ No se encontró wallpaper actual válido"
+    echo "💡 Ejecuta el selector primero con Super+Shift+W"
+    exit 1
+fi
+
+echo "🖼️ Simulando aplicación del wallpaper actual: $(basename "$current_wallpaper")"
+
+# Limpiar log anterior
+rm -f /tmp/wallpaper-selector-sync.log
+
+# Simular proceso completo
+echo "🎨 Aplicando pywal..."
+if [[ "${current_wallpaper,,}" == *.gif ]]; then
+    # Para GIFs
+    gif_frame_temp="/tmp/test_gif_frame_$$.png"
+    if convert "$current_wallpaper[0]" "$gif_frame_temp" 2>/dev/null; then
+        wal -i "$gif_frame_temp" -n
+        rm -f "$gif_frame_temp" 2>/dev/null || true
+        echo "✅ Colores extraídos del primer frame del GIF"
+    fi
+else
+    wal -i "$current_wallpaper" -n
+    echo "✅ Colores aplicados desde imagen estática"
+fi
+
+sleep 1
+
+# Recargar Hyprland
+echo "🎨 Recargando Hyprland..."
+hyprctl reload > /dev/null 2>&1 || true
+sleep 0.5
+
+# Actualizar CSS de waybar
+echo "📝 Actualizando CSS de waybar..."
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+    
+    waybar_config_dir="$HOME/.config/waybar"
+    
+    cat > "$waybar_config_dir/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    
+    if [[ -f "$waybar_config_dir/style-pywal.css" ]]; then
+        cp "$waybar_config_dir/style-pywal.css" "$waybar_config_dir/style.css"
+        echo "✅ Style optimizado aplicado"
+    fi
+fi
+
+# Contar instancias de waybar ANTES
+waybar_before=$(pgrep -x waybar | wc -l)
+echo "📊 Instancias de waybar ANTES del reinicio: $waybar_before"
+
+# REINICIO ÚNICO DE WAYBAR
+echo ""
+echo "🔄 REINICIANDO WAYBAR (SOLO UNA VEZ)..."
+waybar_pids=$(pgrep -x waybar)
+
+if [[ -n "$waybar_pids" ]]; then
+    pid_count=$(echo "$waybar_pids" | wc -l)
+    echo "📋 Encontradas $pid_count instancia(s) de waybar"
+    
+    if [[ $pid_count -eq 1 ]]; then
+        echo "🔄 Intentando recarga inteligente..."
+        if kill -USR2 $waybar_pids 2>/dev/null; then
+            echo "✅ Waybar recargado con señal USR2 (SIN REINICIO COMPLETO)"
+            restart_method="Recarga con señal"
+        else
+            echo "🔄 Recarga con señal falló, reiniciando..."
+            kill -TERM $waybar_pids 2>/dev/null
+            sleep 1.5
+            waybar &
+            echo "✅ Waybar reiniciado (1 vez)"
+            restart_method="Reinicio completo (1 vez)"
+        fi
+    else
+        echo "🧹 Limpiando múltiples instancias..."
+        kill -TERM $waybar_pids 2>/dev/null
+        sleep 2
+        pkill -9 waybar 2>/dev/null || true
+        sleep 1
+        waybar &
+        echo "✅ Waybar iniciado (instancia única)"
+        restart_method="Limpieza + reinicio (1 vez)"
+    fi
+else
+    waybar &
+    echo "✅ Waybar iniciado (no estaba corriendo)"
+    restart_method="Inicio desde cero"
+fi
+
+sleep 2
+
+# Contar instancias DESPUÉS
+waybar_after=$(pgrep -x waybar | wc -l)
+echo ""
+echo "📊 Instancias de waybar DESPUÉS: $waybar_after"
+echo "🔧 Método utilizado: $restart_method"
+
+# Verificar que solo hay una instancia
+if [[ $waybar_after -eq 1 ]]; then
+    echo "✅ ÉXITO: Solo hay 1 instancia de waybar corriendo"
+else
+    echo "⚠️ ADVERTENCIA: Hay $waybar_after instancias de waybar"
+fi
+
+echo ""
+echo "🎉 Prueba completada. Waybar se reinició solo una vez usando el método más eficiente."

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# nm-applet simple color updater
+echo "🎨 Aplicando colores de pywal a nm-applet..."
+
+# Verificar pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Cargar colores
+source "$HOME/.cache/wal/colors.sh"
+echo "✅ Colores: bg=$background, fg=$foreground, accent=$color4"
+
+# Crear directorio
+mkdir -p "$HOME/.config/gtk-3.0"
+
+# Crear CSS simplificado y efectivo
+cat > "$HOME/.config/gtk-3.0/gtk.css" << EOF
+/* GTK Theme generado por pywal */
+@define-color theme_bg_color $background;
+@define-color theme_fg_color $foreground;
+@define-color theme_base_color $background;
+@define-color theme_text_color $foreground;
+@define-color theme_selected_bg_color $color4;
+@define-color theme_selected_fg_color $background;
+
+/* Aplicar a todos los elementos */
+window { background-color: $background; color: $foreground; }
+menu { background-color: $background; color: $foreground; border: 1px solid $color4; }
+menuitem { background-color: $background; color: $foreground; padding: 6px; }
+menuitem:hover { background-color: $color4; color: $background; }
+button { background-color: $color4; color: $background; border: 1px solid $color4; }
+button:hover { background-color: $foreground; color: $background; }
+EOF
+
+# Configurar gsettings
+gsettings set org.gnome.desktop.interface gtk-theme "Adwaita:dark" 2>/dev/null
+gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null
+
+# Reiniciar nm-applet
+echo "🔄 Reiniciando nm-applet..."
+pkill nm-applet 2>/dev/null
+sleep 1
+nm-applet &
+
+echo "✅ Colores aplicados. Abre el menú de nm-applet para ver los cambios."
+notify-send "nm-applet" "Colores actualizados" -t 2000 2>/dev/null || true

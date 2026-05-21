@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Script de prueba para verificar la sincronización automática nm-applet ↔ waybar
+
+echo "🧪 Prueba de sincronización automática nm-applet ↔ waybar"
+echo "=================================================="
+echo ""
+
+# Verificar que el monitor esté ejecutándose
+if ! /home/rhythmcreative/.local/bin/nm-applet-monitor status > /dev/null; then
+    echo "❌ El monitor no está ejecutándose. Iniciando..."
+    /home/rhythmcreative/.local/bin/nm-applet-monitor start
+    echo ""
+fi
+
+# Mostrar colores actuales
+echo "🎨 Colores actuales de waybar:"
+if [ -f "$HOME/.config/waybar/colors-pywal.css" ]; then
+    grep -E "(background|foreground|color4)" "$HOME/.config/waybar/colors-pywal.css" | head -3
+else
+    echo "  ⚠️ Archivo de colores no encontrado"
+fi
+echo ""
+
+# Buscar wallpapers disponibles
+wallpapers_dir="$HOME/Pictures/Wallpapers"
+if [ -d "$wallpapers_dir" ]; then
+    wallpapers=($(find "$wallpapers_dir" -name "*.jpg" -o -name "*.png" | head -3))
+    
+    if [ ${#wallpapers[@]} -gt 0 ]; then
+        echo "📷 Wallpapers disponibles para prueba:"
+        for i in "${!wallpapers[@]}"; do
+            echo "  $((i+1)). $(basename "${wallpapers[$i]}")"
+        done
+        echo ""
+        
+        echo "🔄 Cambiando wallpaper para probar sincronización automática..."
+        echo "   Usando: $(basename "${wallpapers[1]}")"
+        
+        # Usar sync-waybar-pywal que ya integra la sincronización
+        if [ -x "$HOME/.local/bin/sync-waybar-pywal" ]; then
+            "$HOME/.local/bin/sync-waybar-pywal" "${wallpapers[1]}" --backend wal
+        else
+            echo "   Fallback: usando wal directamente..."
+            wal -i "${wallpapers[1]}" > /dev/null 2>&1
+        fi
+        
+        echo "✅ Wallpaper cambiado"
+        echo ""
+        
+        # Esperar un momento para que el monitor detecte los cambios
+        echo "⏳ Esperando a que el monitor detecte cambios..."
+        sleep 5
+        
+        # Mostrar nuevos colores
+        echo "🎨 Nuevos colores de waybar:"
+        if [ -f "$HOME/.config/waybar/colors-pywal.css" ]; then
+            grep -E "(background|foreground|color4)" "$HOME/.config/waybar/colors-pywal.css" | head -3
+        fi
+        echo ""
+        
+        # Verificar log del monitor
+        echo "📊 Actividad del monitor (últimas 5 líneas):"
+        if [ -f "/tmp/nm-applet-monitor.log" ]; then
+            tail -5 /tmp/nm-applet-monitor.log | sed 's/^/  /'
+        else
+            echo "  ⚠️ Log del monitor no encontrado"
+        fi
+        echo ""
+        
+        # Verificar que nm-applet esté ejecutándose
+        if pgrep -x nm-applet > /dev/null; then
+            echo "✅ nm-applet está ejecutándose"
+            echo "🎉 ¡Prueba completada! nm-applet debería tener ahora los mismos colores que waybar"
+        else
+            echo "⚠️ nm-applet no está ejecutándose - puede haberse reiniciado durante la sincronización"
+            echo "💡 Esto es normal, debería iniciarse automáticamente"
+        fi
+        
+    else
+        echo "❌ No se encontraron wallpapers en $wallpapers_dir"
+    fi
+else
+    echo "❌ Directorio de wallpapers no encontrado: $wallpapers_dir"
+fi
+
+echo ""
+echo "💡 Comandos útiles:"
+echo "  Monitor: nm-applet-monitor {start|stop|status|restart}"
+echo "  Sync manual: sync-nm-applet-waybar"
+echo "  Cambiar wallpaper: sync-waybar-pywal [imagen]"

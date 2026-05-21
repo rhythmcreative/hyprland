@@ -1,0 +1,291 @@
+#!/bin/bash
+
+# Script corregido para cambio de wallpaper que PRESERVA waybar
+# Versión mejorada que evita el cierre de waybar
+
+set -euo pipefail
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_$$"
+LOG_FILE="$HOME/.cache/wallpaper-changer-fixed.log"
+
+# Crear directorios necesarios
+mkdir -p "$CACHE_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "$1" >&2
+}
+
+# Función para preservar waybar
+preserve_waybar() {
+    local waybar_pids=$(pgrep -x waybar || true)
+    
+    if [[ -n "$waybar_pids" ]]; then
+        log "✅ Waybar corriendo (PIDs: $waybar_pids) - manteniendo activo"
+        return 0
+    else
+        log "⚠️ Waybar no está corriendo, iniciándolo..."
+        waybar -c "$HOME/.config/waybar/config" -s "$HOME/.config/waybar/style.css" > /dev/null 2>&1 &
+        sleep 1
+        return 0
+    fi
+}
+
+# Función para aplicar wallpaper preservando waybar
+apply_wallpaper_safely() {
+    local wallpaper_file="$1"
+    
+    log "🖼️ Aplicando wallpaper: $wallpaper_file"
+    preserve_waybar
+    
+    # Aplicar wallpaper con swww
+    if swww img "$wallpaper_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+        log "✅ Wallpaper aplicado exitosamente"
+    else
+        log "❌ Error al aplicar wallpaper"
+        return 1
+    fi
+    
+    # Guardar wallpaper actual
+    echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
+    
+    # Aplicar pywal con sincronización completa
+    if command -v wal > /dev/null 2>&1; then
+        log "🎨 Aplicando colores con pywal..."
+        notify-send "🌈 Generando colores..." "Aplicando tema completo" -t 2000 2>/dev/null || true
+        
+        # Aplicar pywal con backend optimizado y opciones adicionales
+        if wal -i "$wallpaper_file" -n -q --backend wal --saturate 0.8; then
+            log "✅ Pywal aplicado con saturación optimizada"
+            
+            # Generar templates adicionales para aplicaciones
+            if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+                source "$HOME/.cache/wal/colors.sh"
+                
+                # Crear CSS para waybar si no existe
+                mkdir -p "$HOME/.config/waybar"
+                cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+                log "✅ CSS de waybar actualizado"
+                
+                # Forzar cambio de mtime en style.css para evitar caché de CSS
+                if [[ -f "$HOME/.config/waybar/style.css" ]]; then
+                    sed -i "1s|^|/* reload-ts: $(date +%s) */\n|" "$HOME/.config/waybar/style.css" || true
+                    log "🕒 Forzado reload timestamp en style.css"
+                fi
+                
+                # Sincronizar aplicaciones GTK
+                if command -v gsettings >/dev/null 2>&1; then
+                    gsettings set org.gnome.desktop.interface gtk-theme "oomox-pywal" 2>/dev/null || true
+                    gsettings set org.gnome.desktop.interface icon-theme "Papirus-Dark" 2>/dev/null || true
+                    log "✅ GTK sincronizado"
+                fi
+                
+                # Sincronizar kitty si existe
+                if [[ -f "$HOME/.config/kitty/kitty.conf" ]] && [[ -f "$HOME/.cache/wal/colors-kitty.conf" ]]; then
+                    pkill -USR1 kitty 2>/dev/null || true
+                    log "✅ Kitty sincronizado"
+                fi
+                
+                # Sincronizar nm-applet (reinicio para aplicar nuevos colores GTK)
+                log "🔄 Sincronizando nm-applet..."
+                if pgrep -f nm-applet >/dev/null; then
+                    pkill -f nm-applet 2>/dev/null || true
+                    sleep 1
+                    # Reiniciar nm-applet en segundo plano
+                    nohup nm-applet >/dev/null 2>&1 &
+                    disown
+                    sleep 1
+                    log "✅ nm-applet reiniciado con nuevos colores"
+                else
+                    # Si no estaba corriendo, iniciarlo
+                    nohup nm-applet >/dev/null 2>&1 &
+                    disown
+                    log "✅ nm-applet iniciado"
+                fi
+            fi
+            
+            sleep 1.5
+            
+            # REINICIAR waybar completamente para cargar nuevos colores CSS
+            log "🔄 Reiniciando waybar para cargar nuevos colores..."
+            if pgrep -x waybar > /dev/null; then
+                log "⏹️ Cerrando waybar..."
+                pkill waybar
+                
+                # Esperar hasta 5 segundos a que se cierre
+                for i in {1..5}; do
+                    if ! pgrep waybar > /dev/null; then
+                        break
+                    fi
+                    sleep 1
+                    log "⏳ Esperando cierre ($i/5)..."
+                done
+                
+                # Si sigue corriendo, forzar cierre
+                if pgrep waybar > /dev/null; then
+                    log "🔨 Forzando cierre de waybar..."
+                    pkill -9 waybar
+                    sleep 1
+                fi
+            fi
+            
+            # Iniciar waybar con nuevos colores
+            log "🚀 Iniciando waybar con colores actualizados..."
+            if command -v setsid >/dev/null 2>&1; then
+                setsid waybar -c "$HOME/.config/waybar/config" -s "$HOME/.config/waybar/style.css" >/dev/null 2>&1 &
+                disown
+            else
+                nohup waybar -c "$HOME/.config/waybar/config" -s "$HOME/.config/waybar/style.css" >/dev/null 2>&1 &
+                disown
+            fi
+            
+            sleep 3
+
+            # Refuerzo: ejecutar recarga completa de Waybar con pywal si está disponible
+            if [[ -x "$HOME/.local/bin/waybar-pywal-reload" ]]; then
+                log "🔁 Ejecutando waybar-pywal-reload para asegurar sincronización..."
+                "$HOME/.local/bin/waybar-pywal-reload" >/dev/null 2>&1 || true
+            fi
+            
+            # Recargar Hyprland
+            hyprctl reload > /dev/null 2>&1 || true
+            
+            # Verificar waybar final
+            if pgrep -x waybar > /dev/null; then
+                log "✅ Waybar funcionando correctamente"
+                notify-send "🎨 Tema Aplicado" "Wallpaper + colores (Waybar preservado)" -t 3000 2>/dev/null || true
+            else
+                log "❌ Reiniciando waybar emergencia"
+                waybar -c "$HOME/.config/waybar/config" -s "$HOME/.config/waybar/style.css" > /dev/null 2>&1 &
+                sleep 2
+            fi
+        else
+            log "❌ Error: Pywal falló"
+            notify-send "⚠️ Error Pywal" "Wallpaper aplicado, colores fallaron" -t 3000 2>/dev/null || true
+        fi
+    else
+        log "ℹ️ Solo wallpaper aplicado"
+        notify-send "✅ Wallpaper Aplicado" "$(basename "$wallpaper_file")" -t 2000 2>/dev/null || true
+    fi
+}
+
+# Función de limpieza
+cleanup() {
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+    if ! pgrep -x waybar > /dev/null; then
+        log "🚨 Asegurando waybar al salir"
+        waybar > /dev/null 2>&1 &
+    fi
+}
+
+trap cleanup EXIT INT TERM
+
+log "=== Selector de wallpapers (versión corregida) ==="
+
+# Verificaciones
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio no encontrado" -u critical
+    exit 1
+fi
+
+if ! command -v swww &> /dev/null; then
+    notify-send "❌ Error" "swww no instalado" -u critical
+    exit 1
+fi
+
+# Iniciar swww-daemon si necesario
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Iniciando swww-daemon"
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# Buscar imágenes
+cd "$WALLPAPER_DIR" || exit 1
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No hay imágenes" -u critical
+    exit 1
+fi
+
+# Crear previews para rofi
+> "$TEMP_FILE"
+for img in "${images[@]}"; do
+    [[ ! -f "$img" ]] && continue
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        fi
+    fi
+    
+    if [[ -f "$preview_file" ]]; then
+        echo -e "$clean_name\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+    else
+        echo "$clean_name" >> "$TEMP_FILE"
+    fi
+done
+
+# Mostrar selector sin ocultar waybar
+log "🎭 Mostrando selector (waybar visible)"
+selected=$(rofi -dmenu -i \
+    -p "🖼️ Wallpaper (Waybar protegido)" \
+    -show-icons \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    < "$TEMP_FILE")
+
+# Si no hay selección, salir
+if [[ -z "$selected" ]]; then
+    log "ℹ️ No se seleccionó wallpaper"
+    exit 0
+fi
+
+# Buscar archivo
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    notify-send "❌ Error" "Archivo no encontrado" -u critical
+    exit 1
+fi
+
+# Aplicar wallpaper preservando waybar
+apply_wallpaper_safely "$selected_file"
+
+log "🎉 Completado - Waybar preservado"
+exit 0

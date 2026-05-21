@@ -1,0 +1,196 @@
+#!/bin/bash
+
+# Directorio de wallpapers
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+
+# Crear directorio de cache si no existe
+mkdir -p "$CACHE_DIR"
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "Error" "No se encontraron imágenes en $WALLPAPER_DIR" -u critical
+    exit 1
+fi
+
+# Función para generar miniaturas
+generate_thumbnails() {
+    local count=0
+    local total=${#images[@]}
+    
+    for img in "${images[@]}"; do
+        local basename_img=$(basename "$img")
+        local thumb_path="$CACHE_DIR/${basename_img%.*}.jpg"
+        
+        # Generar miniatura si no existe o si la imagen es más nueva
+        if [[ ! -f "$thumb_path" ]] || [[ "$img" -nt "$thumb_path" ]]; then
+            # Generar miniatura de 300x200 con esquinas redondeadas
+            convert "$img" -resize "300x200^" -gravity center -extent "300x200" \
+                \( +clone -alpha extract -draw 'fill black polygon 0,0 0,15 15,0 fill white circle 15,15 15,0' \
+                \( +clone -flip \) -compose Multiply -composite \
+                \( +clone -flop \) -compose Multiply -composite \
+                \) -alpha off -compose CopyOpacity -composite "$thumb_path" 2>/dev/null
+        fi
+        
+        count=$((count + 1))
+        echo "Generando miniaturas... ($count/$total)" >&2
+    done
+}
+
+# Generar miniaturas en paralelo
+echo "Preparando vista previa de imágenes..." >&2
+generate_thumbnails
+
+# Crear lista con rutas de miniaturas y nombres
+image_list=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    thumb_path="$CACHE_DIR/${basename_img%.*}.jpg"
+    
+    # Usar el formato: imagen_miniatura\x00nombre_archivo
+    image_list="$image_list$thumb_path\x00$basename_img\n"
+done
+
+# Configuración de rofi moderna
+rofi_config='
+* {
+    background-color: rgba(40, 44, 52, 0.95);
+    text-color: #abb2bf;
+    border-color: #61afef;
+    selected-color: #61afef;
+}
+
+window {
+    width: 90%;
+    height: 80%;
+    background-color: @background-color;
+    border: 2px solid @border-color;
+    border-radius: 15px;
+    padding: 20px;
+}
+
+mainbox {
+    spacing: 15px;
+    background-color: transparent;
+}
+
+inputbar {
+    background-color: rgba(97, 175, 239, 0.1);
+    border: 1px solid @border-color;
+    border-radius: 10px;
+    padding: 10px;
+    margin: 0 0 10px 0;
+}
+
+prompt {
+    text-color: @selected-color;
+    font: "JetBrainsMono Nerd Font 12";
+}
+
+entry {
+    placeholder: "Buscar wallpaper...";
+    text-color: @text-color;
+}
+
+listview {
+    columns: 4;
+    lines: 3;
+    spacing: 10px;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    background-color: transparent;
+}
+
+element {
+    orientation: vertical;
+    border-radius: 10px;
+    padding: 5px;
+    background-color: transparent;
+    border: 2px solid transparent;
+}
+
+element selected {
+    background-color: rgba(97, 175, 239, 0.2);
+    border-color: @selected-color;
+    transform: scale(1.05);
+}
+
+element-icon {
+    size: 120px;
+    border-radius: 8px;
+    margin: 0 auto;
+}
+
+element-text {
+    horizontal-align: 0.5;
+    vertical-align: 0.5;
+    text-color: @text-color;
+    font: "JetBrainsMono Nerd Font 10";
+    margin: 5px 0 0 0;
+}
+'
+
+# Mostrar rofi con vista previa de imágenes
+selected=$(printf "%b" "$image_list" | rofi -dmenu -i \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -theme "$HOME/.config/rofi/wallpaper-theme.rasi" \
+    -show-icons \
+    -icon-theme "Papirus" \
+    -markup-rows \
+    -eh 2 \
+    -format "s" \
+    -kb-custom-1 "Alt+Return" \
+    -kb-accept-entry "Return,KP_Enter")
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    exit 0
+fi
+
+# Encontrar la ruta completa del archivo seleccionado
+selected_path=""
+for img in "${images[@]}"; do
+    if [[ "$(basename "$img")" == "$selected" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    notify-send "Error" "No se pudo encontrar el archivo seleccionado" -u critical
+    exit 1
+fi
+
+# Aplicar wallpaper con animación suave
+echo "Aplicando wallpaper: $(basename "$selected_path")"
+swww img "$selected_path" --transition-type wipe --transition-duration 1
+
+# Aplicar colores con wal
+if command -v wal >/dev/null 2>&1; then
+    echo "Generando paleta de colores..."
+    wal -i "$selected_path" -n
+    
+    # Recargar waybar si está ejecutándose
+    if pgrep -x waybar >/dev/null; then
+        pkill -SIGUSR2 waybar
+    fi
+    
+    # Notificación de éxito con miniatura
+    notify-send "🎨 Tema Aplicado" \
+        "Wallpaper: $(basename "$selected_path")\nPaleta de colores generada" \
+        -i "$selected_path" -t 4000
+        
+    echo "✅ Wallpaper y tema aplicados exitosamente"
+else
+    notify-send "⚠️ Advertencia" "Wallpaper aplicado, pero wal no está disponible" -t 3000
+    echo "⚠️ Wallpaper aplicado, pero no se pudo generar la paleta de colores"
+fi

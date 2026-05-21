@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# wal-theme: Cambiar tema de pywal con sincronización automática de GTK
+# Uso: wal-theme /ruta/a/imagen
+
+if [ $# -eq 0 ]; then
+    echo "Uso: wal-theme /ruta/a/imagen"
+    echo "      wal-theme -r  (para restaurar el último tema)"
+    exit 1
+fi
+
+# Si el argumento es -r, restaurar el último tema
+if [ "$1" = "-r" ]; then
+    echo "Restaurando el último tema..."
+    wal -R -o ~/.config/wal/done
+else
+    # Cambiar tema con la imagen especificada
+    echo "Aplicando tema con: $1"
+    wal -i "$1" -o ~/.config/wal/done
+fi
+
+echo "Tema aplicado y GTK sincronizado automáticamente!"

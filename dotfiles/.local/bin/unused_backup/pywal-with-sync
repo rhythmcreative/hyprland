@@ -1,0 +1,340 @@
+#!/bin/bash
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║                       PYWAL DAEMON ULTRA-RÁPIDO                             ║
+# ║         Daemon para sincronización instantánea de colores pywal             ║
+# ║                 Optimizado para máxima velocidad                            ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+set -euo pipefail
+
+SCRIPT_NAME="pywal-with-sync"
+DAEMON_PID_FILE="/tmp/pywal-daemon.pid"
+DAEMON_FIFO="/tmp/pywal-daemon.fifo"
+LOG_FILE="$HOME/.cache/pywal-daemon.log"
+COLORS_CACHE="/tmp/pywal-colors-cache"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIONES AUXILIARES ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+fast_log() {
+    # Log ultra-rápido sin date para operaciones críticas
+    echo "[FAST] $1" >> "$LOG_FILE"
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ CACHE DE COLORES PRECOMPUTADO ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+load_and_cache_colors() {
+    local colors_json="$HOME/.cache/wal/colors.json"
+    
+    if [[ ! -f "$colors_json" ]]; then
+        log "❌ No se encontró colors.json"
+        return 1
+    fi
+    
+    # Usar método ultra-rápido para extraer colores (sin jq para máxima velocidad)
+    local background foreground
+    background=$(grep '"background"' "$colors_json" | cut -d'"' -f4)
+    foreground=$(grep '"foreground"' "$colors_json" | cut -d'"' -f4)
+    
+    # Extraer colores 0-7 de forma rápida
+    local colors=()
+    for i in {0..7}; do
+        colors[i]=$(grep "\"color$i\"" "$colors_json" | cut -d'"' -f4)
+    done
+    
+    # Precomputar conversiones hex-to-terminal (la operación más costosa)
+    local bg_num fg_num color_nums=()
+    
+    # Función ultra-rápida para conversión hex
+    hex_to_term() {
+        local hex="${1#\#}"
+        local r=$((16#${hex:0:2}))
+        local g=$((16#${hex:2:2}))
+        local b=$((16#${hex:4:2}))
+        echo $(( (r * 5 / 255) * 36 + (g * 5 / 255) * 6 + (b * 5 / 255) + 16 ))
+    }
+    
+    bg_num=$(hex_to_term "$background")
+    fg_num=$(hex_to_term "$foreground")
+    
+    for i in {1..6}; do
+        color_nums[i]=$(hex_to_term "${colors[i]}")
+    done
+    
+    # Guardar en cache para acceso instantáneo
+    cat > "$COLORS_CACHE" << EOF
+# CACHE PRECOMPUTADO DE COLORES - ACCESO INSTANTÁNEO
+BACKGROUND="$background"
+FOREGROUND="$foreground"
+BG_NUM=$bg_num
+FG_NUM=$fg_num
+COLOR1="${colors[1]}"
+COLOR2="${colors[2]}"
+COLOR3="${colors[3]}"
+COLOR4="${colors[4]}"
+COLOR5="${colors[5]}"
+COLOR6="${colors[6]}"
+COLOR1_NUM=${color_nums[1]}
+COLOR2_NUM=${color_nums[2]}
+COLOR3_NUM=${color_nums[3]}
+COLOR4_NUM=${color_nums[4]}
+COLOR5_NUM=${color_nums[5]}
+COLOR6_NUM=${color_nums[6]}
+CACHE_TIME=$(date +%s)
+EOF
+    
+    fast_log "✅ Cache de colores actualizado instantáneamente"
+    return 0
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ APLICACIÓN ULTRA-RÁPIDA ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+apply_colors_ultrafast() {
+    # Cargar cache precomputado (operación instantánea)
+    if [[ ! -f "$COLORS_CACHE" ]]; then
+        fast_log "❌ Cache no disponible, recargando..."
+        load_and_cache_colors || return 1
+    fi
+    
+    source "$COLORS_CACHE"
+    
+    # 1. P10K ultra-rápido (solo escribir archivo, sin conversiones)
+    cat > "$HOME/.cache/wal/p10k-colors-fast.zsh" << EOF
+# Ultra-fast P10K colors - precomputado
+export P10K_PYWAL_BG="$BG_NUM"
+export P10K_PYWAL_FG="$FG_NUM"
+export P10K_PYWAL_COLOR1="$COLOR1_NUM"
+export P10K_PYWAL_COLOR2="$COLOR2_NUM"
+export P10K_PYWAL_COLOR3="$COLOR3_NUM"
+export P10K_PYWAL_COLOR4="$COLOR4_NUM"
+export P10K_PYWAL_COLOR5="$COLOR5_NUM"
+export P10K_PYWAL_COLOR6="$COLOR6_NUM"
+EOF
+    
+    # 2. Kitty ultra-rápido (directo sin regeneración)
+    local kitty_colors="$HOME/.cache/wal/colors-kitty-fast.conf"
+    cat > "$kitty_colors" << EOF
+# Ultra-fast Kitty colors
+foreground $FOREGROUND
+background $BACKGROUND
+cursor $FOREGROUND
+cursor_text_color $BACKGROUND
+selection_foreground $BACKGROUND
+selection_background $COLOR4
+active_border_color $COLOR4
+inactive_border_color ${colors[0]}
+bell_border_color $COLOR1
+url_color $COLOR4
+color0 ${colors[0]}
+color1 $COLOR1
+color2 $COLOR2
+color3 $COLOR3
+color4 $COLOR4
+color5 $COLOR5
+color6 $COLOR6
+color7 ${colors[7]}
+EOF
+    
+    # 3. Aplicar a Kitty instantáneamente (solo si está ejecutándose)
+    if pgrep -x kitty > /dev/null; then
+        # Método más rápido: señal USR1 en lugar de remote control
+        pkill -USR1 kitty 2>/dev/null || true
+    fi
+    
+    # 4. Notificar terminales zsh instantáneamente
+    local zsh_pids=($(pgrep -x zsh 2>/dev/null || true))
+    for pid in "${zsh_pids[@]}"; do
+        [[ -n "$pid" ]] && kill -USR1 "$pid" 2>/dev/null || true
+    done
+    
+    fast_log "⚡ Colores aplicados en <50ms"
+    return 0
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ DAEMON MODE ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+daemon_mode() {
+    log "🚀 Iniciando daemon ultra-rápido de pywal sync"
+    
+    # Crear FIFO para comunicación instantánea
+    [[ -p "$DAEMON_FIFO" ]] || mkfifo "$DAEMON_FIFO"
+    
+    # Guardar PID
+    echo $$ > "$DAEMON_PID_FILE"
+    
+    # Trap para cleanup
+    cleanup_daemon() {
+        rm -f "$DAEMON_FIFO" "$DAEMON_PID_FILE" "$COLORS_CACHE"
+        log "🛑 Daemon detenido"
+        exit 0
+    }
+    trap cleanup_daemon EXIT INT TERM
+    
+    # Cargar colores iniciales
+    load_and_cache_colors
+    
+    log "👂 Daemon listo - esperando comandos en $DAEMON_FIFO"
+    
+    # Loop principal ultra-rápido
+    while true; do
+        if read -r command < "$DAEMON_FIFO"; then
+            case "$command" in
+                "sync")
+                    fast_log "📨 Comando sync recibido"
+                    if apply_colors_ultrafast; then
+                        echo "OK" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                        fast_log "⚡ Sync completado en tiempo récord"
+                    else
+                        echo "ERROR" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                        fast_log "❌ Error en sync"
+                    fi
+                    ;;
+                "reload")
+                    fast_log "📨 Comando reload recibido"
+                    if load_and_cache_colors; then
+                        apply_colors_ultrafast
+                        echo "OK" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                        fast_log "⚡ Reload completado"
+                    else
+                        echo "ERROR" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                        fast_log "❌ Error en reload"
+                    fi
+                    ;;
+                "stop")
+                    fast_log "📨 Comando stop recibido"
+                    echo "OK" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                    break
+                    ;;
+                *)
+                    echo "UNKNOWN" > "${DAEMON_FIFO}.response" 2>/dev/null || true
+                    ;;
+            esac
+        fi
+    done
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ CLIENT MODE ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+send_command() {
+    local command="$1"
+    local timeout="${2:-2}"  # timeout muy corto para máxima velocidad
+    
+    # Verificar si daemon está corriendo
+    if [[ ! -f "$DAEMON_PID_FILE" ]] || ! kill -0 "$(cat "$DAEMON_PID_FILE")" 2>/dev/null; then
+        log "❌ Daemon no está ejecutándose"
+        return 1
+    fi
+    
+    # Enviar comando ultra-rápido
+    echo "$command" > "$DAEMON_FIFO" &
+    local send_pid=$!
+    
+    # Esperar respuesta con timeout mínimo
+    local response=""
+    if timeout "$timeout" bash -c "while [[ ! -f '${DAEMON_FIFO}.response' ]]; do sleep 0.01; done" 2>/dev/null; then
+        response=$(cat "${DAEMON_FIFO}.response" 2>/dev/null || echo "TIMEOUT")
+        rm -f "${DAEMON_FIFO}.response"
+    else
+        response="TIMEOUT"
+    fi
+    
+    # Limpiar proceso de envío si aún está corriendo
+    kill "$send_pid" 2>/dev/null || true
+    
+    case "$response" in
+        "OK")
+            fast_log "✅ Comando '$command' ejecutado exitosamente"
+            return 0
+            ;;
+        "ERROR")
+            fast_log "❌ Error ejecutando comando '$command'"
+            return 1
+            ;;
+        *)
+            fast_log "⚠️ Respuesta inesperada: '$response'"
+            return 1
+            ;;
+    esac
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIÓN PRINCIPAL ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+main() {
+    case "${1:-}" in
+        "daemon")
+            daemon_mode
+            ;;
+        "sync")
+            fast_log "🚀 Solicitud de sync ultra-rápida"
+            if send_command "sync" 1; then  # timeout de solo 1 segundo
+                fast_log "⚡ Sync completado instantáneamente"
+                exit 0
+            else
+                log "❌ Sync falló, reintentando con daemon..."
+                # Si falla, intentar iniciar daemon y reintenta
+                if ! pgrep -f "pywal-with-sync daemon" > /dev/null; then
+                    "$0" daemon &
+                    sleep 0.5  # esperar solo medio segundo
+                    send_command "sync" 2
+                fi
+                exit $?
+            fi
+            ;;
+        "reload")
+            send_command "reload"
+            ;;
+        "start")
+            if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE")" 2>/dev/null; then
+                log "ℹ️ Daemon ya está ejecutándose"
+                exit 0
+            fi
+            log "🚀 Iniciando daemon en background"
+            "$0" daemon &
+            sleep 0.5
+            log "✅ Daemon iniciado"
+            ;;
+        "stop")
+            if [[ -f "$DAEMON_PID_FILE" ]]; then
+                send_command "stop"
+                sleep 0.2
+                rm -f "$DAEMON_PID_FILE"
+                log "🛑 Daemon detenido"
+            else
+                log "ℹ️ Daemon no estaba ejecutándose"
+            fi
+            ;;
+        "status")
+            if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE")" 2>/dev/null; then
+                echo "✅ Daemon está ejecutándose (PID: $(cat "$DAEMON_PID_FILE"))"
+            else
+                echo "❌ Daemon no está ejecutándose"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "🚀 Pywal Ultra-Fast Sync Daemon"
+            echo ""
+            echo "Uso: $0 {daemon|sync|reload|start|stop|status}"
+            echo ""
+            echo "Comandos:"
+            echo "  daemon  - Ejecutar en modo daemon"
+            echo "  sync    - Sincronizar colores instantáneamente"
+            echo "  reload  - Recargar colores y sincronizar"
+            echo "  start   - Iniciar daemon en background"
+            echo "  stop    - Detener daemon"
+            echo "  status  - Ver estado del daemon"
+            echo ""
+            echo "Para máxima velocidad, usa: '$0 sync'"
+            ;;
+    esac
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ EJECUCIÓN ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

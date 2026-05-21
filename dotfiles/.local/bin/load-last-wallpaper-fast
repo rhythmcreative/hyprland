@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🚀 WALLPAPER LOADER - ULTRA FAST VERSION 🚀
+# ═══════════════════════════════════════════════════════════════════════════════
+# Optimizado para inicio ultra rápido de Hyprland
+# Versión robusta para AWww (mejor soporte de GIFs)
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+CACHE_FILE="$HOME/.cache/current-wallpaper"
+DEFAULT_WALLPAPER="$HOME/Pictures/Wallpapers/10. Animated.gif"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# 1. Asegurar que awww-daemon esté corriendo
+if ! pgrep -x "awww-daemon" > /dev/null; then
+    log "🔧 awww-daemon no detectado, iniciando..."
+    awww-daemon &
+    sleep 0.5
+fi
+
+# 2. Esperar a que el socket de awww esté listo
+log "⏳ Esperando a que awww esté listo..."
+for i in {1..30}; do
+    if awww query >/dev/null 2>&1; then
+        log "✅ awww está listo tras $((i*100))ms"
+        break
+    fi
+    sleep 0.1
+done
+
+# 3. Determinar wallpaper a cargar
+if [[ -f "$CACHE_FILE" ]]; then
+    WALLPAPER_PATH=$(cat "$CACHE_FILE")
+    if [[ ! -f "$WALLPAPER_PATH" ]]; then
+        log "⚠️ Cache apunta a un archivo inexistente: $WALLPAPER_PATH. Usando default."
+        WALLPAPER_PATH="$DEFAULT_WALLPAPER"
+    fi
+else
+    WALLPAPER_PATH="$DEFAULT_WALLPAPER"
+fi
+
+# 4. Aplicar wallpaper
+if [[ -f "$WALLPAPER_PATH" ]]; then
+    log "⚡ Cargando wallpaper: $(basename "$WALLPAPER_PATH")"
+    
+    # Aplicar imagen/gif
+    if awww img "$WALLPAPER_PATH" --transition-type none > /tmp/awww-load.err 2>&1; then
+        log "✅ Wallpaper aplicado exitosamente"
+    else
+        log "❌ Error al aplicar wallpaper: $(cat /tmp/awww-load.err)"
+    fi
+    
+    # Sincronizar colores pywal en segundo plano
+    if command -v wal > /dev/null 2>&1; then
+        (wal -i "$WALLPAPER_PATH" -n -t > /dev/null 2>&1 &)
+    fi
+else
+    log "❌ Error crítico: No se encontró ningún wallpaper para cargar"
+fi
+
+log "✅ Finalizado proceso de carga"

@@ -1,0 +1,367 @@
+#!/bin/bash
+
+# Script para sincronizar los colores del nm-applet con waybar/pywal
+# Creado para mantener consistencia visual en el escritorio
+
+# Directorio donde guardaremos el tema GTK personalizado
+GTK_THEME_DIR="$HOME/.local/share/themes/PywalNMApplet"
+GTK_CSS_DIR="$GTK_THEME_DIR/gtk-3.0"
+
+# Archivo de colores de pywal
+PYWAL_COLORS="$HOME/.cache/wal/colors.sh"
+WAYBAR_COLORS="$HOME/.config/waybar/colors-pywal.css"
+
+# Función para extraer colores de pywal
+extract_colors() {
+    if [ -f "$PYWAL_COLORS" ]; then
+        source "$PYWAL_COLORS"
+    else
+        echo "Error: No se encontró el archivo de colores de pywal"
+        exit 1
+    fi
+}
+
+# Función para crear el directorio del tema
+create_theme_dir() {
+    mkdir -p "$GTK_CSS_DIR"
+}
+
+# Función para generar el CSS del tema GTK
+generate_gtk_css() {
+    cat > "$GTK_CSS_DIR/gtk.css" << EOF
+/* Tema GTK personalizado para nm-applet sincronizado con waybar/pywal */
+/* Generado automáticamente - No editar manualmente */
+
+/* Variables de colores basadas en pywal */
+@define-color background_color ${color0};
+@define-color foreground_color ${color7};
+@define-color selected_bg_color ${color4};
+@define-color selected_fg_color ${color0};
+@define-color insensitive_bg_color ${color8};
+@define-color insensitive_fg_color ${color8};
+@define-color borders ${color8};
+@define-color text_color ${foreground};
+@define-color base_color ${background};
+
+/* Estilos para ventanas */
+window {
+    background-color: ${color0};
+    color: ${color7};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+}
+
+/* Estilos para menús */
+menu,
+.menu {
+    background-color: ${color0};
+    color: ${color7};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+menuitem,
+.menuitem {
+    background-color: transparent;
+    color: ${color7};
+    padding: 8px 12px;
+    border-radius: 4px;
+    transition: all 0.2s ease-in-out;
+}
+
+menuitem:hover,
+.menuitem:hover {
+    background-color: ${color8};
+    color: ${color7};
+}
+
+menuitem:selected,
+.menuitem:selected {
+    background-color: ${color4};
+    color: ${color0};
+}
+
+/* Estilos para separadores */
+separator {
+    background-color: ${color8};
+    min-height: 1px;
+    margin: 4px 0;
+}
+
+/* Estilos para etiquetas */
+label {
+    color: ${color7};
+}
+
+/* Estilos para botones */
+button {
+    background-color: ${background};
+    color: ${color7};
+    border: 1px solid ${color8};
+    border-radius: 4px;
+    padding: 6px 12px;
+    transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+    background-color: ${color8};
+    border-color: ${color4};
+}
+
+button:active {
+    background-color: ${color4};
+    color: ${color0};
+}
+
+/* Estilos específicos para nm-applet */
+.nm-applet-menu {
+    background-color: ${color0};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+}
+
+.nm-applet-menu menuitem {
+    color: ${color7};
+}
+
+.nm-applet-menu menuitem:hover {
+    background-color: ${color8};
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: ${color0};
+    border-radius: 6px;
+}
+
+scrollbar slider {
+    background-color: ${color8};
+    border-radius: 6px;
+}
+
+scrollbar slider:hover {
+    background-color: ${color4};
+}
+
+/* Entradas de texto */
+entry {
+    background-color: ${background};
+    color: ${color7};
+    border: 1px solid ${color8};
+    border-radius: 4px;
+    padding: 6px;
+}
+
+entry:focus {
+    border-color: ${color4};
+    box-shadow: 0 0 0 2px alpha(${color4}, 0.3);
+}
+
+/* Checkboxes y radio buttons */
+check, radio {
+    background-color: ${background};
+    border: 1px solid ${color8};
+    color: ${color4};
+}
+
+check:checked, radio:checked {
+    background-color: ${color4};
+    color: ${color0};
+}
+
+/* Tooltips */
+tooltip {
+    background-color: ${color0};
+    color: ${color7};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+    padding: 6px 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Popovers */
+popover {
+    background-color: ${color0};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Estilos para listas */
+list {
+    background-color: ${color0};
+    color: ${color7};
+}
+
+listbox row {
+    padding: 6px;
+    border-radius: 4px;
+}
+
+listbox row:hover {
+    background-color: ${color8};
+}
+
+listbox row:selected {
+    background-color: ${color4};
+    color: ${color0};
+}
+
+/* Headerbar (si se usa) */
+headerbar {
+    background-color: ${color0};
+    color: ${color7};
+    border-bottom: 1px solid ${color8};
+}
+
+/* Switches */
+switch {
+    background-color: ${color8};
+    border-radius: 12px;
+}
+
+switch:checked {
+    background-color: ${color4};
+}
+
+switch slider {
+    background-color: ${color7};
+    border-radius: 50%;
+}
+EOF
+}
+
+# Función para crear el archivo index.theme
+create_index_theme() {
+    cat > "$GTK_THEME_DIR/index.theme" << EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=PywalNMApplet
+Comment=Tema GTK sincronizado con waybar/pywal para nm-applet
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=PywalNMApplet
+MetacityTheme=PywalNMApplet
+IconTheme=Papirus-Dark
+CursorTheme=Adwaita
+ButtonLayout=close,minimize,maximize:menu
+EOF
+}
+
+# Función para crear configuración GTK2 (si es necesario)
+create_gtk2_config() {
+    echo "Creando configuración GTK-2.0..."
+    
+    GTK2_DIR="$GTK_THEME_DIR/gtk-2.0"
+    mkdir -p "$GTK2_DIR"
+    
+    cat > "$GTK2_DIR/gtkrc" << EOF
+# GTK2 theme for nm-applet with pywal colors
+gtk-theme-name="PywalNMApplet"
+gtk-icon-theme-name="Papirus-Dark"
+gtk-font-name="Sans 10"
+gtk-cursor-theme-name="Adwaita"
+gtk-cursor-theme-size=24
+gtk-toolbar-style=GTK_TOOLBAR_ICONS
+gtk-toolbar-icon-size=GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-button-images=1
+gtk-menu-images=1
+
+# Color definitions
+gtk_color_scheme = "bg_color:${color0}\nfg_color:${color7}\nbase_color:${color0}\ntext_color:${color7}\nselected_bg_color:${color4}\nselected_fg_color:${color0}\ntooltip_bg_color:${color0}\ntooltip_fg_color:${color7}"
+EOF
+}
+
+# Función para reiniciar nm-applet con el nuevo tema
+restart_nm_applet() {
+    echo "Reiniciando nm-applet..."
+    
+    # Matar nm-applet si está corriendo (más agresivo)
+    pkill -TERM nm-applet 2>/dev/null || true
+    sleep 1
+    pkill -KILL nm-applet 2>/dev/null || true
+    sleep 1
+    
+    # Configurar variables de entorno para el tema
+    export GTK_THEME="PywalNMApplet"
+    export GTK_USE_PORTAL=1
+    export GDK_BACKEND=wayland,x11
+    
+    # Reiniciar nm-applet con el tema personalizado
+    nohup env GTK_THEME=PywalNMApplet nm-applet > /dev/null 2>&1 &
+    
+    # Esperar y verificar que se inició
+    sleep 2
+    if pgrep -f nm-applet > /dev/null; then
+        echo "nm-applet reiniciado con tema personalizado"
+    else
+        echo "Error: nm-applet no se pudo iniciar"
+        return 1
+    fi
+}
+
+# Función para crear un script de inicio automático
+create_autostart() {
+    AUTOSTART_DIR="$HOME/.config/autostart"
+    AUTOSTART_FILE="$AUTOSTART_DIR/nm-applet-themed.desktop"
+    
+    mkdir -p "$AUTOSTART_DIR"
+    
+    cat > "$AUTOSTART_FILE" << EOF
+[Desktop Entry]
+Type=Application
+Name=Network Manager Applet (Themed)
+Comment=Network Manager Applet con tema personalizado
+Exec=env GTK_THEME=PywalNMApplet nm-applet
+Icon=nm-device-wireless
+Terminal=false
+Categories=Network;System;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+EOF
+    
+    echo "Archivo de autostart creado en $AUTOSTART_FILE"
+}
+
+# Función principal
+main() {
+    echo "🎨 Sincronizando colores del nm-applet con waybar..."
+    
+    # Extraer colores de pywal
+    extract_colors
+    
+    # Crear directorio del tema
+    create_theme_dir
+    
+    # Generar CSS del tema
+    generate_gtk_css
+    
+    # Crear archivo index.theme
+    create_index_theme
+    
+    # Crear configuración GTK2
+    create_gtk2_config
+    
+    # Crear autostart
+    create_autostart
+    
+    # Reiniciar nm-applet
+    restart_nm_applet
+    
+    echo "✅ Sincronización completada!"
+    echo "📝 Tema GTK creado en: $GTK_THEME_DIR"
+    echo "🔄 nm-applet reiniciado con colores sincronizados"
+    echo ""
+    echo "💡 Consejos:"
+    echo "   - Ejecuta este script cada vez que cambies el wallpaper"
+    echo "   - Puedes agregar este script a tu hook de pywal"
+    echo "   - El nm-applet se iniciará automáticamente con el tema personalizado"
+}
+
+# Verificar si se está ejecutando directamente
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

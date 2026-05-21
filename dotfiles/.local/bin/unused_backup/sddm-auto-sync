@@ -1,0 +1,233 @@
+#!/bin/bash
+
+# Script mejorado para sincronización automática de wallpaper en SDDM
+# Autor: rhythmcreative
+# Compatible con BG-SDDM y tema sddm-astronaut-theme
+# Versión completamente sin sudo - usa polkit y configuración de usuario
+
+LOG_FILE="/tmp/sddm-auto-sync.log"
+USER_HOME="/home/rhythmcreative"
+# Usar directorio local completamente
+SDDM_THEME_DIR="$USER_HOME/.local/share/sddm/themes/sddm-astronaut-theme-local"
+SDDM_SYSTEM_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BG_SDDM_DIR="/home/rhythmcreative/BG-SDDM"
+
+# Verificar si tenemos acceso directo al directorio SDDM del sistema
+SYSTEM_WRITABLE=false
+if [[ -w "$SDDM_SYSTEM_DIR" ]]; then
+    SYSTEM_WRITABLE=true
+fi
+
+# Crear estructura de directorios locales si no existe
+setup_local_dirs() {
+    # El tema ya está copiado, solo verificamos que los directorios existen
+    mkdir -p "$SDDM_THEME_DIR/Backgrounds"
+    mkdir -p "$SDDM_THEME_DIR/Themes"
+    
+    # Si no existe el archivo de configuración, usar el theme.conf como base
+    if [[ ! -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]]; then
+        if [[ -f "$SDDM_THEME_DIR/theme.conf" ]]; then
+            cp "$SDDM_THEME_DIR/theme.conf" "$SDDM_THEME_DIR/Themes/theme1.conf"
+        else
+            # Crear una configuración básica con fondo negro
+            cat > "$SDDM_THEME_DIR/Themes/theme1.conf" << 'EOF'
+[General]
+Background="Backgrounds/default.jpg"
+DimBackground="0.8"
+BackgroundColor="#000000"
+HighlightColor="#ffffff"
+TextColor="#ffffff"
+PlaceholderColor="#bbbbbb"
+SystemButtonsIconColor="#ffffff"
+HighlightTextColor="#000000"
+HaveFormBackground="false"
+FullBlur="true"
+Blur="1.0"
+BlurMax="64"
+EOF
+        fi
+    fi
+}
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Sync" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    # Intentar obtener wallpaper desde pywal
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        cat "$USER_HOME/.cache/wal/wal" 2>/dev/null
+        return 0
+    fi
+    
+    # Fallback: buscar en archivos de configuración de swww
+    if [[ -f "$USER_HOME/.cache/current-wallpaper" ]]; then
+        cat "$USER_HOME/.cache/current-wallpaper" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+sync_wallpaper_direct() {
+    local wallpaper="$1"
+    log "🖼️ Sincronizando wallpaper directamente con tema SDDM..."
+    
+    # Configurar directorios locales
+    setup_local_dirs
+    
+    # Verificar que el wallpaper existe y es accesible
+    if [[ ! -f "$wallpaper" ]]; then
+        log "❌ Wallpaper no encontrado: $wallpaper"
+        return 1
+    fi
+    
+    # Copiar wallpaper al directorio de backgrounds local
+    local filename=$(basename "$wallpaper")
+    local dest_path="$SDDM_THEME_DIR/Backgrounds/$filename"
+    
+    # Copiar wallpaper si no existe o si es diferente
+    if [[ ! -f "$dest_path" ]] || ! cmp -s "$wallpaper" "$dest_path" 2>/dev/null; then
+        log "📁 Copiando wallpaper: $filename"
+        if cp "$wallpaper" "$dest_path" 2>/dev/null; then
+            chmod 644 "$dest_path" 2>/dev/null || true
+            log "✅ Wallpaper copiado a directorio local de SDDM"
+        else
+            log "❌ Error al copiar wallpaper"
+            return 1
+        fi
+    fi
+    
+    # Actualizar configuración de SDDM para usar este wallpaper
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    if [[ -f "$config_file" ]]; then
+        log "⚙️ Actualizando configuración SDDM local..."
+        
+        # Crear backup
+        cp "$config_file" "$config_file.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        
+        # Actualizar línea Background para usar ruta relativa
+        if sed -i "s|^Background=.*|Background=\"Backgrounds/$filename\"|g" "$config_file" 2>/dev/null; then
+            log "✅ Configuración SDDM local actualizada para usar: $filename"
+            log "💡 Tema local preparado en: $SDDM_THEME_DIR"
+            
+            return 0
+        else
+            log "❌ Error al actualizar configuración SDDM local"
+            return 1
+        fi
+    else
+        log "❌ Archivo de configuración SDDM local no encontrado: $config_file"
+        return 1
+    fi
+}
+
+
+sync_with_pywal_colors() {
+    log "🎨 Aplicando colores de pywal a SDDM local..."
+    
+    local colors_file="$USER_HOME/.cache/wal/colors"
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    
+    if [[ ! -f "$colors_file" ]]; then
+        log "⚠️ Archivo de colores pywal no encontrado"
+        return 1
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        log "❌ Archivo de configuración SDDM local no encontrado"
+        return 1
+    fi
+    
+    # Leer colores de pywal
+    local background=$(sed -n '1p' "$colors_file")
+    local foreground=$(sed -n '8p' "$colors_file")
+    local color1=$(sed -n '2p' "$colors_file")
+    local color4=$(sed -n '5p' "$colors_file")
+    local color5=$(sed -n '6p' "$colors_file")
+    
+    # Aplicar colores usando sed al archivo local
+    sed -i "s|background-color = #[0-9a-fA-F]*|background-color = $background|g" "$config_file" 2>/dev/null || true
+    sed -i "s|color = #[0-9a-fA-F]*|color = $foreground|g" "$config_file" 2>/dev/null || true
+    sed -i "s|content-color = #[0-9a-fA-F]*|content-color = $foreground|g" "$config_file" 2>/dev/null || true
+    sed -i "s|border-color = #[0-9a-fA-F]*|border-color = $color4|g" "$config_file" 2>/dev/null || true
+    sed -i "s|active-border-color = #[0-9a-fA-F]*|active-border-color = $color5|g" "$config_file" 2>/dev/null || true
+    
+    log "🎨 Colores pywal aplicados a configuración local de SDDM"
+}
+
+# Función para actualizar el script de sistema con colores
+update_system_script_with_colors() {
+    local bg_color="$1"
+    local fg_color="$2"
+    local border_color="$3"
+    local active_border="$4"
+    local apply_script="$SDDM_THEME_DIR/apply-to-system.sh"
+    
+    # Agregar aplicación de colores al script
+    cat >> "$apply_script" << EOF
+
+# Aplicar colores pywal al sistema
+if [[ -f "\$CONFIG_FILE" ]]; then
+    echo "🎨 Aplicando colores pywal al sistema..."
+    sed -i "s|background-color = #[0-9a-fA-F]*|background-color = $bg_color|g" "\$CONFIG_FILE" 2>/dev/null || true
+    sed -i "s|color = #[0-9a-fA-F]*|color = $fg_color|g" "\$CONFIG_FILE" 2>/dev/null || true
+    sed -i "s|content-color = #[0-9a-fA-F]*|content-color = $fg_color|g" "\$CONFIG_FILE" 2>/dev/null || true
+    sed -i "s|border-color = #[0-9a-fA-F]*|border-color = $border_color|g" "\$CONFIG_FILE" 2>/dev/null || true
+    sed -i "s|active-border-color = #[0-9a-fA-F]*|active-border-color = $active_border|g" "\$CONFIG_FILE" 2>/dev/null || true
+    echo "✅ Colores aplicados al sistema"
+fi
+EOF
+}
+
+main() {
+    log "🔐 Iniciando sincronización automática de SDDM..."
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+        log "❌ No se pudo obtener el wallpaper actual"
+        notify_user "❌ No se pudo sincronizar SDDM: wallpaper no encontrado"
+        exit 1
+    fi
+    
+    log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    
+    # Sincronizar wallpaper
+    if sync_wallpaper_direct "$CURRENT_WALLPAPER"; then
+        # Aplicar colores de pywal si están disponibles
+        sync_with_pywal_colors
+        
+        log "🎉 Sincronización SDDM completada exitosamente"
+        notify_user "✅ SDDM sincronizado con $(basename "$CURRENT_WALLPAPER")"
+        
+        # Log final
+        log "💡 Configuración guardada en: $SDDM_THEME_DIR"
+        # Los cambios ya se aplicaron automáticamente, no es necesario hacerlo manualmente
+        log "🔄 Los cambios estarán visibles al iniciar sesión"
+        
+    else
+        log "❌ Error en la sincronización de SDDM"
+        notify_user "❌ Error al sincronizar SDDM"
+        exit 1
+    fi
+}
+
+# Permitir usar el script con argumentos específicos
+if [[ "$1" == "--wallpaper" ]] && [[ -n "$2" ]] && [[ -f "$2" ]]; then
+    log "🖼️ Sincronizando con wallpaper específico: $2"
+    CURRENT_WALLPAPER="$2"
+    sync_wallpaper_direct "$CURRENT_WALLPAPER"
+    sync_with_pywal_colors
+else
+    main
+fi

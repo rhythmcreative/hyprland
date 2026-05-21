@@ -1,0 +1,167 @@
+#!/bin/bash
+# Script para sincronizar SDDM en todos los monitores
+
+WALLPAPER_DIR="$HOME/.config/SDDM"
+SDDM_THEME_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BACKGROUNDS_DIR="$SDDM_THEME_DIR/Backgrounds"
+
+sync_wallpaper() {
+    echo "🖼️ Sincronizando wallpaper SDDM..."
+
+    # Crear directorio si no existe
+    mkdir -p "$WALLPAPER_DIR"
+
+    # Obtener wallpaper actual de Hyprland
+    CURRENT_WALLPAPER=$(grep -E "^preload|^wallpaper" ~/.config/hypr/hyprpaper.conf | tail -1 | cut -d'=' -f2 | xargs 2>/dev/null)
+
+    if [ -z "$CURRENT_WALLPAPER" ] || [ ! -f "$CURRENT_WALLPAPER" ]; then
+        echo "⚠️ No se encontró hyprpaper.conf o wallpaper, usando configuración por defecto"
+        return 0
+    fi
+
+    echo "📁 Wallpaper encontrado: $CURRENT_WALLPAPER"
+
+    # Copiar wallpaper al directorio de SDDM
+    WALLPAPER_NAME=$(basename "$CURRENT_WALLPAPER")
+    SDDM_WALLPAPER="$WALLPAPER_DIR/$WALLPAPER_NAME"
+
+    if cp "$CURRENT_WALLPAPER" "$SDDM_WALLPAPER"; then
+        echo "✅ Wallpaper copiado a: $SDDM_WALLPAPER"
+    else
+        echo "❌ Error al copiar wallpaper"
+        return 1
+    fi
+
+    # Copiar al directorio del tema con sudo
+    if sudo cp "$SDDM_WALLPAPER" "$BACKGROUNDS_DIR/current_wallpaper.jpg"; then
+        echo "✅ Wallpaper aplicado al tema SDDM"
+    else
+        echo "❌ Error al aplicar wallpaper al tema"
+        return 1
+    fi
+
+    # Actualizar configuración del tema para usar el nuevo wallpaper
+    sudo sed -i 's|^Background=.*|Background="Backgrounds/current_wallpaper.jpg"|' "$SDDM_THEME_DIR/Themes/theme1.conf"
+
+    echo "🎨 Wallpaper SDDM sincronizado exitosamente!"
+}
+
+setup_all_monitors() {
+    echo "🖥️ Configurando SDDM para todos los monitores..."
+
+    # Crear script Xsetup para todos los monitores
+    xsetup_temp="/tmp/sddm-all-monitors.sh"
+    cat > "$xsetup_temp" << 'XSETUP_EOF'
+#!/bin/sh
+# SDDM visible en todos los monitores
+
+export DISPLAY=:0
+
+echo "$(date): === CONFIGURANDO SDDM EN TODOS LOS MONITORES ===" > /tmp/sddm-all.log
+
+# Auto-detectar todos los monitores
+xrandr --auto >> /tmp/sddm-all.log 2>&1
+sleep 2
+
+MONITORS=$(xrandr | grep " connected" | awk '{print $1}')
+echo "$(date): Monitores detectados: $MONITORS" >> /tmp/sddm-all.log
+
+# Configurar eDP-1 como principal
+if echo "$MONITORS" | grep -q "eDP-1"; then
+    echo "$(date): Configurando eDP-1..." >> /tmp/sddm-all.log
+    xrandr --output eDP-1 --mode 1920x1080 --pos 0x0 --primary >> /tmp/sddm-all.log 2>&1
+fi
+
+# Configurar DP-1-0 (tu DP-6) extendido
+if echo "$MONITORS" | grep -q "DP-1-0"; then
+    echo "$(date): Configurando DP-1-0..." >> /tmp/sddm-all.log
+    xrandr --output DP-1-0 --mode 2560x1440 --pos 1920x0 >> /tmp/sddm-all.log 2>&1
+fi
+
+# Verificar configuración final
+echo "$(date): Estado final de todos los monitores:" >> /tmp/sddm-all.log
+xrandr --query >> /tmp/sddm-all.log 2>&1
+
+echo "$(date): === TODOS LOS MONITORES CONFIGURADOS ===" >> /tmp/sddm-all.log
+XSETUP_EOF
+
+    chmod +x "$xsetup_temp"
+
+    # Aplicar configuración
+    echo "Aplicando configuración para todos los monitores..."
+    if sudo cp "$xsetup_temp" "/etc/sddm/Xsetup"; then
+        sudo chmod +x "/etc/sddm/Xsetup"
+        echo "✅ SDDM configurado para todos los monitores"
+        return 0
+    else
+        echo "❌ Error al configurar monitores"
+        return 1
+    fi
+}
+
+restart_sddm() {
+    echo "🔄 Reiniciando SDDM..."
+    sudo systemctl restart sddm
+    echo "✅ SDDM reiniciado"
+}
+
+# Función principal
+main() {
+    case "$1" in
+        "--wallpaper-only"|"-w")
+            sync_wallpaper
+            ;;
+        "--monitors-only"|"-m")
+            setup_all_monitors
+            if [ "$2" = "--restart" ] || [ "$2" = "-r" ]; then
+                restart_sddm
+            fi
+            ;;
+        "--restart"|"-r")
+            restart_sddm
+            ;;
+        "--help"|"-h")
+            echo "Uso: $0 [OPCIÓN] [--restart]"
+            echo ""
+            echo "Opciones:"
+            echo "  (sin parámetros)      : Sincronizar wallpaper Y configurar todos los monitores"
+            echo "  --wallpaper-only, -w  : Sincronizar SOLO wallpaper"
+            echo "  --monitors-only, -m   : Configurar SOLO monitores"
+            echo "  --restart, -r         : Solo reiniciar SDDM"
+            echo "  --help, -h            : Mostrar esta ayuda"
+            echo ""
+            echo "Configuración actual:"
+            echo "  • SDDM se extiende por TODOS los monitores conectados"
+            echo "  • Wallpaper se extiende por toda la resolución"
+            echo "  • Formulario centrado en el área total"
+            ;;
+        "")
+            # COMPORTAMIENTO POR DEFECTO: wallpaper + todos los monitores
+            echo "🚀 Configuración completa SDDM (wallpaper + todos los monitores)"
+            if sync_wallpaper && setup_all_monitors; then
+                echo "✨ Configuración completa exitosa!"
+                echo "💡 Para aplicar cambios ejecuta: $0 --restart"
+            else
+                echo "❌ Error en la configuración"
+                exit 1
+            fi
+            ;;
+        "--restart")
+            echo "🚀 Configuración completa + reinicio"
+            if sync_wallpaper && setup_all_monitors; then
+                restart_sddm
+                echo "✨ Configuración completa y reinicio exitosos!"
+            else
+                echo "❌ Error en la configuración"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "❌ Opción no válida: $1"
+            echo "Usa --help para ver las opciones disponibles"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

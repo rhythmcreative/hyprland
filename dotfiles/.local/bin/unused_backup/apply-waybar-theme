@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Script para aplicar el tema personalizado de waybar
+# Copia los archivos de configuración desde dotfiles y reinicia waybar
+
+DOTFILES_WAYBAR_DIR="$HOME/dotfiles/waybar"
+WAYBAR_CONFIG_DIR="$HOME/.config/waybar"
+
+# Verificar que exista el directorio de dotfiles
+if [ ! -d "$DOTFILES_WAYBAR_DIR" ]; then
+    notify-send "❌ Error" "No se encuentra el directorio de dotfiles: $DOTFILES_WAYBAR_DIR"
+    exit 1
+fi
+
+# Crear el directorio de configuración de waybar si no existe
+mkdir -p "$WAYBAR_CONFIG_DIR"
+
+# Hacer backup de la configuración actual
+if [ -f "$WAYBAR_CONFIG_DIR/config" ]; then
+    cp "$WAYBAR_CONFIG_DIR/config" "$WAYBAR_CONFIG_DIR/config.backup.$(date +%Y%m%d_%H%M%S)"
+fi
+
+if [ -f "$WAYBAR_CONFIG_DIR/style.css" ]; then
+    cp "$WAYBAR_CONFIG_DIR/style.css" "$WAYBAR_CONFIG_DIR/style.css.backup.$(date +%Y%m%d_%H%M%S)"
+fi
+
+# Copiar los archivos del tema desde dotfiles
+cp "$DOTFILES_WAYBAR_DIR/config" "$WAYBAR_CONFIG_DIR/config"
+cp "$DOTFILES_WAYBAR_DIR/style.css" "$WAYBAR_CONFIG_DIR/style.css"
+
+# Verificar si waybar está ejecutándose y reiniciarlo
+if pgrep -x "waybar" > /dev/null; then
+    pkill waybar
+    sleep 1
+fi
+
+# Iniciar waybar con la nueva configuración
+waybar &
+
+# Notificar éxito
+notify-send "🎨 Tema Waybar Aplicado" "Configuración personalizada cargada desde dotfiles"

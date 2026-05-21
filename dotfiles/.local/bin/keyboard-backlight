@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Script para controlar la retroiluminación del teclado ASUS
+# Uso: keyboard-backlight [up|down|toggle]
+
+BACKLIGHT_PATH="/sys/class/leds/asus::kbd_backlight"
+BRIGHTNESS_FILE="$BACKLIGHT_PATH/brightness"
+MAX_BRIGHTNESS_FILE="$BACKLIGHT_PATH/max_brightness"
+
+# Verificar si el archivo existe
+if [ ! -f "$BRIGHTNESS_FILE" ]; then
+    echo "Error: No se encontró el control de retroiluminación del teclado"
+    exit 1
+fi
+
+# Obtener valores actuales
+current=$(cat "$BRIGHTNESS_FILE")
+max=$(cat "$MAX_BRIGHTNESS_FILE")
+
+# Función para establecer brillo
+set_brightness() {
+    local new_brightness=$1
+    if [ "$new_brightness" -ge 0 ] && [ "$new_brightness" -le "$max" ]; then
+        echo "$new_brightness" | sudo tee "$BRIGHTNESS_FILE" > /dev/null
+        echo "Brillo del teclado: $new_brightness/$max"
+    fi
+}
+
+# Procesar argumentos
+case "${1:-down}" in
+    "up")
+        new_brightness=$((current + 1))
+        if [ "$new_brightness" -gt "$max" ]; then
+            new_brightness=$max
+        fi
+        set_brightness $new_brightness
+        ;;
+    "down")
+        new_brightness=$((current - 1))
+        if [ "$new_brightness" -lt 0 ]; then
+            new_brightness=0
+        fi
+        set_brightness $new_brightness
+        ;;
+    "toggle")
+        if [ "$current" -eq 0 ]; then
+            set_brightness $max
+        else
+            set_brightness 0
+        fi
+        ;;
+    *)
+        echo "Uso: $0 [up|down|toggle]"
+        echo "Brillo actual: $current/$max"
+        exit 1
+        ;;
+esac

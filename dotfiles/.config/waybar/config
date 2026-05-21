@@ -19,8 +19,26 @@
     "tray",
     "pulseaudio",
     "backlight",
+    "custom/battery-mode",
+    "battery",
     "custom/dual-battery"
   ],
+  "battery": {
+    "states": {
+      "warning": 30,
+      "critical": 15
+    },
+    "format": "{icon} {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": "󰂄 {capacity}%",
+    "format-alt": "{icon} {time}",
+    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+  },
+  "custom/battery-mode": {
+    "format": "󰂄",
+    "on-click": "$HOME/.config/waybar/scripts/switch_battery.sh",
+    "tooltip-format": "Cambiar modo de batería (Single/Dual/PC)"
+  },
   "hyprland/workspaces": {
     "format": "{name} {icon}",
     "format-icons": {

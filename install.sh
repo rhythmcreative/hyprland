@@ -31,7 +31,7 @@ DEPENDENCIES=(
     qt5ct mako grim slurp wl-clipboard xdg-desktop-portal-hyprland
     hypridle hyprlock imagemagick swappy fastfetch gvfs nfs-utils
     ttf-jetbrains-mono-nerd ttf-font-awesome otf-font-awesome inter-font
-    xorg-xrandr brightnessctl playerctl pamixer
+    xorg-xrandr brightnessctl playerctl pamixer jq
 )
 
 AUR_DEPENDENCIES=(

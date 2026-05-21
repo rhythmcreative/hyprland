@@ -6,41 +6,37 @@ if [ ! -f "$WAYBAR_CONFIG" ]; then
     exit 1
 fi
 
-# Detect current mode using jq to check modules-right list
-CURRENT_MODE=$(jq -r '.["modules-right"] | if any(. == "custom/dual-battery") then "dual" elif any(. == "battery") then "single" else "pcmode" end' "$WAYBAR_CONFIG")
+# Detect current mode
+# We check which modules are present in modules-right
+CURRENT_RIGHT=$(jq -r '.["modules-right"]' "$WAYBAR_CONFIG")
 
-echo "Detected mode: $CURRENT_MODE"
+HAS_SINGLE=$(echo "$CURRENT_RIGHT" | grep -q "\"battery\"" && echo "true" || echo "false")
+HAS_DUAL=$(echo "$CURRENT_RIGHT" | grep -q "\"custom/dual-battery\"" && echo "true" || echo "false")
 
-# Cycle to next mode: Single -> Dual -> PC Mode -> Single
-if [[ "$CURRENT_MODE" == "single" ]]; then
-    NEXT_MODE="dual"
-    echo "Switching to Dual Battery Mode..."
-    notify-send "Waybar" "Switching to Dual Battery Mode..." || true
-    
-    # Apply Dual Battery
-    # Apply Dual Battery
-    jq '.["modules-right"] |= (map(if . == "battery" then ["custom/dual-battery"] else [.] end) | flatten)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-    # Ensure custom/dual-battery is defined (it should be in config already, but just in case we don't need to add dynamic definitions like before)
+echo "Status: Single=$HAS_SINGLE, Dual=$HAS_DUAL"
 
-elif [[ "$CURRENT_MODE" == "dual" ]]; then
-    NEXT_MODE="pcmode"
-    echo "Switching to PC Mode (No Battery)..."
-    notify-send "Waybar" "Switching to PC Mode (No Battery)..." || true
+# Transitions:
+# 1. If has Dual -> Switch to PC Mode (Remove both)
+# 2. If has neither -> Switch to Single (Add battery)
+# 3. If has Single -> Switch to Dual (Replace battery with dual)
 
-    # Apply PC Mode
-    jq '.["modules-right"] |= map(select(. != "battery" and . != "custom/dual-battery"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-    # jq 'del(."battery#bat1", ."battery#bat2")' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
-
+if [ "$HAS_DUAL" == "true" ]; then
+    echo "Mode: Dual -> PC Mode"
+    notify-send "Energía" "Modo PC (Sin batería en barra)" -i battery
+    jq '.["modules-right"] |= map(select(. != "battery" and . != "custom/dual-battery"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
+elif [ "$HAS_SINGLE" == "false" ]; then
+    echo "Mode: PC -> Single"
+    notify-send "Energía" "Modo Batería Simple" -i battery
+    # Add 'battery' after 'custom/battery-mode'
+    jq '.["modules-right"] |= (reduce .[] as $item ([]; if $item == "custom/battery-mode" then . + [$item, "battery"] else . + [$item] end))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
 else
-    NEXT_MODE="single"
-    echo "Switching to Single Battery Mode..."
-    notify-send "Waybar" "Switching to Single Battery Mode..." || true
-
-    # Apply Single Battery
-    # Add 'battery' back to modules-right if it's missing. 
-    # We want to put it after backlight if possible.
-    jq 'if (.["modules-right"] | index("backlight")) then .["modules-right"] |= (reduce .[] as $item ([]; if $item == "backlight" then . + [$item, "battery"] else . + [$item] end)) else .["modules-right"] += ["battery"] end' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp" && mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+    echo "Mode: Single -> Dual"
+    notify-send "Energía" "Modo Batería Dual (Thinkpad/ASUS)" -i battery
+    # Replace 'battery' with 'custom/dual-battery'
+    jq '.["modules-right"] |= map(if . == "battery" then "custom/dual-battery" else . end)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
 fi
 
+mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
+
 # Reload Waybar
-pkill -SIGUSR2 waybar
+pkill -SIGUSR2 waybar || hyprctl dispatch exec "$HOME/.config/waybar/launch.sh"

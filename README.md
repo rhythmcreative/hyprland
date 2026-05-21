@@ -9,6 +9,7 @@ Este repositorio contiene la configuración completa de mi sistema Arch Linux, o
 - **Lanzador**: Rofi (temas personalizados adaptativos).
 - **Colores**: Pywal (sincronización total entre terminal, Hyprland, Waybar y SDDM).
 - **Wallpapers**: Awww (soporte nativo para GIFs animados).
+- **Energía**: Gestión inteligente de batería (soporte para Single/Dual/Plugged) con selector rápido.
 - **Login**: SDDM (Tema Astronaut sincronizado dinámicamente con el wallpaper).
 - **Terminal**: Warp (Principal) y Kitty (Alternativa).
 
@@ -40,6 +41,7 @@ El instalador automatizado se encarga de todo: dependencias, respaldos y configu
 - `Super + E`: Dolphin (Explorador de archivos)
 - `Super + R`: Rofi (Lanzador)
 - `Super + Shift + W`: Selector de Wallpaper (Selector inteligente adaptativo)
+- `Super + Shift + E`: Ciclar modo de batería (Single / Dual / PC Mode)
 - `Super + Q`: Cerrar Ventana
 - `Super + M`: Salir (Power Menu)
 - `Super + Tab`: Cambiar entre ventanas

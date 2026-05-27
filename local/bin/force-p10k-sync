@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Script para forzar sincronización entre Kitty, P10k y PyWal
+# Uso: force-p10k-sync
+
+echo "🔄 Forzando sincronización Kitty + Powerlevel10k + PyWal..."
+
+# 1. Verificar que pywal tenga colores generados
+if [[ ! -f "$HOME/.cache/wal/colors.json" ]]; then
+    echo "❌ Error: No se encontraron colores de PyWal"
+    echo "💡 Ejecuta 'wal -i /path/to/image' primero"
+    exit 1
+fi
+
+# 2. Regenerar colores de P10k
+if [[ -f "$HOME/.cache/wal/p10k-colors.zsh" ]]; then
+    echo "📝 Recargando colores de Powerlevel10k..."
+    source "$HOME/.cache/wal/p10k-colors.zsh"
+    echo "✅ Colores de P10k recargados"
+else
+    echo "⚠️ Archivo p10k-colors.zsh no encontrado"
+fi
+
+# 3. Recargar Kitty
+if command -v kitty >/dev/null 2>&1; then
+    echo "🐱 Recargando configuración de Kitty..."
+    kitty @ load-config 2>/dev/null || echo "⚠️ No se pudo recargar Kitty automáticamente"
+    echo "✅ Kitty sincronizado"
+fi
+
+# 4. Aplicar colores pywal
+if [[ -f "$HOME/.cache/wal/sequences" ]]; then
+    echo "🎨 Aplicando secuencias de color..."
+    cat "$HOME/.cache/wal/sequences"
+    echo "✅ Secuencias aplicadas"
+fi
+
+# 5. Ejecutar hooks personalizados si existen
+if [[ -x "$HOME/.local/bin/apply-pywal-colors-now" ]]; then
+    echo "⚡ Ejecutando hooks personalizados..."
+    "$HOME/.local/bin/apply-pywal-colors-now"
+fi
+
+echo ""
+echo "✨ Sincronización completada"
+echo "💡 Si usas zsh, ejecuta 'source ~/.zshrc' para recargar completamente"
+echo "💡 O abre una nueva terminal para ver los cambios"

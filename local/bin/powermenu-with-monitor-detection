@@ -1,0 +1,398 @@
+#!/bin/bash
+
+# Script de powermenu con detección automática de monitor activo
+# Basado en rofi-with-monitor-detection para mantener consistencia
+# Autor: rhythmcreative
+
+# Log file para depuración
+LOG_FILE="$HOME/.cache/powermenu-waybar-toggle.log"
+
+# Función de logging
+log_debug() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función para detectar el monitor activo basado en posición del cursor
+get_active_monitor() {
+    # PRIORIDAD 1: Detectar por posición del cursor
+    local cursor_info=$(hyprctl cursorpos 2>/dev/null)
+    if [ -n "$cursor_info" ]; then
+        local cursor_x=$(echo "$cursor_info" | cut -d',' -f1 | tr -d ' ')
+        local cursor_y=$(echo "$cursor_info" | cut -d',' -f2 | tr -d ' ')
+        
+        log_debug "Cursor en coordenadas: ($cursor_x, $cursor_y)"
+        
+        # Obtener información de todos los monitores
+        local monitors=$(hyprctl monitors -j 2>/dev/null)
+        
+        if [ -n "$monitors" ]; then
+            local cursor_monitor=$(echo "$monitors" | jq -r --arg cx "$cursor_x" --arg cy "$cursor_y" '
+                .[] | select(
+                    ($cx | tonumber) >= .x and 
+                    ($cx | tonumber) < (.x + .width) and 
+                    ($cy | tonumber) >= .y and 
+                    ($cy | tonumber) < (.y + .height)
+                ) | .name' 2>/dev/null | head -n1)
+            
+            if [ -n "$cursor_monitor" ] && [ "$cursor_monitor" != "null" ]; then
+                log_debug "Monitor detectado por cursor: $cursor_monitor"
+                echo "$cursor_monitor"
+                return
+            fi
+        fi
+    fi
+    
+    # FALLBACK 1: usar el monitor con la ventana activa
+    local active_window=$(hyprctl activewindow -j 2>/dev/null)
+    
+    if [ -n "$active_window" ] && [ "$active_window" != "Invalid" ]; then
+        # Extraer coordenadas de la ventana activa
+        local window_x=$(echo "$active_window" | jq -r '.at[0]' 2>/dev/null)
+        local window_y=$(echo "$active_window" | jq -r '.at[1]' 2>/dev/null)
+        
+        log_debug "Ventana activa en coordenadas: ($window_x, $window_y)"
+        
+        if [ -n "$window_x" ] && [ "$window_x" != "null" ] && [ "$window_x" != "0" ] || [ -n "$window_y" ] && [ "$window_y" != "null" ]; then
+            # Obtener información de todos los monitores
+            local monitors=$(hyprctl monitors -j 2>/dev/null)
+            
+            if [ -n "$monitors" ]; then
+                # Encontrar el monitor que contiene las coordenadas de la ventana
+                local active_monitor=$(echo "$monitors" | jq -r --arg wx "$window_x" --arg wy "$window_y" '
+                    .[] | select(
+                        ($wx | tonumber) >= .x and 
+                        ($wx | tonumber) < (.x + .width) and 
+                        ($wy | tonumber) >= .y and 
+                        ($wy | tonumber) < (.y + .height)
+                    ) | .name' 2>/dev/null | head -n1)
+                
+                if [ -n "$active_monitor" ] && [ "$active_monitor" != "null" ]; then
+                    log_debug "Monitor detectado por ventana activa: $active_monitor"
+                    echo "$active_monitor"
+                    return
+                fi
+            fi
+        fi
+    fi
+    
+    # Último fallback: usar el monitor principal/focused
+    local focused_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null)
+    if [ -n "$focused_monitor" ] && [ "$focused_monitor" != "null" ]; then
+        log_debug "Monitor detectado como focused: $focused_monitor"
+        echo "$focused_monitor"
+        return
+    fi
+    
+    # Fallback final: usar el primer monitor disponible
+    local first_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
+    if [ -n "$first_monitor" ] && [ "$first_monitor" != "null" ]; then
+        log_debug "Usando primer monitor disponible: $first_monitor"
+        echo "$first_monitor"
+        return
+    fi
+    
+    # Último recurso
+    log_debug "No se pudo detectar monitor, usando eDP-1 por defecto"
+    echo "eDP-1"
+}
+
+# Función para ocultar Waybar
+hide_waybar() {
+    log_debug "Ocultando Waybar..."
+    pkill -SIGUSR1 waybar 2>/dev/null || true
+    sleep 0.1
+}
+
+# Función para mostrar Waybar
+show_waybar() {
+    log_debug "Mostrando Waybar..."
+    pkill -SIGUSR2 waybar 2>/dev/null || true
+    sleep 0.1
+}
+
+# Función de cleanup al salir
+cleanup() {
+    log_debug "Ejecutando cleanup..."
+    show_waybar
+    exit 0
+}
+
+# Configurar trap para cleanup
+trap cleanup EXIT INT TERM
+
+# Crear directorio de cache si no existe
+mkdir -p "$(dirname "$LOG_FILE")"
+
+log_debug "=== Iniciando powermenu-with-monitor-detection ==="
+log_debug "DISPLAY: $DISPLAY"
+log_debug "WAYLAND_DISPLAY: $WAYLAND_DISPLAY"
+
+# Detectar monitor activo
+ACTIVE_MONITOR=$(get_active_monitor)
+log_debug "Monitor activo detectado: $ACTIVE_MONITOR"
+
+# Obtener información del monitor para ajustar escala
+MONITOR_INFO=$(hyprctl monitors -j 2>/dev/null | jq -r --arg monitor "$ACTIVE_MONITOR" '.[] | select(.name == $monitor)')
+MONITOR_WIDTH=$(echo "$MONITOR_INFO" | jq -r '.width' 2>/dev/null)
+MONITOR_HEIGHT=$(echo "$MONITOR_INFO" | jq -r '.height' 2>/dev/null)
+
+log_debug "Resolución del monitor $ACTIVE_MONITOR: ${MONITOR_WIDTH}x${MONITOR_HEIGHT}"
+
+# Crear directorio temporal para el tema dinámico
+TEMP_DIR="$HOME/.cache/powermenu-themes"
+mkdir -p "$TEMP_DIR"
+
+# Configurar escalado según resolución del monitor activo
+if [[ "$MONITOR_WIDTH" -le 1920 ]]; then
+    # Para eDP-1 (1920x1080) - tamaños reducidos
+    scale_factor="0.75"
+    margin="12%"
+    log_debug "Aplicando escala reducida para monitor de 1080p: $scale_factor"
+else
+    # Para DP-6 (2560x1440) - tamaños originales  
+    scale_factor="1.0"
+    margin="15%"
+    log_debug "Aplicando escala completa para monitor de 1440p: $scale_factor"
+fi
+
+# Calcular tamaños escalados
+font_prompt=$(echo "48 * $scale_factor" | bc | cut -d. -f1)
+font_element=$(echo "52 * $scale_factor" | bc | cut -d. -f1)
+spacing_main=$(echo "80 * $scale_factor" | bc | cut -d. -f1)
+spacing_list=$(echo "40 * $scale_factor" | bc | cut -d. -f1)
+padding_v=$(echo "50 * $scale_factor" | bc | cut -d. -f1)
+margin_v=$(echo "120 * $scale_factor" | bc | cut -d. -f1)
+
+log_debug "Escalas calculadas - Font prompt: $font_prompt, Font element: $font_element"
+
+# Crear tema dinámico específico para el monitor
+cat > "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" << EOF
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+configuration {
+    show-icons: false;
+}
+
+* {
+    mainbox-spacing: ${spacing_main}px;
+    mainbox-margin: ${margin_v}px ${margin};
+    message-margin: 0px ${margin};
+    message-padding: 20px;
+    message-border-radius: 15px;
+    listview-spacing: ${spacing_list}px;
+    element-padding: ${padding_v}px 3%;
+    element-border-radius: 25px;
+
+    prompt-font: "JetBrainsMono Nerd Font Bold ${font_prompt}";
+    textbox-font: "JetBrainsMono Nerd Font Medium 14";
+    element-text-font: "JetBrainsMono Nerd Font Bold ${font_element}";
+
+    background-window: rgba(0, 0, 0, 0.75);
+    background-normal: @background;
+    background-selected: @selected-normal-background;
+    background-message: rgba(0, 0, 0, 0.65);
+    foreground-normal: @foreground;
+    foreground-selected: @selected-normal-foreground;
+    border-color: @selected-normal-background;
+}
+
+window {
+    transparency: "real";
+    location: center;
+    anchor: center;
+    fullscreen: true;
+    cursor: "default";
+    background-color: var(background-window);
+}
+
+mainbox {
+    enabled: true;
+    spacing: var(mainbox-spacing);
+    margin: var(mainbox-margin);
+    background-color: transparent;
+    children: [ "dummy", "inputbar", "listview", "message", "dummy" ];
+}
+
+inputbar {
+    enabled: true;
+    background-color: transparent;
+    children: [ "dummy", "prompt", "dummy"];
+}
+
+dummy {
+    background-color: transparent;
+}
+
+prompt {
+    enabled: true;
+    font: var(prompt-font);
+    background-color: transparent;
+    text-color: var(foreground-normal);
+}
+
+message {
+    enabled: true;
+    margin: var(message-margin);
+    padding: var(message-padding);
+    border-radius: var(message-border-radius);
+    border: 2px 0px 0px;
+    border-color: var(border-color);
+    background-color: var(background-normal);
+    text-color: var(foreground-normal);
+}
+
+textbox {
+    font: var(textbox-font);
+    background-color: transparent;
+    text-color: inherit;
+    vertical-align: 0.5;
+    horizontal-align: 0.5;
+}
+
+listview {
+    enabled: true;
+    expand: false;
+    columns: 5;
+    lines: 1;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    layout: vertical;
+    reverse: false;
+    fixed-height: true;
+    fixed-columns: true;
+    spacing: var(listview-spacing);
+    background-color: transparent;
+    border: 0px 0px 0px;
+    cursor: "default";
+}
+
+element {
+    enabled: true;
+    padding: var(element-padding);
+    border-radius: var(element-border-radius);
+    background-color: var(background-normal);
+    text-color: var(foreground-normal);
+    cursor: pointer;
+}
+
+element-text {
+    font: var(element-text-font);
+    background-color: transparent;
+    text-color: inherit;
+    cursor: inherit;
+    vertical-align: 0.5;
+    horizontal-align: 0.5;
+}
+
+element selected.normal {
+    background-color: var(background-selected);
+    text-color: var(foreground-selected);
+}
+EOF
+
+# Variables del sistema
+uptime="$(uptime -p | sed -e 's/up //g')"
+host=$(cat /etc/hostname 2>/dev/null || echo "$USER")
+
+# Options - Iconos mejorados con Nerd Font
+shutdown='⏻'  # Símbolo power
+reboot='󰜉'    # Símbolo restart
+lock='󰌾'     # Símbolo lock
+suspend='󰒲'   # Símbolo sleep
+logout='󰍃'    # Símbolo logout
+yes='✓'      # Checkmark simple
+no='✗'       # X mark simple
+
+# Rofi CMD con monitor específico
+rofi_cmd() {
+    rofi -dmenu \
+        -p "Goodbye ${USER}" \
+        -mesg "Uptime: $uptime" \
+        -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
+        -monitor "$ACTIVE_MONITOR"
+}
+
+# Confirmation CMD con monitor específico
+confirm_cmd() {
+    rofi -dmenu \
+        -p 'Confirmation' \
+        -mesg 'Are you Sure?' \
+        -theme "$HOME/rofi/files/powermenu/type-4/shared/confirm.rasi" \
+        -monitor "$ACTIVE_MONITOR"
+}
+
+# Ask for confirmation
+confirm_exit() {
+    echo -e "$yes\n$no" | confirm_cmd
+}
+
+# Pass variables to rofi dmenu
+run_rofi() {
+    # Hide waybar
+    hide_waybar
+    log_debug "Ejecutando rofi powermenu en monitor: $ACTIVE_MONITOR"
+    echo -e "$lock\n$suspend\n$logout\n$reboot\n$shutdown" | rofi_cmd
+}
+
+# Execute Command
+run_cmd() {
+    selected="$(confirm_exit)"
+    if [[ "$selected" == "$yes" ]]; then
+        if [[ $1 == '--shutdown' ]]; then
+            systemctl poweroff
+        elif [[ $1 == '--reboot' ]]; then
+            systemctl reboot
+        elif [[ $1 == '--suspend' ]]; then
+            mpc -q pause 2>/dev/null || true
+            amixer set Master mute 2>/dev/null || true
+            systemctl suspend
+        elif [[ $1 == '--logout' ]]; then
+            if [[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]]; then
+                hyprctl dispatch exit
+            elif [[ "$DESKTOP_SESSION" == 'openbox' ]]; then
+                openbox --exit
+            elif [[ "$DESKTOP_SESSION" == 'bspwm' ]]; then
+                bspc quit
+            elif [[ "$DESKTOP_SESSION" == 'i3' ]]; then
+                i3-msg exit
+            elif [[ "$DESKTOP_SESSION" == 'plasma' ]]; then
+                qdbus org.kde.ksmserver /KSMServer logout 0 0 0
+            fi
+        fi
+    else
+        exit 0
+    fi
+}
+
+# Actions
+chosen="$(run_rofi)"
+log_debug "Opción seleccionada: $chosen"
+
+case ${chosen} in
+    $shutdown)
+        run_cmd --shutdown
+        ;;
+    $reboot)
+        run_cmd --reboot
+        ;;
+    $lock)
+        if [[ -x '/usr/bin/hyprlock' ]]; then
+            hyprlock
+        elif [[ -x '/usr/bin/betterlockscreen' ]]; then
+            betterlockscreen -l
+        elif [[ -x '/usr/bin/i3lock' ]]; then
+            i3lock
+        fi
+        ;;
+    $suspend)
+        run_cmd --suspend
+        ;;
+    $logout)
+        run_cmd --logout
+        ;;
+esac
+
+log_debug "=== Finalizando powermenu-with-monitor-detection ==="
+
+# Al salir del script, el trap ejecutará cleanup automáticamente

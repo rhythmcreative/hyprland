@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Volume control with Dynamic Island notifications
+
+case "$1" in
+    up)
+        pactl set-sink-volume @DEFAULT_SINK@ +5%
+        # Limit to 100%
+        CURRENT=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -Po '\d+(?=%)' | head -1)
+        if [ $CURRENT -gt 100 ]; then
+            pactl set-sink-volume @DEFAULT_SINK@ 100%
+        fi
+        ;;
+    down)
+        pactl set-sink-volume @DEFAULT_SINK@ -5%
+        ;;
+    mute)
+        pactl set-sink-mute @DEFAULT_SINK@ toggle
+        ;;
+esac
+
+# Send Dynamic Island notification via EWW
+~/.local/bin/eww-volume

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Aplicar el wallpaper específico que mencionaste
+WALLPAPER="$HOME/Pictures/Wallpapers/red-grass-digital-painting-concept-art-4k-tm-228633440.jpg"
+
+if [[ -f "$WALLPAPER" ]]; then
+    echo "Aplicando wallpaper: $(basename "$WALLPAPER")"
+    swww img "$WALLPAPER" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+    wal -i "$WALLPAPER" -n
+    
+    # Recargar waybar si está ejecutándose
+    if pgrep -x waybar >/dev/null; then
+        pkill -SIGUSR2 waybar 2>/dev/null
+    fi
+    
+    notify-send "🎨 Tema Aplicado" "Red Grass Digital Painting" -i "$WALLPAPER" -t 3000
+    echo "✅ Wallpaper y tema aplicados exitosamente"
+else
+    notify-send "❌ Error" "Wallpaper no encontrado" -u critical
+    echo "❌ Error: Wallpaper no encontrado en: $WALLPAPER"
+fi

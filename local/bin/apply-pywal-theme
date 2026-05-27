@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# Script completo para forzar la sincronización de pywal en rofi y hyprland
+
+echo "🎨 Forzando sincronización de pywal..."
+
+# Verificar que pywal esté instalado
+if ! command -v wal &> /dev/null; then
+    echo "❌ Error: pywal no está instalado"
+    exit 1
+fi
+
+# Obtener el wallpaper actual
+current_wallpaper="$(cat ~/.cache/wal/wal)"
+
+if [ -z "$current_wallpaper" ]; then
+    echo "❌ No se pudo encontrar el wallpaper actual en ~/.cache/wal/wal"
+    exit 1
+fi
+
+# Forzar la regeneración de todos los templates
+wal -i "$current_wallpaper" -n -t -e
+
+# Sincronizar rofi style-3 con nuevos colores
+echo "🚀 Sincronizando rofi style-3..."
+~/.local/bin/sync-rofi-style3-pywal
+
+# Recargar Hyprland para aplicar los nuevos colores
+hyprctl reload
+
+# Notificación de éxito
+notify-send "🎨 Tema Sincronizado" "Rofi y Hyprland ahora usan los mismos colores"
+
+echo "✅ Sincronización completada. Verifica los colores ahora."

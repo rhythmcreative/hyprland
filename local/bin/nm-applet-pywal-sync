@@ -1,0 +1,328 @@
+#!/bin/bash
+
+# nm-applet pywal synchronizer - Enhanced version
+# Sincroniza automáticamente nm-applet con los colores de pywal
+# Compatible con Hyprland y Waybar
+
+set -euo pipefail
+
+SCRIPT_NAME="nm-applet-pywal-sync"
+LOG_FILE="$HOME/.cache/${SCRIPT_NAME}.log"
+LOCK_FILE="/tmp/${SCRIPT_NAME}.lock"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación silenciosa
+notify() {
+    notify-send "📶 nm-applet" "$1" -t 2000 -i network-wireless 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Sincronización ya en progreso (PID: $lock_pid), saliendo..."
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Cleanup function
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+log "🚀 Iniciando sincronización nm-applet con pywal..."
+
+# Verificar que pywal esté instalado y configurado
+if ! command -v wal >/dev/null 2>&1; then
+    log "❌ pywal no está instalado"
+    exit 1
+fi
+
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ No se encontraron colores de pywal generados"
+    exit 1
+fi
+
+# Cargar colores de pywal
+log "🎨 Cargando colores de pywal..."
+source "$HOME/.cache/wal/colors.sh"
+
+# Validar que los colores sean válidos
+if [[ ! "$background" =~ ^#[0-9A-Fa-f]{6}$ ]] || [[ ! "$foreground" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+    log "❌ Colores de pywal no válidos: bg=$background, fg=$foreground"
+    exit 1
+fi
+
+log "✅ Colores pywal cargados: bg=$background, fg=$foreground"
+
+# Función para crear tema GTK personalizado para nm-applet
+create_nm_applet_gtk_theme() {
+    local gtk3_dir="$HOME/.config/gtk-3.0"
+    local gtk4_dir="$HOME/.config/gtk-4.0" 
+    
+    mkdir -p "$gtk3_dir" "$gtk4_dir"
+    
+    log "🎨 Creando tema GTK personalizado para nm-applet..."
+    
+    # Crear CSS para GTK3
+    cat > "$gtk3_dir/nm-applet-pywal.css" << EOF
+/* nm-applet pywal theme - Generated $(date) */
+/* Colors: bg=$background, fg=$foreground, accent=$color4 */
+
+/* NetworkManager applet styling */
+.nm-applet,
+.nm-applet-window,
+#nm-applet {
+    background-color: $background;
+    color: $foreground;
+    border-radius: 8px;
+    border: 1px solid $color4;
+}
+
+/* Menu items */
+.nm-applet menuitem,
+.nm-applet-window menuitem {
+    background-color: $background;
+    color: $foreground;
+    padding: 8px 12px;
+    border-radius: 4px;
+}
+
+.nm-applet menuitem:hover,
+.nm-applet-window menuitem:hover {
+    background-color: $color4;
+    color: $background;
+}
+
+/* Active connections */
+.nm-applet .connection-active {
+    color: $color2;
+    font-weight: bold;
+}
+
+/* Entry fields */
+.nm-applet entry {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color4;
+    border-radius: 4px;
+    padding: 6px;
+}
+
+/* Buttons */
+.nm-applet button {
+    background-color: $color4;
+    color: $background;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.nm-applet button:hover {
+    background-color: $color6;
+    opacity: 0.9;
+}
+
+/* Separators */
+.nm-applet separator {
+    background-color: $color8;
+    opacity: 0.5;
+}
+
+/* Popover/Dialog styling */
+popover,
+dialog {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color4;
+    border-radius: 8px;
+}
+
+/* List styling */
+list,
+listbox {
+    background-color: $background;
+    color: $foreground;
+}
+
+list row,
+listbox row {
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+list row:hover,
+listbox row:hover {
+    background-color: $color4;
+    color: $background;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: $background;
+    border-radius: 10px;
+}
+
+scrollbar slider {
+    background-color: $color4;
+    border-radius: 10px;
+    min-width: 10px;
+    min-height: 10px;
+}
+
+/* System tray specific */
+.system-tray .nm-applet {
+    color: $foreground;
+    padding: 4px;
+}
+EOF
+
+    # Copiar para GTK4
+    cp "$gtk3_dir/nm-applet-pywal.css" "$gtk4_dir/nm-applet-pywal.css"
+    
+    # Actualizar/crear archivo gtk.css principal para importar el tema
+    local gtk3_main="$gtk3_dir/gtk.css"
+    local gtk4_main="$gtk4_dir/gtk.css"
+    
+    for gtk_main in "$gtk3_main" "$gtk4_main"; do
+        if [[ -f "$gtk_main" ]]; then
+            if ! grep -q "nm-applet-pywal.css" "$gtk_main"; then
+                echo '@import "nm-applet-pywal.css";' | cat - "$gtk_main" > temp && mv temp "$gtk_main"
+            fi
+        else
+            echo '@import "nm-applet-pywal.css";' > "$gtk_main"
+        fi
+    done
+    
+    log "✅ Tema GTK personalizado creado y configurado"
+}
+
+# Función para configurar variables de entorno
+setup_environment() {
+    log "🔧 Configurando variables de entorno..."
+    
+    # Crear script de entorno para nm-applet
+    cat > "/tmp/nm-applet-env.sh" << EOF
+#!/bin/bash
+# nm-applet environment setup with pywal colors
+
+# Basic environment
+export HOME="$HOME"
+export USER="$USER"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+export DISPLAY="${DISPLAY:-}"
+
+# GTK theming
+export GTK_THEME="Adwaita:dark"
+export GDK_BACKEND="wayland,x11"
+export GTK_CSD=0
+export GTK_OVERLAY_SCROLLING=0
+
+# Apply pywal colors to environment
+export PYWAL_BACKGROUND="$background"
+export PYWAL_FOREGROUND="$foreground"
+export PYWAL_ACCENT="$color4"
+
+# Start nm-applet
+exec nm-applet "\$@"
+EOF
+    
+    chmod +x "/tmp/nm-applet-env.sh"
+    log "✅ Variables de entorno configuradas"
+}
+
+# Función para reiniciar nm-applet
+restart_nm_applet() {
+    log "🔄 Reiniciando nm-applet con tema pywal..."
+    
+    # Matar procesos existentes
+    pkill -f nm-applet 2>/dev/null || true
+    sleep 2
+    
+    # Forzar cierre si sigue corriendo
+    if pgrep -x nm-applet >/dev/null; then
+        pkill -9 nm-applet 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Iniciar nm-applet con el nuevo entorno
+    nohup /tmp/nm-applet-env.sh >/dev/null 2>&1 &
+    
+    # Verificar que inició correctamente
+    local attempts=0
+    while [[ $attempts -lt 8 ]]; do
+        if pgrep -x nm-applet >/dev/null; then
+            log "✅ nm-applet reiniciado exitosamente"
+            notify "Sincronizado con pywal"
+            rm -f "/tmp/nm-applet-env.sh"
+            return 0
+        fi
+        sleep 1
+        ((attempts++))
+    done
+    
+    log "⚠️ nm-applet tardó en iniciar, pero puede estar funcionando"
+    rm -f "/tmp/nm-applet-env.sh"
+    return 0
+}
+
+# Función para aplicar cambios de tema a nivel sistema
+apply_system_theme() {
+    log "🖥️ Aplicando cambios de tema a nivel sistema..."
+    
+    # Actualizar gsettings si está disponible
+    if command -v gsettings >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface gtk-theme "Adwaita:dark" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+    fi
+    
+    # Enviar señales D-Bus para actualizar temas
+    if command -v dbus-send >/dev/null 2>&1; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+            string:"gtk-theme-name" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated \
+            2>/dev/null || true
+    fi
+    
+    log "✅ Cambios de tema aplicados"
+}
+
+# Función principal
+main() {
+    log "=== Iniciando sincronización nm-applet ↔ pywal ==="
+    
+    # Crear tema personalizado
+    create_nm_applet_gtk_theme
+    
+    # Configurar entorno
+    setup_environment
+    
+    # Aplicar cambios de tema
+    apply_system_theme
+    
+    # Reiniciar nm-applet
+    restart_nm_applet
+    
+    log "🎉 Sincronización completada exitosamente!"
+    log "📋 Log disponible en: $LOG_FILE"
+}
+
+# Verificar argumentos
+if [[ "${1:-}" == "--force" ]]; then
+    log "🔥 Modo forzado activado"
+fi
+
+# Ejecutar función principal
+main
+
+exit 0

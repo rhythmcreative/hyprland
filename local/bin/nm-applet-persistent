@@ -1,0 +1,174 @@
+#!/bin/bash
+
+# Script mejorado para mantener nm-applet corriendo de forma persistente
+# Evita que se cierre automáticamente y maneja reinicios suaves
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/nm-applet-persistent.log"
+
+# Función de logging
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función para verificar si nm-applet está corriendo
+is_nm_applet_running() {
+    pgrep -x nm-applet > /dev/null 2>&1
+}
+
+# Función para matar nm-applet de forma limpia
+kill_nm_applet() {
+    if is_nm_applet_running; then
+        local pid=$(pgrep -x nm-applet | head -1)
+        log "🔄 Cerrando nm-applet actual (PID: $pid)..."
+        
+        # Intentar cerrar gracefully primero
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 1
+        
+        # Si aún está corriendo, forzar cierre
+        if is_nm_applet_running; then
+            kill -KILL "$pid" 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Esperar a que realmente se cierre
+        local attempts=0
+        while is_nm_applet_running && [ $attempts -lt 5 ]; do
+            sleep 1
+            ((attempts++))
+        done
+        
+        if is_nm_applet_running; then
+            log "⚠️ nm-applet resistente a cerrarse, continuando..."
+        else
+            log "✅ nm-applet cerrado exitosamente"
+        fi
+    fi
+}
+
+# Función para iniciar nm-applet con configuración optimizada
+start_nm_applet() {
+    log "🚀 Iniciando nm-applet con configuración persistente..."
+    
+    # Variables de entorno para estabilidad
+    export GTK_THEME="Arc-Dark"
+    export GDK_BACKEND="wayland,x11"
+    export DISPLAY="${DISPLAY:-:0}"
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+    
+    # Iniciar nm-applet en segundo plano con nohup para persistencia
+    nohup nm-applet > /dev/null 2>&1 &
+    local nm_applet_pid=$!
+    
+    # Esperar un momento para verificar que se inicie correctamente
+    sleep 3
+    
+    if is_nm_applet_running; then
+        local actual_pid=$(pgrep -x nm-applet | head -1)
+        log "✅ nm-applet iniciado exitosamente (PID: $actual_pid)"
+        
+        # Verificar que realmente está funcionando
+        sleep 2
+        if is_nm_applet_running; then
+            log "🔒 nm-applet confirmado como estable"
+            return 0
+        else
+            log "❌ nm-applet se cerró inmediatamente después del inicio"
+            return 1
+        fi
+    else
+        log "❌ Falló al iniciar nm-applet"
+        return 1
+    fi
+}
+
+# Función para restart suave (sin matar si está funcionando bien)
+soft_restart() {
+    log "🔄 Realizando restart suave de nm-applet..."
+    
+    if is_nm_applet_running; then
+        # Verificar si nm-applet responde correctamente
+        local pid=$(pgrep -x nm-applet | head -1)
+        
+        # Verificar que el proceso no esté zombie o colgado
+        if kill -0 "$pid" 2>/dev/null; then
+            log "✅ nm-applet está corriendo y responde (PID: $pid)"
+            log "ℹ️ No es necesario reiniciar, manteniéndolo activo"
+            return 0
+        else
+            log "⚠️ nm-applet no responde, reiniciando..."
+        fi
+    fi
+    
+    # Reiniciar si no está corriendo o no responde
+    kill_nm_applet
+    sleep 2
+    start_nm_applet
+}
+
+# Función para restart forzado
+force_restart() {
+    log "🔄 Realizando restart forzado de nm-applet..."
+    kill_nm_applet
+    sleep 2
+    start_nm_applet
+}
+
+# Función para asegurar que nm-applet esté corriendo
+ensure_running() {
+    log "🔍 Verificando estado de nm-applet..."
+    
+    if is_nm_applet_running; then
+        local pid=$(pgrep -x nm-applet | head -1)
+        log "✅ nm-applet ya está corriendo (PID: $pid)"
+        return 0
+    else
+        log "⚠️ nm-applet no está corriendo, iniciando..."
+        start_nm_applet
+    fi
+}
+
+# Función principal
+main() {
+    local action="${1:-ensure}"
+    
+    log "📶 === nm-applet-persistent: $action ==="
+    
+    case "$action" in
+        "start")
+            kill_nm_applet
+            start_nm_applet
+            ;;
+        "stop")
+            kill_nm_applet
+            ;;
+        "restart"|"force")
+            force_restart
+            ;;
+        "soft"|"gentle")
+            soft_restart
+            ;;
+        "ensure"|*)
+            ensure_running
+            ;;
+    esac
+    
+    # Verificación final
+    if is_nm_applet_running; then
+        local final_pid=$(pgrep -x nm-applet | head -1)
+        log "🎉 nm-applet funcionando correctamente (PID: $final_pid)"
+        
+        # Crear archivo de estado para monitoreo
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - PID: $final_pid" > "$HOME/.cache/nm-applet-status"
+    else
+        log "❌ nm-applet no está funcionando"
+        rm -f "$HOME/.cache/nm-applet-status" 2>/dev/null || true
+        exit 1
+    fi
+}
+
+# Ejecutar función principal
+main "$@"

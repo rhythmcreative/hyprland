@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Script para recargar Hyprland y reiniciar el dock con nueva configuración
+
+echo "🔄 Recargando Hyprland con nueva configuración..."
+
+# Detener nwg-dock-hyprland si está corriendo
+if pgrep -f "nwg-dock-hyprland" > /dev/null; then
+    echo "⏹️  Deteniendo nwg-dock-hyprland..."
+    pkill -f "nwg-dock-hyprland"
+    sleep 1
+fi
+
+# Recargar configuración de Hyprland
+echo "🔃 Recargando configuración de Hyprland..."
+hyprctl reload
+
+# Esperar un momento
+sleep 2
+
+# Iniciar nwg-dock-hyprland con nueva configuración
+echo "🚀 Iniciando nwg-dock-hyprland..."
+nwg-dock-hyprland -c ~/.config/nwg-dock-hyprland/config &
+disown
+
+echo "✅ Hyprland y dock recargados exitosamente"
+notify-send "🔄 Sistema Recargado" "Hyprland y nwg-dock-hyprland actualizados" -t 3000

@@ -1,0 +1,101 @@
+#!/bin/bash
+# Script para sincronizar oh-my-posh con pywal
+# Configuración de colores dinámicos para oh-my-posh
+
+# Colores de pywal
+source ~/.cache/wal/colors.sh
+
+# Archivo de configuración de oh-my-posh
+OMP_CONFIG="$HOME/.config/oh-my-posh/pywal-dynamic.omp.json"
+
+# Crear tema elegante minimalista de oh-my-posh con colores de pywal
+cat > "$OMP_CONFIG" << EOF
+{
+  "\$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "console_title_template": "{{ .Shell }} in {{ .Folder }}",
+  "blocks": [
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "segments": [
+        {
+          "properties": {
+            "cache_duration": "none",
+            "folder_separator_icon": "/",
+            "home_icon": "~",
+            "max_depth": 3,
+            "style": "full"
+          },
+          "template": "{{ .Path }}",
+          "foreground": "$color6",
+          "type": "path",
+          "style": "plain"
+        },
+        {
+          "properties": {
+            "cache_duration": "none",
+            "fetch_status": true
+          },
+          "template": " via {{ .HEAD }}{{ if .Working.Changed }} [!]{{ end }}",
+          "foreground": "$color2",
+          "type": "git",
+          "style": "plain",
+          "foreground_templates": [
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}$color3{{ end }}"
+          ]
+        },
+        {
+          "properties": {
+            "cache_duration": "none",
+            "fetch_version": true
+          },
+          "template": " with node {{ .Full }}",
+          "foreground": "$color5",
+          "type": "node",
+          "style": "plain"
+        },
+        {
+          "properties": {
+            "cache_duration": "none"
+          },
+          "template": " took {{ .FormattedMs }}",
+          "foreground": "$color8",
+          "type": "executiontime",
+          "style": "plain"
+        }
+      ],
+      "newline": true
+    },
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "segments": [
+        {
+          "properties": {
+            "cache_duration": "none"
+          },
+          "template": "❱ ",
+          "foreground": "$color6",
+          "type": "status",
+          "style": "plain",
+          "foreground_templates": [
+            "{{ if gt .Code 0 }}$color1{{ end }}"
+          ]
+        }
+      ]
+    }
+  ],
+  "version": 3,
+  "final_space": true
+}
+EOF
+
+echo "✓ Oh My Posh theme updated with pywal colors!"
+echo "  Theme saved to: $OMP_CONFIG"
+echo "  Colors used:"
+echo "    Background: $background"
+echo "    Foreground: $foreground"
+echo "    Accent: $color6"
+echo "    Success: $color2"
+echo "    Warning: $color3"
+echo "    Error: $color1"

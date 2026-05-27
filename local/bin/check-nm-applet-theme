@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# Script para verificar el estado del tema de nm-applet
+
+echo "🔍 Verificando estado del tema de nm-applet..."
+echo ""
+
+# Verificar si nm-applet está corriendo
+if pgrep -f nm-applet > /dev/null; then
+    echo "✅ nm-applet está corriendo"
+    
+    # Mostrar el PID del proceso
+    NM_PID=$(pgrep -f nm-applet)
+    echo "   PID: $NM_PID"
+    
+    # Verificar variables de entorno del proceso
+    if [ -d "/proc/$NM_PID" ]; then
+        echo "   Variables de tema:"
+        cat /proc/$NM_PID/environ | tr '\0' '\n' | grep -E "(GTK_THEME|THEME)" || echo "   No se encontraron variables de tema específicas"
+    fi
+else
+    echo "❌ nm-applet no está corriendo"
+fi
+
+echo ""
+
+# Verificar si existe el tema personalizado
+THEME_DIR="$HOME/.local/share/themes/PywalNMApplet"
+if [ -d "$THEME_DIR" ]; then
+    echo "✅ Tema personalizado existe en: $THEME_DIR"
+    
+    # Verificar archivos del tema
+    if [ -f "$THEME_DIR/gtk-3.0/gtk.css" ]; then
+        echo "✅ CSS de GTK-3.0 encontrado"
+        LINES=$(wc -l < "$THEME_DIR/gtk-3.0/gtk.css")
+        echo "   Líneas en el CSS: $LINES"
+    else
+        echo "❌ CSS de GTK-3.0 no encontrado"
+    fi
+    
+    if [ -f "$THEME_DIR/index.theme" ]; then
+        echo "✅ Archivo index.theme encontrado"
+    else
+        echo "❌ Archivo index.theme no encontrado"
+    fi
+else
+    echo "❌ Tema personalizado no existe"
+fi
+
+echo ""
+
+# Verificar colores de pywal
+if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+    echo "✅ Colores de pywal disponibles"
+    source "$HOME/.cache/wal/colors.sh"
+    echo "   Fondo: $background"
+    echo "   Texto: $foreground" 
+    echo "   Acento: $color4"
+else
+    echo "❌ Colores de pywal no encontrados"
+fi
+
+echo ""
+
+# Verificar archivo de autostart
+AUTOSTART_FILE="$HOME/.config/autostart/nm-applet-themed.desktop"
+if [ -f "$AUTOSTART_FILE" ]; then
+    echo "✅ Autostart configurado correctamente"
+    echo "   Archivo: $AUTOSTART_FILE"
+else
+    echo "❌ Autostart no configurado"
+fi
+
+echo ""
+
+# Sugerencias
+echo "💡 Sugerencias:"
+echo "   - Si hay problemas, ejecuta: fix-nm-applet-colors"
+echo "   - Para sincronizar manualmente: nm-applet-theme-sync"
+echo "   - Para aplicar a todo: pywal-full-sync"

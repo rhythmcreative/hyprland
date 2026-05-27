@@ -1,0 +1,392 @@
+#!/bin/bash
+
+# nm-applet waybar color synchronizer (FIXED VERSION)
+# Forces nm-applet to use the exact same colors as waybar
+
+set -u  # Only exit on undefined variables, but continue on errors
+
+echo "🔄 Sincronizando nm-applet con colores de Waybar..."
+
+# Function to extract colors from pywal (most reliable method)
+extract_waybar_colors() {
+    echo "📊 Extrayendo colores de pywal para sincronización con waybar..."
+    
+    # Always use pywal colors as they are the source of truth
+    if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+        echo "❌ Error: No se encontraron colores de pywal"
+        return 1
+    fi
+    
+    # Load pywal colors with safer approach
+    # Set default values for common variables that might be unbound
+    export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+    export LS_COLORS="${LS_COLORS:-}"
+    export GREP_OPTIONS="${GREP_OPTIONS:-}"
+    
+    # Temporarily disable unbound variable checking for sourcing
+    set +u
+    source "$HOME/.cache/wal/colors.sh"
+    set -u
+    
+    # Use pywal colors directly - these are what waybar should be using too
+    # Eliminar las comillas simples que a veces aparecen en los valores
+    WAYBAR_BG=$(echo "$background" | tr -d "'")
+    WAYBAR_FG=$(echo "$foreground" | tr -d "'")
+    WAYBAR_ACCENT=$(echo "$color4" | tr -d "'")  # Use color4 as accent
+    WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'")  # Additional highlight color
+    WAYBAR_WARNING=$(echo "$color3" | tr -d "'")   # Warning color
+    WAYBAR_URGENT=$(echo "$color1" | tr -d "'")    # Urgent/error color
+    
+    # Export variables para que estén disponibles
+    export WAYBAR_BG
+    export WAYBAR_FG
+    export WAYBAR_ACCENT
+    export WAYBAR_HIGHLIGHT
+    export WAYBAR_WARNING
+    export WAYBAR_URGENT
+    
+    # Validate colors (must start with #)
+    if [[ ! "$WAYBAR_BG" =~ ^#[0-9A-Fa-f]{6}$ ]] || [[ ! "$WAYBAR_FG" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+        echo "❌ Error: Colores de pywal no válidos"
+        echo "  BG: $WAYBAR_BG"
+        echo "  FG: $WAYBAR_FG"
+        return 1
+    fi
+    
+    echo "✅ Colores pywal extraídos para nm-applet:"
+    echo "  Background: $WAYBAR_BG"
+    echo "  Foreground: $WAYBAR_FG"
+    echo "  Accent: $WAYBAR_ACCENT"
+    echo "  Highlight: $WAYBAR_HIGHLIGHT"
+    echo "  Warning: $WAYBAR_WARNING"
+    echo "  Urgent: $WAYBAR_URGENT"
+}
+
+# Function to create custom GTK CSS for nm-applet with waybar colors
+create_nm_applet_gtk_css() {
+    local gtk3_dir="$HOME/.config/gtk-3.0"
+    local gtk4_dir="$HOME/.config/gtk-4.0"
+    local nm_css_file="$gtk3_dir/nm-applet-waybar.css"
+    
+    mkdir -p "$gtk3_dir" "$gtk4_dir"
+    
+    echo "🎨 Creando CSS personalizado para nm-applet con colores exactos de Waybar..."
+    echo "  Usando BG: $WAYBAR_BG, FG: $WAYBAR_FG, Accent: $WAYBAR_ACCENT"
+    
+    # Create specific CSS for nm-applet with waybar colors using exact hex values
+    cat > "$nm_css_file" << EOF
+/* nm-applet specific styling with waybar colors - Updated $(date) */
+/* Colors: BG=$WAYBAR_BG, FG=$WAYBAR_FG, Accent=$WAYBAR_ACCENT */
+
+/* NetworkManager applet main window and popup */
+.nm-applet-window,
+.nm-applet,
+#nm-applet,
+window.background {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Network menu and popup items */
+.nm-applet-window menuitem,
+.nm-applet menuitem,
+menuitem {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: none;
+}
+
+.nm-applet-window menuitem:hover,
+.nm-applet menuitem:hover,
+menuitem:hover {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Connection status indicators */
+.nm-applet-window .connection-active,
+.nm-applet .connection-active {
+    color: $WAYBAR_ACCENT;
+    font-weight: bold;
+}
+
+/* Separator lines */
+.nm-applet-window separator,
+.nm-applet separator,
+separator {
+    background-color: $WAYBAR_ACCENT;
+    opacity: 0.3;
+}
+
+/* Entry fields (for passwords, etc.) */
+.nm-applet-window entry,
+.nm-applet entry,
+entry {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+    border-radius: 4px;
+    padding: 6px;
+}
+
+/* Buttons */
+.nm-applet-window button,
+.nm-applet button,
+button {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.nm-applet-window button:hover,
+.nm-applet button:hover,
+button:hover {
+    opacity: 0.8;
+    background-color: $WAYBAR_HIGHLIGHT;
+}
+
+/* System tray icon styling */
+.system-tray .nm-applet-icon {
+    color: $WAYBAR_FG;
+}
+
+/* General popup and dialog styling */
+popover,
+dialog {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* List items in network selection */
+listview,
+list {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+}
+
+listview row,
+list row {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    padding: 4px 8px;
+}
+
+listview row:hover,
+list row:hover {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: $WAYBAR_BG;
+}
+
+scrollbar slider {
+    background-color: $WAYBAR_ACCENT;
+    border-radius: 10px;
+}
+EOF
+    
+    echo "📄 CSS específico para nm-applet creado en: $nm_css_file"
+    
+    # Also create a GTK4 version
+    local nm_css_file_gtk4="$gtk4_dir/nm-applet-waybar.css"
+    cp "$nm_css_file" "$nm_css_file_gtk4"
+    echo "📄 CSS GTK4 copiado a: $nm_css_file_gtk4"
+    
+    # Update main GTK CSS to include nm-applet styles
+    local main_gtk_css="$gtk3_dir/gtk.css"
+    if [[ -f "$main_gtk_css" ]]; then
+        # Add import at the beginning if not already present
+        if ! grep -q "nm-applet-waybar.css" "$main_gtk_css"; then
+            echo '@import "nm-applet-waybar.css";' | cat - "$main_gtk_css" > temp && mv temp "$main_gtk_css"
+            echo "✅ Importado nm-applet CSS en gtk.css principal"
+        fi
+    else
+        # Create gtk.css if it doesn't exist
+        echo '@import "nm-applet-waybar.css";' > "$main_gtk_css"
+        echo "✅ Creado gtk.css principal con import nm-applet"
+    fi
+    
+    # Do the same for GTK4
+    local main_gtk4_css="$gtk4_dir/gtk.css"
+    if [[ -f "$main_gtk4_css" ]]; then
+        if ! grep -q "nm-applet-waybar.css" "$main_gtk4_css"; then
+            echo '@import "nm-applet-waybar.css";' | cat - "$main_gtk4_css" > temp && mv temp "$main_gtk4_css"
+            echo "✅ Importado nm-applet CSS en gtk4.css principal"
+        fi
+    else
+        echo '@import "nm-applet-waybar.css";' > "$main_gtk4_css"
+        echo "✅ Creado gtk4.css principal con import nm-applet"
+    fi
+}
+
+# Function to create a custom CSS provider for GTK applications
+create_css_provider_script() {
+    local script_dir="$HOME/.config/gtk-3.0"
+    local script_file="$script_dir/load-nm-applet-css.sh"
+    
+    mkdir -p "$script_dir"
+    
+    cat > "$script_file" << 'EOF'
+#!/bin/bash
+
+# Script to force GTK to load our custom CSS for nm-applet
+# This runs in the background to ensure the styles are applied
+
+# Load environment variables if they exist
+[ -f "$HOME/.cache/wal/colors.sh" ] && source "$HOME/.cache/wal/colors.sh"
+
+# Apply the GTK CSS settings
+gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
+
+# Set environment variables for GTK
+export GTK_THEME=PywalGTK-Auto
+export GTK_CSD=0
+export GTK_OVERLAY_SCROLLING=0
+
+# If running in Wayland, set GDK backend
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    export GDK_BACKEND=wayland,x11
+fi
+
+# Send D-Bus signal to reload GTK settings
+dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+    string:"gtk-theme-name" string:"PywalGTK-Auto" 2>/dev/null || true
+
+# Send CSS reload message
+dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+
+# Success
+echo "GTK CSS settings applied successfully"
+exit 0
+EOF
+
+    chmod +x "$script_file"
+    echo "📜 Script CSS provider creado en: $script_file"
+}
+
+# Function to restart nm-applet with proper environment
+restart_nm_applet_with_waybar_theme() {
+    echo "🔄 Reiniciando nm-applet con tema waybar..."
+    
+    # Kill existing nm-applet (gentle approach first)
+    echo "🛑 Deteniendo nm-applet actual..."
+    pkill nm-applet 2>/dev/null || true
+    sleep 2
+    
+    # Double check and force kill if still running
+    if pgrep -x nm-applet > /dev/null; then
+        echo "⚡ Forzando cierre de nm-applet..."
+        pkill -9 nm-applet 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Simple restart approach to avoid script hanging
+    echo "🚀 Iniciando nm-applet con colores de waybar..."
+    
+    # Set up environment variables
+    export GTK_THEME="Adwaita:dark"
+    export GDK_BACKEND="wayland,x11"
+    export GTK_CSD=0
+    
+    # Start nm-applet in background
+    nohup nm-applet >/dev/null 2>&1 &
+    local nm_pid=$!
+    
+    # Wait a moment for it to start
+    sleep 3
+    
+    # Verify it's running
+    if pgrep -x nm-applet >/dev/null; then
+        echo "✅ nm-applet reiniciado exitosamente con colores de waybar"
+        
+        # Send success notification
+        if command -v notify-send >/dev/null; then
+            notify-send "🎨 nm-applet Sincronizado" "Ahora usa los colores de pywal" -t 2000 -i network-wireless 2>/dev/null || true
+        fi
+        return 0
+    else
+        echo "❌ Error: no se pudo reiniciar nm-applet"
+        return 1
+    fi
+}
+
+# Function to apply GTK theme changes system-wide
+apply_system_theme_changes() {
+    echo "🔧 Aplicando cambios de tema a nivel de sistema..."
+    
+    # Update gsettings
+    if command -v gsettings > /dev/null; then
+        gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+    fi
+    
+    # Send D-Bus signals to update themes
+    if command -v dbus-send > /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged string:"gtk-theme-name" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged string:"gtk-application-prefer-dark-theme" 2>/dev/null || true
+        # Add specific signal for CSS changes
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+    fi
+    
+    # Run CSS provider script if it exists
+    local css_provider_script="$HOME/.config/gtk-3.0/load-nm-applet-css.sh"
+    if [[ -f "$css_provider_script" ]]; then
+        bash "$css_provider_script" &
+    fi
+    
+    echo "✅ Cambios de tema aplicados a nivel de sistema"
+}
+
+# Function to fix file permissions
+fix_permissions() {
+    echo "🔒 Verificando y corrigiendo permisos de archivos..."
+    
+    # Make CSS files readable
+    chmod 644 "$HOME/.config/gtk-3.0/nm-applet-waybar.css" 2>/dev/null || true
+    chmod 644 "$HOME/.config/gtk-4.0/nm-applet-waybar.css" 2>/dev/null || true
+    
+    # Make scripts executable
+    chmod 755 "$HOME/.config/gtk-3.0/load-nm-applet-css.sh" 2>/dev/null || true
+    
+    echo "✅ Permisos corregidos"
+}
+
+# Main execution
+main() {
+    echo "=== Iniciando sincronización nm-applet ↔ Waybar ==="
+    
+    # Extract waybar colors
+    if ! extract_waybar_colors; then
+        echo "❌ Error al extraer colores de waybar"
+        exit 1
+    fi
+    
+    # Create custom CSS for nm-applet
+    create_nm_applet_gtk_css
+    
+    # Create CSS provider script
+    create_css_provider_script
+    
+    # Apply system theme changes
+    apply_system_theme_changes
+    
+    # Fix file permissions
+    fix_permissions
+    
+    # Restart nm-applet with new theme
+    restart_nm_applet_with_waybar_theme
+    
+    echo "🎉 Sincronización nm-applet ↔ Waybar completada exitosamente!"
+}
+
+# Run main function
+main

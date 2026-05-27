@@ -1,0 +1,118 @@
+@import "colors-pywal.css";
+
+/* --- Global Styles --- */
+* {
+  font-family: 'JetBrainsMono Nerd Font', 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 0;
+  border: none;
+  outline: none;
+}
+
+/* --- Waybar Container --- */
+#waybar {
+  background-color: alpha(@background, 0.8);
+  color: @foreground;
+  min-width: 72px; /* A comfortable width */
+  border-radius: 10px;
+  margin: 5px;
+  padding: 5px 0;
+  backdrop-filter: blur(10px); /* Frosted glass effect */
+}
+
+/* --- General Module Styling --- */
+#workspaces,
+#clock,
+#custom-cava,
+#tray,
+#cpu, #memory, #temperature, #custom-nvidia-temp, #custom-dual-battery,
+#pulseaudio, #backlight, #bluetooth {
+  padding: 10px 6px;
+  margin: 6px 8px;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+/* Add margin between module groups */
+#workspaces, #clock, .modules-center > *, .modules-bottom > * {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+
+/* --- Workspaces --- */
+#workspaces {
+  padding: 8px 4px;
+}
+
+#workspaces button {
+  color: @foreground;
+  border-radius: 8px;
+  padding: 8px 4px; /* Increased padding for bigger buttons */
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+#workspaces button.active {
+  color: @color4;
+  background-color: alpha(@color4, 0.25);
+}
+
+#workspaces button:hover {
+  background: @color8;
+  color: @foreground;
+  border-radius: 12px; /* Fun hover effect */
+}
+
+/* --- Clock --- */
+#clock {
+  color: @color4;
+  font-size: 16px;
+  padding: 12px 0;
+}
+
+/* --- Icon-specific sizing --- */
+#pulseaudio .icon, #backlight .icon, #cpu .icon, #memory .icon, #temperature .icon, #bluetooth .icon {
+    font-size: 18px;
+}
+
+/* --- Module Hover Effects --- */
+#cpu:hover, #memory:hover, #temperature:hover, #custom-nvidia-temp:hover, #custom-dual-battery:hover,
+#pulseaudio:hover, #backlight:hover, #bluetooth:hover {
+  background-color: alpha(@color8, 0.5);
+}
+
+/* --- Module Colors --- */
+#cpu { color: @color1; }
+#memory { color: @color5; }
+#pulseaudio { color: @color3; }
+#backlight { color: @color6; }
+#bluetooth { color: @color8; font-size: 20px; }
+#bluetooth.on { color: @color2; }
+#bluetooth.connected { color: @color6; }
+#custom-dual-battery { color: @color4; }
+#custom-dual-battery.warning { color: @color3; }
+#custom-dual-battery.critical { color: @color1; animation: pulse 1.5s infinite; }
+#tray { color: @foreground; padding: 10px 0; }
+#temperature { color: @color3; }
+#custom-nvidia-temp { color: @color2; }
+#custom-nvidia-temp.critical, #temperature.critical { color: @color1; animation: pulse 1.5s infinite; }
+#custom-cava { color: @color4; padding: 15px 0; }
+
+/* Pulse animation */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+/* --- Tooltip Styles --- */
+tooltip {
+  background-color: @background;
+  color: @foreground;
+  padding: 8px 15px;
+  border-radius: 8px;
+  border: 1px solid @color8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}

@@ -1,0 +1,120 @@
+{
+  "layer": "top",
+  "position": "left",
+  "spacing" : 0,
+  "exclusive": true,
+  "modules-top": [
+    "hyprland/workspaces"
+  ],
+  "modules-center": [
+    "clock",
+    "group/controls"
+  ],
+  "modules-bottom": [
+    "group/system-info",
+    "tray",
+    "custom/cava"
+  ],
+
+  "hyprland/workspaces": {
+    "format": "{icon}",
+    "format-icons": {
+      "1": "󰎦", "2": "󰎩", "3": "󰎬", "4": "󰎮", "5": "󰎰",
+      "6": "󰎵", "7": "󰎸", "8": "󰎻", "9": "󰎾", "10": "󰽁",
+      "active": "󰮯",
+      "default": "󰀤"
+    },
+    "orientation": "vertical"
+  },
+
+  "group/system-info": {
+    "orientation": "vertical",
+    "modules": [
+      "cpu",
+      "memory",
+      "temperature#cpu",
+      "custom/nvidia-temp",
+      "custom/dual-battery"
+    ]
+  },
+
+  "group/controls": {
+      "orientation": "vertical",
+      "modules": [
+          "pulseaudio",
+          "backlight",
+          "bluetooth"
+      ]
+  },
+
+  "custom/cava": {
+    "exec": "/home/rhythmcreative/waybar-cava/cava.sh",
+    "format": "{}"
+  },
+
+  "bluetooth": {
+    "format": "{icon}",
+    "format-icons": { "enabled": "󰂯", "disabled": "󰂲", "connected": "󰂱" },
+    "tooltip-format": "{status}",
+    "tooltip-format-connected": "{device_enumerate}",
+    "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
+  },
+
+  "clock": {
+    "tooltip": false,
+    "format": "{:%H\n%M}",
+    "interval": 1
+  },
+
+  "cpu": {
+    "interval": 2,
+    "format": "󰍛\n{usage}%",
+    "on-click": "ghostty -e htop"
+  },
+
+  "memory": {
+    "interval": 5,
+    "format": "󰘚\n{used:0.1f}G"
+  },
+
+  "backlight": {
+    "format": "{icon}\n{percent}%",
+    "format-icons": ["","󰃜", "󰃛", "󰃞","󰃝","󰃟","󰃠"]
+  },
+
+  "pulseaudio": {
+    "format": "{icon}\n{volume}%",
+    "format-muted": "󰝟",
+    "format-icons": { "default": ["󰕿", "󰖀", "󰕾"] },
+    "on-click": "pavucontrol"
+  },
+
+  "custom/dual-battery": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "$HOME/.config/waybar/scripts/dual_battery.sh",
+    "interval": 30,
+    "tooltip": true
+  },
+
+  "temperature#cpu": {
+    "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
+    "critical-threshold": 85,
+    "format": "󰔏\n{temperatureC}°",
+    "format-critical": "󰸁 {temperatureC}°"
+  },
+
+  "custom/nvidia-temp": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "$HOME/.config/waybar/scripts/nvidia-temp.sh",
+    "interval": 10,
+    "tooltip": true
+  },
+
+  "tray": {
+    "icon-size": 20,
+    "spacing": 10,
+    "orientation": "vertical"
+  }
+}

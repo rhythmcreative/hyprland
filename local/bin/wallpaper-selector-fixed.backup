@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# Wallpaper Selector - Versión simple y funcional
+
+# Variables básicas
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+
+# Crear directorio de cache
+mkdir -p "$CACHE_DIR"
+
+# Verificar directorio
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Buscar imágenes
+cd "$WALLPAPER_DIR" || exit 1
+shopt -s nullglob
+images=(*.{jpg,jpeg,png,gif,webp,bmp})
+
+# Verificar que hay imágenes
+if [[ ${#images[@]} -eq 0 ]] || [[ "${images[0]}" == "*.jpg" ]]; then
+    notify-send "❌ Error" "No se encontraron imágenes válidas" -u critical
+    exit 1
+fi
+
+# Generar lista para rofi
+options=""
+for img in "${images[@]}"; do
+    # Verificar que el archivo existe
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Generar preview si no existe
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "300x200^" -gravity center -extent "300x200" "$preview_file" 2>/dev/null || continue
+        else
+            convert "$img" -resize "300x200^" -gravity center -extent "300x200" "$preview_file" 2>/dev/null || continue
+        fi
+    fi
+    
+    # Agregar a la lista si el preview existe
+    if [[ -f "$preview_file" ]]; then
+        options+="$clean_name"$'\0icon\x1f'"$preview_file"$'\n'
+    else
+        options+="$clean_name"$'\n'
+    fi
+done
+
+# Si no hay opciones, salir
+if [[ -z "$options" ]]; then
+    notify-send "❌ Error" "No se pudieron generar previews" -u critical
+    exit 1
+fi
+
+# Mostrar selector con rofi
+selected=$(printf "%b" "$options" | rofi -dmenu -i \
+    -theme-str 'window {width: 80%; height: 70%;}' \
+    -theme-str 'listview {columns: 4; lines: 3; spacing: 15px;}' \
+    -theme-str 'element {orientation: vertical; padding: 15px; border-radius: 8px;}' \
+    -theme-str 'element-icon {size: 150px; border-radius: 8px;}' \
+    -theme-str 'element-text {horizontal-align: 0.5; margin: 5px 0 0 0;}' \
+    -theme-str 'element selected {background-color: #458588; color: white;}' \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -show-icons \
+    -markup-rows)
+
+# Si no se seleccionó nada, salir
+[[ -z "$selected" ]] && exit 0
+
+# Buscar el archivo correspondiente
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+# Verificar que se encontró el archivo
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    notify-send "❌ Error" "Archivo no encontrado: $selected" -u critical
+    exit 1
+fi
+
+# Aplicar wallpaper
+notify-send "🎨 Aplicando Wallpaper" "$selected" -t 2000
+swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+
+# Aplicar pywal si está disponible
+if command -v wal >/dev/null 2>&1; then
+    wal -i "$selected_file" -n
+    
+    # Recargar waybar
+    if pgrep -x waybar >/dev/null; then
+        pkill -SIGUSR2 waybar 2>/dev/null || (pkill waybar && waybar &)
+    fi
+    
+    # Recargar hyprland
+    if [[ -f ~/.cache/wal/colors-hyprland.conf ]]; then
+        hyprctl reload >/dev/null 2>&1 || true
+    fi
+    
+    notify-send "✅ Completado" "Wallpaper y tema aplicados" -t 2000
+fi

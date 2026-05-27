@@ -1,0 +1,192 @@
+#!/bin/bash
+
+# Script optimizado para sincronizar waybar con pywal
+# VERSIÓN MEJORADA - Evita duplicaciones y cierres inesperados
+
+set -euo pipefail
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') - $1" | tee -a /tmp/waybar-pywal-sync.log
+}
+
+# Verificar si pywal está instalado
+if ! command -v wal &> /dev/null; then
+    notify-send "❌ Error" "pywal no está instalado" -u critical
+    exit 1
+fi
+
+log "🎨 Iniciando sincronización waybar-pywal mejorada..."
+
+# Verificar si existen los archivos de colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.css" ]]; then
+    log "⚠️ No se encontraron colores de pywal, aplicando wallpaper actual..."
+    current_wallpaper=$(cat ~/.cache/current-wallpaper 2>/dev/null || echo "")
+    if [[ -n "$current_wallpaper" && -f "$current_wallpaper" ]]; then
+        wal -i "$current_wallpaper" -n
+        sleep 1
+    else
+        log "❌ No se pudo determinar wallpaper actual"
+        exit 1
+    fi
+fi
+
+# Función mejorada para manejar waybar sin duplicaciones
+reload_waybar_safe() {
+    local waybar_pids=$(pgrep -x waybar 2>/dev/null || true)
+    local pid_count=0
+    
+    if [[ -n "$waybar_pids" ]]; then
+        pid_count=$(echo "$waybar_pids" | wc -l)
+    fi
+    
+    log "📊 Instancias de waybar encontradas: $pid_count"
+    
+    # Si no hay waybar corriendo, iniciarlo
+    if [[ -z "$waybar_pids" ]]; then
+        log "🚀 Iniciando waybar (no estaba corriendo)..."
+        nohup waybar > /dev/null 2>&1 &
+        sleep 2
+        return 0
+    fi
+    
+    # Si hay exactamente una instancia, intentar recarga CSS solamente
+    if [[ $pid_count -eq 1 ]]; then
+        log "🔄 Recargando configuración CSS de waybar..."
+        
+        # Método 1: Solo recargar CSS sin señales peligrosas
+        # En lugar de usar SIGUSR2, simplemente tocamos el archivo CSS
+        touch "$HOME/.config/waybar/style.css"
+        
+        # Verificar si waybar sigue corriendo
+        sleep 1
+        if kill -0 $waybar_pids 2>/dev/null; then
+            # Enviar señal de recarga CSS (SIGUSR2) una sola vez
+            if kill -USR2 $waybar_pids 2>/dev/null; then
+                log "✅ Waybar CSS recargado exitosamente"
+                sleep 1
+                return 0
+            fi
+        fi
+        
+        # Si la recarga CSS falló, reinicio controlado
+        log "⚠️ Recarga CSS falló, realizando reinicio controlado..."
+        kill -TERM $waybar_pids 2>/dev/null
+        sleep 2
+        
+        # Verificar que se cerró completamente
+        if pgrep -x waybar >/dev/null 2>&1; then
+            log "⚠️ Waybar no se cerró correctamente, forzando cierre..."
+            pkill -9 waybar 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Iniciar nueva instancia
+        nohup waybar > /dev/null 2>&1 &
+        sleep 2
+        log "✅ Waybar reiniciado correctamente"
+        
+    else
+        # Si hay múltiples instancias, limpiar todo y reiniciar
+        log "🧹 Limpiando múltiples instancias de waybar ($pid_count encontradas)..."
+        pkill -TERM waybar 2>/dev/null || true
+        sleep 3
+        
+        # Verificar si quedan procesos y forzar cierre si es necesario
+        remaining=$(pgrep -x waybar 2>/dev/null || true)
+        if [[ -n "$remaining" ]]; then
+            log "⚠️ Forzando cierre de procesos restantes..."
+            pkill -9 waybar 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Iniciar una sola instancia nueva
+        nohup waybar > /dev/null 2>&1 &
+        sleep 2
+        log "✅ Waybar iniciado (instancia única)"
+    fi
+}
+
+# Función para actualizar CSS de waybar con colores de pywal
+update_waybar_css() {
+    local waybar_config_dir="$HOME/.config/waybar"
+    local wal_colors="$HOME/.cache/wal/colors.css"
+    
+    # Verificar que existan los archivos necesarios
+    if [[ ! -f "$wal_colors" ]]; then
+        log "❌ Archivo de colores de pywal no encontrado"
+        return 1
+    fi
+    
+    # Leer colores de pywal
+    source "$HOME/.cache/wal/colors.sh"
+    
+    # Crear/actualizar el archivo de colores para waybar
+    cat > "$waybar_config_dir/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    
+    log "✅ Colores de waybar actualizados"
+    
+    # Crear backup del style.css actual si no existe
+    if [[ -f "$waybar_config_dir/style.css" && ! -f "$waybar_config_dir/style.css.backup" ]]; then
+        cp "$waybar_config_dir/style.css" "$waybar_config_dir/style.css.backup"
+        log "📋 Backup del style.css creado"
+    fi
+    
+    # Usar el style optimizado para pywal si existe
+    if [[ -f "$waybar_config_dir/style-pywal.css" ]]; then
+        cp "$waybar_config_dir/style-pywal.css" "$waybar_config_dir/style.css"
+        log "✅ Style optimizado para pywal aplicado"
+    else
+        # Asegurar que style.css importe los colores si no lo hace ya
+        if [[ -f "$waybar_config_dir/style.css" ]] && ! grep -q "colors-pywal.css" "$waybar_config_dir/style.css"; then
+            # Crear una copia temporal y añadir el import al inicio
+            {
+                echo '@import "colors-pywal.css";'
+                cat "$waybar_config_dir/style.css"
+            } > "$waybar_config_dir/style.css.tmp"
+            mv "$waybar_config_dir/style.css.tmp" "$waybar_config_dir/style.css"
+            log "✅ Import de colores añadido a style.css"
+        fi
+    fi
+}
+
+# Ejecutar actualización de CSS
+update_waybar_css
+
+# Recargar waybar de forma segura
+reload_waybar_safe
+
+# Verificar que waybar esté corriendo correctamente
+sleep 2
+waybar_final_pids=$(pgrep -x waybar 2>/dev/null || true)
+if [[ -n "$waybar_final_pids" ]]; then
+    final_count=$(echo "$waybar_final_pids" | wc -l)
+    log "🎉 Sincronización completada - Waybar corriendo ($final_count instancia(s))"
+else
+    log "❌ Error: Waybar no está corriendo después de la sincronización"
+    exit 1
+fi
+
+# Notificación final
+notify-send "🎨 Waybar Sync" "Colores sincronizados sin duplicaciones" -t 2000 2>/dev/null || true

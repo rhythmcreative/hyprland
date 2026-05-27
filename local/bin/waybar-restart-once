@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Script simple para reiniciar waybar una sola vez
+# Sin pywal, solo reinicio limpio
+
+echo "🔄 Reiniciando waybar..."
+
+# Matar todos los procesos waybar existentes
+pkill -x waybar
+
+# Esperar a que terminen completamente
+sleep 1.5
+
+# Verificar que no queden procesos waybar
+if pgrep -x waybar > /dev/null; then
+    echo "⚠️ Forzando cierre de waybar..."
+    pkill -9 waybar
+    sleep 1
+fi
+
+# Iniciar waybar una sola vez
+echo "🚀 Iniciando waybar..."
+waybar &
+
+echo "✅ Waybar reiniciado correctamente"

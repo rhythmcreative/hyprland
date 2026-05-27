@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Script para sincronizar los bordes de Kitty con los colores de pywal
+
+KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
+WAL_KITTY_COLORS="$HOME/.cache/wal/colors-kitty.conf"
+
+# Verificar que los archivos necesarios existan
+if [[ ! -f "$WAL_KITTY_COLORS" ]]; then
+    echo "Error: No se encontró el archivo de colores de pywal para Kitty: $WAL_KITTY_COLORS"
+    exit 1
+fi
+
+if [[ ! -f "$KITTY_CONFIG" ]]; then
+    echo "Error: No se encontró el archivo de configuración de Kitty: $KITTY_CONFIG"
+    exit 1
+fi
+
+# Extraer los valores hexadecimales de color4 y color8
+COLOR4=$(grep -m 1 "color4" "$WAL_KITTY_COLORS" | awk '{print $2}')
+COLOR8=$(grep -m 1 "color8" "$WAL_KITTY_COLORS" | awk '{print $2}')
+
+if [[ -z "$COLOR4" || -z "$COLOR8" ]]; then
+    echo "Error: No se pudieron extraer los colores de $WAL_KITTY_COLORS"
+    exit 1
+fi
+
+# Actualizar kitty.conf usando sed para reemplazar las líneas completas
+sed -i "s/^active_border_color .*/active_border_color ${COLOR4}/" "$KITTY_CONFIG"
+sed -i "s/^inactive_border_color .*/inactive_border_color ${COLOR8}/" "$KITTY_CONFIG"
+
+echo "✅ Bordes de Kitty actualizados correctamente."
+echo "   Activo: ${COLOR4}"
+echo "   Inactivo: ${COLOR8}"
+

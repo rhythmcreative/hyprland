@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# Script completo de sincronización de pywal con wallpaper
+# Detecta automáticamente el wallpaper actual y sincroniza todos los temas
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CURRENT_WALLPAPER_FILE="$HOME/.cache/current_wallpaper"
+
+# Función para obtener el wallpaper actual
+get_current_wallpaper() {
+    # Verificar si hay un archivo que guarde el wallpaper actual
+    if [ -f "$CURRENT_WALLPAPER_FILE" ]; then
+        cat "$CURRENT_WALLPAPER_FILE"
+    else
+        # Intentar detectar el wallpaper desde swww
+        swww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
+    fi
+}
+
+# Función para aplicar pywal
+apply_pywal() {
+    local wallpaper="$1"
+    
+    if [ ! -f "$wallpaper" ]; then
+        notify-send "🚫 Pywal Sync" "Wallpaper no encontrado: $wallpaper"
+        return 1
+    fi
+    
+    echo "🎨 Aplicando pywal con: $(basename "$wallpaper")"
+    
+    # Aplicar pywal con configuraciones optimizadas
+    wal -i "$wallpaper" -n -s -t
+    
+    # Esperar un momento para que los archivos se generen
+    sleep 1
+    
+    # Verificar que los archivos de colores se generaron correctamente
+    if [ ! -f ~/.cache/wal/colors.rasi ]; then
+        notify-send "⚠️ Pywal" "Error generando colores para rofi"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Función para recargar componentes
+reload_components() {
+    echo "🔄 Recargando componentes del sistema..."
+    
+    # Recargar Hyprland para aplicar nuevos colores
+    hyprctl reload &>/dev/null
+    
+    # Recargar waybar si está corriendo
+    if pgrep -x "waybar" > /dev/null; then
+        pkill waybar
+        sleep 0.5
+        waybar &disown
+    fi
+    
+    # Aplicar colores a aplicaciones existentes
+    if command -v pywalfox &> /dev/null; then
+        pywalfox update &>/dev/null &
+    fi
+    
+    # Si existe, aplicar tema a Discord
+    if [ -x "$HOME/.local/bin/wallpaper-with-discord" ]; then
+        $HOME/.local/bin/apply-discord-theme &>/dev/null &
+    fi
+    
+    echo "✅ Componentes recargados"
+}
+
+# Función principal
+main() {
+    echo "🎨 Iniciando sincronización de pywal..."
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [ -z "$CURRENT_WALLPAPER" ] || [ ! -f "$CURRENT_WALLPAPER" ]; then
+        # Si no se puede detectar automáticamente, usar el último wallpaper conocido
+        if [ -f ~/.cache/wal/wal ]; then
+            CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal)
+        else
+            notify-send "🚫 Pywal Sync" "No se pudo detectar el wallpaper actual"
+            echo "❌ Error: No se pudo detectar el wallpaper actual"
+            exit 1
+        fi
+    fi
+    
+    echo "🖼️ Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    
+    # Aplicar pywal
+    if apply_pywal "$CURRENT_WALLPAPER"; then
+        # Recargar componentes
+        reload_components
+        
+        # Notificación de éxito
+        notify-send "🎨 Pywal Sincronizado" "Tema actualizado con: $(basename "$CURRENT_WALLPAPER")" -t 3000
+        echo "✅ Sincronización completada exitosamente"
+    else
+        notify-send "❌ Error Pywal" "No se pudo sincronizar el tema" -t 3000
+        echo "❌ Error en la sincronización"
+        exit 1
+    fi
+}
+
+# Verificar dependencias
+if ! command -v wal &> /dev/null; then
+    notify-send "❌ Error" "pywal no está instalado"
+    echo "❌ Error: pywal no está instalado"
+    exit 1
+fi
+
+# Ejecutar función principal
+main "$@"

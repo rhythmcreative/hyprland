@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Wrapper script para aplicar tema variado de waybar con pywal
+# Uso: waybar-varied [opciones]
+
+exec "$HOME/.config/waybar/scripts/apply_varied_theme.sh" "$@"

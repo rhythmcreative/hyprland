@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Script para configurar la integración automática de pywal-tela-sync con Pywal
+
+INTEGRATION_SCRIPT="$HOME/.local/bin/pywal-post-hook"
+BASHRC="$HOME/.bashrc"
+ZSHRC="$HOME/.zshrc"
+
+echo "Configurando integración automática de PywalSync-Tela..."
+
+# Crear script de post-hook para Pywal
+cat > "$INTEGRATION_SCRIPT" << 'EOF'
+#!/bin/bash
+
+# Post-hook para Pywal - ejecuta pywal-tela-sync automáticamente
+
+# Función para ejecutar pywal-tela-sync después de Pywal
+run_pywal_tela_sync() {
+    # Esperar un poco para que Pywal termine
+    sleep 3
+    
+    # Ejecutar pywal-tela-sync si existe
+    if command -v pywal-tela-sync >/dev/null 2>&1; then
+        echo "Actualizando tema de iconos Tela con colores de Pywal..."
+        pywal-tela-sync --no-apply >/dev/null 2>&1 &
+        
+        # Aplicar el tema después de generarlo
+        sleep 5
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.desktop.interface icon-theme "PywalSync Tela"
+        fi
+        if command -v kwriteconfig5 >/dev/null 2>&1; then
+            kwriteconfig5 --file kdeglobals --group Icons --key Theme "PywalSync Tela"
+        fi
+        
+        echo "Tema de iconos PywalSync-Tela actualizado!"
+    fi
+}
+
+# Ejecutar en background
+run_pywal_tela_sync &
+EOF
+
+chmod +x "$INTEGRATION_SCRIPT"
+
+# Crear alias para wal que incluye nuestro hook
+create_wal_alias() {
+    local rc_file="$1"
+    
+    if [[ -f "$rc_file" ]]; then
+        # Eliminar alias existente si lo hay
+        sed -i '/# PywalSync-Tela integration/d' "$rc_file"
+        sed -i '/alias wal=/d' "$rc_file"
+        
+        # Añadir nuevo alias
+        echo "" >> "$rc_file"
+        echo "# PywalSync-Tela integration" >> "$rc_file"
+        echo "alias wal='command wal \"\$@\" && ~/.local/bin/pywal-post-hook'" >> "$rc_file"
+        
+        echo "Alias agregado a $rc_file"
+    fi
+}
+
+# Agregar alias a shells comunes
+if [[ "$SHELL" == *"zsh"* ]] && [[ -f "$ZSHRC" ]]; then
+    create_wal_alias "$ZSHRC"
+elif [[ -f "$BASHRC" ]]; then
+    create_wal_alias "$BASHRC"
+fi
+
+echo "================================================================"
+echo "Integración configurada exitosamente!"
+echo ""
+echo "Para que los cambios tomen efecto:"
+echo "  source ~/.zshrc  (si usas zsh)"
+echo "  source ~/.bashrc  (si usas bash)"
+echo ""
+echo "Ahora, cada vez que ejecutes 'wal' para cambiar el wallpaper,"
+echo "el tema de iconos PywalSync-Tela se actualizará automáticamente."
+echo ""
+echo "Para generar el tema manualmente:"
+echo "  pywal-tela-sync"
+echo "================================================================"

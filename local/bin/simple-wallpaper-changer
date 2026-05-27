@@ -1,0 +1,193 @@
+#!/bin/bash
+
+# Script simplificado para cambiar wallpaper SIN múltiples reinicios de Waybar
+# Ejecutado por: Super + Shift + W
+
+set -euo pipefail
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_simple_$$"
+LOG_FILE="$HOME/.cache/simple-wallpaper-changer.log"
+
+# Crear directorios necesarios
+mkdir -p "$CACHE_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging simplificada
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función de limpieza
+cleanup() {
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+log "=== Iniciando selector de wallpapers (SIMPLE) ==="
+
+# Verificar directorio de wallpapers
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio de wallpapers no encontrado" -u critical
+    exit 1
+fi
+
+# Verificar swww
+if ! command -v swww &>/dev/null; then
+    log "ERROR: swww no está instalado"
+    notify-send "❌ Error" "swww no está instalado" -u critical
+    exit 1
+fi
+
+# Verificar e iniciar swww-daemon si es necesario
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Iniciando swww-daemon..."
+    notify-send "🔄 Iniciando swww..." "Preparando sistema de wallpapers"
+    swww-daemon --format xrgb &
+    sleep 3
+fi
+
+# Buscar imágenes
+log "🔍 Buscando imágenes en $WALLPAPER_DIR"
+cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
+
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes"
+    notify-send "❌ Error" "No se encontraron imágenes en el directorio" -u critical
+    exit 1
+fi
+
+log "📁 Encontradas ${#images[@]} imágenes"
+
+# Crear archivo temporal para rofi
+> "$TEMP_FILE"
+
+# Procesar cada imagen para crear previews
+for img in "${images[@]}"; do
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Crear preview si no existe
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null || continue
+        fi
+    fi
+    
+    # Agregar entrada a rofi
+    if [[ -f "$preview_file" ]]; then
+        echo -e "$clean_name\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+    else
+        echo "$clean_name" >> "$TEMP_FILE"
+    fi
+done
+
+# Verificar que tenemos entradas
+if [[ ! -s "$TEMP_FILE" ]]; then
+    log "ERROR: No se pudieron procesar las imágenes"
+    notify-send "❌ Error" "No se pudieron procesar las imágenes" -u critical
+    exit 1
+fi
+
+log "🎭 Mostrando selector de wallpapers..."
+
+# Ejecutar rofi con tema apropiado
+selected=$(rofi -dmenu -i \
+    -p "🖼️ Wallpaper Simple" \
+    -show-icons \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    < "$TEMP_FILE")
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    log "ℹ️ No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "✅ Seleccionado: $selected"
+
+# Buscar el archivo correspondiente
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+# Verificar archivo seleccionado
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    log "ERROR: Archivo no encontrado: $selected"
+    notify-send "❌ Error" "Archivo no encontrado" -u critical
+    exit 1
+fi
+
+# ===== APLICAR WALLPAPER SIN REINICIAR WAYBAR =====
+
+log "🖼️ Aplicando wallpaper: $selected_file"
+
+# 1. Aplicar wallpaper con swww
+if swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+    log "✅ Wallpaper aplicado con swww"
+    notify-send "🖼️ Wallpaper Aplicado" "$(basename "$selected_file")" -t 2000 2>/dev/null || true
+else
+    log "❌ Error al aplicar wallpaper con swww"
+    exit 1
+fi
+
+# 2. Guardar wallpaper actual
+echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+
+# 3. Si pywal está disponible, aplicar colores SOLO UNA VEZ
+if command -v wal > /dev/null 2>&1; then
+    log "🎨 Aplicando colores con pywal..."
+    notify-send "🌈 Generando colores..." "Aplicando tema" -t 2000 2>/dev/null || true
+    
+    if wal -i "$selected_file" -n -q; then
+        log "✅ Pywal aplicado exitosamente"
+        
+        # Esperar a que pywal genere archivos
+        sleep 1
+        
+        # 4. Recargar Hyprland config (para colores)
+        hyprctl reload >/dev/null 2>&1 || log "WARNING: No se pudo recargar Hyprland"
+        
+        # 5. SOLO RECARGAR CSS DE WAYBAR (SIN REINICIAR)
+        if pgrep -x waybar > /dev/null; then
+            log "🎨 Recargando CSS de Waybar..."
+            # Usar SIGUSR2 para recargar solo el CSS
+            if pkill -SIGUSR2 waybar 2>/dev/null; then
+                log "✅ CSS de Waybar recargado exitosamente"
+                sleep 0.5
+            else
+                log "⚠️ No se pudo recargar CSS, intentando recarga completa..."
+                pkill -SIGHUP waybar 2>/dev/null || true
+                sleep 0.5
+            fi
+        else
+            log "🚀 Waybar no está corriendo, iniciándolo..."
+            waybar > /dev/null 2>&1 &
+            sleep 1
+        fi
+        
+        notify-send "🎨 Tema Aplicado" "Wallpaper + Pywal + Waybar sincronizados" -t 3000 2>/dev/null || true
+        
+    else
+        log "❌ Error: Pywal falló"
+        notify-send "⚠️ Error Pywal" "Se aplicó el wallpaper pero falló la generación de colores" -t 3000 2>/dev/null || true
+    fi
+else
+    log "ℹ️ Pywal no disponible, solo wallpaper aplicado"
+fi
+
+log "🎉 Script completado exitosamente"
+exit 0

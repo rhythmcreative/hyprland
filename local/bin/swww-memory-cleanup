@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Script para limpiar procesos SWWW que consumen demasiada memoria
+# Ejecutado automáticamente para prevenir OOM kills
+
+LOG_FILE="$HOME/.cache/swww-cleanup.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "=== INICIANDO LIMPIEZA DE SWWW ==="
+
+# Función para obtener uso de memoria en MB
+get_memory_usage() {
+    local pid=$1
+    ps -o rss= -p "$pid" 2>/dev/null | awk '{print int($1/1024)}'
+}
+
+# Límite de memoria en MB (1GB)
+MEMORY_LIMIT=1024
+
+# Revisar procesos swww y swww-daemon
+for process in "swww" "swww-daemon"; do
+    while read -r pid; do
+        if [[ -n "$pid" ]]; then
+            memory_mb=$(get_memory_usage "$pid")
+            if [[ -n "$memory_mb" && "$memory_mb" -gt "$MEMORY_LIMIT" ]]; then
+                log "⚠️ $process (PID: $pid) usando ${memory_mb}MB - MATANDO"
+                kill -9 "$pid" 2>/dev/null
+                log "✅ Proceso $process (PID: $pid) eliminado"
+            else
+                log "ℹ️ $process (PID: $pid) usando ${memory_mb}MB - OK"
+            fi
+        fi
+    done < <(pgrep -x "$process" 2>/dev/null)
+done
+
+# Esperar un momento y reiniciar swww-daemon si es necesario
+sleep 2
+
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "🚀 Reiniciando swww-daemon..."
+    swww-daemon --format xrgb &
+    sleep 2
+    
+    # Aplicar un wallpaper estático simple por seguridad
+    if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+        current_wallpaper=$(cat "$HOME/.cache/current-wallpaper")
+        if [[ -f "$current_wallpaper" && "${current_wallpaper,,}" != *.gif ]]; then
+            log "🖼️ Aplicando wallpaper estático: $(basename "$current_wallpaper")"
+            swww img "$current_wallpaper" --transition-type none 2>/dev/null
+        else
+            log "🚫 Saltando GIF o wallpaper no válido por seguridad"
+            # Usar color sólido como fallback
+            swww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null
+        fi
+    fi
+fi
+
+log "=== LIMPIEZA DE SWWW COMPLETADA ==="

@@ -91,7 +91,7 @@ info "Dependencias iniciales listas."
 section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
-CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak"
+CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww"
 
 # 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
 SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
@@ -185,6 +185,16 @@ if gum confirm "¿Quieres descargar la colección de wallpapers?"; then
         info "Wallpapers instalados en $WALL_DIR."
     else
         warn "La carpeta de wallpapers ya tiene contenido, saltando descarga."
+    fi
+    
+    # Sincronización inicial de colores para el terminal
+    if command -v wal > /dev/null; then
+        info "Generando paleta de colores inicial (Pywal)..."
+        RANDOM_WALL=$(find "$WALL_DIR" -type f | shuf -n 1)
+        if [ ! -z "$RANDOM_WALL" ]; then
+            wal -i "$RANDOM_WALL" --skip-sequences > /dev/null 2>&1
+            info "Terminal sincronizado con el wallpaper: $(basename "$RANDOM_WALL")"
+        fi
     fi
 fi
 

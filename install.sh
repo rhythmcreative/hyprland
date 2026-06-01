@@ -155,32 +155,48 @@ step_dotfiles() {
 
 step_wallpapers() {
     header "Fondos de Pantalla"
-    if gum confirm "¿Quieres instalar la colección de wallpapers?"; then
+    if gum confirm "¿Quieres descargar wallpapers desde el nuevo repositorio?"; then
         WALL_DIR="$HOME/Pictures/Wallpapers"
         mkdir -p "$WALL_DIR"
+        TEMP_WALL="/tmp/wallpaper_install"
+        mkdir -p "$TEMP_WALL"
         
-        if [ -d "$DOTFILES_DIR/wallpapers" ] && [ -f "$DOTFILES_DIR/wallpapers/extract.sh" ]; then
-            CHOICE=$(gum choose "Instalar todos los packs" "Instalar un pack específico" "Cancelar")
-            
-            if [ "$CHOICE" == "Instalar todos los packs" ]; then
-                info "Extrayendo colección completa..."
-                cd "$DOTFILES_DIR/wallpapers" && bash extract.sh
-                cd "$DOTFILES_DIR"
-            elif [ "$CHOICE" == "Instalar un pack específico" ]; then
-                PACK_NUM=$(gum input --placeholder "Número de pack (1-49)" --value "1")
-                if [ ! -z "$PACK_NUM" ]; then
-                    info "Extrayendo pack $PACK_NUM..."
-                    cd "$DOTFILES_DIR/wallpapers" && bash extract.sh "$PACK_NUM"
-                    cd "$DOTFILES_DIR"
-                fi
-            fi
-        else
-            info "Descargando desde repositorio externo..."
-            git clone https://github.com/bjarneo/wallpapers.git /tmp/wallpapers-repo > /dev/null 2>&1
-            cp -r /tmp/wallpapers-repo/* "$WALL_DIR/"
-            rm -rf /tmp/wallpapers-repo
-            info "Wallpapers descargados en $WALL_DIR."
+        REPO_URL="https://raw.githubusercontent.com/rhythmcreative/wallpapers/main"
+        
+        CHOICE=$(gum choose "Descargar todo (4GB+)" "Descargar packs específicos" "Descargar selección aleatoria" "Cancelar")
+        
+        if [ "$CHOICE" == "Descargar todo (4GB+)" ]; then
+            info "Descargando colección completa (esto puede tardar mucho)..."
+            for i in {1..49}; do
+                info "Bajando pack $i/49..."
+                curl -L "$REPO_URL/pack_$i.zip" -o "$TEMP_WALL/pack_$i.zip"
+                unzip -q -o "$TEMP_WALL/pack_$i.zip" -d "$TEMP_WALL"
+                # Move contents from pack_N/ to WALL_DIR
+                [ -d "$TEMP_WALL/pack_$i" ] && cp -r "$TEMP_WALL/pack_$i"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$i"
+                rm "$TEMP_WALL/pack_$i.zip"
+            done
+        elif [ "$CHOICE" == "Descargar packs específicos" ]; then
+            PACKS=$(gum input --placeholder "Números de packs separados por espacio (ej: 1 5 10)")
+            for p in $PACKS; do
+                info "Bajando pack $p..."
+                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip"
+                unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
+                [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
+                rm "$TEMP_WALL/pack_$p.zip"
+            done
+        elif [ "$CHOICE" == "Descargar selección aleatoria" ]; then
+            info "Bajando 3 packs aleatorios..."
+            for i in {1..3}; do
+                p=$(shuf -i 1-49 -n 1)
+                info "Bajando pack $p..."
+                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip"
+                unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
+                [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
+                rm "$TEMP_WALL/pack_$p.zip"
+            done
         fi
+        rm -rf "$TEMP_WALL"
+        info "Wallpapers listos en $WALL_DIR."
     fi
 }
 

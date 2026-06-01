@@ -90,10 +90,4 @@ The script will automatically detect your hardware, install dependencies, set up
 └── (over 100+ custom scripts)
 ```
 
-## Credits
-* Hyprland team
-* Pywal developers
-* Bjarneo (wallpapers)
-* Arch linux community
-
-Configurations are adapted and customized for personal use.
+Configurations are adapted and customized for personal use. :)

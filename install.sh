@@ -1,141 +1,156 @@
 #!/bin/bash
 
-# --- Rhythm arch Hyprland installer (Concise & Emoji-free) ---
+# --- Rhythm Arch Hyprland Installer (GUM TUI Version) ---
 
-# Colores (Sin emojis)
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-BOLD='\033[1m'
+# ANSI Color Codes
+CLR_CYAN='\033[0;36m'
+CLR_GREEN='\033[0;32m'
+CLR_YELLOW='\033[1;33m'
+CLR_RED='\033[0;31m'
+CLR_NC='\033[0m'
+CLR_BOLD='\033[1m'
 
-DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-# --- SEGURIDAD ---
+# --- SECURITY CHECK ---
 if [ "$EUID" -eq 0 ]; then
-    echo -e "${RED}[ERROR] No ejecutes este script como root.${NC}"
+    echo -e "${CLR_RED}[ERROR] No ejecutes este script como root.${CLR_NC}"
     exit 1
 fi
 
-clear
-echo -e "${CYAN}"
-echo "██████╗ ██╗  ██╗██╗   ██╗████████╗██╗  ██╗███╗   ███╗ ██████╗██████╗ ███████╗ █████╗ ████████╗██╗██╗   ██╗███████╗"
-echo "██╔══██╗██║  ██║╚██╗ ██╔╝╚══██╔══╝██║  ██║████╗ ████║██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║██║   ██║██╔════╝"
-echo "██████╔╝███████║ ╚████╔╝    ██║   ███████║██╔████╔██║██║     ██████╔╝█████╗  ███████║   ██║   ██║██║   ██║█████╗  "
-echo "██╔══██╗██╔══██║  ╚██╔╝     ██║   ██╔══██║██║╚██╔╝██║██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██║╚██╗ ██╔╝██╔══╝  "
-echo "██║  ██║██║  ██║   ██║      ██║   ██║  ██║██║ ╚═╝ ██║╚██████╗██║  ██║███████╗██║  ██║   ██║   ██║ ╚████╔╝ ███████╗"
-echo "╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝"
-echo ""
-echo "██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗"
-echo "██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝"
-echo "██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗"
-echo "██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║"
-echo "██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║"
-echo "╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝"
-echo -e "${NC}"
+# --- INITIAL SETUP ---
+# Pre-install gum for the TUI
+if ! command -v gum > /dev/null; then
+    echo -e "[INFO] Instalando gum para la interfaz..."
+    sudo pacman -S --needed --noconfirm gum git base-devel stow zsh curl > /dev/null 2>&1
+fi
 
-# --- Utilidades ---
+DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-ask() {
-    read -p "[PREGUNTA] $1 (s/n): " resp
-    if [[ $resp =~ ^[Ss]$ ]]; then
-        return 0
-    else
-        return 1
-    fi
+# --- FUNCTIONS ---
+
+print_banner() {
+    clear
+    echo -e "${CLR_CYAN}"
+    echo "██████╗ ██╗  ██╗██╗   ██╗████████╗██╗  ██╗███╗   ███╗ ██████╗██████╗ ███████╗ █████╗ ████████╗██╗██╗   ██╗███████╗"
+    echo "██╔══██╗██║  ██║╚██╗ ██╔╝╚══██╔══╝██║  ██║████╗ ████║██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║██║   ██║██╔════╝"
+    echo "██████╔╝███████║ ╚████╔╝    ██║   ███████║██╔████╔██║██║     ██████╔╝█████╗  ███████║   ██║   ██║██║   ██║█████╗  "
+    echo "██╔══██╗██╔══██║  ╚██╔╝     ██║   ██╔══██║██║╚██╔╝██║██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██║╚██╗ ██╔╝██╔══╝  "
+    echo "██║  ██║██║  ██║   ██║      ██║   ██║  ██║██║ ╚═╝ ██║╚██████╗██║  ██║███████╗██║  ██║   ██║   ██║ ╚████╔╝ ███████╗"
+    echo "╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝"
+    echo ""
+    echo "██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗"
+    echo "██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝"
+    echo "██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗"
+    echo "██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║"
+    echo "██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║"
+    echo "╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝"
+    echo -e "${CLR_NC}"
 }
 
-# --- Funciones de Configuración ---
+section() {
+    echo -e "\n${CLR_BOLD}${CLR_CYAN}>>> $1${CLR_NC}\n"
+}
+
+info() {
+    echo -e "${CLR_GREEN}[OK]${CLR_NC} $1"
+}
+
+warn() {
+    echo -e "${CLR_YELLOW}[!]${CLR_NC} $1"
+}
+
+error() {
+    echo -e "${CLR_RED}[X]${CLR_NC} $1"
+}
 
 enable_multilib() {
     if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-        echo -e "[INFO] Habilitando repositorio multilib..."
+        info "Habilitando repositorio multilib..."
         sudo sed -i '/^#\[multilib\]/,+1 s/^#//' /etc/pacman.conf
-        sudo pacman -Sy
+        sudo pacman -Sy > /dev/null 2>&1
     fi
-}
-
-install_base_deps() {
-    echo -e "[INFO] Instalando dependencias base..."
-    sudo pacman -S --needed --noconfirm git base-devel stow zsh curl
 }
 
 install_yay() {
     if ! command -v yay > /dev/null; then
-        echo -e "[INFO] Instalando AUR helper (yay)..."
-        git clone https://aur.archlinux.org/yay.git /tmp/yay
-        cd /tmp/yay && makepkg -si --noconfirm
+        info "Instalando AUR helper (yay)..."
+        git clone https://aur.archlinux.org/yay.git /tmp/yay > /dev/null 2>&1
+        cd /tmp/yay && makepkg -si --noconfirm > /dev/null 2>&1
         cd "$DOTFILES_DIR"
     fi
 }
 
-# --- Selección de Software ---
+# --- MAIN INSTALLER ---
 
-install_software() {
-    echo -e "\n[SOFTWARE] Selección de componentes:"
-    
-    # 1. CORE (Siempre necesario para Hyprland)
-    CORE_PKGS="hyprland hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp"
-    echo -e "[*] Instalando núcleo del sistema (Hyprland, Waybar, etc.)..."
-    yay -S --needed --noconfirm $CORE_PKGS
+print_banner
+gum spin --spinner dot --title "Iniciando instalador..." sleep 1
 
-    # 2. DRIVERS
-    if lspci | grep -qi "NVIDIA"; then
-        if ask "¿Instalar drivers de NVIDIA?"; then
-            yay -S --needed --noconfirm nvidia-open-dkms nvidia-settings nvidia-utils
-        fi
-    fi
-
-    if [ -f /sys/class/dmi/id/board_vendor ] && grep -qi "ASUS" /sys/class/dmi/id/board_vendor; then
-        if ask "¿Instalar herramientas para ASUS (asusctl, supergfxctl)?"; then
-            yay -S --needed --noconfirm asusctl supergfxctl rog-control-center
-        fi
-    fi
-
-    # 3. APLICACIONES
-    if ask "¿Instalar aplicaciones de usuario (Brave, Discord, Telegram, VSCode)?"; then
-        yay -S --needed --noconfirm brave-origin-nightly-bin vesktop telegram-desktop code thunar dolphin
-    fi
-
-    # 4. STEAM (Requiere multilib)
-    if ask "¿Instalar Steam y configurar soporte multilib?"; then
-        enable_multilib
-        yay -S --needed --noconfirm steam
-    fi
-
-    # 5. PERSONALIZACIÓN
-    if ask "¿Instalar temas y fuentes (Tela Circle, JetBrains Mono, Bibata)?"; then
-        yay -S --needed --noconfirm bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd nwg-look
-    fi
-}
-
-# --- Ejecución ---
-
-echo -e "[INICIO] Comenzando instalación personalizada..."
-
-install_base_deps
+section "Preparación del sistema"
 install_yay
-install_software
+info "Dependencias iniciales listas."
 
-if ask "¿Aplicar configuraciones (dotfiles) ahora?"; then
+section "Selección de Software"
+# Categorías de software para elegir
+SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona qué componentes instalar (Espacio para marcar, Enter para confirmar)" \
+    "Drivers NVIDIA" \
+    "Herramientas ASUS (ROG/TUF)" \
+    "Aplicaciones (Brave, Vesktop, etc.)" \
+    "Gaming (Steam + Multilib)" \
+    "Temas e Iconos (Bibata, Tela Circle)" \
+    "Fuentes (JetBrains Mono, FontAwesome)")
+
+# Construir lista de paquetes basada en la elección
+PKGS_TO_INSTALL="hyprland hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp"
+
+if [[ $SOFTWARE_CHOICE == *"Drivers NVIDIA"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL nvidia-open-dkms nvidia-settings nvidia-utils"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL asusctl supergfxctl rog-control-center"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Aplicaciones"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL brave-origin-nightly-bin vesktop telegram-desktop code thunar dolphin"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Gaming"* ]]; then
+    enable_multilib
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL steam"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Temas e Iconos"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL bibata-cursor-theme tela-circle-icon-theme-all nwg-look"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Fuentes"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL otf-font-awesome ttf-jetbrains-mono-nerd"
+fi
+
+section "Instalación de paquetes"
+echo -e "Instalando selección de software..."
+yay -S --needed --noconfirm $PKGS_TO_INSTALL
+
+section "Configuraciones (Dotfiles)"
+if gum confirm "¿Quieres aplicar las configuraciones (stow) ahora?"; then
     mkdir -p ~/.config ~/.local/bin
     stow -v -R -t ~ .config
     stow -v -R -t ~ .local
     stow -v -R -t ~ zsh
     stow -v -R -t ~ bash
     stow -v -R -t ~ gtk
+    info "Configuraciones aplicadas."
 fi
 
-if ask "¿Configurar Zsh como shell por defecto?"; then
+section "Entorno de Shell"
+if gum confirm "¿Quieres configurar Zsh como shell por defecto?"; then
     [ "$SHELL" != "$(which zsh)" ] && sudo chsh -s "$(which zsh)" "$USER"
     if [ ! -d "$HOME/.oh-my-zsh" ]; then
-        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        info "Instalando Oh-My-Zsh..."
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1
     fi
+    info "Zsh configurado."
 fi
 
-echo -e "\n${GREEN}[HECHO] Instalación completada con éxito.${NC}"
-echo "[AVISO] Reinicia la sesión para ver los cambios."
-
-
-
+print_banner
+echo -e "${CLR_GREEN}${CLR_BOLD}Instalación completada con éxito.${CLR_NC}"
+echo -e "Reinicia la sesión para aplicar todos los cambios."

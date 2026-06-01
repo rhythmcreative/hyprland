@@ -94,73 +94,60 @@ section "Selección de Software"
 # Incluye base, ui, audio, red, bluetooth, polkit y estética
 CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow"
 
-# 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
-SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
+info "Instalando núcleo del sistema y estética base..."
+yay -S --needed --noconfirm $CORE_PKGS
+
+# 2. SELECCIÓN DE SOFTWARE ADICIONAL (Todo en una lista única)
+SELECTED_SW=$(gum choose --no-limit --header "Selecciona el software adicional (Espacio para marcar, Enter para confirmar)" \
     "Drivers NVIDIA" \
     "Herramientas ASUS (ROG/TUF)" \
-    "Aplicaciones (Brave, Obsidian, OBS...)" \
-    "Gaming (Steam, Minecraft...)" \
-    "Productividad (LibreOffice)" \
-    "Virtualización (VirtualBox)")
+    "Navegador Brave" \
+    "Vesktop (Discord)" \
+    "Telegram Desktop" \
+    "Visual Studio Code" \
+    "Obsidian" \
+    "OBS Studio" \
+    "Steam (Habilita Multilib)" \
+    "Minecraft Launcher" \
+    "LibreOffice" \
+    "VirtualBox" \
+    "Thunar (File Manager)" \
+    "Dolphin (File Manager)" \
+    "Aplicaciones Flatpak (Lista personalizada)")
 
-# Construir lista basada en la elección
-PKGS_TO_INSTALL="$CORE_PKGS"
+EXTRA_PKGS=""
 
-if [[ $SOFTWARE_CHOICE == *"Drivers NVIDIA"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL nvidia-open-dkms nvidia-settings nvidia-utils"
-fi
+[[ $SELECTED_SW == *"Drivers NVIDIA"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia-open-dkms nvidia-settings nvidia-utils"
+[[ $SELECTED_SW == *"Herramientas ASUS"* ]] && EXTRA_PKGS="$EXTRA_PKGS asusctl supergfxctl rog-control-center"
+[[ $SELECTED_SW == *"Brave"* ]] && EXTRA_PKGS="$EXTRA_PKGS brave-origin-nightly-bin"
+[[ $SELECTED_SW == *"Vesktop"* ]] && EXTRA_PKGS="$EXTRA_PKGS vesktop"
+[[ $SELECTED_SW == *"Telegram"* ]] && EXTRA_PKGS="$EXTRA_PKGS telegram-desktop"
+[[ $SELECTED_SW == *"VS Code"* ]] && EXTRA_PKGS="$EXTRA_PKGS code"
+[[ $SELECTED_SW == *"Obsidian"* ]] && EXTRA_PKGS="$EXTRA_PKGS obsidian"
+[[ $SELECTED_SW == *"OBS Studio"* ]] && EXTRA_PKGS="$EXTRA_PKGS obs-studio"
+[[ $SELECTED_SW == *"Minecraft"* ]] && EXTRA_PKGS="$EXTRA_PKGS minecraft-launcher"
+[[ $SELECTED_SW == *"LibreOffice"* ]] && EXTRA_PKGS="$EXTRA_PKGS libreoffice-fresh"
+[[ $SELECTED_SW == *"VirtualBox"* ]] && EXTRA_PKGS="$EXTRA_PKGS virtualbox virtualbox-host-dkms"
+[[ $SELECTED_SW == *"Thunar"* ]] && EXTRA_PKGS="$EXTRA_PKGS thunar"
+[[ $SELECTED_SW == *"Dolphin"* ]] && EXTRA_PKGS="$EXTRA_PKGS dolphin"
 
-if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL asusctl supergfxctl rog-control-center"
-fi
-
-if [[ $SOFTWARE_CHOICE == *"Aplicaciones"* ]]; then
-    APPS_CHOICE=$(gum choose --no-limit --header "Selecciona qué aplicaciones instalar (Espacio para marcar)" \
-        "Brave (Browser)" \
-        "Vesktop (Discord)" \
-        "Telegram" \
-        "VS Code" \
-        "Obsidian" \
-        "OBS Studio" \
-        "Thunar (File Manager)" \
-        "Dolphin (File Manager)")
-    
-    [[ $APPS_CHOICE == *"Brave"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL brave-origin-nightly-bin"
-    [[ $APPS_CHOICE == *"Vesktop"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL vesktop"
-    [[ $APPS_CHOICE == *"Telegram"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL telegram-desktop"
-    [[ $APPS_CHOICE == *"VS Code"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL code"
-    [[ $APPS_CHOICE == *"Obsidian"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL obsidian"
-    [[ $APPS_CHOICE == *"OBS Studio"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL obs-studio"
-    [[ $APPS_CHOICE == *"Thunar"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL thunar"
-    [[ $APPS_CHOICE == *"Dolphin"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL dolphin"
-fi
-
-if [[ $SOFTWARE_CHOICE == *"Gaming"* ]]; then
+if [[ $SELECTED_SW == *"Steam"* ]]; then
     enable_multilib
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL steam minecraft-launcher"
+    EXTRA_PKGS="$EXTRA_PKGS steam"
 fi
 
-if [[ $SOFTWARE_CHOICE == *"Productividad"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL libreoffice-fresh"
+if [ ! -z "$EXTRA_PKGS" ]; then
+    section "Instalando software adicional"
+    yay -S --needed --noconfirm $EXTRA_PKGS
 fi
 
-if [[ $SOFTWARE_CHOICE == *"Virtualización"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL virtualbox virtualbox-host-dkms"
-fi
-
-section "Instalación de paquetes"
-info "Instalando núcleo del sistema, estética y selección de software..."
-yay -S --needed --noconfirm $PKGS_TO_INSTALL
-
-# 3. INSTALACIÓN DE FLATPAKS
-if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
-    if gum confirm "¿Quieres instalar las aplicaciones Flatpak de la lista?"; then
-        info "Instalando Flatpaks..."
-        while read -r app; do
-            [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
-            flatpak install --user -y flathub "$app"
-        done < "$DOTFILES_DIR/flatpaks.txt"
-    fi
+# 3. INSTALACIÓN DE FLATPAKS (Si se seleccionó en la lista)
+if [[ $SELECTED_SW == *"Flatpak"* ]] && [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
+    info "Instalando aplicaciones Flatpak..."
+    while read -r app; do
+        [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
+        flatpak install --user -y flathub "$app"
+    done < "$DOTFILES_DIR/flatpaks.txt"
 fi
 
 section "Configuraciones (Dotfiles)"

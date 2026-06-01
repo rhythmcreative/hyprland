@@ -112,7 +112,20 @@ if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
 fi
 
 if [[ $SOFTWARE_CHOICE == *"Aplicaciones"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL brave-origin-nightly-bin vesktop telegram-desktop code thunar dolphin"
+    APPS_CHOICE=$(gum choose --no-limit --header "Selecciona qué aplicaciones instalar (Espacio para marcar)" \
+        "Brave (Browser)" \
+        "Vesktop (Discord)" \
+        "Telegram" \
+        "VS Code" \
+        "Thunar (File Manager)" \
+        "Dolphin (File Manager)")
+    
+    [[ $APPS_CHOICE == *"Brave"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL brave-origin-nightly-bin"
+    [[ $APPS_CHOICE == *"Vesktop"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL vesktop"
+    [[ $APPS_CHOICE == *"Telegram"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL telegram-desktop"
+    [[ $APPS_CHOICE == *"VS Code"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL code"
+    [[ $APPS_CHOICE == *"Thunar"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL thunar"
+    [[ $APPS_CHOICE == *"Dolphin"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL dolphin"
 fi
 
 if [[ $SOFTWARE_CHOICE == *"Gaming"* ]]; then

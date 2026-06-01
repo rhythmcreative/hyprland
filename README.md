@@ -5,7 +5,8 @@ Personal arch linux configuration built around **hyprland**, featuring a dynamic
 ## Preview
 
 <p align="center">
-  <img src="<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/955d3c8e-071f-4e41-b352-b7098414ae03" />
+  <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" />
+
 </p>
 
 ## Components

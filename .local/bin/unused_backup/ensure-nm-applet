@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# ensure-nm-applet - Garantiza que nm-applet esté siempre corriendo
+# Este script puede ser ejecutado después de sincronizaciones o como watchdog
+
+LOG_FILE="$HOME/.cache/ensure-nm-applet.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para verificar y iniciar nm-applet si es necesario
+ensure_nm_applet() {
+    if ! pgrep -x nm-applet > /dev/null; then
+        log "🔄 nm-applet no está corriendo, iniciando..."
+        
+        # Iniciar con variables de entorno optimizadas
+        env GTK_THEME="Arc-Dark" \
+            GDK_BACKEND="wayland,x11" \
+            nohup nm-applet > /dev/null 2>&1 &
+        
+        sleep 2
+        
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado exitosamente"
+            notify-send "📶 nm-applet" "Reiniciado automáticamente" -t 2000 2>/dev/null || true
+        else
+            # Fallback: sin variables de entorno
+            log "⚠️ Intentando fallback..."
+            nohup nm-applet > /dev/null 2>&1 &
+            sleep 2
+            
+            if pgrep -x nm-applet > /dev/null; then
+                log "✅ nm-applet iniciado en modo fallback"
+                notify-send "📶 nm-applet" "Iniciado en modo fallback" -t 2000 2>/dev/null || true
+            else
+                log "❌ ERROR: No se pudo iniciar nm-applet"
+                notify-send "❌ Error" "nm-applet no se pudo iniciar" -t 3000 2>/dev/null || true
+                return 1
+            fi
+        fi
+    else
+        log "✅ nm-applet ya está corriendo correctamente"
+    fi
+    return 0
+}
+
+# Ejecutar función principal
+ensure_nm_applet

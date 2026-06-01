@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Script para sincronizar colores de Waybar específicamente para wallpapers GIF
+# Soluciona el problema de sincronización con pywal cuando hay un GIF activo
+
+COLORS_CSS_SOURCE="$HOME/.cache/wal/colors.css"
+WAYBAR_COLORS_TARGET="$HOME/.config/waybar/colors-pywal.css"
+LOCK_FILE="/tmp/waybar_gif_sync.lock"
+
+# Evitar múltiples ejecuciones simultáneas
+if [[ -f "$LOCK_FILE" ]]; then
+    exit 0
+fi
+
+# Crear lock
+touch "$LOCK_FILE"
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+# Verificar que el archivo source existe
+if [[ ! -f "$COLORS_CSS_SOURCE" ]]; then
+    echo "❌ Error: No se encontró $COLORS_CSS_SOURCE"
+    exit 1
+fi
+
+# Crear el directorio si no existe
+mkdir -p "$(dirname "$WAYBAR_COLORS_TARGET")"
+
+# Convertir CSS variables (--color) a @define-color format para GTK/Waybar
+convert_css_to_gtk() {
+    local input_file="$1"
+    local output_file="$2"
+    
+    # Extraer colores del archivo CSS y convertir al formato GTK
+    {
+        echo "/* Waybar colors generated from pywal */"
+        
+        # Extraer background, foreground y cursor
+        grep -E "^\s*--background:" "$input_file" | sed 's/--background: \(.*\);/@define-color background \1;/'
+        grep -E "^\s*--foreground:" "$input_file" | sed 's/--foreground: \(.*\);/@define-color foreground \1;/'
+        grep -E "^\s*--cursor:" "$input_file" | sed 's/--cursor: \(.*\);/@define-color cursor \1;/'
+        
+        # Extraer colors 0-15
+        for i in {0..15}; do
+            grep -E "^\s*--color$i:" "$input_file" | sed "s/--color$i: \(.*\);/@define-color color$i \1;/"
+        done
+    } > "$output_file"
+}
+
+# Realizar la conversión
+convert_css_to_gtk "$COLORS_CSS_SOURCE" "$WAYBAR_COLORS_TARGET"
+
+if [[ $? -eq 0 ]]; then
+    echo "✅ Colores de Waybar sincronizados desde: $COLORS_CSS_SOURCE"
+    
+# Recargar waybar si está ejecutándose
+if pgrep -x waybar > /dev/null; then
+    # Intentar recarga suave primero
+    pkill -USR2 waybar 2>/dev/null && {
+        echo "🔄 Waybar recargado (señal USR2)"
+        sleep 0.3
+    } || {
+        # Si la recarga suave falla, reiniciar waybar
+        echo "🔄 Reiniciando waybar..."
+        pkill waybar
+        sleep 0.8
+        
+        # Iniciar waybar en background
+        nohup waybar > /dev/null 2>&1 &
+        
+        # Esperar a que waybar esté completamente cargado
+        local attempts=0
+        while [[ $attempts -lt 10 ]] && ! pgrep -x waybar > /dev/null; do
+            sleep 0.2
+            ((attempts++))
+        done
+        
+        if pgrep -x waybar > /dev/null; then
+            echo "✅ Waybar reiniciado exitosamente"
+        else
+            echo "❌ Error: No se pudo reiniciar waybar"
+        fi
+    }
+else
+    echo "⚠️  Waybar no está ejecutándose, iniciando..."
+    nohup waybar > /dev/null 2>&1 &
+    sleep 0.5
+fi
+else
+    echo "❌ Error al convertir colores"
+    exit 1
+fi

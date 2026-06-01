@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Script para lanzar Mission Center con tema pywal
+# Asegura que el tema esté actualizado antes de ejecutar la aplicación
+
+echo "🎨 Aplicando tema pywal a Mission Center..."
+
+# Aplicar el tema actualizado
+if [ -f "$HOME/.local/bin/mission-center-pywal-theme" ]; then
+    "$HOME/.local/bin/mission-center-pywal-theme"
+fi
+
+# Esperar un momento para que los cambios se apliquen
+sleep 1
+
+echo "🚀 Lanzando Mission Center..."
+
+# Lanzar Mission Center
+flatpak run io.missioncenter.MissionCenter

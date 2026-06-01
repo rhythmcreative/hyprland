@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Sincronización directa de nm-applet con colores de Waybar
+# Comando rápido: sync-nm-applet-waybar
+
+echo "🎨 Sincronizando nm-applet con colores de Waybar..."
+
+# Ejecutar el script de sincronización completo
+if [[ -f "$HOME/.local/bin/nm-applet-waybar-sync-fixed" ]]; then
+    "$HOME/.local/bin/nm-applet-waybar-sync-fixed"
+else
+    echo "❌ Error: Script de sincronización no encontrado"
+    echo "   Ubicación esperada: $HOME/.local/bin/nm-applet-waybar-sync-fixed"
+    exit 1
+fi
+
+echo "✅ Sincronización completada"

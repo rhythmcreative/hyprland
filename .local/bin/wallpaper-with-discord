@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Script para cambiar wallpaper con aplicación automática de pywal-discord
+# Este script ejecuta el selector de wallpaper de HyDE que ya incluye
+# la aplicación de pywal-discord, pero asegura que los directorios
+# necesarios estén creados
+
+# Asegurar que los directorios de pywal-discord existen
+if command -v pywal-discord > /dev/null 2>&1; then
+    # Crear directorios si no existen usando el tema default
+    pywal-discord -t default -d > /dev/null 2>&1
+fi
+
+# Ejecutar el selector de wallpaper de HyDE
+# (Este script ya incluye la aplicación de pywal-discord)
+~/.local/bin/wallpaper-selector-hyde

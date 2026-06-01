@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Script adaptativo para rofi que detecta monitores automáticamente
+# Soporta: drun, run, window
+
+MODE=${1:-drun}
+
+# Configuración de tema por defecto
+THEME="~/.config/rofi/onedark.rasi"
+
+# Verificar si el tema existe
+if [ ! -f "$HOME/.config/rofi/onedark.rasi" ]; then
+    # Fallback a tema por defecto del sistema
+    THEME=""
+fi
+
+# Obtener información de monitores
+get_active_monitor() {
+    if command -v hyprctl &> /dev/null; then
+        # Hyprland
+        hyprctl monitors -j | jq -r '.[] | select(.focused == true) | .name'
+    elif command -v xrandr &> /dev/null; then
+        # X11
+        xrandr --listmonitors | grep -E '^\s*[0-9]+:.*\*' | awk '{print $4}' | head -1
+    else
+        echo "primary"
+    fi
+}
+
+# Obtener configuración de monitor
+ACTIVE_MONITOR=$(get_active_monitor)
+MONITOR_COUNT=$(xrandr --listmonitors 2>/dev/null | tail -n +2 | wc -l || echo 1)
+
+# Configurar argumentos de rofi según el modo
+case "$MODE" in
+    "drun")
+        ROFI_ARGS="-show drun"
+        ;;
+    "run")
+        ROFI_ARGS="-show run"
+        ;;
+    "window")
+        ROFI_ARGS="-show window"
+        ;;
+    *)
+        ROFI_ARGS="-show $MODE"
+        ;;
+esac
+
+# Añadir tema si está disponible
+if [ -n "$THEME" ]; then
+    ROFI_ARGS="$ROFI_ARGS -theme $THEME"
+fi
+
+# Configuración para múltiples monitores
+if [ "$MONITOR_COUNT" -gt 1 ] && command -v hyprctl &> /dev/null; then
+    # En Hyprland, rofi aparecerá en el monitor activo automáticamente
+    rofi $ROFI_ARGS
+else
+    # Monitor único o sistema sin Hyprland
+    rofi $ROFI_ARGS
+fi

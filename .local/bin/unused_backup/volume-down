@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Disminuir volumen 5%
+if command -v wpctl >/dev/null 2>&1; then
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+elif command -v pactl >/dev/null 2>&1; then
+    pactl set-sink-volume @DEFAULT_SINK@ -5%
+fi
+
+# Mostrar notificación
+~/.local/bin/volume-notify

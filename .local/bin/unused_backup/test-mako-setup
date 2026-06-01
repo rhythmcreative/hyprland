@@ -1,0 +1,56 @@
+#!/bin/bash
+
+echo "🔧 Verificando configuración de Mako..."
+
+# Verificar si Mako está ejecutándose
+if pgrep -x "mako" > /dev/null; then
+    echo "✅ Mako está ejecutándose"
+else
+    echo "❌ Mako no está ejecutándose"
+    echo "   Iniciando Mako..."
+    mako &
+    sleep 1
+fi
+
+# Verificar si pywal está configurado
+if [[ -f ~/.cache/wal/colors.sh ]]; then
+    echo "✅ Pywal configurado correctamente"
+    source ~/.cache/wal/colors.sh
+    echo "   Colores actuales: background=$color0, foreground=$color7"
+else
+    echo "⚠️  Pywal no configurado. Ejecuta 'wal -i /path/to/image' primero"
+fi
+
+# Verificar si el hook de sincronización existe
+if [[ -f ~/.config/wal/done.d/mako-sync.sh && -x ~/.config/wal/done.d/mako-sync.sh ]]; then
+    echo "✅ Hook de sincronización automática configurado"
+else
+    echo "❌ Hook de sincronización automática no configurado"
+fi
+
+# Verificar configuración de Mako
+if [[ -f ~/.config/mako/config ]]; then
+    echo "✅ Configuración de Mako encontrada"
+else
+    echo "❌ Configuración de Mako no encontrada"
+fi
+
+echo ""
+echo "🧪 Probando notificaciones..."
+
+# Notificación general
+notify-send "Test General" "Esta es una notificación general con colores de pywal"
+sleep 2
+
+# Notificación de volumen (estilo simplificado)
+notify-send -a volume "Volumen" "70% - Nuevo estilo simple"
+sleep 2
+
+# Notificación de audio
+notify-send "Audio Test" "Notificación de audio con colores sincronizados"
+
+echo ""
+echo "✨ Prueba completada. Las notificaciones deberían aparecer con los colores de pywal."
+echo ""
+echo "📝 Para sincronizar manualmente: ~/.local/bin/sync-mako-pywal"
+echo "🔄 Para probar la sincronización automática: cambia el wallpaper con 'wal -i /path/to/image'"

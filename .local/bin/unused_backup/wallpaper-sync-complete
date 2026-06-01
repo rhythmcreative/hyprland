@@ -1,0 +1,92 @@
+#!/bin/bash
+
+# Script completo para sincronización de wallpaper con SDDM automático
+# Ejecutado por: Super + Shift + W en Hyprland
+# Autor: rhythmcreative
+
+LOG_FILE="/tmp/wallpaper-sync-complete.log"
+USER_HOME="/home/rhythmcreative"
+SDDM_THEME_PATH="/usr/share/sddm/themes/sddm-astronaut-theme"
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify() {
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "Wallpaper Sync" "$1" -i preferences-desktop-wallpaper
+    fi
+}
+
+log "🎨 Iniciando sincronización completa: Wallpaper + Waybar + P10k/OMP + SDDM"
+notify "Iniciando sincronización completa..."
+
+# Paso 1: Selector de wallpaper con sincronización de Waybar
+log "🖼️ Paso 1: Ejecutando selector de wallpaper..."
+if ~/.local/bin/wallpaper-changer-with-waybar-sync; then
+    log "✅ Wallpaper y Waybar sincronizados correctamente"
+    
+    # Esperar un momento para que pywal complete
+    sleep 2
+    
+    # Paso 2: Sincronización de shell prompt (P10k o OMP)
+    log "🎨 Paso 2: Sincronizando shell prompt..."
+    
+    # Intentar P10k primero, luego OMP
+    if ~/.local/bin/p10k-pywal-sync > /dev/null 2>&1; then
+        log "✅ Powerlevel10k sincronizado"
+    elif ~/.local/bin/sync-omp-pywal > /dev/null 2>&1; then
+        log "✅ Oh My Posh sincronizado"
+    else
+        log "⚠️ No se encontró P10k ni OMP, continuando..."
+    fi
+    
+    # Paso 3: Sincronización automática de SDDM
+    log "🔐 Paso 3: Sincronizando SDDM wallpaper automáticamente..."
+    
+    # Usar nuestro script mejorado de sincronización SDDM
+    if ~/.local/bin/sddm-auto-sync 2>/dev/null; then
+        log "✅ SDDM sincronizado automáticamente"
+    else
+        log "⚠️ Error en sincronización automática de SDDM, intentando métodos alternativos..."
+        
+        # Fallback: intentar métodos alternativos
+        CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal 2>/dev/null || echo "")
+        if [[ -n "$CURRENT_WALLPAPER" ]] && [[ -f "$CURRENT_WALLPAPER" ]]; then
+            log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+            
+            # Fallback con el script del tema astronaut
+            if [[ -f "$SDDM_THEME_PATH/pywal-sync.sh" ]]; then
+                if sudo "$SDDM_THEME_PATH/pywal-sync.sh" 2>/dev/null; then
+                    log "✅ SDDM sincronizado usando tema astronaut"
+                else
+                    log "❌ Fallo al sincronizar SDDM - permisos insuficientes"
+                fi
+            else
+                log "⚠️ No se encontró script de SDDM, saltando sincronización"
+            fi
+        else
+            log "⚠️ No se pudo detectar wallpaper actual, saltando sincronización de SDDM"
+        fi
+    fi
+    
+    # Paso 4: Aplicar colores adicionales si hay scripts disponibles
+    log "🎨 Paso 4: Aplicando colores adicionales..."
+    
+    # Sincronizar otros componentes si existen
+    ~/.local/bin/sync-kitty-pywal > /dev/null 2>&1 || true
+    ~/.local/bin/dunst-pywal-sync > /dev/null 2>&1 || true
+    ~/.local/bin/vesktop-pywal-sync > /dev/null 2>&1 || true
+    
+    log "🎉 ¡Sincronización completa exitosa!"
+    log "💡 Todos los componentes sincronizados con el nuevo wallpaper"
+    
+    notify "✅ Sincronización completa exitosa! Wallpaper, temas y SDDM actualizados"
+    
+else
+    log "❌ Error al ejecutar selector de wallpaper"
+    notify "❌ Error al cambiar wallpaper"
+    exit 1
+fi

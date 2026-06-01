@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Script simplificado para recargar Waybar con pywal
+# Enfoque directo y eficiente
+
+LOG_FILE="$HOME/.cache/waybar-pywal-reload.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "🔄 Iniciando recarga de Waybar con colores pywal..."
+
+# 1. Actualizar colores de waybar desde pywal actual
+log "📄 Actualizando colores..."
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+    
+    # Crear archivo de colores para waybar
+    cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    log "✅ Colores actualizados exitosamente"
+else
+    log "❌ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# 2. Reiniciar waybar
+log "🔄 Reiniciando Waybar..."
+
+# Matar waybar actual con timeout
+if pgrep waybar > /dev/null; then
+    log "⏹️ Cerrando Waybar..."
+    pkill waybar
+    sleep 2
+    
+    # Si aún está corriendo, forzar
+    if pgrep waybar > /dev/null; then
+        pkill -9 waybar
+        sleep 1
+    fi
+fi
+
+# 3. Iniciar waybar en background
+log "🚀 Iniciando Waybar..."
+waybar &
+sleep 2
+
+# Verificar que esté funcionando
+if pgrep waybar > /dev/null; then
+    log "✅ Waybar iniciado correctamente"
+    notify-send "🎨 Waybar" "Colores actualizados" -t 2000 2>/dev/null || true
+else
+    log "❌ Error: Waybar no se inició"
+    notify-send "❌ Error" "No se pudo reiniciar Waybar" -u critical -t 3000 2>/dev/null || true
+    exit 1
+fi
+
+log "🎉 Recarga completada"
+exit 0

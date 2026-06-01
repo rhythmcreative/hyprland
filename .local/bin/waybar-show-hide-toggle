@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Script toggle para mostrar/ocultar Waybar
+# Si Waybar está ejecutándose, lo mata
+# Si no está ejecutándose, lo inicia
+
+if pgrep -x "waybar" > /dev/null; then
+    # Waybar está ejecutándose, matarlo
+    pkill waybar
+    notify-send "📊 Waybar" "Waybar oculto" --icon=window-close --timeout=2000
+else
+    # Waybar no está ejecutándose, iniciarlo
+    nohup waybar > /dev/null 2>&1 &
+    notify-send "📊 Waybar" "Waybar mostrado" --icon=window-new --timeout=2000
+fi

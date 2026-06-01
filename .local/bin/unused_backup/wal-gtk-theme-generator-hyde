@@ -1,0 +1,796 @@
+#!/bin/bash
+
+# Script para generar temas GTK3 automáticamente desde wal
+# Estilo HyDE - Tema monotónico y moderno
+
+WAL_CACHE="$HOME/.cache/wal"
+THEMES_DIR="$HOME/.themes"
+THEME_NAME="wal-gtk-auto"
+
+# Verificar que existe wal
+if [ ! -f "$WAL_CACHE/colors.json" ]; then
+    echo "❌ Error: No se encontraron colores de wal. Ejecuta 'wal -i imagen' primero."
+    exit 1
+fi
+
+# Leer colores de wal
+source "$WAL_CACHE/colors.sh"
+
+# Crear directorio del tema
+THEME_DIR="$THEMES_DIR/$THEME_NAME"
+mkdir -p "$THEME_DIR/gtk-3.0"
+mkdir -p "$THEME_DIR/gtk-2.0"
+
+# Función para crear el tema GTK3 con estilo Hyde monotónico
+create_gtk3_theme() {
+    cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Tema GTK3 monotónico estilo HyDE */
+
+/* Paleta de colores */
+@define-color base_bg ${background};
+@define-color base_fg ${foreground};
+@define-color accent ${color1};
+@define-color accent_light ${color9};
+@define-color surface ${color0};
+@define-color surface_light ${color8};
+@define-color surface_dark shade(${color0}, 0.7);
+@define-color text_primary ${foreground};
+@define-color text_secondary alpha(${foreground}, 0.8);
+@define-color text_disabled alpha(${foreground}, 0.5);
+@define-color borders alpha(${color8}, 0.5);
+@define-color shadow alpha(black, 0.2);
+
+/* Estilos globales */
+* {
+    transition-property: background-color, color, border-color, box-shadow;
+    transition-duration: 0.2s;
+    transition-timing-function: ease;
+}
+
+window, dialog {
+    background-color: @base_bg;
+    color: @text_primary;
+}
+
+/* Barras de título y encabezados */
+headerbar {
+    background-color: @surface;
+    color: @text_primary;
+    border-bottom: 1px solid @borders;
+    padding: 8px;
+    box-shadow: 0 2px 3px @shadow;
+    border-radius: 0;
+}
+
+headerbar:backdrop {
+    background-color: @surface_dark;
+    color: @text_secondary;
+    box-shadow: none;
+}
+
+headerbar > * {
+    margin: 0 3px;
+}
+
+/* Botones */
+button {
+    background-color: @surface;
+    color: @text_primary;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    padding: 8px 12px;
+    box-shadow: 0 1px 1px @shadow;
+    min-height: 24px;
+    min-width: 32px;
+}
+
+button:hover {
+    background-color: alpha(@accent, 0.1);
+    border-color: @accent;
+}
+
+button:active, button:checked {
+    background-color: @accent;
+    color: @base_bg;
+    border-color: @accent;
+}
+
+button:disabled {
+    background-color: alpha(@surface, 0.5);
+    color: @text_disabled;
+    border-color: @borders;
+    box-shadow: none;
+}
+
+button.suggested-action {
+    background-color: @accent;
+    color: @base_bg;
+    border-color: @accent;
+}
+
+button.suggested-action:hover {
+    background-color: @accent_light;
+}
+
+button.destructive-action {
+    background-color: #ec7875;
+    color: @base_bg;
+    border-color: #ec7875;
+}
+
+button.flat {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+button.flat:hover {
+    background-color: alpha(@accent, 0.1);
+}
+
+button.flat:active, button.flat:checked {
+    background-color: alpha(@accent, 0.2);
+    color: @accent;
+}
+
+/* Entradas de texto */
+entry {
+    background-color: alpha(@surface_dark, 0.5);
+    color: @text_primary;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 24px;
+}
+
+entry:focus {
+    border-color: @accent;
+    box-shadow: 0 0 0 1px alpha(@accent, 0.3);
+}
+
+entry:disabled {
+    background-color: alpha(@surface, 0.5);
+    color: @text_disabled;
+}
+
+entry selection {
+    background-color: @accent;
+    color: @base_bg;
+}
+
+/* Desplegables y listas */
+combobox button {
+    min-height: 24px;
+    padding: 6px 10px;
+}
+
+combobox button arrow {
+    -gtk-icon-source: -gtk-icontheme("pan-down-symbolic");
+    color: @text_primary;
+    min-height: 16px;
+    min-width: 16px;
+}
+
+combobox menu {
+    background-color: @surface;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    padding: 4px 0;
+    margin: 4px 0;
+    box-shadow: 0 2px 5px @shadow;
+}
+
+/* Menús */
+menu, .menu, .context-menu {
+    background-color: @surface;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 2px 5px @shadow;
+}
+
+menuitem, .menuitem {
+    padding: 8px 16px;
+    color: @text_primary;
+}
+
+menuitem:hover, .menuitem:hover {
+    background-color: @accent;
+    color: @base_bg;
+}
+
+menuitem:disabled, .menuitem:disabled {
+    color: @text_disabled;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: transparent;
+    transition-property: background-color;
+    transition-duration: 0.3s;
+}
+
+scrollbar slider {
+    min-width: 6px;
+    min-height: 6px;
+    background-color: alpha(@surface_light, 0.7);
+    border-radius: 9999px;
+    margin: 2px;
+}
+
+scrollbar slider:hover {
+    background-color: alpha(@accent, 0.7);
+}
+
+scrollbar slider:active {
+    background-color: @accent;
+}
+
+scrollbar.overlay-indicator:not(.dragging):not(.hovering) slider {
+    min-width: 4px;
+    min-height: 4px;
+    background-color: alpha(@surface_light, 0.4);
+}
+
+/* Notebook y pestañas */
+notebook > header {
+    background-color: @surface;
+    border-bottom: 1px solid @borders;
+    padding: 0;
+    margin: 0;
+}
+
+notebook > header > tabs > tab {
+    padding: 8px 12px;
+    background-color: transparent;
+    color: @text_secondary;
+    border-bottom: 2px solid transparent;
+    margin: 0 2px;
+    font-weight: normal;
+    min-width: 80px;
+}
+
+notebook > header > tabs > tab:hover {
+    background-color: alpha(@accent, 0.1);
+}
+
+notebook > header > tabs > tab:checked {
+    color: @accent;
+    border-bottom: 2px solid @accent;
+    font-weight: bold;
+}
+
+notebook > stack {
+    background-color: @base_bg;
+    border: none;
+}
+
+/* Selectores */
+checkbutton check {
+    margin: 2px;
+    min-height: 16px;
+    min-width: 16px;
+    border: 2px solid @borders;
+    border-radius: 4px;
+    background-color: transparent;
+    -gtk-icon-source: none;
+}
+
+checkbutton check:checked {
+    border-color: @accent;
+    background-color: @accent;
+    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+    color: @base_bg;
+}
+
+radiobutton radio {
+    margin: 2px;
+    min-height: 16px;
+    min-width: 16px;
+    border: 2px solid @borders;
+    border-radius: 9999px;
+    background-color: transparent;
+    -gtk-icon-source: none;
+}
+
+radiobutton radio:checked {
+    border-color: @accent;
+    background-color: @accent;
+    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+    color: @base_bg;
+}
+
+/* Switch */
+switch {
+    background-color: @surface_light;
+    border-radius: 9999px;
+    min-width: 40px;
+    min-height: 22px;
+    margin: 4px;
+    border: none;
+}
+
+switch:checked {
+    background-color: @accent;
+}
+
+switch slider {
+    background-color: @base_bg;
+    border-radius: 9999px;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 2px;
+    box-shadow: 0 1px 2px @shadow;
+}
+
+/* Barras de progreso */
+progressbar {
+    padding: 0;
+    margin: 4px;
+    border-radius: 9999px;
+    min-height: 6px;
+    background-color: @surface_light;
+}
+
+progressbar progress {
+    background-color: @accent;
+    border-radius: 9999px;
+    min-height: 6px;
+}
+
+progressbar trough {
+    background-color: @surface_light;
+    border-radius: 9999px;
+    min-height: 6px;
+    border: none;
+}
+
+/* Escalas */
+scale {
+    padding: 8px 0;
+    margin: 4px 0;
+}
+
+scale trough {
+    background-color: @surface_light;
+    border-radius: 9999px;
+    min-height: 4px;
+    margin: 8px 0;
+}
+
+scale highlight {
+    background-color: @accent;
+    border-radius: 9999px;
+    min-height: 4px;
+}
+
+scale slider {
+    background-color: @base_bg;
+    border: 1px solid @accent;
+    border-radius: 9999px;
+    min-height: 16px;
+    min-width: 16px;
+    margin: -6px;
+    box-shadow: 0 1px 2px @shadow;
+}
+
+scale slider:hover {
+    background-color: @accent;
+    border-color: @accent;
+}
+
+/* Separadores */
+separator {
+    background-color: @borders;
+    min-height: 1px;
+    min-width: 1px;
+    margin: 6px 0;
+}
+
+/* Vista de lista y árbol */
+treeview {
+    background-color: @base_bg;
+    color: @text_primary;
+}
+
+treeview:selected {
+    background-color: @accent;
+    color: @base_bg;
+}
+
+treeview header button {
+    background-color: @surface;
+    color: @text_primary;
+    border: none;
+    border-right: 1px solid @borders;
+    border-bottom: 1px solid @borders;
+    border-radius: 0;
+    padding: 6px 10px;
+    min-height: 24px;
+}
+
+/* Tooltips */
+tooltip {
+    background-color: @surface;
+    color: @text_primary;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px @shadow;
+    padding: 8px;
+    margin: 2px;
+}
+
+/* Overlays */
+overlay {
+    background-color: transparent;
+}
+
+/* Popovers */
+popover {
+    background-color: @surface;
+    color: @text_primary;
+    border: 1px solid @borders;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px @shadow;
+    padding: 8px;
+    margin: 4px;
+}
+
+popover > arrow {
+    background-color: @surface;
+    border: 1px solid @borders;
+}
+
+/* Selección de texto */
+selection {
+    background-color: @accent;
+    color: @base_bg;
+}
+
+/* Iconos */
+image {
+    color: @text_primary;
+}
+
+image:disabled {
+    color: @text_disabled;
+}
+
+/* Enlaces */
+*:link {
+    color: @accent;
+}
+
+*:visited {
+    color: mix(@accent, @text_primary, 0.7);
+}
+
+*:link:hover, *:visited:hover {
+    color: @accent_light;
+}
+
+EOF
+}
+
+# Función para crear configuración GTK2
+create_gtk2_theme() {
+    cat > "$THEME_DIR/gtk-2.0/gtkrc" << EOF
+# Tema GTK2 monotónico estilo HyDE
+
+# Esquema de colores
+gtk-color-scheme = "base_color:${background}\\nbg_color:${background}\\nfg_color:${foreground}\\nselected_bg_color:${color1}\\nselected_fg_color:${background}\\ntooltip_bg_color:${color0}\\ntooltip_fg_color:${foreground}\\ntext_color:${foreground}\\nlink_color:${color1}"
+
+# Estilo predeterminado
+style "default" {
+    xthickness = 1
+    ythickness = 1
+
+    # Colores de primer plano
+    fg[NORMAL] = @fg_color
+    fg[PRELIGHT] = @fg_color
+    fg[ACTIVE] = @fg_color
+    fg[SELECTED] = @selected_fg_color
+    fg[INSENSITIVE] = mix(0.5, @fg_color, @bg_color)
+    
+    # Colores de fondo
+    bg[NORMAL] = @bg_color
+    bg[PRELIGHT] = mix(0.1, @selected_bg_color, @bg_color)
+    bg[ACTIVE] = mix(0.05, @fg_color, @bg_color)
+    bg[SELECTED] = @selected_bg_color
+    bg[INSENSITIVE] = @bg_color
+    
+    # Colores de base (para widgets de entrada)
+    base[NORMAL] = @base_color
+    base[PRELIGHT] = mix(0.1, @selected_bg_color, @base_color)
+    base[ACTIVE] = mix(0.15, @selected_bg_color, @base_color)
+    base[SELECTED] = @selected_bg_color
+    base[INSENSITIVE] = mix(0.9, @base_color, @bg_color)
+    
+    # Colores de texto
+    text[NORMAL] = @text_color
+    text[PRELIGHT] = @text_color
+    text[ACTIVE] = @text_color
+    text[SELECTED] = @selected_fg_color
+    text[INSENSITIVE] = mix(0.5, @text_color, @base_color)
+
+    # Propiedades específicas
+    GtkWidget::focus-line-width = 1
+    GtkWidget::focus-padding = 1
+    GtkButton::default-border = {0, 0, 0, 0}
+    GtkButton::default-outside-border = {0, 0, 0, 0}
+    GtkRange::trough-border = 0
+    GtkRange::slider-width = 14
+    GtkRange::stepper-size = 14
+    GtkPaned::handle-size = 6
+    GtkScrollbar::min-slider-length = 30
+    GtkCheckButton::indicator-size = 16
+    GtkRadioButton::indicator-size = 16
+    GtkTreeView::expander-size = 14
+    GtkExpander::expander-size = 16
+    GtkScale::slider-length = 24
+    GtkScale::slider-width = 24
+    GtkScale::trough-side-details = 1
+    
+    # Fuentes
+    font_name = "Sans 10"
+    
+    # Motor de dibujo
+    engine "murrine" {
+        roundness = 6
+        contrast = 0.8
+        glazestyle = 0
+        gradient_shades = {1.0, 1.0, 1.0, 1.0}
+        highlight_shade = 1.0
+        lightborder_shade = 1.0
+        lightborderstyle = 0
+        listviewstyle = 0
+        menubaritemstyle = 0
+        menubarstyle = 0
+        menuitemstyle = 0
+        menustyle = 0
+        progressbarstyle = 0
+        reliefstyle = 0
+        sliderstyle = 0
+        stepperstyle = 1
+        toolbarstyle = 0
+    }
+}
+
+style "wide" {
+    xthickness = 2
+    ythickness = 2
+}
+
+style "wider" {
+    xthickness = 3
+    ythickness = 3
+}
+
+style "button" {
+    xthickness = 4
+    ythickness = 4
+    
+    bg[NORMAL] = mix(0.05, @fg_color, @bg_color)
+    bg[PRELIGHT] = mix(0.15, @selected_bg_color, @bg_color)
+    bg[ACTIVE] = @selected_bg_color
+    bg[INSENSITIVE] = mix(0.9, @bg_color, @base_color)
+    
+    engine "murrine" {
+        roundness = 6
+        contrast = 0.8
+        border_shades = {1.0, 0.85}
+        lightborderstyle = 1
+        lightborder_shade = 1.1
+        textstyle = 0
+    }
+}
+
+style "entry" {
+    xthickness = 4
+    ythickness = 4
+    
+    bg[NORMAL] = @base_color
+    bg[PRELIGHT] = @base_color
+    bg[SELECTED] = @selected_bg_color
+    bg[ACTIVE] = @base_color
+    bg[INSENSITIVE] = mix(0.95, @base_color, @bg_color)
+    
+    engine "murrine" {
+        contrast = 0.8
+        roundness = 6
+        border_shades = {1.2, 1.0}
+        lightborderstyle = 0
+    }
+}
+
+style "notebook" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.95, @bg_color, @base_color)
+    bg[ACTIVE] = mix(0.85, @bg_color, @base_color)
+    
+    engine "murrine" {
+        contrast = 0.8
+        roundness = 6
+        lightborder_shade = 1.0
+    }
+}
+
+style "scrollbar" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.3, @fg_color, @bg_color)
+    bg[PRELIGHT] = mix(0.6, @selected_bg_color, @bg_color)
+    bg[ACTIVE] = @selected_bg_color
+    
+    engine "murrine" {
+        roundness = 8
+        contrast = 0.0
+        border_shades = {0.9, 0.9}
+        trough_shades = {0.97, 0.97}
+        trough_border_shades = {1.0, 1.0}
+    }
+}
+
+style "progressbar" {
+    xthickness = 0
+    ythickness = 0
+    
+    bg[NORMAL] = mix(0.2, @fg_color, @bg_color)
+    bg[SELECTED] = @selected_bg_color
+    
+    engine "murrine" {
+        roundness = 10
+        contrast = 0.8
+        border_shades = {1.0, 1.0}
+        trough_border_shades = {0.9, 0.9}
+    }
+}
+
+style "scale" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.3, @fg_color, @bg_color)
+    bg[PRELIGHT] = mix(0.6, @selected_bg_color, @bg_color)
+    bg[ACTIVE] = @selected_bg_color
+    
+    engine "murrine" {
+        roundness = 10
+        contrast = 0.8
+        border_shades = {1.0, 1.0}
+        trough_shades = {0.9, 0.9}
+        trough_border_shades = {0.9, 0.9}
+    }
+}
+
+style "menu" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.05, @fg_color, @bg_color)
+    bg[PRELIGHT] = @selected_bg_color
+    fg[PRELIGHT] = @selected_fg_color
+    
+    engine "murrine" {
+        roundness = 6
+        contrast = 0.8
+    }
+}
+
+style "menubar" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.15, @fg_color, @bg_color)
+    
+    engine "murrine" {
+        contrast = 0.8
+    }
+}
+
+style "menuitem" {
+    xthickness = 3
+    ythickness = 3
+    
+    bg[PRELIGHT] = @selected_bg_color
+    fg[PRELIGHT] = @selected_fg_color
+    
+    engine "murrine" {
+        contrast = 0.8
+        roundness = 6
+        border_shades = {1.0, 1.0}
+        lightborderstyle = 0
+    }
+}
+
+style "toolbar" {
+    xthickness = 2
+    ythickness = 2
+    
+    bg[NORMAL] = mix(0.15, @fg_color, @bg_color)
+    
+    engine "murrine" {
+        contrast = 0.8
+    }
+}
+
+# Aplicando estilos
+class "GtkWidget" style "default"
+class "GtkButton" style "button"
+class "GtkEntry" style "entry"
+class "GtkRange" style "scale"
+class "GtkFrame" style "wide"
+class "GtkNotebook" style "notebook"
+class "GtkProgressBar" style "progressbar"
+class "GtkScrollbar" style "scrollbar"
+class "GtkMenu" style "menu"
+class "GtkMenuBar" style "menubar"
+class "GtkMenuItem" style "menuitem"
+class "GtkToolbar" style "toolbar"
+class "*MenuBar.*" style "menubar"
+class "*MenuItem.*" style "menuitem"
+widget_class "*MenuItem.*" style "menuitem"
+widget_class "*MenuBar.*" style "menubar"
+widget_class "*.GtkNotebook" style "notebook"
+widget_class "*.GtkScrollbar" style "scrollbar"
+widget_class "*.GtkProgressBar" style "progressbar"
+
+EOF
+}
+
+# Crear index.theme
+create_theme_index() {
+    cat > "$THEME_DIR/index.theme" << EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Wal GTK Auto (HyDE)
+Comment=Tema GTK monotónico estilo HyDE generado desde wal
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=wal-gtk-auto
+MetacityTheme=wal-gtk-auto
+ButtonLayout=:minimize,maximize,close
+EOF
+}
+
+# Generar tema
+echo "🎨 Generando tema GTK monotónico estilo HyDE..."
+create_gtk3_theme
+create_gtk2_theme
+create_theme_index
+
+# Aplicar el tema automáticamente
+echo "✅ Aplicando tema GTK..."
+
+# Para GTK3
+gsettings set org.gnome.desktop.interface gtk-theme "$THEME_NAME"
+
+# Para GTK2
+if [ ! -f "$HOME/.gtkrc-2.0" ]; then
+    echo "include \"$THEME_DIR/gtk-2.0/gtkrc\"" > "$HOME/.gtkrc-2.0"
+else
+    # Actualizar si ya existe
+    sed -i '/wal-gtk-auto/d' "$HOME/.gtkrc-2.0"
+    echo "include \"$THEME_DIR/gtk-2.0/gtkrc\"" >> "$HOME/.gtkrc-2.0"
+fi
+
+# Vincular CSS de wal directamente para mayor integración
+if [ -f "$WAL_CACHE/gtk3.css" ]; then
+    echo "" >> "$THEME_DIR/gtk-3.0/gtk.css"
+    echo "/* Estilos adicionales de wal */" >> "$THEME_DIR/gtk-3.0/gtk.css"
+    cat "$WAL_CACHE/gtk3.css" >> "$THEME_DIR/gtk-3.0/gtk.css"
+fi
+
+echo ""
+echo "✨ Tema GTK '$THEME_NAME' mejorado estilo HyDE aplicado"
+echo "✨ Ahora está disponible en nwg-look y en todo el sistema"
+echo "✨ El tema se actualizará automáticamente cuando cambies colores con wal"
+
+# Recargar configuración GTK
+if command -v nwg-look >/dev/null 2>&1; then
+    echo "💡 Tema disponible en nwg-look: $THEME_NAME"
+fi

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Get current brightness
+BRIGHTNESS=$(brightnessctl g)
+MAX=$(brightnessctl m)
+PERCENT=$((BRIGHTNESS * 100 / MAX))
+
+# Create progress bar
+FILLED=$((PERCENT / 10))
+EMPTY=$((10 - FILLED))
+BAR=""
+
+for i in $(seq 1 $FILLED); do
+    BAR="${BAR}━"
+done
+
+for i in $(seq 1 $EMPTY); do
+    BAR="${BAR}─"
+done
+
+# Send notification
+notify-send -a "brightness" -u low -h string:x-canonical-private-synchronous:brightness \
+    -h string:category:brightness \
+    -h int:value:$PERCENT \
+    "" "$PERCENT%" -t 1500

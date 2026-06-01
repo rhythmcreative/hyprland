@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Script to update nwg-dock-hyprland colors when pywal changes
+# This script is called by pywal hooks
+
+# Generate new CSS with current pywal colors
+echo "Generating nwg-dock-hyprland CSS with new pywal colors..."
+~/.local/bin/generate-nwg-dock-css
+
+# Check if nwg-dock-hyprland is running
+if pgrep -x "nwg-dock-hyprland" > /dev/null; then
+    echo "Restarting nwg-dock-hyprland to apply new colors..."
+    # Kill current instance
+    pkill -x nwg-dock-hyprland
+    
+    # Wait a moment for the process to fully terminate
+    sleep 0.5
+    
+    # Start nwg-dock-hyprland again with the updated colors
+    nohup nwg-dock-hyprland -c ~/.config/nwg-dock-hyprland/config > /dev/null 2>&1 &
+    echo "nwg-dock-hyprland restarted with new pywal colors"
+else
+    echo "nwg-dock-hyprland is not running, no need to restart"
+fi

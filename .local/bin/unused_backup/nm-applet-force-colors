@@ -1,0 +1,181 @@
+#!/bin/bash
+
+# Force nm-applet to use custom colors by creating a custom GTK theme
+# This is a more aggressive approach
+
+set -eo pipefail
+
+echo "🎨 Forzando colores personalizados para nm-applet..."
+
+# Load pywal colors
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+source "$HOME/.cache/wal/colors.sh"
+
+# Extract colors
+WAYBAR_BG=$(echo "$background" | tr -d "'")
+WAYBAR_FG=$(echo "$foreground" | tr -d "'")
+WAYBAR_ACCENT=$(echo "$color4" | tr -d "'")
+
+echo "📊 Aplicando colores: BG=$WAYBAR_BG, FG=$WAYBAR_FG, Accent=$WAYBAR_ACCENT"
+
+# Kill existing nm-applet
+if pgrep -x nm-applet > /dev/null; then
+    echo "🔄 Cerrando nm-applet existente..."
+    pkill nm-applet
+    sleep 2
+fi
+
+# Create a custom theme specifically for NetworkManager
+THEME_DIR="$HOME/.local/share/themes/NMApplet-Custom"
+mkdir -p "$THEME_DIR/gtk-3.0"
+mkdir -p "$THEME_DIR/gtk-4.0"
+
+# Create custom theme CSS
+cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Custom NetworkManager Applet Theme */
+
+/* Base window styling */
+window {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+}
+
+/* All elements */
+* {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    -gtk-icon-palette: success $WAYBAR_ACCENT, warning $WAYBAR_ACCENT, error $WAYBAR_ACCENT;
+}
+
+/* Menu items */
+menuitem {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    padding: 8px;
+}
+
+menuitem:hover {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Buttons */
+button {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+    border: none;
+    border-radius: 4px;
+}
+
+button:hover {
+    opacity: 0.8;
+}
+
+/* Entry fields */
+entry {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Lists */
+treeview, list, listbox {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+}
+
+treeview:hover, list:hover, listbox:hover {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Popover */
+popover {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Labels */
+label {
+    color: $WAYBAR_FG;
+}
+
+/* Separators */
+separator {
+    background-color: $WAYBAR_ACCENT;
+    opacity: 0.3;
+}
+EOF
+
+# Copy to GTK4
+cp "$THEME_DIR/gtk-3.0/gtk.css" "$THEME_DIR/gtk-4.0/gtk.css"
+
+echo "📄 Tema personalizado creado en: $THEME_DIR"
+
+# Create a custom .gtkrc-2.0 for GTK2 applications
+cat > "$HOME/.gtkrc-2.0" << EOF
+# Custom GTK2 theme for NetworkManager
+style "nm-applet-style" {
+    base[NORMAL] = "$WAYBAR_BG"
+    base[ACTIVE] = "$WAYBAR_ACCENT" 
+    base[SELECTED] = "$WAYBAR_ACCENT"
+    bg[NORMAL] = "$WAYBAR_BG"
+    bg[ACTIVE] = "$WAYBAR_ACCENT"
+    bg[SELECTED] = "$WAYBAR_ACCENT"
+    fg[NORMAL] = "$WAYBAR_FG"
+    fg[ACTIVE] = "$WAYBAR_FG"
+    fg[SELECTED] = "$WAYBAR_FG"
+    text[NORMAL] = "$WAYBAR_FG"
+    text[ACTIVE] = "$WAYBAR_FG"
+    text[SELECTED] = "$WAYBAR_FG"
+}
+
+widget "*" style "nm-applet-style"
+widget_class "*" style "nm-applet-style"
+class "*" style "nm-applet-style"
+EOF
+
+echo "📄 Configuración GTK2 actualizada"
+
+# Set environment variables for custom theme
+export GTK_THEME="NMApplet-Custom"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+export GDK_BACKEND="wayland,x11"
+
+# Update gsettings to use our custom theme
+gsettings set org.gnome.desktop.interface gtk-theme "NMApplet-Custom"
+
+echo "🔧 Tema personalizado configurado"
+
+# Start nm-applet with custom theme
+echo "🚀 Iniciando nm-applet con tema personalizado..."
+
+GTK_THEME="NMApplet-Custom" GTK2_RC_FILES="$HOME/.gtkrc-2.0" nm-applet &
+
+sleep 3
+
+if pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet iniciado con tema personalizado"
+    echo "🎨 Colores aplicados: BG=$WAYBAR_BG, FG=$WAYBAR_FG, Accent=$WAYBAR_ACCENT"
+    
+    # Send notification
+    if command -v notify-send > /dev/null; then
+        notify-send "🎨 nm-applet Personalizado" "Tema personalizado con colores de Waybar aplicado" -t 3000 -i network-wireless 2>/dev/null || true
+    fi
+else
+    echo "❌ Error: no se pudo iniciar nm-applet"
+    exit 1
+fi
+
+echo ""
+echo "🎉 ¡nm-applet ahora debería usar los colores de Waybar!"
+echo "💡 Si aún no funciona, intenta:"
+echo "   1. Cerrar y abrir el menú de nm-applet"
+echo "   2. Reiniciar el script: nm-applet-force-colors"
+echo "   3. Reiniciar Waybar si es necesario"

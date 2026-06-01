@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Script to reload Kitty with new pywal colors
+
+# Generate pywal colors if image is provided
+if [ ! -z "$1" ]; then
+    echo "Applying pywal with image: $1"
+    wal -i "$1"
+fi
+
+# Send signal to all running Kitty instances to reload config
+if pgrep -x "kitty" > /dev/null; then
+    echo "Reloading Kitty configuration..."
+    killall -SIGUSR1 kitty 2>/dev/null || echo "Kitty instances will update on next launch"
+else
+    echo "No Kitty instances running"
+fi
+
+echo "Kitty colors updated with pywal!"

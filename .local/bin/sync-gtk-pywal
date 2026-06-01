@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Script para sincronizar manualmente los temas GTK con pywal
+# Uso: sync-gtk-pywal
+
+echo "🎨 Sincronizando temas GTK con pywal..."
+
+# Generar el tema PywalGTK-Auto con los colores actuales
+if [ -x "$HOME/.local/bin/generate-pywal-gtk-theme" ]; then
+    "$HOME/.local/bin/generate-pywal-gtk-theme"
+    
+    # Aplicar el tema usando gsettings
+    gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto'
+    gsettings set org.gnome.desktop.wm.preferences theme 'PywalGTK-Auto'
+    
+    # Aplicar para aplicaciones flatpak
+    if command -v flatpak > /dev/null 2>&1; then
+        flatpak --user override --env=GTK_THEME=PywalGTK-Auto 2>/dev/null || true
+        echo "✓ Tema aplicado a aplicaciones Flatpak"
+    fi
+    
+    # Aplicar tema usando nwg-look (específico para Hyprland)
+    if command -v nwg-look > /dev/null 2>&1; then
+        nwg-look -a PywalGTK-Auto
+        echo "✓ Tema aplicado con nwg-look"
+    fi
+    
+    # Exportar variable de entorno GTK_THEME
+    export GTK_THEME=PywalGTK-Auto
+    echo "export GTK_THEME=PywalGTK-Auto" >> ~/.bashrc.tmp
+    mv ~/.bashrc.tmp ~/.bashrc 2>/dev/null || echo "export GTK_THEME=PywalGTK-Auto" >> ~/.profile
+    
+    # Forzar recarga de aplicaciones GTK
+    pkill -HUP gsd-xsettings 2>/dev/null || true
+    dbus-send --session --type=signal /org/gnome/SettingsDaemon/StyleMgr org.gnome.SettingsDaemon.StyleMgr.ThemeChanged 2>/dev/null || true
+    
+    # Reiniciar aplicaciones GTK comunes si están ejecutándose
+    if command -v killall > /dev/null 2>&1; then
+        killall -SIGUSR1 nautilus 2>/dev/null || true
+        killall -SIGUSR1 thunar 2>/dev/null || true
+        killall -SIGUSR1 nemo 2>/dev/null || true
+    fi
+    
+    echo "✅ Sincronización completada!"
+    
+    # Mostrar notificación si está disponible
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "GTK + Pywal" "Temas sincronizados exitosamente" -t 3000 -i preferences-desktop-theme
+    fi
+    
+else
+    echo "❌ Error: No se encontró generate-pywal-gtk-theme"
+    exit 1
+fi

@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Script para sincronización automática e inmediata de Powerlevel10k con pywal
+# Este script se ejecuta automáticamente después de cambiar wallpapers
+
+set -e
+
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+COLORS_JSON="$HOME/.cache/wal/colors.json"
+P10K_COLORS_FILE="$HOME/.cache/wal/p10k-colors.zsh"
+LOG_FILE="$HOME/.cache/p10k-auto-sync.log"
+
+# Función de logging silencioso
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Verificar que pywal haya generado colores
+if [[ ! -f "$COLORS_JSON" ]] || [[ ! -f "$COLORS_FILE" ]]; then
+    log "❌ Archivos de pywal no encontrados, saltando sincronización P10k"
+    exit 0
+fi
+
+log "🎨 Iniciando auto-sincronización P10k con pywal"
+
+# Leer colores usando jq o grep como fallback
+if command -v jq >/dev/null 2>&1 && [[ -f "$COLORS_JSON" ]]; then
+    background=$(jq -r '.special.background' "$COLORS_JSON")
+    foreground=$(jq -r '.special.foreground' "$COLORS_JSON")
+    color0=$(jq -r '.colors.color0' "$COLORS_JSON")
+    color1=$(jq -r '.colors.color1' "$COLORS_JSON")
+    color2=$(jq -r '.colors.color2' "$COLORS_JSON")
+    color3=$(jq -r '.colors.color3' "$COLORS_JSON")
+    color4=$(jq -r '.colors.color4' "$COLORS_JSON")
+    color5=$(jq -r '.colors.color5' "$COLORS_JSON")
+    color6=$(jq -r '.colors.color6' "$COLORS_JSON")
+    color7=$(jq -r '.colors.color7' "$COLORS_JSON")
+    color8=$(jq -r '.colors.color8' "$COLORS_JSON")
+else
+    # Fallback usando grep
+    background=$(grep '^background=' "$COLORS_FILE" | cut -d"'" -f2)
+    foreground=$(grep '^foreground=' "$COLORS_FILE" | cut -d"'" -f2)
+    color0=$(grep '^color0=' "$COLORS_FILE" | cut -d"'" -f2)
+    color1=$(grep '^color1=' "$COLORS_FILE" | cut -d"'" -f2)
+    color2=$(grep '^color2=' "$COLORS_FILE" | cut -d"'" -f2)
+    color3=$(grep '^color3=' "$COLORS_FILE" | cut -d"'" -f2)
+    color4=$(grep '^color4=' "$COLORS_FILE" | cut -d"'" -f2)
+    color5=$(grep '^color5=' "$COLORS_FILE" | cut -d"'" -f2)
+    color6=$(grep '^color6=' "$COLORS_FILE" | cut -d"'" -f2)
+    color7=$(grep '^color7=' "$COLORS_FILE" | cut -d"'" -f2)
+    color8=$(grep '^color8=' "$COLORS_FILE" | cut -d"'" -f2)
+fi
+
+# Verificar que los colores se cargaron
+if [[ -z "${color1:-}" ]] || [[ -z "${background:-}" ]]; then
+    log "❌ Error cargando colores de pywal"
+    exit 1
+fi
+
+log "✅ Colores cargados: bg=$background, fg=$foreground"
+
+# Crear archivo de configuración dinámica para P10k
+cat > "$P10K_COLORS_FILE" << EOF
+# Configuración dinámica de colores P10k generada automáticamente
+# Generado: $(date)
+
+# Colores hexadecimales de pywal
+export PYWAL_BACKGROUND="$background"
+export PYWAL_FOREGROUND="$foreground"
+export PYWAL_COLOR0="$color0"
+export PYWAL_COLOR1="$color1"
+export PYWAL_COLOR2="$color2"
+export PYWAL_COLOR3="$color3"
+export PYWAL_COLOR4="$color4"
+export PYWAL_COLOR5="$color5"
+export PYWAL_COLOR6="$color6"
+export PYWAL_COLOR7="$color7"
+export PYWAL_COLOR8="$color8"
+
+# Aplicar colores a P10k inmediatamente si está cargado
+if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
+    # OS icon
+    typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND="\$PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND="\$PYWAL_FOREGROUND"
+    
+    # Directory
+    typeset -g POWERLEVEL9K_DIR_BACKGROUND="\$PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_DIR_FOREGROUND="\$PYWAL_BACKGROUND"
+    typeset -g POWERLEVEL9K_DIR_SHORTENED_FOREGROUND="\$PYWAL_COLOR8"
+    
+    # Git status con colores apropiados
+    typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND="\$PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_VCS_CLEAN_FOREGROUND="\$PYWAL_BACKGROUND"
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND="\$PYWAL_COLOR3"
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_FOREGROUND="\$PYWAL_BACKGROUND"
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND="\$PYWAL_COLOR5"
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND="\$PYWAL_BACKGROUND"
+    typeset -g POWERLEVEL9K_VCS_CONFLICTED_BACKGROUND="\$PYWAL_COLOR1"
+    typeset -g POWERLEVEL9K_VCS_CONFLICTED_FOREGROUND="\$PYWAL_FOREGROUND"
+    
+    # Context (user@host)
+    typeset -g POWERLEVEL9K_CONTEXT_DEFAULT_BACKGROUND="\$PYWAL_COLOR6"
+    typeset -g POWERLEVEL9K_CONTEXT_DEFAULT_FOREGROUND="\$PYWAL_BACKGROUND"
+    typeset -g POWERLEVEL9K_CONTEXT_ROOT_BACKGROUND="\$PYWAL_COLOR1"
+    typeset -g POWERLEVEL9K_CONTEXT_ROOT_FOREGROUND="\$PYWAL_FOREGROUND"
+    
+    # Prompt character
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND="\$PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND="\$PYWAL_COLOR1"
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VICMD_FOREGROUND="\$PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VICMD_FOREGROUND="\$PYWAL_COLOR1"
+    
+    # Actualizar prompt inmediatamente si p10k está disponible
+    if [[ "\${+functions[p10k]}" == 1 ]]; then
+        p10k reload
+    fi
+fi
+EOF
+
+log "✅ Archivo P10k actualizado: $P10K_COLORS_FILE"
+
+# Enviar comando a terminales zsh activas para recargar
+for pid in $(pgrep -x zsh 2>/dev/null || true); do
+    if [[ -e "/proc/$pid" ]]; then
+        # Solo para terminales interactivas (con tty)
+        if [[ -n "$(ps -p $pid -o tty= 2>/dev/null | grep -v '?')" ]]; then
+            log "🔄 Señal de recarga enviada a terminal PID: $pid"
+            # Usar kill -USR1 como señal personalizada para recargar
+            kill -USR1 "$pid" 2>/dev/null || true
+        fi
+    fi
+done
+
+log "✅ Auto-sincronización P10k completada"
+
+# Mostrar notificación discreta
+if command -v notify-send >/dev/null 2>&1; then
+    notify-send "🎨 P10k Sync" "Colores actualizados automáticamente" -t 2000 >/dev/null 2>&1 || true
+fi

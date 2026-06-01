@@ -1,0 +1,93 @@
+#!/bin/bash
+
+# Script independiente para recargar Waybar con colores pywal
+# Se ejecuta en background completamente desacoplado
+
+# Función para ejecutar en background
+reload_waybar() {
+    # Actualizar colores de waybar desde pywal actual
+    if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+        # Cargar los colores de pywal
+        unset background foreground cursor color0 color1 color2 color3 color4 color5 color6 color7 color8 color9 color10 color11 color12 color13 color14 color15
+        source "$HOME/.cache/wal/colors.sh"
+        
+        # Debug: mostrar qué colores se están usando
+        echo "Actualizando con colores: bg=$background, fg=$foreground, color1=$color1" >> /tmp/waybar-debug.log
+        
+        # Crear archivo de colores para waybar
+        cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal - $(date) */
+@define-color background $background;
+@define-color foreground $foreground;
+@define-color cursor $cursor;
+@define-color color0 $color0;
+@define-color color1 $color1;
+@define-color color2 $color2;
+@define-color color3 $color3;
+@define-color color4 $color4;
+@define-color color5 $color5;
+@define-color color6 $color6;
+@define-color color7 $color7;
+@define-color color8 $color8;
+@define-color color9 $color9;
+@define-color color10 $color10;
+@define-color color11 $color11;
+@define-color color12 $color12;
+@define-color color13 $color13;
+@define-color color14 $color14;
+@define-color color15 $color15;
+EOF
+        
+        # Verificar que se escribió correctamente
+        if grep -q "$background" "$HOME/.config/waybar/colors-pywal.css"; then
+            echo "✅ Colores actualizados correctamente" >> /tmp/waybar-debug.log
+        else
+            echo "❌ Error al actualizar colores" >> /tmp/waybar-debug.log
+        fi
+        
+        # Forzar cambio en el archivo CSS principal para que waybar detecte cambios
+        local timestamp=$(date +%s)
+        local style_file="$HOME/.config/waybar/style.css"
+        
+        # Remover timestamp anterior si existe
+        sed -i '/^\/\* reload-ts:/d' "$style_file"
+        
+        # Añadir nuevo timestamp al inicio del archivo
+        sed -i "1i/* reload-ts: $timestamp */" "$style_file"
+        
+        echo "Timestamp actualizado: $timestamp" >> /tmp/waybar-debug.log
+    else
+        notify-send "❌ Error" "No se encontraron colores de pywal" -u critical -t 3000
+        exit 1
+    fi
+
+    # Matar waybar actual
+    pkill waybar 2>/dev/null
+    sleep 3
+    
+    # Forzar cierre si sigue corriendo
+    if pgrep waybar > /dev/null; then
+        pkill -9 waybar 2>/dev/null
+        sleep 1
+    fi
+
+    # Asegurar que no queden procesos zombie
+    sleep 1
+
+    # Iniciar waybar con configuración explícita
+    waybar -c "$HOME/.config/waybar/config" -s "$HOME/.config/waybar/style.css" > /dev/null 2>&1 &
+    sleep 3
+
+    # Verificar que esté funcionando
+    if pgrep waybar > /dev/null; then
+        notify-send "🎨 Waybar" "Colores actualizados: $color1" -t 2000
+    else
+        notify-send "❌ Error" "No se pudo reiniciar Waybar" -u critical -t 3000
+    fi
+}
+
+# Ejecutar en background completamente independiente
+nohup bash -c "$(declare -f reload_waybar); reload_waybar" > /dev/null 2>&1 &
+disown
+
+exit 0

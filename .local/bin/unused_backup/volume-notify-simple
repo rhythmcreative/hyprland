@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Notificación simple: solo texto y barra enorme de colores
+# Como las notificaciones default del sistema pero mejor
+
+TIMEOUT=2000
+URGENT="low"
+
+# Generar barra enorme de colores
+generate_big_colorbar() {
+    local percent=$1
+    local width=30  # Barra súper larga
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    local bar=""
+    # Usar caracteres grandes y coloridos
+    for ((i=0; i<filled; i++)); do
+        bar+="█"  # Bloque lleno grande
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="░"  # Bloque vacío
+    done
+    
+    echo "$bar"
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Notificación súper simple con barra enorme
+show_simple_notification() {
+    local volume=$1
+    local muted=$2
+    
+    if [ "$muted" = "true" ]; then
+        # Mute simple
+        local empty_bar="$(generate_big_colorbar 0)"
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "Volume" \
+                   "Muted\n$empty_bar"
+    else
+        # Solo volumen y barra enorme
+        local colorbar="$(generate_big_colorbar $volume)"
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "Volume" \
+                   "$volume%\n$colorbar"
+    fi
+}
+
+# Notificación de audio simple
+show_simple_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local colorbar="$(generate_big_colorbar $volume)"
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$title" \
+               "$message\nVolume: $volume%\n$colorbar"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_simple_audio_notification "${2:-Audio}" "${3:-Playing}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing simple style with big color bar..."
+        echo "Volume 30%..."
+        show_simple_notification "30" "false"
+        sleep 2
+        echo "Volume 70%..."
+        show_simple_notification "70" "false"
+        sleep 2
+        echo "Volume 100%..."
+        show_simple_notification "100" "false"
+        sleep 2
+        echo "Muted..."
+        show_simple_notification "0" "true"
+        sleep 2
+        echo "Audio notification..."
+        show_simple_audio_notification "Spotify" "Now Playing: Song Name"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+
+show_simple_notification "$volume" "$muted"
+exit 0

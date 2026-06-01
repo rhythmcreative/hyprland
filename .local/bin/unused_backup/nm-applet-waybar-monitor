@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Monitor automático para mantener nm-applet sincronizado con waybar
+# Se ejecuta en background y detecta cambios de colores
+
+CACHE_FILE="$HOME/.cache/nm-applet-waybar-sync.cache"
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+
+echo "🔄 Iniciando monitor de sincronización nm-applet ↔ Waybar..."
+
+# Función para obtener hash de colores actuales
+get_colors_hash() {
+    if [[ -f "$COLORS_FILE" ]]; then
+        md5sum "$COLORS_FILE" | cut -d' ' -f1
+    else
+        echo "no-colors"
+    fi
+}
+
+# Función para sincronizar colores
+sync_colors() {
+    echo "🎨 Detectado cambio de colores, sincronizando..."
+    
+    # Ejecutar script de sincronización
+    if [[ -f "$HOME/.local/bin/fix-nm-applet-waybar-sync" ]]; then
+        # Ejecutar en background sin input interactivo
+        echo "n" | "$HOME/.local/bin/fix-nm-applet-waybar-sync" > /dev/null 2>&1
+        
+        # Guardar nuevo hash
+        get_colors_hash > "$CACHE_FILE"
+        
+        echo "✅ Sincronización automática completada"
+        
+        # Notificación opcional
+        if command -v notify-send > /dev/null; then
+            notify-send "🎨 Auto-Sync" "nm-applet sincronizado con waybar" -t 2000 2>/dev/null || true
+        fi
+    else
+        echo "❌ Script de sincronización no encontrado"
+    fi
+}
+
+# Inicializar cache si no existe
+if [[ ! -f "$CACHE_FILE" ]]; then
+    get_colors_hash > "$CACHE_FILE"
+    echo "📋 Cache inicializado"
+fi
+
+echo "👁️ Monitoreando cambios de colores... (Ctrl+C para detener)"
+
+# Loop de monitoreo
+while true; do
+    current_hash=$(get_colors_hash)
+    cached_hash=$(cat "$CACHE_FILE" 2>/dev/null || echo "")
+    
+    if [[ "$current_hash" != "$cached_hash" ]] && [[ "$current_hash" != "no-colors" ]]; then
+        sync_colors
+    fi
+    
+    # Verificar que nm-applet esté corriendo
+    if ! pgrep -x nm-applet > /dev/null; then
+        echo "🔄 nm-applet no está corriendo, reiniciando..."
+        nohup nm-applet > /dev/null 2>&1 &
+        sleep 2
+    fi
+    
+    # Esperar 5 segundos antes de la siguiente verificación
+    sleep 5
+done

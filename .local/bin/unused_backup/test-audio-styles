@@ -1,0 +1,389 @@
+#!/bin/bash
+
+# Script para probar diferentes estilos de notificaciones de audio
+
+echo "🎨 Selector de Estilos de Notificaciones de Audio"
+echo "=================================================="
+echo ""
+echo "Estilos disponibles:"
+echo "1. Moderno con iconos grandes (actual)"
+echo "2. Elegante con barras de progreso"
+echo "3. Minimalista con íconos pequeños"
+echo "4. Colorido con gradientes"
+echo "5. Gaming style con efectos"
+echo ""
+
+read -p "Selecciona un estilo (1-5): " style_choice
+
+case $style_choice in
+    1)
+        echo "🔄 Aplicando estilo moderno..."
+        style_name="moderno"
+        ;;
+    2)
+        echo "🔄 Aplicando estilo elegante..."
+        style_name="elegante"
+        ;;
+    3)
+        echo "🔄 Aplicando estilo minimalista..."
+        style_name="minimalista"
+        ;;
+    4)
+        echo "🔄 Aplicando estilo colorido..."
+        style_name="colorido"
+        ;;
+    5)
+        echo "🔄 Aplicando estilo gaming..."
+        style_name="gaming"
+        ;;
+    *)
+        echo "❌ Opción inválida"
+        exit 1
+        ;;
+esac
+
+# Source pywal colors
+source ~/.cache/wal/colors.sh
+
+# Función para crear configuración de audio según el estilo
+create_audio_config() {
+    local style="$1"
+    
+    case $style in
+        "moderno")
+            cat << EOF
+# Volume notifications - Moderno con iconos grandes
+[app-name=volume]
+width=380
+height=85
+border-radius=12
+default-timeout=2000
+border-color=${color4}
+border-size=2
+background-color=${color0}95
+text-color=${color7}
+format=<span size='large' weight='bold'>🔊</span>  <b>%s</b>
+padding=20
+margin=10
+
+[summary~="Volume"]
+width=380
+height=85
+border-radius=12
+default-timeout=2000
+border-color=${color4}
+border-size=2
+background-color=${color0}95
+text-color=${color7}
+format=<span size='large' weight='bold'>🔊</span>  <b>%s</b>
+padding=20
+margin=10
+
+[summary~="Audio"]
+width=380
+height=85
+border-radius=12
+default-timeout=2000
+border-color=${color5}
+border-size=2
+background-color=${color0}95
+text-color=${color7}
+format=<span size='large' weight='bold'>🎵</span>  <b>%s</b>
+padding=20
+margin=10
+EOF
+            ;;
+        "elegante")
+            cat << EOF
+# Volume notifications - Elegante con estilo refinado
+[app-name=volume]
+width=350
+height=75
+border-radius=15
+default-timeout=2500
+border-color=${color6}
+border-size=1
+background-color=${color0}88
+text-color=${color15}
+format=<span size='medium'>♪</span> <span weight='light'>Volume</span> <b>%s</b>
+padding=18
+margin=8
+
+[summary~="Volume"]
+width=350
+height=75
+border-radius=15
+default-timeout=2500
+border-color=${color6}
+border-size=1
+background-color=${color0}88
+text-color=${color15}
+format=<span size='medium'>♪</span> <span weight='light'>Volume</span> <b>%s</b>
+padding=18
+margin=8
+
+[summary~="Audio"]
+width=350
+height=75
+border-radius=15
+default-timeout=2500
+border-color=${color13}
+border-size=1
+background-color=${color0}88
+text-color=${color15}
+format=<span size='medium'>♫</span> <span weight='light'>Audio</span> <b>%s</b>
+padding=18
+margin=8
+EOF
+            ;;
+        "minimalista")
+            cat << EOF
+# Volume notifications - Minimalista limpio
+[app-name=volume]
+width=280
+height=60
+border-radius=6
+default-timeout=1800
+border-color=${color8}
+border-size=1
+background-color=${color0}85
+text-color=${color7}
+format=<small>🔉</small> %s
+padding=12
+margin=5
+
+[summary~="Volume"]
+width=280
+height=60
+border-radius=6
+default-timeout=1800
+border-color=${color8}
+border-size=1
+background-color=${color0}85
+text-color=${color7}
+format=<small>🔉</small> %s
+padding=12
+margin=5
+
+[summary~="Audio"]
+width=280
+height=60
+border-radius=6
+default-timeout=1800
+border-color=${color8}
+border-size=1
+background-color=${color0}85
+text-color=${color7}
+format=<small>🎶</small> %s
+padding=12
+margin=5
+EOF
+            ;;
+        "colorido")
+            cat << EOF
+# Volume notifications - Colorido con gradientes
+[app-name=volume]
+width=400
+height=90
+border-radius=18
+default-timeout=2200
+border-color=${color11}
+border-size=3
+background-color=${color0}92
+text-color=${color11}
+format=<span size='x-large' foreground='${color4}'>🔊</span> <span size='large' weight='bold' foreground='${color11}'>%s</span>
+padding=25
+margin=12
+
+[summary~="Volume"]
+width=400
+height=90
+border-radius=18
+default-timeout=2200
+border-color=${color11}
+border-size=3
+background-color=${color0}92
+text-color=${color11}
+format=<span size='x-large' foreground='${color4}'>🔊</span> <span size='large' weight='bold' foreground='${color11}'>%s</span>
+padding=25
+margin=12
+
+[summary~="Audio"]
+width=400
+height=90
+border-radius=18
+default-timeout=2200
+border-color=${color13}
+border-size=3
+background-color=${color0}92
+text-color=${color13}
+format=<span size='x-large' foreground='${color5}'>🎵</span> <span size='large' weight='bold' foreground='${color13}'>%s</span>
+padding=25
+margin=12
+EOF
+            ;;
+        "gaming")
+            cat << EOF
+# Volume notifications - Gaming style con efectos
+[app-name=volume]
+width=420
+height=95
+border-radius=8
+default-timeout=3000
+border-color=${color1}
+border-size=2
+background-color=${color0}98
+text-color=${color9}
+format=<span size='x-large' weight='bold' foreground='${color1}'>▶</span> <span size='large' weight='bold' foreground='${color9}'>VOLUME</span> <span size='large' weight='heavy' foreground='${color15}'>%s</span>
+padding=22
+margin=15
+
+[summary~="Volume"]
+width=420
+height=95
+border-radius=8
+default-timeout=3000
+border-color=${color1}
+border-size=2
+background-color=${color0}98
+text-color=${color9}
+format=<span size='x-large' weight='bold' foreground='${color1}'>▶</span> <span size='large' weight='bold' foreground='${color9}'>VOLUME</span> <span size='large' weight='heavy' foreground='${color15}'>%s</span>
+padding=22
+margin=15
+
+[summary~="Audio"]
+width=420
+height=95
+border-radius=8
+default-timeout=3000
+border-color=${color3}
+border-size=2
+background-color=${color0}98
+text-color=${color11}
+format=<span size='x-large' weight='bold' foreground='${color3}'>♪</span> <span size='large' weight='bold' foreground='${color11}'>AUDIO</span> <span size='large' weight='heavy' foreground='${color15}'>%s</span>
+padding=22
+margin=15
+EOF
+            ;;
+    esac
+}
+
+# Crear nueva configuración temporal
+temp_config=$(mktemp)
+
+# Copiar configuración base
+cat > "$temp_config" << EOF
+# Mako - Pywal Synchronized Configuration
+# Estilo de prueba: $style_name
+
+# Global appearance
+font=SF Pro Display 12
+width=400
+height=90
+margin=15
+padding=18
+border-size=1
+border-radius=12
+icons=1
+max-icon-size=42
+icon-location=left
+markup=1
+actions=1
+
+# Pywal synchronized colors
+background-color=${color0}90
+text-color=${color7}
+border-color=${color1}50
+
+# Top-right positioning
+anchor=top-right
+layer=overlay
+
+# Behavior
+sort=-time
+default-timeout=6000
+ignore-timeout=0
+max-visible=3
+
+# Icons
+icon-path=/usr/share/icons/Papirus-Dark
+
+# Grouping
+group-by=app-name
+max-history=20
+
+EOF
+
+# Agregar configuración de audio específica
+create_audio_config "$style_name" >> "$temp_config"
+
+# Agregar resto de configuraciones
+cat >> "$temp_config" << EOF
+
+# Brightness notifications
+[app-name=brightness]
+width=320
+height=70
+border-radius=8
+default-timeout=2000
+border-color=${color3}60
+format=<b>%s</b>
+
+[summary~="Brightness"]
+width=320
+height=70
+border-radius=8
+default-timeout=2000
+border-color=${color3}60
+
+# Spotify notifications
+[app-name=Spotify]
+width=440
+border-color=${color4}60
+default-timeout=6000
+background-color=${color0}95
+
+# Urgency levels
+[urgency=low]
+border-color=${color8}50
+default-timeout=4000
+
+[urgency=normal]
+border-color=${color1}50
+default-timeout=6000
+
+[urgency=critical]
+background-color=${color0}95
+border-color=${color9}
+border-size=2
+default-timeout=0
+EOF
+
+# Aplicar configuración temporal
+cp "$temp_config" ~/.config/mako/config
+rm "$temp_config"
+
+# Recargar Mako
+makoctl reload 2>/dev/null || {
+    echo "⚠️ Reiniciando Mako..."
+    killall mako 2>/dev/null
+    sleep 0.5
+    mako &
+}
+
+echo "✅ Estilo '$style_name' aplicado"
+echo ""
+echo "🧪 Probando notificaciones..."
+
+# Probar notificaciones
+notify-send -a volume "Volumen" "75%" &
+sleep 1.5
+notify-send "Audio Test" "Reproduciendo música" &
+
+echo ""
+echo "💡 ¿Te gusta este estilo?"
+echo "Si quieres mantenerlo, no hagas nada."
+echo "Si quieres volver al anterior, ejecuta: ~/.local/bin/sync-mako-pywal"
+echo ""
+echo "Para hacer este estilo permanente, ejecuta:"
+echo "echo 'MAKO_STYLE=\"$style_name\"' >> ~/.bashrc"

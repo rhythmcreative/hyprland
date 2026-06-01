@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# Script para aplicar colores de pywal a Hyprland
+# Útil cuando cambias configuraciones de pywal sin cambiar wallpaper
+
+LOG_FILE="$HOME/.cache/hyprland-pywal.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "Iniciando aplicación de colores pywal a Hyprland"
+
+# Verificar si pywal está instalado y ha generado colores
+if ! command -v wal > /dev/null 2>&1; then
+    echo "ERROR: pywal no está instalado"
+    log "ERROR: pywal no está instalado"
+    exit 1
+fi
+
+if [[ ! -f ~/.cache/wal/colors ]]; then
+    echo "ERROR: No se encontraron colores de pywal. Ejecuta 'wal -i [imagen]' primero"
+    log "ERROR: No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Verificar si Hyprland está corriendo
+if ! pgrep -x "Hyprland" > /dev/null; then
+    echo "WARNING: Hyprland no está corriendo"
+    log "WARNING: Hyprland no está corriendo"
+fi
+
+# Obtener colores de pywal
+ACTIVE_COLOR=$(cat ~/.cache/wal/colors | sed -n '2p' | sed 's/#//')    # color1 para borde activo
+INACTIVE_COLOR=$(cat ~/.cache/wal/colors | sed -n '9p' | sed 's/#//')  # color8 para borde inactivo
+SHADOW_COLOR=$(cat ~/.cache/wal/colors | sed -n '1p' | sed 's/#//')    # background para sombra
+
+log "Colores detectados - Active: #$ACTIVE_COLOR, Inactive: #$INACTIVE_COLOR, Shadow: #$SHADOW_COLOR"
+
+echo "🎨 Aplicando colores a Hyprland:"
+echo "   Borde activo: #$ACTIVE_COLOR"
+echo "   Borde inactivo: #$INACTIVE_COLOR"
+echo "   Sombra: #$SHADOW_COLOR"
+
+# Verificar si el archivo de configuración de Hyprland existe
+if [[ ! -f ~/.config/hypr/hyprland.conf ]]; then
+    echo "ERROR: No se encontró el archivo de configuración de Hyprland"
+    log "ERROR: No se encontró ~/.config/hypr/hyprland.conf"
+    exit 1
+fi
+
+# Verificar si el template de colores enhanced existe
+if [[ ! -f ~/.config/wal/templates/colors-hyprland-enhanced.conf ]]; then
+    echo "✅ Template colors-hyprland-enhanced.conf ya existe"
+    log "Template colors-hyprland-enhanced.conf encontrado"
+else
+    echo "✅ Template colors-hyprland-enhanced.conf está disponible"
+    log "Template colors-hyprland-enhanced.conf disponible"
+fi
+
+# Regenerar colores con el template
+echo "🔄 Regenerando colores de Hyprland..."
+log "Regenerando template de colores"
+
+# Obtener la imagen actual de pywal
+CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal 2>/dev/null || echo "")
+
+if [[ -n "$CURRENT_WALLPAPER" && -f "$CURRENT_WALLPAPER" ]]; then
+    # Regenerar colores usando la imagen actual
+    wal -i "$CURRENT_WALLPAPER" > /dev/null 2>&1
+    log "Colores regenerados usando wallpaper: $CURRENT_WALLPAPER"
+else
+    echo "WARNING: No se pudo obtener el wallpaper atual, usando colores existentes"
+    log "WARNING: Wallpaper actual no encontrado"
+fi
+
+# Verificar y generar archivos de colores
+echo "🎨 Generando archivos de colores mejorados..."
+
+# Verificar si se generó colors-hyprland-enhanced.conf (para hyprlock)
+if [[ -f ~/.cache/wal/colors-hyprland-enhanced.conf ]]; then
+    echo "✅ Archivo colors-hyprland-enhanced.conf generado exitosamente"
+    log "Archivo colors-hyprland-enhanced.conf generado exitosamente"
+    
+    # Mostrar contenido para verificación
+    echo "📄 Contenido del archivo enhanced (para hyprlock):"
+    head -n 15 ~/.cache/wal/colors-hyprland-enhanced.conf
+    echo "..."
+else
+    echo "❌ ERROR: No se pudo generar el archivo colors-hyprland-enhanced.conf"
+    log "ERROR: No se pudo generar colors-hyprland-enhanced.conf"
+    exit 1
+fi
+
+# Verificar archivo regular (para compatibilidad)
+if [[ -f ~/.cache/wal/colors-hyprland.conf ]]; then
+    echo "✅ Archivo colors-hyprland.conf también disponible (compatibilidad)"
+    log "Archivo colors-hyprland.conf generado exitosamente"
+else
+    echo "⚠️ Archivo colors-hyprland.conf no encontrado (no es crítico)"
+    log "WARNING: colors-hyprland.conf no encontrado"
+fi
+
+# Recargar Hyprland si está corriendo
+if pgrep -x "Hyprland" > /dev/null; then
+    echo "🔄 Recargando configuración de Hyprland..."
+    log "Recargando Hyprland"
+    
+    if hyprctl reload > /dev/null 2>&1; then
+        echo "✅ Hyprland recargado exitosamente"
+        log "Hyprland recargado exitosamente"
+    else
+        echo "❌ ERROR: Fallo al recargar Hyprland"
+        log "ERROR: Fallo al recargar Hyprland"
+        
+        # Intentar comando alternativo
+        echo "🔄 Intentando comando alternativo..."
+        if hyprctl dispatch exec "hyprctl reload" > /dev/null 2>&1; then
+            echo "✅ Hyprland recargado con comando alternativo"
+            log "Hyprland recargado con comando alternativo"
+        else
+            echo "❌ No se pudo recargar Hyprland automáticamente"
+            echo "   Puedes intentar manualmente: hyprctl reload"
+            log "ERROR: No se pudo recargar Hyprland"
+        fi
+    fi
+else
+    echo "ℹ️  Hyprland no está corriendo, configuración aplicada para el próximo inicio"
+    log "Hyprland no está corriendo"
+fi
+
+echo "🎉 Proceso completado. Los bordes de las ventanas deberían usar los nuevos colores."
+log "Aplicación de colores completada exitosamente"

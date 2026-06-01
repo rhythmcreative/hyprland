@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Script para recargar Vesktop sin reiniciar
+# Usa la funcionalidad de recarga del navegador (Ctrl+R)
+
+echo "🔄 Recargando Vesktop..."
+
+# Buscar la ventana de Vesktop y enviar Ctrl+R
+if command -v xdotool >/dev/null 2>&1; then
+    # Método con xdotool (más confiable)
+    VESKTOP_WINDOW=$(xdotool search --name "Vesktop" | head -1)
+    if [ -n "$VESKTOP_WINDOW" ]; then
+        xdotool windowactivate $VESKTOP_WINDOW
+        sleep 0.5
+        xdotool key ctrl+r
+        echo "✅ Vesktop recargado usando xdotool"
+    else
+        echo "❌ No se pudo encontrar la ventana de Vesktop"
+    fi
+elif command -v wmctrl >/dev/null 2>&1; then
+    # Método alternativo con wmctrl
+    wmctrl -a "Vesktop" && sleep 0.5 && xdotool key ctrl+r
+    echo "✅ Vesktop recargado usando wmctrl"
+else
+    echo "⚠️  xdotool no disponible. Instalando..."
+    
+    # Verificar si es Arch Linux y sugerir instalación
+    if command -v pacman >/dev/null 2>&1; then
+        echo "💡 Ejecuta: sudo pacman -S xdotool"
+        echo "💡 Luego podrás usar este script para recarga automática"
+    else
+        echo "💡 Instala xdotool para recarga automática"
+    fi
+    
+    echo "🔄 Alternativa: Usa Ctrl+R manualmente en Vesktop"
+fi

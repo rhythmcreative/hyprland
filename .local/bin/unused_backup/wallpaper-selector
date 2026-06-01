@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# Directorio de wallpapers
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
+
+# Función para generar thumbnails
+generate_thumbnails() {
+    mkdir -p "$PREVIEW_DIR"
+    
+    for img in "$WALLPAPER_DIR"/*.{jpg,jpeg,png,webp,bmp}; do
+        [[ -f "$img" ]] || continue
+        
+        local basename_img=$(basename "$img")
+        local preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
+        
+        # Generar thumbnail si no existe o la imagen es más nueva
+        if [[ ! -f "$preview_path" ]] || [[ "$img" -nt "$preview_path" ]]; then
+            convert "$img" -resize 200x150^ -gravity center -extent 200x150 "$preview_path" 2>/dev/null
+        fi
+    done
+}
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    rofi -e "Directorio $WALLPAPER_DIR no encontrado"
+    exit 1
+fi
+
+# Generar thumbnails (silencioso)
+generate_thumbnails
+
+# Obtener lista de imágenes
+images=($(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) | sort))
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    rofi -e "No se encontraron imágenes en $WALLPAPER_DIR"
+    exit 1
+fi
+
+# Crear lista para rofi con íconos (thumbnails) estilo HyDE
+image_list=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
+    # Añadir la imagen a la lista con el estilo
+    image_list="$image_list$basename_img\0icon\x1f$preview_path\x1finfo\x1f$basename_img\n"
+done
+
+# Mostrar rofi con estilo HyDE
+selected=$(echo -e "$image_list" | rofi -dmenu -i \
+    -p "" \
+    -show-icons \
+    -markup-rows \
+    -columns 2 \
+    -lines 2 \
+    -width 40 \
+    -height 40 \
+    -theme-str 'element-text { font: "monospace bold 12"; color: black; }' \
+    -theme-str 'element-icon { size: 200px; }' \
+    -theme-str 'element { background-color: transparent; margin: 5px; }')
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    exit 0
+fi
+
+# Encontrar la ruta completa del archivo seleccionado
+selected_path=""
+for img in "${images[@]}"; do
+    if [[ "$(basename "$img")" == "$selected" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    rofi -e "Error: No se pudo encontrar el archivo seleccionado"
+    exit 1
+fi
+
+# Aplicar wallpaper con swww y wal con parámetros específicos
+swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5 > /dev/null 2>&1 &
+SWWW_PID=$!
+
+wal -i "$selected_path" > /dev/null 2>&1 &
+WAL_PID=$!
+
+# Esperar a que terminen ambos procesos
+wait $SWWW_PID
+wait $WAL_PID
+
+# Notificación de éxito (sin mostrar errores de dbus)
+if command -v notify-send > /dev/null 2>&1; then
+    notify-send "🎨 Wallpaper Aplicado" "$(basename "$selected_path")" 2>/dev/null || true
+fi

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Script helper para usar PywalGTK-Auto con nwg-look
+# Este script regenera el tema antes de abrir nwg-look para asegurar que esté actualizado
+
+echo "🎨 Preparando PywalGTK-Auto para nwg-look..."
+
+# Regenerar el tema con los colores actuales de pywal
+if [ -f "$HOME/.cache/wal/colors.json" ]; then
+    echo "Actualizando tema con colores actuales de pywal..."
+    "$HOME/.local/bin/generate-pywal-gtk-theme" > /dev/null
+    echo "✅ Tema actualizado"
+else
+    echo "⚠️  No hay colores de pywal disponibles. Ejecuta 'wal -i /ruta/a/imagen.jpg' primero."
+fi
+
+# Abrir nwg-look
+echo "🚀 Abriendo nwg-look..."
+echo "💡 Selecciona 'PywalGTK-Auto' en la lista de temas GTK"
+echo ""
+nwg-look

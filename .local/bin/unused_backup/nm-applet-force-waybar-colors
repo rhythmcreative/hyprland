@@ -1,0 +1,365 @@
+#!/bin/bash
+
+# Script avanzado para forzar completamente los colores de waybar en nm-applet
+# Incluye menús internos, popups y diálogos
+
+set -eo pipefail
+
+echo "🎨 Forzando colores de Waybar en nm-applet (modo agresivo)..."
+
+# Cargar colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+source "$HOME/.cache/wal/colors.sh"
+
+# Extraer colores limpiando comillas
+WAYBAR_BG=$(echo "$background" | tr -d "'")
+WAYBAR_FG=$(echo "$foreground" | tr -d "'")
+WAYBAR_ACCENT=$(echo "$color4" | tr -d "'")
+WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'")
+WAYBAR_WARNING=$(echo "$color3" | tr -d "'")
+
+echo "🔧 Usando colores:"
+echo "  BG: $WAYBAR_BG | FG: $WAYBAR_FG | Accent: $WAYBAR_ACCENT"
+
+# Crear CSS más agresivo que cubra todos los casos
+create_aggressive_nm_applet_css() {
+    local gtk3_dir="$HOME/.config/gtk-3.0"
+    local gtk4_dir="$HOME/.config/gtk-4.0"
+    local css_file="$gtk3_dir/nm-applet-force.css"
+    
+    mkdir -p "$gtk3_dir" "$gtk4_dir"
+    
+    cat > "$css_file" << EOF
+/* nm-applet AGGRESSIVE styling - Updated $(date) */
+/* FUERZA todos los elementos a usar colores de waybar */
+
+/* === VENTANAS PRINCIPALES === */
+window,
+window.background,
+.background,
+dialog,
+messagedialog,
+.dialog,
+.nm-applet-window,
+.nm-applet,
+#nm-applet {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+/* === MENÚS Y POPUPS === */
+menu,
+.menu,
+menubar,
+.menubar,
+popover,
+.popover,
+popover.background,
+popover > contents {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+    border-radius: 6px !important;
+}
+
+/* === ITEMS DE MENÚ === */
+menuitem,
+.menuitem,
+menubar > menuitem,
+menu > menuitem,
+popover menuitem {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    padding: 8px 12px !important;
+    border: none !important;
+    border-radius: 4px !important;
+}
+
+menuitem:hover,
+.menuitem:hover,
+menubar > menuitem:hover,
+menu > menuitem:hover,
+popover menuitem:hover {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_BG !important;
+}
+
+menuitem:selected,
+.menuitem:selected {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_BG !important;
+}
+
+/* === LISTAS Y ELEMENTOS SELECCIONABLES === */
+list,
+listbox,
+.list,
+.listbox,
+listview,
+.listview {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+list row,
+listbox row,
+listview row,
+.list row,
+.listbox row,
+.listview row {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    padding: 6px 10px !important;
+}
+
+list row:hover,
+listbox row:hover,
+listview row:hover,
+list row:selected,
+listbox row:selected,
+listview row:selected {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_BG !important;
+}
+
+/* === ENTRADAS DE TEXTO === */
+entry,
+.entry,
+textview,
+.textview {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 2px solid $WAYBAR_ACCENT !important;
+    border-radius: 4px !important;
+    padding: 6px !important;
+}
+
+entry:focus,
+.entry:focus {
+    border-color: $WAYBAR_HIGHLIGHT !important;
+    box-shadow: 0 0 0 2px $WAYBAR_HIGHLIGHT !important;
+}
+
+/* === BOTONES === */
+button,
+.button {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_BG !important;
+    border: none !important;
+    border-radius: 4px !important;
+    padding: 8px 16px !important;
+    font-weight: bold !important;
+}
+
+button:hover,
+.button:hover {
+    background-color: $WAYBAR_HIGHLIGHT !important;
+    opacity: 0.9 !important;
+}
+
+button:active,
+.button:active {
+    background-color: $WAYBAR_WARNING !important;
+}
+
+/* === SEPARADORES === */
+separator,
+.separator {
+    background-color: $WAYBAR_ACCENT !important;
+    opacity: 0.4 !important;
+}
+
+/* === BARRAS DE DESPLAZAMIENTO === */
+scrollbar,
+.scrollbar {
+    background-color: $WAYBAR_BG !important;
+}
+
+scrollbar slider,
+.scrollbar slider {
+    background-color: $WAYBAR_ACCENT !important;
+    border-radius: 10px !important;
+}
+
+scrollbar slider:hover {
+    background-color: $WAYBAR_HIGHLIGHT !important;
+}
+
+/* === INDICADORES DE CONEXIÓN === */
+.connection-active,
+.connected {
+    color: $WAYBAR_ACCENT !important;
+    font-weight: bold !important;
+}
+
+.connection-inactive,
+.disconnected {
+    color: $WAYBAR_WARNING !important;
+    opacity: 0.7 !important;
+}
+
+/* === ICONOS DE TRAY === */
+.system-tray,
+systray {
+    background-color: transparent !important;
+}
+
+.system-tray image,
+systray image {
+    color: $WAYBAR_FG !important;
+}
+
+/* === TOOLTIPS === */
+tooltip,
+.tooltip {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+    border-radius: 4px !important;
+    padding: 6px !important;
+}
+
+/* === FUERZA TODOS LOS WIDGETS GTK === */
+* {
+    -gtk-icon-theme: "Adwaita" !important;
+}
+
+/* Fuerza colores en widgets específicos de NetworkManager */
+.nm-wifi-dialog,
+.nm-connection-editor,
+.nm-connection-list {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+}
+
+/* === OVERRIDE GLOBAL PARA ASEGURAR APLICACIÓN === */
+GtkWindow,
+GtkDialog,
+GtkMenu,
+GtkMenuItem,
+GtkListBox,
+GtkEntry,
+GtkButton {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+}
+EOF
+
+    echo "📝 CSS agresivo creado en: $css_file"
+    
+    # Copiar a GTK4
+    cp "$css_file" "$gtk4_dir/nm-applet-force.css"
+    
+    # Actualizar gtk.css principal
+    local main_css="$gtk3_dir/gtk.css"
+    if [[ -f "$main_css" ]]; then
+        # Remover imports anteriores
+        sed -i '/nm-applet.*\.css/d' "$main_css"
+    fi
+    
+    # Agregar import al principio
+    echo '@import "nm-applet-force.css";' | cat - "$main_css" > temp 2>/dev/null && mv temp "$main_css" || echo '@import "nm-applet-force.css";' > "$main_css"
+    
+    # Lo mismo para GTK4
+    local main_css4="$gtk4_dir/gtk.css"
+    if [[ -f "$main_css4" ]]; then
+        sed -i '/nm-applet.*\.css/d' "$main_css4"
+    fi
+    echo '@import "nm-applet-force.css";' | cat - "$main_css4" > temp 2>/dev/null && mv temp "$main_css4" || echo '@import "nm-applet-force.css";' > "$main_css4"
+    
+    echo "✅ CSS principal actualizado con import forzado"
+}
+
+# Función para forzar la recarga de GTK
+force_gtk_reload() {
+    echo "🔄 Forzando recarga completa de temas GTK..."
+    
+    # Establecer variables de entorno
+    export GTK_THEME="Default"
+    export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+    export GDK_BACKEND="wayland,x11"
+    
+    # Recargar configuración GTK
+    if command -v gsettings > /dev/null; then
+        gsettings set org.gnome.desktop.interface gtk-theme "Default" 2>/dev/null || true
+        sleep 1
+        gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+    fi
+    
+    # Enviar señales D-Bus para forzar recarga
+    if command -v dbus-send > /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged string:"gtk-theme-name" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        dbus-send --type=signal /org/freedesktop/Notifications org.freedesktop.Notifications.StyleChanged 2>/dev/null || true
+    fi
+    
+    echo "✅ Recarga GTK completada"
+}
+
+# Función para iniciar nm-applet con configuración forzada
+start_nm_applet_forced() {
+    echo "🚀 Iniciando nm-applet con colores forzados..."
+    
+    # Variables de entorno específicas
+    export GTK_THEME="PywalGTK-Auto"
+    export GTK_CSD=0
+    export GTK_OVERLAY_SCROLLING=0
+    export GDK_BACKEND="wayland,x11"
+    
+    # Iniciar nm-applet con configuración forzada
+    nohup env \
+        GTK_THEME="PywalGTK-Auto" \
+        GTK2_RC_FILES="$HOME/.gtkrc-2.0" \
+        GDK_BACKEND="wayland,x11" \
+        nm-applet > /dev/null 2>&1 &
+    
+    sleep 3
+    
+    if pgrep -x nm-applet > /dev/null; then
+        echo "✅ nm-applet iniciado con colores forzados"
+        
+        # Notificación
+        if command -v notify-send > /dev/null; then
+            notify-send "🎨 nm-applet" "Colores de Waybar aplicados (modo forzado)" -t 3000 -i network-wireless 2>/dev/null || true
+        fi
+        
+        return 0
+    else
+        echo "❌ Error iniciando nm-applet"
+        return 1
+    fi
+}
+
+# Ejecución principal
+main() {
+    echo "=== Aplicando colores Waybar a nm-applet (MODO FORZADO) ==="
+    
+    # Matar nm-applet existente
+    if pgrep -x nm-applet > /dev/null; then
+        pkill nm-applet
+        sleep 2
+    fi
+    
+    # Crear CSS agresivo
+    create_aggressive_nm_applet_css
+    
+    # Forzar recarga GTK
+    force_gtk_reload
+    
+    # Iniciar nm-applet con configuración forzada
+    start_nm_applet_forced
+    
+    echo "🎉 ¡Aplicación completada! Los menús internos ahora deberían usar los colores de Waybar."
+    echo "💡 Si aún ves colores antiguos, reinicia waybar: pkill waybar && waybar &"
+}
+
+# Ejecutar
+main

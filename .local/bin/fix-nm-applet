@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# fix-nm-applet - Script rápido para solucionar problemas con nm-applet
+# Útil cuando nm-applet se mata y no vuelve a iniciarse
+
+echo "🔧 Solucionando problemas de nm-applet..."
+
+# Matar cualquier instancia colgada
+echo "🛑 Cerrando instancias problemáticas de nm-applet..."
+pkill -9 nm-applet 2>/dev/null || true
+sleep 1
+
+# Usar el script watchdog para reiniciar limpiamente
+echo "🚀 Reiniciando nm-applet..."
+if [[ -x "$HOME/.local/bin/nm-applet-watchdog" ]]; then
+    "$HOME/.local/bin/nm-applet-watchdog" restart
+else
+    # Fallback manual
+    env GTK_THEME="Arc-Dark" GDK_BACKEND="wayland,x11" nohup nm-applet > /dev/null 2>&1 &
+    sleep 2
+fi
+
+# Verificar estado
+echo "📊 Estado final:"
+if pgrep -x nm-applet > /dev/null; then
+    pid=$(pgrep -x nm-applet)
+    echo "✅ nm-applet está funcionando (PID: $pid)"
+    notify-send "✅ nm-applet" "Reparado exitosamente" -t 3000 2>/dev/null || true
+else
+    echo "❌ nm-applet sigue sin funcionar"
+    notify-send "❌ nm-applet" "No se pudo reparar" -t 3000 2>/dev/null || true
+fi

@@ -1,0 +1,294 @@
+#!/bin/bash
+# Script para aplicar tema GTK4 basado en pywal
+
+set -e
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Función para mostrar mensajes
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Función para verificar dependencias
+check_dependencies() {
+    log_info "Verificando dependencias..."
+    
+    if ! command -v wal &> /dev/null; then
+        log_error "pywal no está instalado. Instálalo con: pip install pywal"
+        exit 1
+    fi
+    
+    log_success "Todas las dependencias están disponibles"
+}
+
+# Función para generar tema desde wallpaper
+generate_theme_from_wallpaper() {
+    local wallpaper_path="$1"
+    
+    if [ -z "$wallpaper_path" ]; then
+        log_error "No se proporcionó ruta de wallpaper"
+        exit 1
+    fi
+    
+    if [ ! -f "$wallpaper_path" ]; then
+        log_error "El archivo de wallpaper no existe: $wallpaper_path"
+        exit 1
+    fi
+    
+    log_info "Generando paleta de colores desde: $wallpaper_path"
+    
+    # Generar paleta con pywal
+    wal -i "$wallpaper_path" -n -q
+    
+    log_success "Paleta de colores generada"
+}
+
+# Función para aplicar tema GTK4
+apply_gtk4_theme() {
+    log_info "Aplicando tema GTK4..."
+    
+    # Crear directorio para el tema si no existe
+    local gtk_theme_dir="$HOME/.config/gtk-4.0"
+    mkdir -p "$gtk_theme_dir"
+    
+    # Template personalizado
+    local template_file="$HOME/.config/wal/templates/gtk4-theme.css"
+    local output_file="$gtk_theme_dir/gtk.css"
+    
+    if [ -f "$template_file" ]; then
+        log_info "Usando template personalizado"
+        # Usar template personalizado con wal
+        wal --theme "$(cat ~/.cache/wal/wal)" -n -q
+        # Copiar el archivo generado personalizado
+        if [ -f "$HOME/.cache/wal/gtk4-theme.css" ]; then
+            cp "$HOME/.cache/wal/gtk4-theme.css" "$output_file"
+        else
+            log_warning "Template personalizado no encontrado, usando el por defecto"
+            cp "$HOME/.cache/wal/gtk4.css" "$output_file"
+        fi
+    else
+        log_info "Usando template por defecto de pywal"
+        cp "$HOME/.cache/wal/gtk4.css" "$output_file"
+    fi
+    
+    # También crear para GTK3 por compatibilidad
+    local gtk3_theme_dir="$HOME/.config/gtk-3.0"
+    mkdir -p "$gtk3_theme_dir"
+    
+    if [ -f "$HOME/.cache/wal/gtk3.css" ]; then
+        cp "$HOME/.cache/wal/gtk3.css" "$gtk3_theme_dir/gtk.css"
+    fi
+    
+    log_success "Tema GTK aplicado"
+}
+
+# Función para recargar aplicaciones GTK
+reload_gtk_apps() {
+    log_info "Recargando configuración GTK..."
+    
+    # Recargar configuración de GTK
+    if command -v gsettings &> /dev/null; then
+        # Cambiar temporalmente el tema para forzar recarga
+        current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme)
+        gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+        sleep 0.5
+        gsettings set org.gnome.desktop.interface gtk-theme "$current_theme"
+    fi
+    
+    # Enviar señal a aplicaciones GTK para recargar CSS
+    pkill -USR1 -f gtk || true
+    
+    # Si está disponible, recargar theme-manager
+    if command -v theme-manager &> /dev/null; then
+        theme-manager reload &> /dev/null || true
+    fi
+    
+    log_success "Configuración GTK recargada"
+}
+
+# Función para crear entrada de desktop
+create_desktop_entry() {
+    local desktop_dir="$HOME/.local/share/applications"
+    mkdir -p "$desktop_dir"
+    
+    cat > "$desktop_dir/pywal-gtk4-theme.desktop" << 'EOF'
+[Desktop Entry]
+Name=PyWal GTK4 Theme Applier
+Comment=Apply GTK4 theme based on wallpaper colors using PyWal
+Exec=apply-pywal-gtk4 --current-wallpaper
+Icon=preferences-desktop-theme
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;
+Keywords=theme;gtk;pywal;colors;wallpaper;
+EOF
+    
+    log_success "Entrada de aplicación creada"
+}
+
+# Función para mostrar información del tema actual
+show_current_info() {
+    log_info "Información del tema actual:"
+    
+    if [ -f "$HOME/.cache/wal/wal" ]; then
+        echo "  Wallpaper actual: $(cat ~/.cache/wal/wal)"
+    else
+        echo "  No hay wallpaper configurado con pywal"
+    fi
+    
+    if [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
+        echo "  Tema GTK4: Aplicado"
+        echo "  Archivo: ~/.config/gtk-4.0/gtk.css"
+    else
+        echo "  Tema GTK4: No aplicado"
+    fi
+    
+    if [ -f "$HOME/.config/gtk-3.0/gtk.css" ]; then
+        echo "  Tema GTK3: Aplicado"
+    fi
+    
+    # Mostrar algunos colores principales
+    if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+        echo "  Colores principales:"
+        source "$HOME/.cache/wal/colors.sh"
+        echo "    Background: $background"
+        echo "    Foreground: $foreground"
+        echo "    Accent: $color1"
+    fi
+}
+
+# Función para configurar aplicación automática
+setup_auto_apply() {
+    log_info "Configurando aplicación automática..."
+    
+    # Crear directorio para hooks de pywal
+    local hooks_dir="$HOME/.config/wal/done.d"
+    mkdir -p "$hooks_dir"
+    
+    # Crear script hook que se ejecuta después de generar paleta
+    cat > "$hooks_dir/gtk4-theme.sh" << 'EOF'
+#!/bin/bash
+# Hook para aplicar tema GTK4 automáticamente después de pywal
+apply-pywal-gtk4 --apply-only
+EOF
+    
+    chmod +x "$hooks_dir/gtk4-theme.sh"
+    
+    log_success "Aplicación automática configurada"
+    log_info "El tema se aplicará automáticamente cuando cambies el wallpaper con pywal"
+}
+
+# Función para mostrar ayuda
+show_help() {
+    cat << 'EOF'
+apply-pywal-gtk4 - Aplicar tema GTK4 basado en pywal
+
+USAGE:
+    apply-pywal-gtk4 [OPTIONS] [WALLPAPER]
+
+OPTIONS:
+    -h, --help              Mostrar esta ayuda
+    --current-wallpaper     Usar wallpaper actual de pywal
+    --apply-only            Solo aplicar tema (no generar paleta)
+    --setup-auto            Configurar aplicación automática
+    --info                  Mostrar información del tema actual
+    --create-desktop        Crear entrada de aplicación
+    --reload                Recargar aplicaciones GTK
+
+EXAMPLES:
+    # Aplicar tema desde imagen
+    apply-pywal-gtk4 ~/Pictures/wallpaper.jpg
+    
+    # Usar wallpaper actual de pywal
+    apply-pywal-gtk4 --current-wallpaper
+    
+    # Solo aplicar tema existente
+    apply-pywal-gtk4 --apply-only
+    
+    # Configurar para que se aplique automáticamente
+    apply-pywal-gtk4 --setup-auto
+
+NOTES:
+    - Requiere pywal instalado
+    - El tema se guarda en ~/.config/gtk-4.0/gtk.css
+    - También se crea tema GTK3 para compatibilidad
+    - Usa template personalizado si existe en ~/.config/wal/templates/gtk4-theme.css
+EOF
+}
+
+# Función principal
+main() {
+    case "${1:-}" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --current-wallpaper)
+            check_dependencies
+            if [ -f "$HOME/.cache/wal/wal" ]; then
+                local current_wallpaper=$(cat ~/.cache/wal/wal)
+                generate_theme_from_wallpaper "$current_wallpaper"
+                apply_gtk4_theme
+                reload_gtk_apps
+            else
+                log_error "No hay wallpaper configurado con pywal"
+                log_info "Usa: wal -i /path/to/wallpaper.jpg"
+                exit 1
+            fi
+            ;;
+        --apply-only)
+            check_dependencies
+            apply_gtk4_theme
+            reload_gtk_apps
+            ;;
+        --setup-auto)
+            setup_auto_apply
+            ;;
+        --info)
+            show_current_info
+            ;;
+        --create-desktop)
+            create_desktop_entry
+            ;;
+        --reload)
+            reload_gtk_apps
+            ;;
+        "")
+            log_error "No se proporcionó wallpaper"
+            show_help
+            exit 1
+            ;;
+        *)
+            if [ -f "$1" ]; then
+                check_dependencies
+                generate_theme_from_wallpaper "$1"
+                apply_gtk4_theme
+                reload_gtk_apps
+            else
+                log_error "Archivo no encontrado: $1"
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+# Ejecutar función principal
+main "$@"

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Post-hook para Pywal - ejecuta pywal-tela-sync automáticamente
+
+# Función para ejecutar pywal-tela-sync después de Pywal
+run_pywal_tela_sync() {
+    # Esperar un poco para que Pywal termine
+    sleep 3
+    
+    # Ejecutar pywal-tela-sync si existe
+    if command -v pywal-tela-sync >/dev/null 2>&1; then
+        echo "Actualizando tema de iconos Tela con colores de Pywal..."
+        pywal-tela-sync --no-apply >/dev/null 2>&1 &
+        
+        # Aplicar el tema después de generarlo
+        sleep 5
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.desktop.interface icon-theme "PywalSync Tela"
+        fi
+        if command -v kwriteconfig5 >/dev/null 2>&1; then
+            kwriteconfig5 --file kdeglobals --group Icons --key Theme "PywalSync Tela"
+        fi
+        
+        echo "Tema de iconos PywalSync-Tela actualizado!"
+    fi
+    
+    # Actualizar nwg-dock-hyprland con nuevos colores
+    if command -v update-nwg-dock-colors >/dev/null 2>&1; then
+        echo "Actualizando nwg-dock-hyprland con colores de Pywal..."
+        update-nwg-dock-colors
+    fi
+}
+
+# Ejecutar en background
+run_pywal_tela_sync &

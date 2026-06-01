@@ -1,0 +1,140 @@
+#!/bin/bash
+set -e
+
+# Wallpaper Selector con Preview
+# Script mejorado para mostrar thumbnails en rofi
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+THUMBNAILS_DIR="$HOME/.cache/wallpaper-thumbnails"
+TEMP_DIR="/tmp/wallpaper-selector-$$"
+THUMBNAIL_SIZE="300x200"
+
+# Crear directorios necesarios
+mkdir -p "$THUMBNAILS_DIR" "$TEMP_DIR"
+
+# Limpiar al salir
+cleanup() {
+    rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+# Verificar directorio de wallpapers
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado"
+    exit 1
+fi
+
+# Obtener imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No se encontraron imágenes en $WALLPAPER_DIR"
+    exit 1
+fi
+
+echo "Encontradas ${#images[@]} imágenes"
+
+# Función para crear thumbnail
+create_thumbnail() {
+    local img="$1"
+    local basename_img=$(basename "$img")
+    local thumb_path="$THUMBNAILS_DIR/${basename_img%.*}_thumb.png"
+    
+    # Si no existe el thumbnail o la imagen es más nueva
+    if [[ ! -f "$thumb_path" || "$img" -nt "$thumb_path" ]]; then
+        echo "Creando thumbnail para: $basename_img"
+        
+        # Para GIFs tomar primer frame
+        if [[ "${img,,}" == *.gif ]]; then
+            magick "$img[0]" -resize "$THUMBNAIL_SIZE^" -gravity center -extent "$THUMBNAIL_SIZE" "$thumb_path" 2>/dev/null
+        else
+            magick "$img" -resize "$THUMBNAIL_SIZE^" -gravity center -extent "$THUMBNAIL_SIZE" "$thumb_path" 2>/dev/null
+        fi
+        
+        # Si falló, crear placeholder
+        if [[ ! -f "$thumb_path" ]]; then
+            magick -size "$THUMBNAIL_SIZE" xc:gray -gravity center -pointsize 20 -fill white -annotate +0+0 "No\nPreview" "$thumb_path" 2>/dev/null
+        fi
+    fi
+    
+    echo "$thumb_path"
+}
+
+# Preparar lista para rofi
+rofi_list="$TEMP_DIR/rofi_list"
+declare -A image_map
+
+# Generar thumbnails y crear lista
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_size=$(du -h "$img" | cut -f1)
+    
+    # Crear thumbnail
+    thumb_path=$(create_thumbnail "$img")
+    
+    # Crear entrada para rofi
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎬 ${basename_img} ($file_size)"
+    else
+        display_name="🖼️ ${basename_img} ($file_size)"
+    fi
+    
+    # Mapear nombre a archivo
+    image_map["$display_name"]="$img"
+    
+    # Agregar a lista de rofi con formato icon
+    echo -e "$display_name\0icon\x1f$thumb_path" >> "$rofi_list"
+done
+
+# Mostrar selector con rofi
+selected=$(rofi -dmenu \
+    -p "🎨 Selecciona Wallpaper:" \
+    -theme "$HOME/.local/share/rofi/themes/wallpaper-preview.rasi" \
+    -format "s" \
+    -markup-rows \
+    -sep '\0' \
+    -show-icons \
+    < "$rofi_list")
+
+# Si no se seleccionó nada
+if [[ -z "$selected" ]]; then
+    exit 0
+fi
+
+# Obtener archivo seleccionado
+selected_file="${image_map[$selected]}"
+
+if [[ -z "$selected_file" ]]; then
+    notify-send "❌ Error" "Archivo no encontrado"
+    exit 1
+fi
+
+echo "Seleccionado: $selected_file"
+
+# Aplicar wallpaper
+if command -v swww >/dev/null 2>&1; then
+    # Verificar que swww-daemon esté corriendo
+    if ! pgrep -x "swww-daemon" > /dev/null; then
+        notify-send "🔄 Iniciando swww-daemon..."
+        swww-daemon --format xrgb &
+        sleep 2
+    fi
+    
+    # Aplicar wallpaper
+    if [[ "${selected_file,,}" == *.gif ]]; then
+        swww img "$selected_file" --transition-type fade --transition-duration 0.8
+        notify-send "🎬 GIF Aplicado" "$(basename "$selected_file")"
+    else
+        swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.2
+        notify-send "🖼️ Wallpaper Aplicado" "$(basename "$selected_file")"
+    fi
+    
+    # Guardar wallpaper actual
+    echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+    
+elif command -v feh >/dev/null 2>&1; then
+    feh --bg-fill "$selected_file"
+    notify-send "🖼️ Wallpaper Aplicado" "$(basename "$selected_file")"
+else
+    notify-send "❌ Error" "No se encontró swww ni feh"
+fi

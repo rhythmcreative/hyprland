@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Script de diagnóstico para waybar
+# Ayuda a identificar problemas comunes
+
+echo "=== DIAGNÓSTICO DE WAYBAR ==="
+echo "Fecha: $(date)"
+echo
+
+echo "1. PROCESOS WAYBAR:"
+pgrep -af waybar || echo "❌ No hay procesos waybar corriendo"
+echo
+
+echo "2. ARCHIVOS DE CONFIGURACIÓN:"
+echo -n "config: "
+[[ -f ~/.config/waybar/config ]] && echo "✅ Existe" || echo "❌ No existe"
+echo -n "style.css: "
+[[ -f ~/.config/waybar/style.css ]] && echo "✅ Existe" || echo "❌ No existe"
+echo -n "colors-pywal.css: "
+[[ -f ~/.config/waybar/colors-pywal.css ]] && echo "✅ Existe" || echo "❌ No existe"
+echo
+
+echo "3. ARCHIVOS PYWAL:"
+echo -n "colors.sh: "
+[[ -f ~/.cache/wal/colors.sh ]] && echo "✅ Existe" || echo "❌ No existe"
+echo -n "colors-hyprland.conf: "
+[[ -f ~/.cache/wal/colors-hyprland.conf ]] && echo "✅ Existe" || echo "❌ No existe"
+echo
+
+echo "4. LOGS RECIENTES:"
+if [[ -f ~/.cache/wallpaper-changer-fixed.log ]]; then
+    echo "Últimas 5 líneas del log de wallpaper:"
+    tail -5 ~/.cache/wallpaper-changer-fixed.log
+else
+    echo "❌ No hay log del script de wallpaper"
+fi
+echo
+
+echo "5. VERIFICACIÓN DE WAYBAR:"
+waybar_pid=$(pgrep -x waybar)
+if [[ -n "$waybar_pid" ]]; then
+    echo "✅ Waybar corriendo (PID: $waybar_pid)"
+    echo "Memoria usada: $(ps -o rss= -p $waybar_pid | tr -d ' ')KB"
+    echo "Tiempo corriendo: $(ps -o etime= -p $waybar_pid | tr -d ' ')"
+else
+    echo "❌ Waybar no está corriendo"
+    echo "Intentando iniciar waybar..."
+    waybar > /dev/null 2>&1 &
+    sleep 2
+    if pgrep -x waybar > /dev/null; then
+        echo "✅ Waybar iniciado exitosamente"
+    else
+        echo "❌ No se pudo iniciar waybar"
+        echo "Verificando errores..."
+        waybar 2>&1 | head -5
+    fi
+fi
+
+echo
+echo "=== FIN DIAGNÓSTICO ==="

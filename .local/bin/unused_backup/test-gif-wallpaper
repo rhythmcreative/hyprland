@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Script de prueba para verificar que swww funciona correctamente con GIFs
+echo "🎬 Probando GIF como wallpaper..."
+
+GIF_PATH="$HOME/Pictures/Wallpapers/asuka-x-evangelion-unit-02-moewalls-com.gif"
+
+if [[ -f "$GIF_PATH" ]]; then
+    echo "✅ GIF encontrado: $(basename "$GIF_PATH")"
+    echo "🔄 Aplicando como wallpaper..."
+    
+    # Aplicar el GIF con swww
+    swww img "$GIF_PATH" --transition-type fade --transition-duration 0.8 --transition-fps 60
+    
+    if [[ $? -eq 0 ]]; then
+        echo "✅ ¡GIF aplicado exitosamente como wallpaper!"
+        notify-send "🎬 GIF Wallpaper" "$(basename "$GIF_PATH") aplicado correctamente"
+    else
+        echo "❌ Error al aplicar el GIF"
+        notify-send "❌ Error" "No se pudo aplicar el GIF como wallpaper"
+    fi
+else
+    echo "❌ No se encontró el GIF en $GIF_PATH"
+    notify-send "❌ Error" "GIF no encontrado"
+fi

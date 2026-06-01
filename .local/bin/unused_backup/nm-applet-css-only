@@ -1,0 +1,502 @@
+#!/bin/bash
+
+# nm-applet CSS updater - VERSIÓN MEJORADA CON ESTÁNDARES GTK
+# Actualiza nm-applet usando archivos CSS estándar de GTK
+# Compatible con temas Arc-Dark y colores de pywal
+
+LOG_FILE="$HOME/.cache/nm-applet-css-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "🎨 === SINCRONIZANDO CSS DE NM-APPLET CON PYWAL ==="
+
+# Verificar que existan los colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "❌ ERROR: Archivo de colores de pywal no encontrado"
+    notify-send "❌ nm-applet CSS" "Error: Sin colores de pywal" -t 3000 2>/dev/null || true
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$HOME/.cache/wal/colors.sh"
+log "✅ Colores de pywal cargados (bg:$background, accent:$color1)"
+
+# Crear directorios para GTK si no existen
+GTK3_DIR="$HOME/.config/gtk-3.0"
+GTK4_DIR="$HOME/.config/gtk-4.0"
+
+mkdir -p "$GTK3_DIR" "$GTK4_DIR"
+
+# Crear CSS específico para nm-applet usando estándares GTK
+log "🎨 Creando archivos CSS estándar de GTK..."
+
+# Función para crear CSS de nm-applet IDÉNTICO a waybar
+create_nm_applet_css() {
+    local css_file="$1"
+    
+    cat > "$css_file" << EOF
+/* CSS de nm-applet SINCRONIZADO CON WAYBAR - Colores idénticos */
+
+/* Variables de color - EXACTAMENTE COMO WAYBAR */
+@define-color nm_bg ${background};
+@define-color nm_fg ${foreground};
+@define-color nm_accent_primary ${color4};     /* Azul principal - igual que clock */
+@define-color nm_accent_secondary ${color1};   /* Color1 - para alertas/errores */
+@define-color nm_hover_color ${color8};        /* EXACTO a waybar hover */
+@define-color nm_inactive ${color7};
+@define-color nm_borders ${color8};
+@define-color nm_success ${color2};
+@define-color nm_warning ${color3};
+@define-color nm_connected ${color4};
+@define-color nm_disconnected ${color1};
+
+/* === APLICACIONES NETWORKMANAGER === */
+.nm-applet,
+window.nm-applet,
+nm-applet {
+    background-color: @nm_bg;
+    color: @nm_fg;
+    font-family: 'SF Pro Text', 'Inter', 'Segoe UI, NotoSans Nerd Font', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* === MENÚS PRINCIPALES - ESTILO WAYBAR === */
+.nm-applet menu,
+window.nm-applet menu,
+nm-applet menu {
+    background-color: @nm_bg;
+    color: @nm_fg;
+    border: 1px solid @nm_borders;
+    border-radius: 6px;  /* Igual que waybar modules */
+    padding: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);  /* Igual que waybar */
+    margin: 5px;
+}
+
+/* === ITEMS DEL MENÚ - HOVER IDÉNTICO A WAYBAR === */
+.nm-applet menuitem,
+window.nm-applet menuitem,
+nm-applet menuitem {
+    background-color: transparent;
+    color: @nm_fg;
+    padding: 0.3rem 0.7rem;  /* EXACTO como waybar modules */
+    border-radius: 0;
+    margin: 0;
+    border: none;
+    border-right: 1px solid @nm_borders;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+/* HOVER - EXACTAMENTE IGUAL QUE WAYBAR */
+.nm-applet menuitem:hover,
+window.nm-applet menuitem:hover,
+nm-applet menuitem:hover {
+    background-color: @nm_hover_color;  /* MISMO color8 que waybar */
+    color: @nm_fg;  /* Mantener foreground como waybar */
+}
+
+.nm-applet menuitem:selected,
+window.nm-applet menuitem:selected,
+nm-applet menuitem:selected {
+    background-color: @nm_accent_primary;  /* Azul como clock de waybar */
+    color: @nm_bg;
+}
+
+/* === CONECTIVIDAD - COLORES IGUALES QUE BLUETOOTH === */
+.nm-applet menuitem.connected,
+window.nm-applet menuitem.connected {
+    color: @nm_connected;  /* Azul para conectado */
+}
+
+.nm-applet menuitem.connecting,
+window.nm-applet menuitem.connecting {
+    color: @nm_warning;  /* Naranja para conectando */
+}
+
+.nm-applet menuitem.disconnected,
+window.nm-applet menuitem.disconnected {
+    color: @nm_disconnected;  /* Rojo para desconectado */
+}
+
+/* === SEPARADORES === */
+.nm-applet separator,
+window.nm-applet separator,
+nm-applet separator {
+    background-color: @nm_borders;
+    margin: 4px 8px;
+    min-height: 1px;
+}
+
+/* === BOTONES - ESTILO WAYBAR === */
+.nm-applet button,
+window.nm-applet button,
+nm-applet button {
+    background-color: @nm_accent_primary;
+    color: @nm_bg;
+    border: none;
+    padding: 0.3rem 0.7rem;  /* Igual que waybar */
+    border-radius: 6px;  /* Igual que waybar */
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+.nm-applet button:hover,
+window.nm-applet button:hover,
+nm-applet button:hover {
+    background-color: @nm_hover_color;  /* Mismo hover que waybar */
+    color: @nm_fg;
+}
+
+/* === LABELS Y TEXTO === */
+.nm-applet label,
+window.nm-applet label,
+nm-applet label {
+    color: @nm_fg;
+    background: transparent;
+    font-weight: 600;
+}
+
+/* === CAMPOS DE ENTRADA === */
+.nm-applet entry,
+window.nm-applet entry,
+nm-applet entry {
+    background-color: @nm_bg;
+    color: @nm_fg;
+    border: 1px solid @nm_borders;
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    transition: border-color 0.2s ease-in-out;
+}
+
+.nm-applet entry:focus,
+window.nm-applet entry:focus,
+nm-applet entry:focus {
+    border-color: @nm_accent_primary;
+    box-shadow: 0 0 4px @nm_accent_primary;
+}
+
+/* === CHECKBOXES Y CONTROLES === */
+.nm-applet check,
+window.nm-applet check,
+nm-applet check {
+    color: @nm_accent_primary;
+}
+
+.nm-applet check:checked,
+window.nm-applet check:checked,
+nm-applet check:checked {
+    color: @nm_success;
+}
+
+.nm-applet radio,
+window.nm-applet radio,
+nm-applet radio {
+    color: @nm_accent_primary;
+}
+
+.nm-applet radio:checked,
+window.nm-applet radio:checked,
+nm-applet radio:checked {
+    color: @nm_success;
+}
+
+/* === TOOLTIPS - ESTILO WAYBAR === */
+.nm-applet tooltip,
+window.nm-applet tooltip,
+nm-applet tooltip {
+    background-color: @nm_bg;
+    color: @nm_fg;
+    border: 1px solid @nm_borders;
+    border-radius: 6px;
+    padding: 5px 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    font-size: 12px;
+}
+
+/* === INDICADORES DE ESTADO === */
+.nm-applet .signal-strength,
+window.nm-applet .signal-strength {
+    color: @nm_success;  /* Verde para buena señal */
+}
+
+.nm-applet .signal-weak,
+window.nm-applet .signal-weak {
+    color: @nm_warning;  /* Naranja para señal débil */
+}
+
+.nm-applet .no-signal,
+window.nm-applet .no-signal {
+    color: @nm_disconnected;  /* Rojo para sin señal */
+}
+
+/* === ELEMENTOS ESPECÍFICOS DE NM-APPLET === */
+.nm-applet .access-point,
+window.nm-applet .access-point {
+    padding: 0.3rem 0.7rem;
+    margin: 0;
+    border-radius: 0;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.nm-applet .access-point:hover,
+window.nm-applet .access-point:hover {
+    background-color: @nm_hover_color;  /* Exacto como waybar hover */
+}
+
+EOF
+    
+    log "✅ CSS WAYBAR-COMPATIBLE creado: $css_file"
+}
+
+# Crear archivos CSS para GTK3 y GTK4
+create_nm_applet_css "$GTK3_DIR/nm-applet-pywal.css"
+create_nm_applet_css "$GTK4_DIR/nm-applet-pywal.css"
+
+# Función para actualizar gtk.css sin romper configuración existente
+update_gtk_css() {
+    local gtk_dir="$1"
+    local gtk_css="$gtk_dir/gtk.css"
+    
+    # Si ya existe gtk.css, hacer backup
+    if [[ -f "$gtk_css" ]]; then
+        cp "$gtk_css" "$gtk_css.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+    fi
+    
+    # Crear/actualizar gtk.css con import de nm-applet y sincronización waybar
+    cat > "$gtk_css" << EOF
+/* GTK CSS SINCRONIZADO CON WAYBAR - Colores idénticos */
+/* Importar estilos específicos de nm-applet PRIMERO */
+@import url("nm-applet-pywal.css");
+
+/* Mantener compatibilidad con tema Arc-Dark */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+/* === COLORES GLOBALES - EXACTOS A WAYBAR === */
+@define-color theme_bg_color ${background};
+@define-color theme_fg_color ${foreground};
+@define-color theme_selected_bg_color ${color4};      /* Azul principal - como clock */
+@define-color theme_selected_fg_color ${background};
+@define-color theme_text_color ${foreground};
+@define-color theme_base_color ${color0};
+@define-color borders ${color8};
+@define-color warning_color ${color3};
+@define-color error_color ${color1};
+@define-color success_color ${color2};
+@define-color hover_color ${color8};                  /* Color hover waybar */
+@define-color accent_color ${color4};                 /* Azul principal */
+
+/* === SOBREESCRIBIR ELEMENTOS GENÉRICOS DE GTK PARA NM-APPLET === */
+/* Asegurar que todos los popups/menús usen colores waybar */
+popover,
+popover.background {
+    background-color: ${background};
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+popover menu,
+popover menuitem {
+    background-color: transparent;
+    color: ${foreground};
+    padding: 0.3rem 0.7rem;
+    transition: background-color 0.2s ease-in-out;
+}
+
+popover menuitem:hover {
+    background-color: ${color8};
+    color: ${foreground};
+}
+
+popover menuitem:selected {
+    background-color: ${color4};
+    color: ${background};
+}
+
+/* === APLICACIONES ESPECÍFICAS DE SISTEMA === */
+/* Forzar estilo para aplicaciones de red */
+.network-menu,
+.wifi-menu,
+.connection-editor {
+    background-color: ${background};
+    color: ${foreground};
+}
+
+EOF
+    
+    log "✅ GTK CSS actualizado: $gtk_css"
+}
+
+# Actualizar archivos gtk.css
+update_gtk_css "$GTK3_DIR"
+update_gtk_css "$GTK4_DIR"
+
+# Función para aplicar CSS sin matar nm-applet (método ULTRA suave)
+apply_css_without_killing() {
+    log "🔍 Aplicando CSS usando método suave (sin reiniciar procesos)..."
+    
+    # Verificar si nm-applet está corriendo
+    local nm_running=false
+    local original_pid=""
+    if pgrep -x nm-applet > /dev/null; then
+        nm_running=true
+        original_pid=$(pgrep -x nm-applet | head -1)
+        log "✅ nm-applet detectado corriendo (PID: $original_pid)"
+    else
+        log "ℹ️ nm-applet no está corriendo actualmente"
+    fi
+    
+    # Aplicar CSS usando método de refresh suave de GTK
+    log "🎨 Aplicando CSS usando refresh suave de GTK..."
+    
+    if command -v gsettings > /dev/null 2>&1; then
+        # Método 1: Refresh suave de configuración de cursor (no afecta aplicaciones)
+        local current_cursor=$(gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null || echo "'default'")
+        gsettings set org.gnome.desktop.interface cursor-theme "$current_cursor" 2>/dev/null || true
+        
+        # Método 2: Pequeño delay para permitir que GTK procese
+        sleep 0.3
+        
+        # Método 3: Actualizar configuración de fuentes (muy suave)
+        local current_font=$(gsettings get org.gnome.desktop.interface font-name 2>/dev/null || echo "'Sans 11'")
+        gsettings set org.gnome.desktop.interface font-name "$current_font" 2>/dev/null || true
+        
+        # Método 4: Pequeña pausa adicional
+        sleep 0.2
+        
+        log "✅ CSS aplicado usando método suave de GTK"
+        
+        # Verificar que nm-applet sigue corriendo si estaba corriendo antes
+        if $nm_running; then
+            if pgrep -x nm-applet > /dev/null; then
+                local current_pid=$(pgrep -x nm-applet | head -1)
+                if [[ "$current_pid" == "$original_pid" ]]; then
+                    log "✅ nm-applet mantuvo su proceso original (PID: $current_pid)"
+                    log "🎨 CSS aplicado exitosamente SIN REINICIO"
+                    return 0
+                else
+                    log "⚠️ nm-applet cambió de PID ($original_pid -> $current_pid) - posible reinicio externo"
+                    return 0  # Aún exitoso, cambio de PID puede ser normal
+                fi
+            else
+                log "❌ nm-applet se cerró durante la aplicación de CSS"
+                return 1
+            fi
+        else
+            log "✅ CSS aplicado correctamente (nm-applet no estaba corriendo)"
+            return 0
+        fi
+    else
+        log "⚠️ gsettings no disponible, usando método alternativo..."
+        # Método alternativo: solo esperar un poco para que los archivos CSS se propaguen
+        sleep 1
+        log "✅ CSS aplicado usando método alternativo"
+        return 0
+    fi
+}
+
+# Función para iniciar nm-applet SOLO si no está corriendo
+start_nm_applet_if_needed() {
+    if pgrep -x nm-applet > /dev/null; then
+        log "ℹ️ nm-applet ya está corriendo, no es necesario iniciarlo"
+        return 0
+    fi
+    
+    log "🚀 Iniciando nm-applet con colores de pywal..."
+    
+    # Variables de entorno para aplicar CSS personalizado
+    env GTK_THEME="Arc-Dark" \
+        GDK_BACKEND="wayland,x11" \
+        nohup nm-applet > /dev/null 2>&1 &
+    
+    sleep 2  # Tiempo reducido para evitar delays innecesarios
+    
+    # Verificar que se inició correctamente
+    if pgrep -x nm-applet > /dev/null; then
+        log "✅ nm-applet iniciado exitosamente con colores de pywal"
+        return 0
+    else
+        log "❌ Error al iniciar nm-applet, intentando modo fallback..."
+        # Fallback: iniciar sin variables de entorno personalizadas
+        nohup nm-applet > /dev/null 2>&1 &
+        sleep 2
+        
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado en modo fallback"
+            return 0
+        else
+            log "❌ ERROR: No se pudo iniciar nm-applet"
+            return 1
+        fi
+    fi
+}
+
+# Aplicar configuración GTK inmediatamente con refresh completo
+log "⚙️ Aplicando configuración GTK y forzando refresh..."
+if command -v gsettings > /dev/null 2>&1; then
+    # Múltiples métodos para forzar recarga de GTK
+    
+    # 1. Cambiar cursor temporalmente (truco clásico)
+    current_cursor=$(gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null || echo "'default'")
+    gsettings set org.gnome.desktop.interface cursor-theme "$current_cursor" 2>/dev/null || true
+    
+    # 2. Cambiar y restaurar tema de iconos para force refresh
+    current_icon_theme=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo "'Tela-circle-black-dark'")
+    gsettings set org.gnome.desktop.interface icon-theme "$current_icon_theme" 2>/dev/null || true
+    
+    # 3. Pequen~a pausa y después forzar reload GTK3/4
+    sleep 0.5
+    
+    # 4. Si existe gtk-update-icon-cache, usarlo
+    if command -v gtk-update-icon-cache > /dev/null 2>&1; then
+        gtk-update-icon-cache -f ~/.local/share/icons 2>/dev/null || true
+        gtk-update-icon-cache -f ~/.icons 2>/dev/null || true
+    fi
+    
+    # 5. Verificar que los temas estén configurados correctamente (sin resetear)
+    if command -v dconf > /dev/null 2>&1; then
+        # Solo asegurar que los temas estén bien configurados, SIN resetear
+        gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface icon-theme "$current_icon_theme" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface cursor-theme "$current_cursor" 2>/dev/null || true
+    fi
+    
+    log "✅ Configuración GTK aplicada con refresh completo"
+fi
+
+# Aplicar CSS usando el método suave (SIN MATAR nm-applet)
+if apply_css_without_killing; then
+    log "✅ nm-applet CSS actualizado exitosamente sin reiniciar procesos"
+else
+    log "⚠️ Hubo un problema aplicando CSS, verificando nm-applet..."
+    # Solo iniciar nm-applet si no está corriendo
+    start_nm_applet_if_needed
+fi
+
+# Verificación final
+if [[ -f "$GTK3_DIR/nm-applet-pywal.css" ]] && [[ -f "$GTK3_DIR/gtk.css" ]]; then
+    log "✅ === SINCRONIZACIÓN DE CSS COMPLETADA ==="
+    
+    # Información de archivos creados
+    log "📂 Archivos actualizados:"
+    log "   • $GTK3_DIR/nm-applet-pywal.css"
+    log "   • $GTK3_DIR/gtk.css"
+    log "   • $GTK4_DIR/nm-applet-pywal.css"
+    log "   • $GTK4_DIR/gtk.css"
+    
+    log "🎨 Colores aplicados: bg=$background, fg=$foreground, accent=$color1"
+    
+    # Notificación final
+    notify-send "🎨 nm-applet CSS" "Sincronizado con colores de pywal" -t 3000 2>/dev/null || true
+    
+    exit 0
+else
+    log "❌ ERROR: No se pudieron crear todos los archivos CSS"
+    notify-send "❌ nm-applet CSS" "Error al crear archivos CSS" -t 3000 2>/dev/null || true
+    exit 1
+fi

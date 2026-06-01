@@ -1,0 +1,115 @@
+#!/bin/bash
+
+# pywal-asusctl-sync
+# Script para sincronizar colores de pywal con el teclado ASUS usando asusctl
+# Autor: Sistema automático
+
+# Configuración
+COLORS_JSON="$HOME/.cache/wal/colors.json"
+COLORS_SH="$HOME/.cache/wal/colors.sh"
+LOG_FILE="$HOME/.local/share/pywal-asusctl/sync.log"
+
+# Crear directorio de logs si no existe
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "$1"
+}
+
+# Función para convertir color hex a formato asusctl (sin #)
+hex_to_asusctl() {
+    echo "${1#\#}"
+}
+
+# Función para extraer color principal de pywal
+get_main_color() {
+    local color_key="$1"
+    if [[ -f "$COLORS_JSON" ]]; then
+        # Extraer color usando jq si está disponible
+        if command -v jq &> /dev/null; then
+            jq -r ".colors.${color_key}" "$COLORS_JSON" 2>/dev/null
+        else
+            # Fallback usando grep y sed
+            grep "\"${color_key}\"" "$COLORS_JSON" | sed 's/.*: *"\([^"]*\)".*/\1/'
+        fi
+    elif [[ -f "$COLORS_SH" ]]; then
+        # Fallback a colors.sh
+        grep "^${color_key}=" "$COLORS_SH" | cut -d"'" -f2
+    fi
+}
+
+# Función para aplicar color al teclado ASUS
+apply_keyboard_color() {
+    local color="$1"
+    local asusctl_color
+    
+    asusctl_color=$(hex_to_asusctl "$color")
+    
+    if [[ -n "$asusctl_color" ]]; then
+        log "Aplicando color $color ($asusctl_color) al teclado ASUS..."
+        
+        # Aplicar color principal (sin zona específica)
+        if asusctl aura static -c "$asusctl_color" 2>/dev/null; then
+            log "Color aplicado al teclado completo"
+        fi
+        
+        # Aplicar a zonas individuales soportadas (Key1, Key2, Key3, Key4)
+        for zone in 1 2 3 4; do
+            if asusctl aura static -c "$asusctl_color" -z "$zone" 2>/dev/null; then
+                log "Color aplicado a zona $zone"
+            fi
+        done
+        
+        log "Color aplicado exitosamente"
+        return 0
+    else
+        log "Error: No se pudo obtener el color"
+        return 1
+    fi
+}
+
+# Función principal
+main() {
+    log "Iniciando sincronización pywal -> ASUS keyboard..."
+    
+    # Verificar que asusctl esté disponible
+    if ! command -v asusctl &> /dev/null; then
+        log "Error: asusctl no está instalado o no está en PATH"
+        exit 1
+    fi
+    
+    # Verificar que existan los archivos de colores
+    if [[ ! -f "$COLORS_JSON" && ! -f "$COLORS_SH" ]]; then
+        log "Error: No se encontraron archivos de colores de pywal"
+        exit 1
+    fi
+    
+    # Obtener color principal (puedes cambiar esto por color1, color2, etc.)
+    # color5 es un amarillo suave bonito
+    main_color=$(get_main_color "color5")
+    
+    # Si color5 está vacío o es muy oscuro, usar color4
+    if [[ -z "$main_color" || "$main_color" == "#000000" || "$main_color" == "#0d201d" ]]; then
+        main_color=$(get_main_color "color4")
+    fi
+    
+    # Si aún no hay color válido, usar el foreground
+    if [[ -z "$main_color" ]]; then
+        main_color=$(get_main_color "foreground")
+    fi
+    
+    if [[ -n "$main_color" ]]; then
+        log "Color seleccionado: $main_color"
+        apply_keyboard_color "$main_color"
+    else
+        log "Error: No se pudo extraer ningún color válido"
+        exit 1
+    fi
+    
+    log "Sincronización completada"
+}
+
+# Ejecutar función principal
+main "$@"

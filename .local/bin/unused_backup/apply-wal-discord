@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Generate Discord theme from pywal colors
+echo "Generating Discord theme from pywal colors..."
+wal-discord
+
+# Check if BetterDiscord is properly installed
+if [ -d "$HOME/.config/BetterDiscord/themes" ] && [ -f "$HOME/.config/BetterDiscord/data/betterdiscord.asar" ]; then
+    # Copy theme to BetterDiscord themes directory
+    echo "Applying theme to BetterDiscord..."
+    cp ~/.cache/wal-discord/style.css ~/.config/BetterDiscord/themes/wal-discord.css
+    echo "✅ wal-discord theme has been applied to BetterDiscord!"
+    echo "📝 Go to Discord Settings → BetterDiscord → Themes and enable 'wal-discord'"
+else
+    echo "⚠️  BetterDiscord no está completamente instalado."
+    echo "📦 Para instalar BetterDiscord:"
+    echo "   1. sudo pacman -S aur/betterdiscord-installer"
+    echo "   2. Ejecuta el instalador y selecciona /opt/discord/"
+    echo ""
+    echo "🔄 O mejor aún, usa Vesktop (Discord client con Vencord integrado):"
+    echo "   sudo pacman -S aur/vesktop-bin"
+    echo ""
+    echo "📁 El theme CSS está listo en: ~/.cache/wal-discord/style.css"
+    echo "📋 Puedes copiarlo manualmente al client de Discord que prefieras"
+fi

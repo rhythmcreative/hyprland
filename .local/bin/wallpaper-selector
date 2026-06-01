@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Selector de Wallpapers Premium - Versión SÚPER RÁPIDA
+# Optimizado para carga instantánea y sincronización inmediata de UI/GTK
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
+ROFI_THEME="$HOME/.config/rofi/wallpaper-select-pywal.rasi"
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    rofi -e "Directorio $WALLPAPER_DIR no encontrado"
+    exit 1
+fi
+
+mkdir -p "$PREVIEW_DIR"
+
+# 1. Obtener lista de imágenes (cacheada en variable para velocidad)
+mapfile -t images < <(find "$WALLPAPER_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    rofi -e "No se encontraron imágenes en $WALLPAPER_DIR"
+    exit 1
+fi
+
+# 2. Generar lista para rofi (Buscador oculto por CSS, filtrado por texto activo)
+TEMP_LIST=$(mktemp)
+for img in "${images[@]}"; do
+    basename_img="${img##*/}"
+    clean_name="${basename_img%.*}"
+    preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
+    
+    # Icono inteligente (usa el original si no hay thumb para no esperar)
+    if [[ -f "$preview_path" ]]; then
+        icon_path="$preview_path"
+    else
+        icon_path="$img"
+    fi
+    
+    echo -e "$basename_img\0icon\x1f$icon_path" >> "$TEMP_LIST"
+done
+
+# 3. Mostrar rofi (Carga instantánea)
+selected=$(rofi -dmenu -i \
+    -p "🖼️  Wallpapers" \
+    -theme "$ROFI_THEME" \
+    -show-icons \
+    -markup-rows \
+    < "$TEMP_LIST")
+
+rm -f "$TEMP_LIST"
+
+# Si no se seleccionó nada, salir
+[[ -z "$selected" ]] && exit 0
+
+# Encontrar ruta completa
+selected_path="$WALLPAPER_DIR/$selected"
+[[ ! -f "$selected_path" ]] && exit 1
+
+# 4. APLICACIÓN INSTANTÁNEA (En paralelo para máxima velocidad)
+
+# A. Wallpaper (swww es casi instantáneo)
+swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.0 &
+
+# B. Sincronización de Colores (Pywal y GTK)
+(
+    # Registrar wallpaper actual primero para evitar race conditions
+    echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+
+    # Ejecutar el script centralizado de sincronización con la ruta directa
+    if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
+        "$HOME/.local/bin/pywal-wallpaper-sync" "$selected_path"
+    else
+        # Fallback si el script no existe
+        wal -i "$selected_path" -n -q
+        hyprctl reload
+    fi
+
+    # Otros componentes específicos
+    [ -x "$HOME/.local/bin/sync-mako-pywal" ] && "$HOME/.local/bin/sync-mako-pywal"
+    [ -x "$HOME/.local/bin/pywal-asusctl-sync" ] && "$HOME/.local/bin/pywal-asusctl-sync" &
+    # [ -x "$HOME/.local/bin/sddm-sync-wrapper" ] && "$HOME/.local/bin/sddm-sync-wrapper" &
+) &
+
+# 5. Generar thumbnails faltantes (mantenimiento en background)
+(
+    for img in "${images[@]}"; do
+        basename_img="${img##*/}"
+        preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
+        if [[ ! -f "$preview_path" ]]; then
+            magick "$img" -resize 300x200^ -gravity center -extent 300x200 "$preview_path" 2>/dev/null
+        fi
+    done
+) &

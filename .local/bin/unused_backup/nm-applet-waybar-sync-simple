@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# nm-applet waybar color synchronizer - SIMPLE & STABLE VERSION
+# Sincroniza nm-applet con colores de pywal de forma rápida y confiable
+
+echo "🔄 Sincronizando nm-applet con colores de pywal..."
+
+# Verificar que pywal esté configurado
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Cargar colores de pywal
+echo "📊 Cargando colores de pywal..."
+source "$HOME/.cache/wal/colors.sh"
+
+# Validar colores básicos
+if [[ ! "$background" =~ ^#[0-9A-Fa-f]{6}$ ]] || [[ ! "$foreground" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+    echo "❌ Error: Colores de pywal no válidos"
+    exit 1
+fi
+
+echo "✅ Colores cargados: bg=$background, fg=$foreground, accent=$color4"
+
+# Crear directorio GTK si no existe
+mkdir -p "$HOME/.config/gtk-3.0"
+mkdir -p "$HOME/.config/gtk-4.0"
+
+# Crear CSS simple para nm-applet
+echo "🎨 Creando CSS para nm-applet..."
+cat > "$HOME/.config/gtk-3.0/nm-applet-pywal.css" << EOF
+/* nm-applet pywal theme - Generated $(date) */
+
+/* NetworkManager applet styling */
+.nm-applet,
+.nm-applet-window {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color4;
+}
+
+/* Menu items */
+.nm-applet menuitem {
+    background-color: $background;
+    color: $foreground;
+    padding: 6px 10px;
+}
+
+.nm-applet menuitem:hover {
+    background-color: $color4;
+    color: $background;
+}
+
+/* Buttons */
+.nm-applet button {
+    background-color: $color4;
+    color: $background;
+    border: none;
+    padding: 4px 8px;
+}
+
+/* Entry fields */
+.nm-applet entry {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color4;
+}
+EOF
+
+# Copiar para GTK4
+cp "$HOME/.config/gtk-3.0/nm-applet-pywal.css" "$HOME/.config/gtk-4.0/nm-applet-pywal.css"
+
+# Actualizar gtk.css principal
+for gtk_dir in "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"; do
+    gtk_css="$gtk_dir/gtk.css"
+    if [[ -f "$gtk_css" ]]; then
+        if ! grep -q "nm-applet-pywal.css" "$gtk_css"; then
+            echo '@import "nm-applet-pywal.css";' | cat - "$gtk_css" > temp && mv temp "$gtk_css"
+        fi
+    else
+        echo '@import "nm-applet-pywal.css";' > "$gtk_css"
+    fi
+done
+
+echo "✅ CSS creado y configurado"
+
+# Reiniciar nm-applet de forma simple
+echo "🔄 Reiniciando nm-applet..."
+
+# Matar nm-applet actual
+pkill nm-applet 2>/dev/null || true
+sleep 1
+
+# Si sigue corriendo, forzar cierre
+if pgrep -x nm-applet >/dev/null; then
+    pkill -9 nm-applet 2>/dev/null || true
+    sleep 1
+fi
+
+# Configurar entorno y reiniciar
+GTK_THEME="Adwaita:dark" GDK_BACKEND="wayland,x11" nohup nm-applet >/dev/null 2>&1 &
+
+# Esperar un momento
+sleep 3
+
+# Verificar que esté corriendo
+if pgrep -x nm-applet >/dev/null; then
+    echo "✅ nm-applet reiniciado exitosamente"
+    notify-send "🎨 nm-applet" "Sincronizado con pywal" -t 2000 2>/dev/null || true
+else
+    echo "⚠️ nm-applet puede estar iniciando..."
+fi
+
+echo "🎉 Sincronización completada"
+exit 0

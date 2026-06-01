@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+# modern-pywal-sync: El script DEFINITIVO de sincronización
+# Este script ignora temas externos y aplica los colores directamente
+# sobre el tema base de GTK para asegurar que NADA se quede "estancado".
+
+# 1. Cargar colores de Pywal
+if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
+    echo "❌ Error: Pywal no ha generado colores aún."
+    exit 1
+fi
+source "$HOME/.cache/wal/colors.sh"
+
+echo "🎨 Iniciando Sincronización Maestra..."
+
+# 2. Sincronizar GTK 3 y 4 (Método Directo)
+# Copiamos directamente a .config para que sea la prioridad #1 del sistema
+echo "  • GTK 3/4..."
+mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+
+# Sincronizar nm-applet (Generar CSS dinámico ultra-agresivo)
+echo "  • nm-applet (System Tray)..."
+cat > "$HOME/.config/gtk-3.0/nm-applet-waybar.css" <<EOF
+/* nm-applet styling DEFINITIVO con Pywal */
+window, .background, .nm-applet-window, #nm-applet, #nm-applet-menu, .menu {
+    background-color: $background !important;
+    color: $foreground !important;
+}
+menu, .menu, menuitem, .menuitem {
+    background-color: $background !important;
+    color: $foreground !important;
+}
+menuitem:hover, .menuitem:hover, menuitem *:hover {
+    background-color: $color6 !important;
+    color: $background !important;
+}
+/* Específico para el texto del menú */
+label {
+    color: inherit !important;
+}
+button {
+    background-color: $color6 !important;
+    color: $background !important;
+}
+EOF
+# Copiar a GTK 4
+cp "$HOME/.config/gtk-3.0/nm-applet-waybar.css" "$HOME/.config/gtk-4.0/nm-applet-waybar.css"
+
+# GTK 3
+if [ -f "$HOME/.cache/wal/gtk3.css" ]; then
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-3.0/gtk.css"
+    cat "$HOME/.cache/wal/gtk3.css" >> "$HOME/.config/gtk-3.0/gtk.css"
+fi
+
+# GTK 4
+if [ -f "$HOME/.cache/wal/gtk4.css" ]; then
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-4.0/gtk.css"
+    cat "$HOME/.cache/wal/gtk4.css" >> "$HOME/.config/gtk-4.0/gtk.css"
+fi
+
+# 3. Sincronizar Iconos (Tela Circle)
+echo "  • Iconos (Tela-Circle)..."
+if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
+    "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1 &
+fi
+
+# Reiniciar nm-applet para aplicar cambios
+if pgrep -x nm-applet > /dev/null; then
+    pkill -9 nm-applet
+    sleep 0.2
+    nm-applet --indicator > /dev/null 2>&1 &
+fi
+
+# 4. Forzar Recarga de GTK (Reset de tema)
+if command -v gsettings &>/dev/null; then
+    # Forzamos a Adwaita que es el que mejor acepta overrides de CSS
+    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"
+    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+fi
+
+# 4. Sincronizar Qt / KDE (Dolphin, etc.)
+echo "  • Qt/KDE..."
+if [ -x "$HOME/.local/bin/sync-qt-pywal" ]; then
+    "$HOME/.local/bin/sync-qt-pywal" >/dev/null 2>&1 || true
+fi
+
+# 5. Sincronizar Waybar
+echo "  • Waybar..."
+if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
+    cp -f "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
+    pkill -SIGUSR2 waybar || true
+fi
+
+# 6. Sincronizar Rofi
+echo "  • Rofi..."
+if [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then
+    cp -f "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
+fi
+
+# 7. Sincronizar Mako (Notificaciones)
+echo "  • Mako..."
+if [ -x "$HOME/.local/bin/sync-mako-pywal" ]; then
+    "$HOME/.local/bin/sync-mako-pywal" >/dev/null 2>&1 || true
+fi
+
+# 8. Recargar Hyprland (Bordes y colores de ventana)
+echo "  • Hyprland..."
+hyprctl reload >/dev/null 2>&1 || true
+
+# 9. Notificación final
+if command -v notify-send &>/dev/null; then
+    notify-send "🎨 Sistema Sincronizado" "Todos los colores han sido actualizados." -t 2000
+fi
+
+echo "✅ ¡Hecho! El sistema ahora debería reflejar los nuevos colores."

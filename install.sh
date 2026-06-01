@@ -91,14 +91,16 @@ info "Dependencias iniciales listas."
 section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
-CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd"
+CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak"
 
 # 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
 SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
     "Drivers NVIDIA" \
     "Herramientas ASUS (ROG/TUF)" \
-    "Aplicaciones (Brave, Vesktop, etc.)" \
-    "Gaming (Steam + Multilib)")
+    "Aplicaciones (Brave, Obsidian, OBS...)" \
+    "Gaming (Steam, Minecraft...)" \
+    "Productividad (LibreOffice)" \
+    "Virtualización (VirtualBox)")
 
 # Construir lista basada en la elección
 PKGS_TO_INSTALL="$CORE_PKGS"
@@ -117,6 +119,8 @@ if [[ $SOFTWARE_CHOICE == *"Aplicaciones"* ]]; then
         "Vesktop (Discord)" \
         "Telegram" \
         "VS Code" \
+        "Obsidian" \
+        "OBS Studio" \
         "Thunar (File Manager)" \
         "Dolphin (File Manager)")
     
@@ -124,18 +128,39 @@ if [[ $SOFTWARE_CHOICE == *"Aplicaciones"* ]]; then
     [[ $APPS_CHOICE == *"Vesktop"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL vesktop"
     [[ $APPS_CHOICE == *"Telegram"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL telegram-desktop"
     [[ $APPS_CHOICE == *"VS Code"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL code"
+    [[ $APPS_CHOICE == *"Obsidian"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL obsidian"
+    [[ $APPS_CHOICE == *"OBS Studio"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL obs-studio"
     [[ $APPS_CHOICE == *"Thunar"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL thunar"
     [[ $APPS_CHOICE == *"Dolphin"* ]] && PKGS_TO_INSTALL="$PKGS_TO_INSTALL dolphin"
 fi
 
 if [[ $SOFTWARE_CHOICE == *"Gaming"* ]]; then
     enable_multilib
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL steam"
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL steam minecraft-launcher"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Productividad"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL libreoffice-fresh"
+fi
+
+if [[ $SOFTWARE_CHOICE == *"Virtualización"* ]]; then
+    PKGS_TO_INSTALL="$PKGS_TO_INSTALL virtualbox virtualbox-host-dkms"
 fi
 
 section "Instalación de paquetes"
 info "Instalando núcleo del sistema, estética y selección de software..."
 yay -S --needed --noconfirm $PKGS_TO_INSTALL
+
+# 3. INSTALACIÓN DE FLATPAKS
+if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
+    if gum confirm "¿Quieres instalar las aplicaciones Flatpak de la lista?"; then
+        info "Instalando Flatpaks..."
+        while read -r app; do
+            [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
+            flatpak install --user -y flathub "$app"
+        done < "$DOTFILES_DIR/flatpaks.txt"
+    fi
+fi
 
 section "Configuraciones (Dotfiles)"
 if gum confirm "¿Quieres aplicar las configuraciones (stow) ahora?"; then
@@ -176,7 +201,12 @@ fi
 section "Servicios del Sistema"
 if gum confirm "¿Quieres habilitar el gestor de inicio (SDDM)?"; then
     sudo systemctl enable sddm
-    info "SDDM habilitado."
+    # Configurar el tema astronaut
+    if [ ! -d "/etc/sddm.conf.d" ]; then
+        sudo mkdir -p /etc/sddm.conf.d
+    fi
+    echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf
+    info "SDDM habilitado con el tema astronaut."
 fi
 
 # Habilitar servicios de hardware si se instalaron

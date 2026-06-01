@@ -89,17 +89,19 @@ install_yay
 info "Dependencias iniciales listas."
 
 section "Selección de Software"
-# Categorías de software para elegir
-SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona qué componentes instalar (Espacio para marcar, Enter para confirmar)" \
+
+# 1. CORE (Mandatorio: Siempre se instala)
+CORE_PKGS="hyprland hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd"
+
+# 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
+SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
     "Drivers NVIDIA" \
     "Herramientas ASUS (ROG/TUF)" \
     "Aplicaciones (Brave, Vesktop, etc.)" \
-    "Gaming (Steam + Multilib)" \
-    "Temas e Iconos (Bibata, Tela Circle)" \
-    "Fuentes (JetBrains Mono, FontAwesome)")
+    "Gaming (Steam + Multilib)")
 
-# Construir lista de paquetes basada en la elección
-PKGS_TO_INSTALL="hyprland hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp"
+# Construir lista basada en la elección
+PKGS_TO_INSTALL="$CORE_PKGS"
 
 if [[ $SOFTWARE_CHOICE == *"Drivers NVIDIA"* ]]; then
     PKGS_TO_INSTALL="$PKGS_TO_INSTALL nvidia-open-dkms nvidia-settings nvidia-utils"
@@ -118,16 +120,8 @@ if [[ $SOFTWARE_CHOICE == *"Gaming"* ]]; then
     PKGS_TO_INSTALL="$PKGS_TO_INSTALL steam"
 fi
 
-if [[ $SOFTWARE_CHOICE == *"Temas e Iconos"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL bibata-cursor-theme tela-circle-icon-theme-all nwg-look"
-fi
-
-if [[ $SOFTWARE_CHOICE == *"Fuentes"* ]]; then
-    PKGS_TO_INSTALL="$PKGS_TO_INSTALL otf-font-awesome ttf-jetbrains-mono-nerd"
-fi
-
 section "Instalación de paquetes"
-echo -e "Instalando selección de software..."
+info "Instalando núcleo del sistema, estética y selección de software..."
 yay -S --needed --noconfirm $PKGS_TO_INSTALL
 
 section "Configuraciones (Dotfiles)"

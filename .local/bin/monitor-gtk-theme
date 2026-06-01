@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Monitor de cambios del tema GTK para sincronizar Mission Center
+echo "🔍 Iniciando monitor de tema GTK para Mission Center..."
+
+# Función para sincronizar
+sync_theme() {
+    echo "📱 Cambio detectado, sincronizando..."
+    /home/rhythmcreative/.local/bin/sync-mission-center-gtk
+}
+
+# Monitorear cambios en el esquema de colores
+gsettings monitor org.gnome.desktop.interface color-scheme | while read -r line; do
+    if [[ $line == *"color-scheme"* ]]; then
+        sync_theme
+    fi
+done &
+
+# Monitorear cambios en el tema GTK
+gsettings monitor org.gnome.desktop.interface gtk-theme | while read -r line; do
+    if [[ $line == *"gtk-theme"* ]]; then
+        sync_theme
+    fi
+done &
+
+echo "✅ Monitor activo. Presiona Ctrl+C para detener."
+wait

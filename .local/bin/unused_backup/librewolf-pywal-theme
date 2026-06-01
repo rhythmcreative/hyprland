@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Script para aplicar tema pywal a LibreWolf manualmente
+# Útil para aplicar el tema sin cambiar el wallpaper
+
+echo "🎨 Aplicando tema pywal a LibreWolf..."
+
+# Regenerar templates de pywal sin cambiar wallpaper
+python3 -m pywal -R
+
+# Sincronizar con LibreWolf
+~/.config/wal/scripts/librewolf-sync.sh
+
+echo ""
+echo "✨ ¡Listo! Los cambios se aplicarán al reiniciar LibreWolf."
+echo ""
+echo "💡 Consejos:"
+echo "   • Los colores se sincronizan automáticamente cuando cambies el wallpaper con pywal"
+echo "   • Si ves líneas amarillas, verifica que LibreWolf esté completamente cerrado antes de reiniciar"
+echo "   • Puedes personalizar más colores editando ~/.config/wal/templates/librewolf-*.css"

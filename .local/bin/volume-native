@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# 🎵 ELEGANT VOLUME NOTIFICATIONS 🎵
+# Beautiful modern design with smooth animations and premium styling
+
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{print int($2 * 100)}'
+}
+
+get_mute_status() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED" && echo "true" || echo "false"
+}
+
+get_volume_icon() {
+    local volume=$1
+    if [ "$volume" -eq 0 ]; then
+        echo "󰠴"  # Speaker off
+    elif [ "$volume" -le 33 ]; then
+        echo "󰠱"  # Low volume
+    elif [ "$volume" -le 66 ]; then
+        echo "󰠲"  # Medium volume
+    else
+        echo "󰠳"  # High volume
+    fi
+}
+
+get_device_name() {
+    local device=$(wpctl inspect @DEFAULT_AUDIO_SINK@ | grep "node.description" | cut -d'"' -f4 | head -1)
+    echo "$device" | sed 's/Built-in Audio //g; s/Internal //g' | cut -c1-30
+}
+
+generate_visual_bar() {
+    local volume=$1
+    local segments=15
+    local filled=$(( volume * segments / 100 ))
+    local bar=""
+    
+    for ((i=1; i<=segments; i++)); do
+        if [ $i -le $filled ]; then
+            if [ $i -le 5 ]; then
+                bar+="█"  # Low volume - solid blocks
+            elif [ $i -le 10 ]; then
+                bar+="█"  # Mid volume - solid blocks
+            else
+                bar+="█"  # High volume - solid blocks
+            fi
+        else
+            bar+="░"  # Empty - light shade
+        fi
+    done
+    
+    echo "$bar"
+}
+
+case "$1" in
+    "up")
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        volume=$(get_volume)
+        icon=$(get_volume_icon $volume)
+        device=$(get_device_name)
+        visual_bar=$(generate_visual_bar $volume)
+        
+        notify-send -a volume -t 2500 -h string:x-canonical-private-synchronous:volume \
+                   -h int:value:$volume \
+                   "$icon Volume $volume%" \
+                   "$visual_bar\n$device"
+        ;;
+        
+    "down") 
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        volume=$(get_volume)
+        icon=$(get_volume_icon $volume)
+        device=$(get_device_name)
+        visual_bar=$(generate_visual_bar $volume)
+        
+        notify-send -a volume -t 2500 -h string:x-canonical-private-synchronous:volume \
+                   -h int:value:$volume \
+                   "$icon Volume $volume%" \
+                   "$visual_bar\n$device"
+        ;;
+        
+    "mute")
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        device=$(get_device_name)
+        
+        if [ "$(get_mute_status)" == "true" ]; then
+            notify-send -a volume -t 2500 -h string:x-canonical-private-synchronous:volume \
+                       "󰝟 Audio Muted" \
+                       "░░░░░░░░░░░░░░░\n$device"
+        else
+            volume=$(get_volume)
+            icon=$(get_volume_icon $volume)
+            visual_bar=$(generate_visual_bar $volume)
+            notify-send -a volume -t 2500 -h string:x-canonical-private-synchronous:volume \
+                       -h int:value:$volume \
+                       "$icon Volume $volume%" \
+                       "$visual_bar\n$device"
+        fi
+        ;;
+        
+    "test")
+        # Test mode
+        volume=65
+        icon=$(get_volume_icon $volume)
+        device=$(get_device_name)
+        visual_bar=$(generate_visual_bar $volume)
+        
+        notify-send -a volume -t 3000 -h string:x-canonical-private-synchronous:volume \
+                   -h int:value:$volume \
+                   "$icon Volume $volume%" \
+                   "$visual_bar\n$device"
+        ;;
+esac

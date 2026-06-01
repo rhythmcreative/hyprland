@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Script para probar la sincronización de waybar con pywal
+# Cambia entre diferentes wallpapers y verifica que waybar se sincroniza
+
+echo "🧪 Probando sincronización waybar-pywal..."
+
+# Array de wallpapers disponibles
+wallpapers=(~/Pictures/Wallpapers/*.{jpg,png,jpeg})
+
+# Verificar si hay wallpapers disponibles
+if [ ${#wallpapers[@]} -eq 0 ]; then
+    echo "❌ No se encontraron wallpapers en ~/Pictures/Wallpapers/"
+    exit 1
+fi
+
+echo "📸 Wallpapers encontrados: ${#wallpapers[@]}"
+
+# Seleccionar un wallpaper aleatorio
+random_wallpaper="${wallpapers[RANDOM % ${#wallpapers[@]}]}"
+
+echo "🎯 Wallpaper seleccionado: $(basename "$random_wallpaper")"
+
+# Usar nuestro script de sincronización
+echo "🔄 Ejecutando sincronización..."
+sync-waybar-pywal "$random_wallpaper"
+
+echo "✅ Prueba completada!"
+echo "💡 Verifica que waybar haya cambiado de colores"
+echo "🔧 También puedes usar: SUPER+SHIFT+CTRL+W para sincronizar manualmente"

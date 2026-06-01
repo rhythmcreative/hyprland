@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Simple Wallpaper Selector - versión simplificada para debug
+
+# Configurar variables de entorno para Wayland/Hyprland
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_CURRENT_DESKTOP="Hyprland"
+export XDG_SESSION_TYPE="wayland"
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Verificar que el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Crear lista simple para rofi
+cd "$WALLPAPER_DIR"
+SELECTED=$(ls -1 *.{jpg,jpeg,png,gif,webp,bmp} 2>/dev/null | rofi -dmenu -i \
+    -theme-str 'window {width: 60%; height: 50%;}' \
+    -theme-str 'listview {columns: 1; lines: 10;}' \
+    -p "🖼️ Selecciona un Wallpaper (Simple)" \
+    -format "s" \
+    -no-show-icons)
+
+# Si no se seleccionó nada, salir
+if [[ -z "$SELECTED" ]]; then
+    exit 0
+fi
+
+# Aplicar wallpaper
+SELECTED_PATH="$WALLPAPER_DIR/$SELECTED"
+if [[ -f "$SELECTED_PATH" ]]; then
+    notify-send "🎨 Aplicando Wallpaper" "$SELECTED" -t 2000
+    swww img "$SELECTED_PATH" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+    
+    # Aplicar pywal si está disponible
+    if command -v wal > /dev/null 2>&1; then
+        wal -i "$SELECTED_PATH" -n
+        notify-send "✅ Tema Completo" "Wallpaper y colores aplicados" -t 2000
+    fi
+else
+    notify-send "❌ Error" "Archivo no encontrado: $SELECTED" -u critical
+fi

@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# nm-applet pywal watcher - Detecta cambios en colores de pywal inmediatamente
+# Usa inotify para respuesta instantánea
+
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+COLORS_DIR="$HOME/.cache/wal"
+LOGFILE="$HOME/.cache/nm-applet-logs/watcher.log"
+
+# Crear directorio de logs
+mkdir -p "$(dirname "$LOGFILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WATCHER: $1" | tee -a "$LOGFILE"
+}
+
+# Función para verificar dependencias
+check_dependencies() {
+    if ! command -v inotifywait >/dev/null 2>&1; then
+        log "❌ ERROR: inotifywait no está instalado"
+        log "Instala con: sudo pacman -S inotify-tools"
+        exit 1
+    fi
+    
+    if [[ ! -d "$COLORS_DIR" ]]; then
+        log "⚠️ Directorio de pywal no existe, creándolo..."
+        mkdir -p "$COLORS_DIR"
+    fi
+}
+
+# Función para ejecutar sincronización
+trigger_sync() {
+    local event_type="$1"
+    log "🎨 Detectado cambio en pywal ($event_type) - Ejecutando sincronización..."
+    
+    # Esperar un momento para que pywal termine de escribir todos los archivos
+    sleep 0.5
+    
+    # Verificar que el archivo de colores existe y no está vacío
+    if [[ -f "$COLORS_FILE" && -s "$COLORS_FILE" ]]; then
+        # Ejecutar el script de CSS inmediatamente
+        if [[ -f "$HOME/.local/bin/nm-applet-css-only" ]]; then
+            log "🔄 Ejecutando sincronización CSS..."
+            "$HOME/.local/bin/nm-applet-css-only" >> "$LOGFILE" 2>&1
+            
+            if [[ $? -eq 0 ]]; then
+                log "✅ Sincronización completada exitosamente"
+                
+                # Opcional: notificar al usuario
+                if command -v notify-send >/dev/null 2>&1; then
+                    notify-send "🎨 nm-applet" "Colores sincronizados con pywal" -t 2000 2>/dev/null || true
+                fi
+            else
+                log "❌ Error en la sincronización"
+            fi
+        else
+            log "❌ Script de sincronización CSS no encontrado"
+        fi
+    else
+        log "⚠️ Archivo de colores no válido, omitiendo sincronización"
+    fi
+}
+
+# Función para manejar señales de terminación
+cleanup() {
+    log "🔄 Recibida señal de terminación, cerrando watcher..."
+    exit 0
+}
+
+# Función principal del watcher
+main() {
+    log "🚀 === INICIANDO WATCHER DE PYWAL PARA NM-APPLET ==="
+    
+    # Verificar dependencias
+    check_dependencies
+    
+    # Registrar manejador de señales
+    trap cleanup SIGTERM SIGINT SIGQUIT
+    
+    log "👀 Monitoreando cambios en: $COLORS_DIR"
+    log "📁 Archivo principal: $COLORS_FILE"
+    
+    # Ejecutar sincronización inicial si ya existen colores
+    if [[ -f "$COLORS_FILE" && -s "$COLORS_FILE" ]]; then
+        log "🎨 Ejecutando sincronización inicial..."
+        trigger_sync "inicial"
+    fi
+    
+    # Monitor principal con inotifywait
+    # Monitoreamos tanto el directorio como el archivo específico para máxima cobertura
+    while true; do
+        log "👁️ Esperando cambios en colores de pywal..."
+        
+        # Usar inotifywait para detectar cambios inmediatamente
+        # Monitorear tanto el archivo colors.sh como todo el directorio wal
+        inotifywait -e modify,create,moved_to \
+                   --format '%w%f %e' \
+                   "$COLORS_DIR" \
+                   2>/dev/null | while read file event; do
+            
+            # Solo procesar si es el archivo de colores o archivos relacionados
+            if [[ "$file" =~ colors\.sh$ ]] || [[ "$file" =~ colors$ ]] || [[ "$file" =~ sequences$ ]]; then
+                log "📝 Detectado cambio: $file ($event)"
+                trigger_sync "$event"
+                
+                # Pequeña pausa para evitar múltiples triggers muy rápidos
+                sleep 1
+            fi
+        done
+        
+        # Si inotifywait falla, esperar un poco antes de reintentar
+        log "⚠️ inotifywait terminó inesperadamente, reiniciando en 3 segundos..."
+        sleep 3
+    done
+}
+
+# Mostrar ayuda
+if [[ "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
+    cat << EOF
+Uso: $0
+
+Watcher que detecta cambios en colores de pywal instantáneamente usando inotify.
+
+FUNCIONALIDAD:
+- Monitorea $COLORS_DIR usando inotifywait
+- Detecta cambios en colors.sh inmediatamente
+- Ejecuta sincronización automática de nm-applet CSS
+- Mantiene logs en $LOGFILE
+
+DEPENDENCIAS:
+- inotify-tools (pacman -S inotify-tools)
+- nm-applet-css-only script
+
+ARCHIVOS MONITOREADOS:
+- $COLORS_FILE
+- $COLORS_DIR (directorio completo)
+
+EOF
+    exit 0
+fi
+
+# Ejecutar función principal
+main

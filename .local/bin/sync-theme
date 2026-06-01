@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Script para sincronizar pywal con Oh My Posh y Kitty
+# Uso: sync-theme [imagen]
+
+WALLPAPER="$1"
+CONFIG_DIR="$HOME/.config/oh-my-posh"
+THEME_FILE="$CONFIG_DIR/pywal-theme.omp.json"
+
+# Función para mostrar ayuda
+show_help() {
+    echo "Uso: sync-theme [imagen]"
+    echo "    imagen: Ruta a la imagen de wallpaper (opcional)"
+    echo ""
+    echo "Si no se especifica imagen, usa pywal con la configuración actual"
+    echo ""
+    echo "Ejemplos:"
+    echo "    sync-theme ~/Pictures/wallpaper.jpg"
+    echo "    sync-theme  # Usa el wallpaper actual"
+    exit 0
+}
+
+# Verificar ayuda
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+fi
+
+# Aplicar pywal si se proporciona una imagen
+if [[ -n "$WALLPAPER" ]]; then
+    if [[ ! -f "$WALLPAPER" ]]; then
+        echo "Error: El archivo '$WALLPAPER' no existe."
+        exit 1
+    fi
+    
+    echo "🎨 Aplicando nueva paleta de colores con pywal..."
+    wal -i "$WALLPAPER" -q
+else
+    echo "🔄 Actualizando tema con colores actuales de pywal..."
+    if [[ ! -f "$HOME/.cache/wal/colors.json" ]]; then
+        echo "❌ No se encontraron colores de pywal. Ejecuta 'wal -i <imagen>' primero."
+        exit 1
+    fi
+fi
+
+# Actualizar tema de Oh My Posh
+echo "🚀 Actualizando tema de Oh My Posh..."
+"$HOME/.local/bin/sync-omp-pywal"
+
+# Reiniciar Kitty si está corriendo (opcional)
+if pgrep -x "kitty" > /dev/null; then
+    echo "🐱 Kitty detectado, los colores se actualizarán automáticamente"
+fi
+
+# Mensaje de éxito
+echo "✅ Tema sincronizado exitosamente!"
+echo "💡 Reinicia tu terminal para ver todos los cambios"
+echo ""
+echo "🎯 Para aplicar cambios inmediatamente, ejecuta:"
+echo "   source ~/.bashrc"

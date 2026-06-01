@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Script de emergencia para reiniciar Waybar cuando sea necesario
+# Uso: waybar-emergency-restart
+
+echo "🚨 REINICIO DE EMERGENCIA DE WAYBAR"
+
+# Matar todos los procesos de waybar (incluso los colgados)
+echo "⏹️ Terminando waybar..."
+pkill -9 waybar 2>/dev/null || true
+
+# Esperar un momento
+sleep 1
+
+# Verificar que no quede ningún proceso
+if pgrep waybar > /dev/null; then
+    echo "🔨 Aún hay procesos waybar, forzando terminación..."
+    pkill -9 waybar
+    sleep 0.5
+fi
+
+# Iniciar waybar limpio
+echo "🚀 Iniciando waybar..."
+waybar > /dev/null 2>&1 &
+
+# Verificar que se inició
+sleep 1.5
+
+if pgrep waybar > /dev/null; then
+    echo "✅ Waybar reiniciado exitosamente"
+    notify-send "🚨 Waybar Emergency" "Reiniciado exitosamente" -t 3000 2>/dev/null || true
+else
+    echo "❌ ERROR: No se pudo reiniciar waybar"
+    notify-send "❌ ERROR Waybar" "No se pudo reiniciar" -u critical 2>/dev/null || true
+    exit 1
+fi
+
+echo "🎉 Reinicio de emergencia completado"

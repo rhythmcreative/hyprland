@@ -1,0 +1,132 @@
+#!/bin/bash
+
+# Monitor de wallpaper que detecta cambios y actualiza automáticamente el tema GTK
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_FILE="$HOME/.cache/current_wallpaper"
+
+echo "🔍 Monitor de wallpaper iniciado..."
+echo "Detectará cambios automáticamente y actualizará temas GTK"
+
+# Función para detectar wallpaper actual de swww
+get_current_wallpaper() {
+    if command -v swww >/dev/null 2>&1; then
+        swww query 2>/dev/null | grep -o 'image: .*' | cut -d' ' -f2- | head -1
+    fi
+}
+
+# Función para procesar cambio de wallpaper
+process_wallpaper_change() {
+    local new_wallpaper="$1"
+    
+    if [[ -n "$new_wallpaper" && -f "$new_wallpaper" ]]; then
+        echo "🎨 Detectado nuevo wallpaper: $(basename "$new_wallpaper")"
+        
+        # Generar colores con wal (sin cambiar wallpaper ya que swww ya lo hizo)
+        echo "Generando colores y tema GTK..."
+        if wal -i "$new_wallpaper" >/dev/null 2>&1; then
+            # El hook post.sh se ejecutará automáticamente
+            echo "✓ Tema actualizado automáticamente"
+            
+            # Guardar wallpaper actual en cache
+            echo "$new_wallpaper" > "$CACHE_FILE"
+            
+            # Notificación
+            if command -v notify-send >/dev/null 2>&1; then
+                notify-send "🎨 Tema Auto-Actualizado" "$(basename "$new_wallpaper")" -t 2000
+            fi
+        else
+            echo "❌ Error al generar colores"
+        fi
+    fi
+}
+
+# Función de monitoreo continuo
+monitor_wallpaper() {
+    local last_wallpaper=""
+    
+    if [[ -f "$CACHE_FILE" ]]; then
+        last_wallpaper=$(cat "$CACHE_FILE")
+    fi
+    
+    while true; do
+        current_wallpaper=$(get_current_wallpaper)
+        
+        if [[ "$current_wallpaper" != "$last_wallpaper" ]]; then
+            process_wallpaper_change "$current_wallpaper"
+            last_wallpaper="$current_wallpaper"
+        fi
+        
+        sleep 2  # Revisar cada 2 segundos
+    done
+}
+
+# Función para ejecutar en background
+start_daemon() {
+    if pgrep -f "wallpaper-monitor" >/dev/null 2>&1; then
+        echo "❌ Monitor ya está ejecutándose"
+        exit 1
+    fi
+    
+    echo "🚀 Iniciando monitor en background..."
+    nohup "$0" monitor >/dev/null 2>&1 &
+    echo "✓ Monitor iniciado (PID: $!)"
+}
+
+# Función para detener daemon
+stop_daemon() {
+    if pgrep -f "wallpaper-monitor" >/dev/null 2>&1; then
+        pkill -f "wallpaper-monitor"
+        echo "✓ Monitor detenido"
+    else
+        echo "❌ Monitor no está ejecutándose"
+    fi
+}
+
+# Función para mostrar estado
+status_daemon() {
+    if pgrep -f "wallpaper-monitor" >/dev/null 2>&1; then
+        echo "✓ Monitor está ejecutándose"
+        pgrep -f "wallpaper-monitor" | while read pid; do
+            echo "  PID: $pid"
+        done
+    else
+        echo "❌ Monitor no está ejecutándose"
+    fi
+}
+
+# Procesar argumentos
+case "$1" in
+    "monitor")
+        monitor_wallpaper
+        ;;
+    "start")
+        start_daemon
+        ;;
+    "stop")
+        stop_daemon
+        ;;
+    "restart")
+        stop_daemon
+        sleep 1
+        start_daemon
+        ;;
+    "status")
+        status_daemon
+        ;;
+    *)
+        echo "Monitor de Wallpaper - Auto-actualizador de temas GTK"
+        echo ""
+        echo "Uso: $0 {start|stop|restart|status|monitor}"
+        echo ""
+        echo "Comandos:"
+        echo "  start     - Iniciar monitor en background"
+        echo "  stop      - Detener monitor"
+        echo "  restart   - Reiniciar monitor"
+        echo "  status    - Ver estado del monitor"
+        echo "  monitor   - Ejecutar monitor en foreground (debug)"
+        echo ""
+        echo "El monitor detecta automáticamente cambios de wallpaper"
+        echo "y actualiza los temas GTK sin intervención manual."
+        ;;
+esac

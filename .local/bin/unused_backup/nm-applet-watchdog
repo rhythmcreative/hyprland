@@ -1,0 +1,170 @@
+#!/bin/bash
+
+# nm-applet watchdog - Monitorea y reinicia nm-applet automáticamente
+# Usa este script para asegurar que nm-applet siempre esté corriendo
+
+LOG_FILE="$HOME/.cache/nm-applet-watchdog.log"
+INTERVAL=5  # Verificar cada 5 segundos
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para iniciar nm-applet
+start_nm_applet() {
+    log "🚀 Iniciando nm-applet..."
+    
+    # Iniciar con variables de entorno apropiadas para Wayland
+    env GTK_THEME="Arc-Dark" \
+        GDK_BACKEND="wayland,x11" \
+        nohup nm-applet > /dev/null 2>&1 &
+    
+    sleep 2
+    
+    if pgrep -x nm-applet > /dev/null; then
+        log "✅ nm-applet iniciado exitosamente"
+        return 0
+    else
+        log "⚠️ Intento fallback sin variables de entorno..."
+        nohup nm-applet > /dev/null 2>&1 &
+        sleep 2
+        
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado en modo fallback"
+            return 0
+        else
+            log "❌ ERROR: No se pudo iniciar nm-applet"
+            return 1
+        fi
+    fi
+}
+
+# Función principal de monitoreo
+monitor_nm_applet() {
+    log "📡 Iniciando monitoreo de nm-applet (intervalo: ${INTERVAL}s)"
+    
+    while true; do
+        if ! pgrep -x nm-applet > /dev/null; then
+            log "⚠️ nm-applet no está corriendo, reiniciando..."
+            start_nm_applet
+        fi
+        
+        sleep $INTERVAL
+    done
+}
+
+# Función para ejecutar una verificación única
+check_once() {
+    if ! pgrep -x nm-applet > /dev/null; then
+        log "⚠️ nm-applet no está corriendo"
+        start_nm_applet
+    else
+        log "✅ nm-applet está funcionando correctamente"
+    fi
+}
+
+# Función para matar nm-applet de forma segura
+kill_nm_applet() {
+    log "🛑 Cerrando nm-applet de forma segura..."
+    
+    local nm_pids=$(pgrep -x nm-applet 2>/dev/null || true)
+    
+    if [[ -n "$nm_pids" ]]; then
+        # Cerrar suavemente primero
+        pkill -TERM nm-applet 2>/dev/null || true
+        sleep 2
+        
+        # Verificar si siguen corriendo
+        local remaining=$(pgrep -x nm-applet 2>/dev/null || true)
+        if [[ -n "$remaining" ]]; then
+            log "⚠️ Forzando cierre de nm-applet..."
+            pkill -9 nm-applet 2>/dev/null || true
+            sleep 1
+        fi
+        
+        log "✅ nm-applet cerrado correctamente"
+    else
+        log "ℹ️ nm-applet no estaba corriendo"
+    fi
+}
+
+# Función para restart completo
+restart_nm_applet() {
+    log "🔄 Reiniciando nm-applet completamente..."
+    kill_nm_applet
+    sleep 1
+    start_nm_applet
+}
+
+# Mostrar ayuda
+show_help() {
+    cat << EOF
+nm-applet-watchdog - Monitor y controlador de nm-applet
+
+USO:
+    $0 [COMANDO]
+
+COMANDOS:
+    monitor     Monitorea nm-applet continuamente y lo reinicia si se cae (por defecto)
+    check       Verifica una vez si nm-applet está corriendo y lo inicia si es necesario
+    start       Inicia nm-applet si no está corriendo
+    stop        Detiene nm-applet de forma segura
+    restart     Reinicia nm-applet (lo mata y lo vuelve a iniciar)
+    status      Muestra el estado actual de nm-applet
+    help        Muestra esta ayuda
+
+EJEMPLOS:
+    $0                  # Monitoreo continuo
+    $0 check           # Verificación única
+    $0 restart         # Reiniciar nm-applet
+    $0 status          # Ver estado
+
+EOF
+}
+
+# Función para mostrar status
+show_status() {
+    if pgrep -x nm-applet > /dev/null; then
+        local pid=$(pgrep -x nm-applet)
+        log "✅ nm-applet está corriendo (PID: $pid)"
+        
+        # Mostrar información adicional si está disponible
+        if command -v ps > /dev/null; then
+            log "📋 Información del proceso:"
+            ps -p $pid -o pid,ppid,cmd,etime 2>/dev/null || true
+        fi
+    else
+        log "❌ nm-applet NO está corriendo"
+    fi
+}
+
+# Main
+case "${1:-monitor}" in
+    monitor)
+        monitor_nm_applet
+        ;;
+    check)
+        check_once
+        ;;
+    start)
+        start_nm_applet
+        ;;
+    stop)
+        kill_nm_applet
+        ;;
+    restart)
+        restart_nm_applet
+        ;;
+    status)
+        show_status
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "❌ Comando desconocido: $1"
+        echo "Usa '$0 help' para ver los comandos disponibles."
+        exit 1
+        ;;
+esac

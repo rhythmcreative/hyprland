@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Get current brightness
+BRIGHTNESS=$(brightnessctl g)
+MAX=$(brightnessctl m)
+PERCENT=$((BRIGHTNESS * 100 / MAX))
+
+# Update EWW
+eww update brightness-percent=$PERCENT
+eww update island-mode="brightness"
+
+# Reset to idle after 2 seconds
+(sleep 2 && eww update island-mode="idle") &

@@ -1,0 +1,182 @@
+#!/bin/bash
+# Script para sincronizar Starship con pywal
+# ~/.local/bin/starship-pywal-sync
+
+# Verificar que pywal esté instalado y tenga colores cargados
+if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
+    echo "Error: No se encontraron colores de pywal. Ejecuta 'wal -i imagen' primero."
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$HOME/.cache/wal/colors.sh"
+
+# Ruta de la configuración de Starship
+STARSHIP_CONFIG="$HOME/.config/starship.toml"
+
+# Backup de la configuración original
+cp "$STARSHIP_CONFIG" "${STARSHIP_CONFIG}.backup.$(date +%s)" 2>/dev/null
+
+# Crear configuración temporal con colores de pywal
+cat > "${STARSHIP_CONFIG}.tmp" << EOF
+# Configuración moderna de Starship sincronizada con pywal
+# ~/.config/starship.toml
+# Generado automáticamente por starship-pywal-sync
+
+# Formato general del prompt
+format = '''
+[](fg:color_orange)\$os\$username[](bg:color_yellow fg:color_orange)\$directory[](fg:color_yellow bg:color_aqua)\$git_branch\$git_status[](fg:color_aqua bg:color_blue)\$nodejs\$rust\$golang\$php\$python[](fg:color_blue bg:color_bg3)\$docker_context\$time[ ](fg:color_bg3)
+\$character'''
+
+# Paleta de colores actualizada con pywal
+palette = 'pywal'
+
+[palettes.pywal]
+# Colores extraídos de pywal
+color_fg0 = '$foreground'
+color_bg1 = '$color1'
+color_bg3 = '$color8'
+color_blue = '$color4'
+color_aqua = '$color6'
+color_green = '$color2'
+color_orange = '$color9'
+color_purple = '$color5'
+color_red = '$color1'
+color_yellow = '$color3'
+
+# OS
+[os]
+disabled = false
+style = "bg:color_orange fg:color_fg0"
+
+[os.symbols]
+Windows = "󰍲"
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = "󰌽"
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+Arch = "󰣇"
+Artix = "󰣇"
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+
+# Usuario
+[username]
+show_always = true
+style_user = "bg:color_orange fg:color_fg0"
+style_root = "bg:color_orange fg:color_fg0"
+format = '[ \$user ](\$style)'
+
+# Directorio
+[directory]
+style = "fg:color_fg0 bg:color_yellow"
+format = "[ \$path ](\$style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
+
+# Git branch
+[git_branch]
+symbol = ""
+style = "bg:color_aqua"
+format = '[[ \$symbol \$branch ](fg:color_fg0 bg:color_aqua)](\$style)'
+
+# Git status
+[git_status]
+style = "bg:color_aqua"
+format = '[[(\$all_status\$ahead_behind )](fg:color_fg0 bg:color_aqua)](\$style)'
+
+# Node.js
+[nodejs]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ \$symbol( \$version) ](fg:color_fg0 bg:color_blue)](\$style)'
+
+# Rust
+[rust]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ \$symbol( \$version) ](fg:color_fg0 bg:color_blue)](\$style)'
+
+# Golang
+[golang]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ \$symbol( \$version) ](fg:color_fg0 bg:color_blue)](\$style)'
+
+# PHP
+[php]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ \$symbol( \$version) ](fg:color_fg0 bg:color_blue)](\$style)'
+
+# Python
+[python]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ \$symbol( \$version) ](fg:color_fg0 bg:color_blue)](\$style)'
+
+# Docker
+[docker_context]
+symbol = ""
+style = "bg:color_bg3"
+format = '[[ \$symbol( \$context) ](fg:color_fg0 bg:color_bg3)](\$style)'
+
+# Tiempo
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:color_bg1"
+format = '[[  \$time ](fg:color_fg0 bg:color_bg1)](\$style)'
+
+# Carácter del prompt
+[character]
+disabled = false
+success_symbol = '[](bold fg:color_green)'
+error_symbol = '[](bold fg:color_red)'
+vimcmd_symbol = '[](bold fg:color_green)'
+vimcmd_replace_one_symbol = '[](bold fg:color_purple)'
+vimcmd_replace_symbol = '[](bold fg:color_purple)'
+vimcmd_visual_symbol = '[](bold fg:color_yellow)'
+
+# Estadísticas del sistema (opcional)
+[memory_usage]
+disabled = true
+threshold = -1
+symbol = "󰍛 "
+style = "bold dimmed fg:color_green"
+
+[battery]
+full_symbol = "󰁹 "
+charging_symbol = "󰂄 "
+discharging_symbol = "󰂃 "
+unknown_symbol = "󰁽 "
+empty_symbol = "󰂎 "
+
+[[battery.display]]
+threshold = 15
+style = "bold red"
+EOF
+
+# Mover configuración temporal a la definitiva
+mv "${STARSHIP_CONFIG}.tmp" "$STARSHIP_CONFIG"
+
+echo "✅ Starship sincronizado con pywal"
+echo "🎨 Colores aplicados desde: $(basename "$(cat ~/.cache/wal/wal 2>/dev/null || echo "wallpaper actual")")"
+echo "🔄 Reinicia tu terminal o ejecuta 'source ~/.bashrc' para ver los cambios"

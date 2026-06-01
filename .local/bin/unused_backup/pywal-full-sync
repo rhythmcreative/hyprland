@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Script integrado para sincronizar waybar y nm-applet con pywal
+# Este script debe ejecutarse después de cada cambio de pywal
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WAYBAR_SYNC_SCRIPT="$SCRIPT_DIR/waybar-pywal-universal-sync"
+NM_APPLET_SYNC_SCRIPT="$SCRIPT_DIR/nm-applet-theme-sync"
+
+echo "🎨 Iniciando sincronización completa de temas..."
+
+# 1. Sincronizar waybar (si el script existe)
+if [ -f "$WAYBAR_SYNC_SCRIPT" ]; then
+    echo "🔄 Sincronizando waybar..."
+    "$WAYBAR_SYNC_SCRIPT"
+else
+    echo "⚠️  Script de waybar no encontrado: $WAYBAR_SYNC_SCRIPT"
+fi
+
+# 2. Sincronizar nm-applet
+echo "🔄 Sincronizando nm-applet..."
+"$NM_APPLET_SYNC_SCRIPT"
+
+echo "✅ Sincronización completa terminada!"
+echo "📱 Waybar y nm-applet ahora usan los mismos colores"

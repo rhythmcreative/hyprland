@@ -1,0 +1,30 @@
+#!/bin/bash
+# pywal-asusctl-sync - Optimizado para la versión actual de asusctl
+
+COLORS_JSON="$HOME/.cache/wal/colors.json"
+[ ! -f "$COLORS_JSON" ] && exit 1
+
+# Extraer color rápidamente con jq (color5 o color4 como fallback)
+main_color=$(jq -r '.colors.color5' "$COLORS_JSON")
+if [[ "$main_color" == "#000000" || "$main_color" == "null" ]]; then
+    main_color=$(jq -r '.colors.color4' "$COLORS_JSON")
+fi
+if [[ "$main_color" == "null" ]]; then
+    main_color=$(jq -r '.colors.foreground' "$COLORS_JSON")
+fi
+
+# Convertir hex a formato asusctl (sin #)
+asus_color="${main_color#\#}"
+
+# Aplicar color usando el comando correcto
+# No usamos background aquí para asegurar que se aplique correctamente antes de que el script termine
+# (asusctl a veces ignora comandos si se envían demasiados a la vez)
+
+# Aplicar al teclado completo
+asusctl aura effect static -c "$asus_color" >/dev/null 2>&1
+
+# Algunas máquinas requieren aplicar a zonas específicas
+for z in 0 1 2 3 4; do
+    asusctl aura effect static -c "$asus_color" --zone "$z" >/dev/null 2>&1 &
+done
+wait

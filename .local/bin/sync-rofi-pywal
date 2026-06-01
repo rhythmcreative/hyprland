@@ -1,0 +1,267 @@
+#!/bin/bash
+
+# Script para sincronizar automáticamente los colores de rofi con pywal
+# Actualiza colors-pywal.rasi con los colores actuales de pywal
+
+ROFI_COLORS_FILE="$HOME/.config/rofi/colors-pywal.rasi"
+PYWAL_COLORS_FILE="$HOME/.cache/wal/colors.sh"
+
+# Verificar que existe el archivo de colores de pywal
+if [[ ! -f "$PYWAL_COLORS_FILE" ]]; then
+    echo "Error: No se encontraron colores de pywal en $PYWAL_COLORS_FILE"
+    exit 1
+fi
+
+# Cargar colores de pywal
+source "$PYWAL_COLORS_FILE"
+
+# Crear directorio si no existe
+mkdir -p "$(dirname "$ROFI_COLORS_FILE")"
+
+# NUEVO: También crear/actualizar el tema style-3-pywal.rasi
+ROFI_THEME_FILE="$HOME/.config/rofi/style-3-pywal.rasi"
+
+# Generar archivo de colores actualizado
+cat > "$ROFI_COLORS_FILE" << EOF
+/*
+ * Rofi color theme generado automáticamente por pywal
+ * Template para sincronización automática
+ * Generado: $(date)
+ */
+
+* {
+    /* Colores principales de pywal */
+    background:     $background;
+    background-alt: $background;
+    foreground:     $foreground;
+    foreground-alt: $color8;
+    
+    /* Colores de acento */
+    selected:       $color6;
+    active:         $color2;
+    urgent:         $color1;
+    
+    /* Colores adicionales */
+    color0:         $color0;
+    color1:         $color1;
+    color2:         $color2;
+    color3:         $color3;
+    color4:         $color4;
+    color5:         $color5;
+    color6:         $color6;
+    color7:         $color7;
+    color8:         $color8;
+    color9:         $color9;
+    color10:        $color10;
+    color11:        $color11;
+    color12:        $color12;
+    color13:        $color13;
+    color14:        $color14;
+    color15:        $color15;
+    
+    /* Transparencias dinámicas */
+    background-trans:     ${background}CC;
+    background-alt-trans: ${background}AA;
+    selected-trans:       ${color6}DD;
+}
+EOF
+
+# NUEVO: Generar/actualizar el tema style-3-pywal.rasi con template completo
+cat > "$ROFI_THEME_FILE" << 'EOF'
+@import "colors-pywal.rasi"
+
+/**
+ *
+ * Author : Aditya Shakya (adi1090x)
+ * Github : @adi1090x
+ * 
+ * Rofi Theme File - Sincronizado con Pywal
+ * Rofi Version: 1.7.3
+ **/
+
+/*****----- Configuration -----*****/
+configuration {
+	modi:                       "drun";
+    show-icons:                 true;
+    display-drun:               "";
+	drun-display-format:        "{name}";
+}
+
+/*****----- Global Properties -----*****/
+/* @import                          "shared/fonts.rasi" */
+* {
+    font: "JetBrainsMono Nerd Font Light 12";
+    /* Los colores se importan dinámicamente desde colors-pywal.rasi */
+}
+*{
+  bgcolor:                        rgba(0, 0, 0, 0.6);
+  selected:                       @color6;
+  background-alt:                 @color8;
+}
+/*****----- Main Window -----*****/
+window {
+    transparency:                "real";
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  true;
+    width:                       1920px;
+    height:                      1080px;
+    x-offset:                    0px;
+    y-offset:                    0px;
+
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    cursor:                      "default";
+}
+
+/*****----- Main Box -----*****/
+mainbox {
+    enabled:                     true;
+    spacing:                     60px;
+    margin:                      0px;
+    padding:                     160px 225px 100px 225px;
+    border:                      0px solid;
+    border-radius:               0px 0px 0px 0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    children:                    [ "inputbar", "listview" ];
+}
+
+/*****----- Inputbar -----*****/
+inputbar {
+    enabled:                     true;
+    spacing:                     0px;
+    margin:                      0% 28%;
+    padding:                     3px;
+    border:                      1px solid;
+    border-radius:               16px;
+    border-color:                rgba(255, 255, 255, 0.12);
+    background-color:            rgba(0, 0, 0, 0.15);
+    text-color:                  @foreground;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+
+prompt {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  inherit;
+}
+textbox-prompt-colon {
+    enabled:                     true;
+    expand:                      false;
+    str:                         "";
+    background-color:            transparent;
+    text-color:                  @color6;
+    font:                        "JetBrainsMono Nerd Font Light 16";
+    padding:                     18px 8px 18px 22px;
+    vertical-align:              0.5;
+}
+entry {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      text;
+    placeholder:                 "Search apps";
+    placeholder-color:           rgba(255, 255, 255, 0.5);
+    padding:                     18px 22px 18px 8px;
+    border:                      0px;
+    border-color:                transparent;
+    font:                        "JetBrainsMono Nerd Font Light 15";
+    vertical-align:              0.5;
+}
+
+/*****----- Listview -----*****/
+listview {
+    enabled:                     true;
+    columns:                     7;
+    lines:                       4;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    
+    spacing:                     0px;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      "default";
+}
+scrollbar {
+    handle-width:                5px ;
+    handle-color:                @selected;
+    border-radius:               0px;
+    background-color:            @background-alt;
+}
+
+/*****----- Elements -----*****/
+element {
+    enabled:                     true;
+    spacing:                     15px;
+    margin:                      3px;
+    padding:                     35px 10px;
+    border:                      0px solid;
+    border-radius:               15px;
+    border-color:                @color6;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    cursor:                      pointer;
+}
+element normal.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+element selected.normal {
+    background-color:            rgba(255, 255, 255, 0.1);
+    text-color:                  @color6;
+    border:                      1px solid;
+    border-color:                @color6;
+}
+element-icon {
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        72px;
+    cursor:                      inherit;
+}
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   inherit;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}
+
+/*****----- Message -----*****/
+error-message {
+    padding:                     100px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            black / 10%;
+    text-color:                  @foreground;
+}
+textbox {
+    background-color:            transparent;
+    text-color:                  @foreground;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   none;
+}
+EOF
+
+echo "✅ Colores de rofi sincronizados con pywal"
+echo "📄 Archivo de colores actualizado: $ROFI_COLORS_FILE"
+echo "🎨 Tema principal actualizado: $ROFI_THEME_FILE"

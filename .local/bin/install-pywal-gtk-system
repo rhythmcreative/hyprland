@@ -1,0 +1,598 @@
+#!/bin/bash
+
+# ╔═══════════════════════════════════════════════════════════════════════════════════════╗
+# ║                       PyWal GTK System Installer                                     ║  
+# ║                                                                                       ║
+# ║  Instalador completo del sistema de temas GTK con PyWal                             ║
+# ║  Configura todo automáticamente: GTK, nm-applet, servicios, etc.                     ║
+# ║                          by rhythmcreative                                            ║
+# ║                                                                                       ║
+# ╚═══════════════════════════════════════════════════════════════════════════════════════╝
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Variables globales
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$HOME/.cache/pywal-gtk-install.log"
+ERROR_LOG="$HOME/.cache/pywal-gtk-error.log"
+
+# Crear directorios de log
+mkdir -p "$HOME/.cache"
+touch "$LOG_FILE" "$ERROR_LOG"
+
+# Funciones de logging
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+log_error() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" >> "$ERROR_LOG"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+# Funciones de mensajes
+print_header() {
+    clear
+    echo -e "${PURPLE}╔═══════════════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}                       ${CYAN}${BOLD}PyWal GTK System Installer${NC}                                     ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}  ${GREEN}Instalador completo del sistema de temas GTK con PyWal${NC}                             ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}  ${GREEN}Configura todo automáticamente: GTK, nm-applet, servicios, etc.${NC}                     ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                          ${YELLOW}by rhythmcreative${NC}                                            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${NC}                                                                                       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚═══════════════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+print_step() {
+    echo -e "${CYAN}[PASO $1]${NC} $2"
+    log_message "PASO $1: $2"
+}
+
+print_status() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+    log_message "INFO: $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    log_message "WARNING: $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+    log_message "SUCCESS: $1"
+}
+
+# Verificar si se ejecuta como root
+check_root() {
+    if [[ $EUID -eq 0 ]]; then
+        log_error "Este script no debe ejecutarse como root"
+        echo -e "${RED}Error: Este script no debe ejecutarse como root${NC}"
+        echo -e "${YELLOW}Ejecuta como usuario normal: $0${NC}"
+        exit 1
+    fi
+}
+
+# Verificar dependencias del sistema
+check_system_dependencies() {
+    print_step "1" "Verificando dependencias del sistema..."
+    
+    local missing_deps=()
+    local optional_deps=()
+    
+    # Dependencias obligatorias
+    local required_deps=("python" "pip" "gsettings" "systemctl")
+    
+    for dep in "${required_deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    # Verificar pywal específicamente
+    if ! python -c "import pywal" 2>/dev/null; then
+        missing_deps+=("python-pywal")
+    fi
+    
+    # Dependencias opcionales
+    local optional_deps_list=("nm-applet" "notify-send" "qt5ct")
+    
+    for dep in "${optional_deps_list[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            optional_deps+=("$dep")
+        fi
+    done
+    
+    if [[ ${#missing_deps[@]} -ne 0 ]]; then
+        print_warning "Dependencias faltantes: ${missing_deps[*]}"
+        echo -e "${YELLOW}¿Deseas instalar las dependencias faltantes? (s/n):${NC} "
+        read -r install_deps
+        
+        if [[ "$install_deps" =~ ^[SsYy]$ ]]; then
+            install_system_dependencies "${missing_deps[@]}"
+        else
+            log_error "Dependencias faltantes, instalación cancelada"
+            echo -e "${RED}Instalación cancelada. Instala las dependencias y vuelve a intentar.${NC}"
+            exit 1
+        fi
+    fi
+    
+    if [[ ${#optional_deps[@]} -ne 0 ]]; then
+        print_warning "Dependencias opcionales faltantes: ${optional_deps[*]}"
+        echo -e "${YELLOW}¿Deseas instalar las dependencias opcionales? (s/n):${NC} "
+        read -r install_optional
+        
+        if [[ "$install_optional" =~ ^[SsYy]$ ]]; then
+            install_optional_dependencies "${optional_deps[@]}"
+        fi
+    fi
+    
+    print_success "Verificación de dependencias completada"
+}
+
+# Instalar dependencias del sistema
+install_system_dependencies() {
+    local deps=("$@")
+    print_status "Instalando dependencias del sistema..."
+    
+    # Detectar gestor de paquetes
+    if command -v pacman &> /dev/null; then
+        # Arch Linux
+        local pacman_deps=()
+        for dep in "${deps[@]}"; do
+            case "$dep" in
+                "python-pywal") pacman_deps+=("python-pywal") ;;
+                "gsettings") pacman_deps+=("glib2") ;;
+                "systemctl") pacman_deps+=("systemd") ;;
+                *) pacman_deps+=("$dep") ;;
+            esac
+        done
+        
+        echo -e "${CYAN}Ejecutando: sudo pacman -S --needed ${pacman_deps[*]}${NC}"
+        sudo pacman -S --needed "${pacman_deps[@]}"
+        
+    elif command -v apt &> /dev/null; then
+        # Ubuntu/Debian
+        local apt_deps=()
+        for dep in "${deps[@]}"; do
+            case "$dep" in
+                "python-pywal") apt_deps+=("python3-pip") ;;
+                "gsettings") apt_deps+=("libglib2.0-bin") ;;
+                "systemctl") apt_deps+=("systemd") ;;
+                *) apt_deps+=("$dep") ;;
+            esac
+        done
+        
+        sudo apt update
+        sudo apt install -y "${apt_deps[@]}"
+        
+        # Instalar pywal via pip
+        if [[ " ${deps[*]} " =~ " python-pywal " ]]; then
+            pip install --user pywal
+        fi
+        
+    elif command -v dnf &> /dev/null; then
+        # Fedora
+        local dnf_deps=()
+        for dep in "${deps[@]}"; do
+            case "$dep" in
+                "python-pywal") dnf_deps+=("python3-pip") ;;
+                "gsettings") dnf_deps+=("glib2") ;;
+                "systemctl") dnf_deps+=("systemd") ;;
+                *) dnf_deps+=("$dep") ;;
+            esac
+        done
+        
+        sudo dnf install -y "${dnf_deps[@]}"
+        
+        # Instalar pywal via pip
+        if [[ " ${deps[*]} " =~ " python-pywal " ]]; then
+            pip install --user pywal
+        fi
+    else
+        print_warning "Gestor de paquetes no detectado. Instala manualmente: ${deps[*]}"
+        return 1
+    fi
+    
+    print_success "Dependencias del sistema instaladas"
+}
+
+# Instalar dependencias opcionales
+install_optional_dependencies() {
+    local deps=("$@")
+    print_status "Instalando dependencias opcionales..."
+    
+    if command -v pacman &> /dev/null; then
+        local pacman_deps=()
+        for dep in "${deps[@]}"; do
+            case "$dep" in
+                "nm-applet") pacman_deps+=("network-manager-applet") ;;
+                "notify-send") pacman_deps+=("libnotify") ;;
+                "qt5ct") pacman_deps+=("qt5ct") ;;
+                *) pacman_deps+=("$dep") ;;
+            esac
+        done
+        sudo pacman -S --needed "${pacman_deps[@]}"
+    # Agregar otros gestores de paquetes si es necesario
+    fi
+    
+    print_success "Dependencias opcionales instaladas"
+}
+
+# Verificar configuración de pywal
+check_pywal_setup() {
+    print_step "2" "Verificando configuración de pywal..."
+    
+    if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+        print_warning "pywal no ha sido configurado aún"
+        echo -e "${YELLOW}¿Deseas configurar pywal con una imagen de muestra? (s/n):${NC} "
+        read -r setup_pywal
+        
+        if [[ "$setup_pywal" =~ ^[SsYy]$ ]]; then
+            setup_sample_pywal
+        else
+            print_warning "Configuración de pywal omitida. Ejecuta 'wal -i imagen.jpg' más tarde"
+        fi
+    else
+        print_success "pywal ya está configurado"
+    fi
+}
+
+# Configurar pywal con imagen de muestra
+setup_sample_pywal() {
+    print_status "Configurando pywal con imagen de muestra..."
+    
+    # Buscar imagen en el sistema
+    local sample_image=""
+    local search_paths=(
+        "/usr/share/pixmaps"
+        "/usr/share/backgrounds"
+        "$HOME/Pictures"
+        "$HOME/Pictures/Wallpapers"
+    )
+    
+    for path in "${search_paths[@]}"; do
+        if [[ -d "$path" ]]; then
+            sample_image=$(find "$path" -type f \( -name "*.jpg" -o -name "*.png" -o -name "*.jpeg" \) | head -1)
+            if [[ -n "$sample_image" ]]; then
+                break
+            fi
+        fi
+    done
+    
+    if [[ -n "$sample_image" ]]; then
+        print_status "Usando imagen de muestra: $sample_image"
+        wal -i "$sample_image" -q
+        print_success "pywal configurado con imagen de muestra"
+    else
+        print_warning "No se encontró imagen de muestra. pywal será configurado más tarde"
+    fi
+}
+
+# Instalar scripts principales
+install_scripts() {
+    print_step "3" "Instalando scripts del sistema PyWal GTK..."
+    
+    # Verificar que los scripts existen
+    local scripts=(
+        "pywal-gtk-theme"
+        "nm-applet-pywal-config"
+    )
+    
+    for script in "${scripts[@]}"; do
+        local script_path="$HOME/.local/bin/$script"
+        if [[ ! -f "$script_path" ]]; then
+            log_error "Script faltante: $script_path"
+            echo -e "${RED}Error: Script faltante $script_path${NC}"
+            echo -e "${YELLOW}Ejecuta este instalador desde el directorio que contiene los scripts${NC}"
+            exit 1
+        fi
+        
+        # Hacer ejecutable
+        chmod +x "$script_path"
+        print_success "Script instalado: $script"
+    done
+    
+    # Agregar ~/.local/bin al PATH si no está
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+        export PATH="$HOME/.local/bin:$PATH"
+        print_status "Agregado ~/.local/bin al PATH"
+    fi
+}
+
+# Configurar tema GTK inicial
+setup_initial_theme() {
+    print_step "4" "Configurando tema GTK inicial..."
+    
+    if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+        print_status "Generando tema GTK con pywal..."
+        "$HOME/.local/bin/pywal-gtk-theme" 2>/dev/null
+        print_success "Tema GTK inicial configurado"
+    else
+        print_warning "Tema GTK será configurado cuando pywal esté disponible"
+    fi
+}
+
+# Configurar nm-applet
+setup_nm_applet() {
+    print_step "5" "Configurando nm-applet..."
+    
+    if command -v nm-applet &> /dev/null; then
+        print_status "Configurando nm-applet con pywal..."
+        "$HOME/.local/bin/nm-applet-pywal-config" 2>/dev/null
+        print_success "nm-applet configurado"
+    else
+        print_warning "nm-applet no está disponible, configuración omitida"
+    fi
+}
+
+# Crear scripts de conveniencia
+create_convenience_scripts() {
+    print_step "6" "Creando scripts de conveniencia..."
+    
+    # Script para aplicar tema rápidamente
+    cat > "$HOME/.local/bin/apply-pywal-theme" << 'EOF'
+#!/bin/bash
+# Script rápido para aplicar tema pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    "$HOME/.local/bin/pywal-gtk-theme"
+    echo "Tema PyWal GTK aplicado exitosamente!"
+else
+    echo "Error: Ejecuta 'wal -i imagen.jpg' primero"
+fi
+EOF
+    
+    chmod +x "$HOME/.local/bin/apply-pywal-theme"
+    
+    # Script para cambiar wallpaper y aplicar tema
+    cat > "$HOME/.local/bin/change-wallpaper-theme" << 'EOF'
+#!/bin/bash
+# Script para cambiar wallpaper y aplicar tema automáticamente
+
+if [[ $# -eq 0 ]]; then
+    echo "Uso: $0 /ruta/a/imagen.jpg"
+    exit 1
+fi
+
+IMAGE="$1"
+
+if [[ ! -f "$IMAGE" ]]; then
+    echo "Error: Imagen no encontrada: $IMAGE"
+    exit 1
+fi
+
+echo "Aplicando wallpaper y generando tema..."
+wal -i "$IMAGE" -q
+
+echo "Aplicando tema GTK..."
+"$HOME/.local/bin/pywal-gtk-theme"
+
+echo "Wallpaper y tema aplicados exitosamente!"
+if command -v notify-send &> /dev/null; then
+    notify-send "PyWal Theme" "Wallpaper y tema aplicados! 🎨" -t 3000
+fi
+EOF
+    
+    chmod +x "$HOME/.local/bin/change-wallpaper-theme"
+    
+    print_success "Scripts de conveniencia creados"
+}
+
+# Crear documentación
+create_documentation() {
+    print_step "7" "Creando documentación..."
+    
+    local doc_dir="$HOME/.config/pywal-gtk"
+    mkdir -p "$doc_dir"
+    
+    cat > "$doc_dir/README.md" << 'EOF'
+# PyWal GTK Theme System
+
+Sistema completo de temas GTK sincronizado con pywal.
+
+## Uso Básico
+
+### Cambiar wallpaper y tema
+```bash
+change-wallpaper-theme /ruta/a/imagen.jpg
+```
+
+### Aplicar solo el tema (sin cambiar wallpaper)
+```bash
+apply-pywal-theme
+```
+
+### Configurar pywal manualmente
+```bash
+wal -i /ruta/a/imagen.jpg
+```
+
+### Generar tema GTK completo
+```bash
+pywal-gtk-theme
+```
+
+### Configurar nm-applet
+```bash
+nm-applet-pywal-config
+```
+
+## Archivos de Configuración
+
+- Tema GTK: `~/.themes/PyWal-Dynamic/`
+- Configuración nm-applet: `~/.config/nm-applet/`
+- Logs: `~/.cache/pywal-gtk-*.log`
+
+## Servicios Systemd
+
+- Sincronización automática: `nm-applet-pywal-sync.timer`
+
+Ver estado: `systemctl --user status nm-applet-pywal-sync.timer`
+
+## Solución de Problemas
+
+1. **El tema no se aplica**: Reinicia las aplicaciones GTK
+2. **nm-applet no cambia**: Ejecuta `nm-applet-pywal-config`
+3. **Errores de pywal**: Verifica que la imagen existe y es válida
+4. **Permisos**: Asegúrate de que los scripts en ~/.local/bin son ejecutables
+
+## Logs
+
+- General: `~/.cache/pywal-gtk-install.log`
+- Errores: `~/.cache/pywal-gtk-error.log`
+EOF
+    
+    print_success "Documentación creada en $doc_dir/README.md"
+}
+
+# Verificar instalación
+verify_installation() {
+    print_step "8" "Verificando instalación..."
+    
+    local issues=()
+    
+    # Verificar scripts
+    local scripts=("pywal-gtk-theme" "nm-applet-pywal-config" "apply-pywal-theme" "change-wallpaper-theme")
+    for script in "${scripts[@]}"; do
+        if [[ ! -x "$HOME/.local/bin/$script" ]]; then
+            issues+=("Script no ejecutable: $script")
+        fi
+    done
+    
+    # Verificar pywal
+    if ! python -c "import pywal" 2>/dev/null; then
+        issues+=("pywal no está disponible")
+    fi
+    
+    # Verificar directorios
+    local dirs=("$HOME/.themes" "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0")
+    for dir in "${dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            issues+=("Directorio faltante: $dir")
+        fi
+    done
+    
+    if [[ ${#issues[@]} -eq 0 ]]; then
+        print_success "Verificación completada sin problemas"
+        return 0
+    else
+        print_warning "Problemas encontrados:"
+        for issue in "${issues[@]}"; do
+            echo -e "   ${YELLOW}• ${issue}${NC}"
+        done
+        return 1
+    fi
+}
+
+# Mostrar resumen final
+show_final_summary() {
+    clear
+    print_header
+    
+    echo -e "${GREEN}${BOLD}🎉 ¡INSTALACIÓN COMPLETADA EXITOSAMENTE! 🎉${NC}"
+    echo ""
+    
+    echo -e "${CYAN}📦 Componentes instalados:${NC}"
+    echo -e "   ${GREEN}✓${NC} Sistema de temas GTK con pywal"
+    echo -e "   ${GREEN}✓${NC} Configuración de nm-applet"
+    echo -e "   ${GREEN}✓${NC} Scripts de automatización"
+    echo -e "   ${GREEN}✓${NC} Servicios systemd"
+    echo -e "   ${GREEN}✓${NC} Scripts de conveniencia"
+    echo -e "   ${GREEN}✓${NC} Documentación"
+    echo ""
+    
+    echo -e "${CYAN}🚀 Comandos principales:${NC}"
+    echo -e "   ${YELLOW}change-wallpaper-theme imagen.jpg${NC} - Cambiar wallpaper y tema"
+    echo -e "   ${YELLOW}apply-pywal-theme${NC}                - Aplicar tema actual"
+    echo -e "   ${YELLOW}pywal-gtk-theme${NC}                  - Generar tema GTK completo"
+    echo -e "   ${YELLOW}nm-applet-pywal-config${NC}           - Configurar nm-applet"
+    echo ""
+    
+    echo -e "${CYAN}📁 Ubicaciones importantes:${NC}"
+    echo -e "   ${BLUE}~/.themes/PyWal-Dynamic/${NC}       - Tema GTK"
+    echo -e "   ${BLUE}~/.config/nm-applet/${NC}           - Configuración nm-applet"
+    echo -e "   ${BLUE}~/.config/pywal-gtk/README.md${NC}   - Documentación completa"
+    echo ""
+    
+    if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+        echo -e "${GREEN}🎨 pywal está configurado y listo para usar${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Configura pywal con: ${CYAN}change-wallpaper-theme imagen.jpg${NC}"
+    fi
+    
+    echo ""
+    echo -e "${PURPLE}Gracias por usar PyWal GTK Theme System! 🎨${NC}"
+    
+    # Log final
+    log_message "Instalación completada exitosamente"
+}
+
+# Función principal
+main() {
+    print_header
+    
+    echo -e "${CYAN}Este instalador configurará el sistema completo de temas PyWal GTK${NC}"
+    echo -e "${CYAN}Incluye: GTK themes, nm-applet, scripts y servicios automáticos${NC}"
+    echo ""
+    echo -e "${YELLOW}¿Deseas continuar con la instalación? (s/n):${NC} "
+    read -r confirm_install
+    
+    if [[ ! "$confirm_install" =~ ^[SsYy]$ ]]; then
+        echo -e "${YELLOW}Instalación cancelada por el usuario${NC}"
+        exit 0
+    fi
+    
+    # Inicializar log
+    log_message "Iniciando instalación del sistema PyWal GTK"
+    log_message "Usuario: $USER"
+    log_message "Directorio home: $HOME"
+    log_message "PATH: $PATH"
+    
+    # Ejecutar pasos de instalación
+    check_root
+    check_system_dependencies
+    check_pywal_setup
+    install_scripts
+    setup_initial_theme
+    setup_nm_applet
+    create_convenience_scripts
+    create_documentation
+    
+    if verify_installation; then
+        show_final_summary
+    else
+        print_warning "Instalación completada con algunos problemas. Revisa los logs."
+        echo -e "${YELLOW}Logs disponibles en:${NC}"
+        echo -e "   ${BLUE}$LOG_FILE${NC}"
+        echo -e "   ${BLUE}$ERROR_LOG${NC}"
+    fi
+}
+
+# Verificar argumentos
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "PyWal GTK System Installer"
+    echo ""
+    echo "Uso: $0 [opciones]"
+    echo ""
+    echo "Opciones:"
+    echo "  -h, --help     Mostrar esta ayuda"
+    echo "  --no-deps      Omitir instalación de dependencias"
+    echo "  --quiet        Modo silencioso (menos output)"
+    echo ""
+    echo "Este script instala y configura el sistema completo de temas GTK con pywal."
+    echo "Incluye soporte para GTK 3.0/4.0, nm-applet y servicios automáticos."
+    exit 0
+fi
+
+# Ejecutar instalación
+main "$@"

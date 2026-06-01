@@ -1,0 +1,475 @@
+#!/bin/bash
+
+# Script para actualizar el tema wal-gtk-auto con colores de pywal
+# Ubicación: ~/.local/bin/update-wal-gtk-auto
+
+# Verificar que existe el directorio del tema
+THEME_DIR="$HOME/.themes/wal-gtk-auto"
+if [ ! -d "$THEME_DIR" ]; then
+    echo "Error: No se encontró el directorio del tema en $THEME_DIR"
+    exit 1
+fi
+
+# Verificar que existen los colores de pywal
+COLORS_FILE="$HOME/.cache/wal/colors.json"
+if [ ! -f "$COLORS_FILE" ]; then
+    echo "Error: No se encontró el archivo de colores de pywal en $COLORS_FILE"
+    echo "Ejecuta 'wal -i /path/to/image' primero"
+    exit 1
+fi
+
+# Leer colores desde el archivo JSON de pywal
+source "$HOME/.cache/wal/colors.sh"
+
+echo "Actualizando tema wal-gtk-auto con colores de pywal..."
+
+# Crear el contenido CSS para GTK3
+cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Generated GTK3 theme from pywal colors */
+
+@define-color bg_color $background;
+@define-color fg_color $foreground;
+@define-color base_color $background;
+@define-color text_color $foreground;
+@define-color selected_bg_color $color1;
+@define-color selected_fg_color $background;
+@define-color tooltip_bg_color $color8;
+@define-color tooltip_fg_color $foreground;
+@define-color titlebar_bg_color $background;
+@define-color titlebar_fg_color $foreground;
+@define-color menu_bg_color $background;
+@define-color menu_fg_color $foreground;
+@define-color link_color $color4;
+@define-color visited_link_color $color5;
+
+/* Window styling */
+window {
+    background-color: $background;
+    color: $foreground;
+}
+
+/* Button styling */
+button {
+    background: linear-gradient(to bottom, $color8, $background);
+    border: 1px solid $color8;
+    color: $foreground;
+    border-radius: 3px;
+    padding: 6px 12px;
+    min-height: 24px;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, $color1, $color8);
+    border-color: $color1;
+}
+
+button:active {
+    background: $color1;
+    border-color: $color1;
+    color: $background;
+}
+
+/* Entry styling */
+entry {
+    background-color: $background;
+    border: 1px solid $color8;
+    color: $foreground;
+    border-radius: 3px;
+    padding: 6px;
+    min-height: 24px;
+}
+
+entry:focus {
+    border-color: $color1;
+    box-shadow: 0 0 0 1px $color1;
+}
+
+/* Selection styling */
+*:selected,
+selection {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Headerbar styling */
+headerbar {
+    background: linear-gradient(to bottom, $background, $background);
+    border-bottom: 1px solid $color8;
+    color: $foreground;
+    min-height: 46px;
+}
+
+headerbar button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: $foreground;
+}
+
+headerbar button:hover {
+    background: $color8;
+    border-color: $color8;
+}
+
+/* Menu styling */
+menu,
+.menu {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color8;
+}
+
+menuitem:hover {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Scrollbar styling */
+scrollbar {
+    background-color: $background;
+}
+
+scrollbar slider {
+    background-color: $color8;
+    border-radius: 10px;
+    min-width: 12px;
+    min-height: 12px;
+}
+
+scrollbar slider:hover {
+    background-color: $color1;
+}
+
+/* Notebook (tabs) styling */
+notebook > header {
+    background-color: $background;
+    border-bottom: 1px solid $color8;
+}
+
+notebook > header > tabs > tab {
+    background-color: $color8;
+    color: $foreground;
+    border: 1px solid $color8;
+    padding: 6px 12px;
+}
+
+notebook > header > tabs > tab:checked {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Treeview styling */
+treeview {
+    background-color: $background;
+    color: $foreground;
+}
+
+treeview:selected {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Popover styling */
+popover {
+    background-color: $background;
+    border: 1px solid $color8;
+    color: $foreground;
+}
+
+/* Switch styling */
+switch {
+    background-color: $color8;
+    border-radius: 14px;
+}
+
+switch:checked {
+    background-color: $color1;
+}
+
+switch slider {
+    background-color: $foreground;
+    border-radius: 50%;
+}
+EOF
+
+# Copiar el CSS de GTK3 a GTK4 y adaptarlo
+cat > "$THEME_DIR/gtk-4.0/gtk.css" << EOF
+/* Generated GTK4 theme from pywal colors */
+
+@define-color accent_bg_color $color1;
+@define-color accent_fg_color $background;
+@define-color accent_color $color1;
+@define-color destructive_bg_color #e01b24;
+@define-color destructive_fg_color white;
+@define-color destructive_color #e01b24;
+@define-color success_bg_color #26a269;
+@define-color success_fg_color white;
+@define-color success_color #26a269;
+@define-color warning_bg_color #f5c211;
+@define-color warning_fg_color rgba(0,0,0,0.8);
+@define-color warning_color #f5c211;
+@define-color error_bg_color #e01b24;
+@define-color error_fg_color white;
+@define-color error_color #e01b24;
+@define-color window_bg_color $background;
+@define-color window_fg_color $foreground;
+@define-color view_bg_color $background;
+@define-color view_fg_color $foreground;
+@define-color headerbar_bg_color $background;
+@define-color headerbar_fg_color $foreground;
+@define-color headerbar_border_color $color8;
+@define-color headerbar_backdrop_color $background;
+@define-color headerbar_shade_color rgba(0,0,0,0.07);
+@define-color card_bg_color rgba(255,255,255,0.08);
+@define-color card_fg_color $foreground;
+@define-color card_shade_color rgba(0,0,0,0.07);
+@define-color dialog_bg_color $background;
+@define-color dialog_fg_color $foreground;
+@define-color popover_bg_color $background;
+@define-color popover_fg_color $foreground;
+@define-color shade_color rgba(0,0,0,0.07);
+@define-color scrollbar_outline_color rgba(0,0,0,0.5);
+
+/* Base styling */
+window {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+
+/* Buttons */
+button {
+    background: linear-gradient(to bottom, $color8, $background);
+    border: 1px solid $color8;
+    color: $foreground;
+    border-radius: 6px;
+    padding: 6px 12px;
+    min-height: 24px;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, $color1, $color8);
+    border-color: $color1;
+}
+
+button:active {
+    background: $color1;
+    border-color: $color1;
+    color: $background;
+}
+
+button.suggested-action {
+    background: $color1;
+    border-color: $color1;
+    color: $background;
+}
+
+button.destructive-action {
+    background: @destructive_bg_color;
+    border-color: @destructive_bg_color;
+    color: @destructive_fg_color;
+}
+
+/* Text entries */
+entry {
+    background-color: $background;
+    border: 1px solid $color8;
+    color: $foreground;
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 24px;
+}
+
+entry:focus-within {
+    border-color: $color1;
+    box-shadow: inset 0 0 0 1px $color1;
+}
+
+/* Headerbar */
+headerbar {
+    background: @headerbar_bg_color;
+    color: @headerbar_fg_color;
+    border-bottom: 1px solid @headerbar_border_color;
+    min-height: 48px;
+}
+
+/* ListView and selection */
+listview,
+list {
+    background-color: @view_bg_color;
+    color: @view_fg_color;
+}
+
+row:selected {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Scrollbars */
+scrollbar {
+    background: transparent;
+}
+
+scrollbar > range > trough {
+    background-color: transparent;
+}
+
+scrollbar > range > trough > slider {
+    background-color: $color8;
+    border-radius: 10px;
+    min-width: 12px;
+    min-height: 12px;
+}
+
+scrollbar > range > trough > slider:hover {
+    background-color: $color1;
+}
+
+/* Notebook (tabs) */
+notebook > header {
+    background: @headerbar_bg_color;
+    border-bottom: 1px solid @headerbar_border_color;
+}
+
+notebook > header > tabs > tab {
+    background: transparent;
+    color: @headerbar_fg_color;
+    border: 1px solid transparent;
+    padding: 8px 16px;
+}
+
+notebook > header > tabs > tab:checked {
+    background: $color1;
+    color: $background;
+    border-color: $color1;
+}
+
+/* Menu and popovers */
+popover,
+menu {
+    background-color: @popover_bg_color;
+    color: @popover_fg_color;
+    border: 1px solid $color8;
+    border-radius: 8px;
+}
+
+popover > contents,
+menu > contents {
+    padding: 8px;
+}
+
+menuitem {
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+menuitem:hover {
+    background-color: $color1;
+    color: $background;
+}
+
+/* Switch */
+switch {
+    background-color: $color8;
+    border-radius: 14px;
+    min-width: 52px;
+    min-height: 28px;
+}
+
+switch:checked {
+    background-color: $color1;
+}
+
+switch > slider {
+    background-color: white;
+    border-radius: 50%;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 2px;
+}
+
+/* Progress bars */
+progressbar > trough {
+    background-color: $color8;
+    border-radius: 10px;
+}
+
+progressbar > trough > progress {
+    background-color: $color1;
+    border-radius: 10px;
+}
+
+/* Check and radio buttons */
+checkbutton > check,
+radiobutton > radio {
+    background-color: $background;
+    border: 2px solid $color8;
+    color: $foreground;
+}
+
+checkbutton > check:checked,
+radiobutton > radio:checked {
+    background-color: $color1;
+    border-color: $color1;
+    color: $background;
+}
+
+/* Scale (sliders) */
+scale > trough {
+    background-color: $color8;
+    border-radius: 10px;
+}
+
+scale > trough > highlight {
+    background-color: $color1;
+    border-radius: 10px;
+}
+
+scale > trough > slider {
+    background-color: white;
+    border: 2px solid $color1;
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+}
+EOF
+
+echo "✓ Tema wal-gtk-auto actualizado con los colores de pywal"
+echo "Los archivos actualizados son:"
+echo "  - $THEME_DIR/gtk-3.0/gtk.css"
+echo "  - $THEME_DIR/gtk-4.0/gtk.css"
+
+# Forzar recarga del tema GTK
+echo "🔄 Forzando recarga del tema GTK..."
+
+# Método 1: Cambiar temporalmente a otro tema y volver (el más efectivo)
+echo "  - Cambiando temporalmente al tema Adwaita..."
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+sleep 1
+echo "  - Regresando al tema wal-gtk-auto..."
+gsettings set org.gnome.desktop.interface gtk-theme 'wal-gtk-auto'
+
+# Método 2: Limpiar caché de temas GTK
+echo "  - Limpiando caché de iconos GTK..."
+if [ -d "$HOME/.cache/gtk-3.0" ]; then
+    rm -rf "$HOME/.cache/gtk-3.0" 2>/dev/null || true
+fi
+if [ -d "$HOME/.cache/gtk-4.0" ]; then
+    rm -rf "$HOME/.cache/gtk-4.0" 2>/dev/null || true
+fi
+
+# Método 3: Actualizar caché de iconos si existe el comando
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    echo "  - Actualizando caché de iconos..."
+    gtk-update-icon-cache -f -t "$HOME/.themes/wal-gtk-auto" 2>/dev/null || true
+fi
+
+# Método 4: Recargar configuración mediante XSettings si está disponible
+if command -v xsettingsd >/dev/null 2>&1; then
+    echo "  - Recargando xsettingsd..."
+    pkill -USR1 xsettingsd 2>/dev/null || true
+fi
+
+# Método 5: Para aplicaciones ya abiertas, crear un timestamp para forzar recarga
+touch "$THEME_DIR/gtk-3.0/.timestamp"
+touch "$THEME_DIR/gtk-4.0/.timestamp"
+
+echo "✅ Tema GTK recargado exitosamente"

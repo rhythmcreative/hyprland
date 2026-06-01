@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Aplicar tema a Steam si está instalado
+if command -v wal_steam > /dev/null 2>&1; then
+    echo "Aplicando tema a Steam"
+    wal_steam > /dev/null 2>&1 &
+fi
+
+# Aplicar tema a Discord si está instalado
+if command -v pywal-discord > /dev/null 2>&1; then
+    echo "Aplicando tema a Discord"
+    pywal-discord > /dev/null 2>&1 &
+fi
+
+# Aplicar tema a Telegram si está instalado
+if command -v wal-telegram > /dev/null 2>&1; then
+    echo "Aplicando tema a Telegram"
+    wal-telegram > /dev/null 2>&1 &
+fi
+
+# Aplicar tema a Firefox con Pywalfox si está instalado
+if command -v pywalfox > /dev/null 2>&1; then
+    echo "Aplicando tema a Firefox con pywalfox"
+    # Esperar un momento para que pywal genere los colores
+    sleep 1
+    pywalfox update
+    if [ $? -eq 0 ]; then
+        echo "✅ Pywalfox actualizado exitosamente"
+    else
+        echo "❌ ERROR: Fallo al actualizar pywalfox"
+    fi
+fi
+
+# Aplicar tema a LibreWolf si está corriendo
+if pgrep -x "librewolf" > /dev/null; then
+    echo "Aplicando tema a LibreWolf"
+    ~/.local/bin/pywal-librewolf > /dev/null 2>&1 &
+fi
+
+# Aplicar tema a Chromium/Chrome si está instalado
+if python3 -c "import pywalfox" 2>/dev/null; then
+    if pgrep -x "chromium" > /dev/null || pgrep -x "google-chrome" > /dev/null; then
+        echo "Aplicando tema a Chromium/Chrome"
+        python3 -c "from pywalfox.pywal import PywalColors; from pywalfox.chrome import Chrome; Chrome().update(PywalColors().colors)" > /dev/null 2>&1 &
+    fi
+fi
+
+# Recargar waybar si está corriendo
+if pgrep -x "waybar" > /dev/null; then
+    echo "Recargando waybar"
+    pkill -SIGUSR2 waybar > /dev/null 2>&1 &
+fi
+
+# Aplicar colores a kitty si está instalado y corriendo
+if command -v kitty > /dev/null 2>&1 && pgrep -x "kitty" > /dev/null; then
+    echo "Aplicando tema a kitty"
+    kitty @ set-colors --all --configured ~/.cache/wal/colors-kitty.conf > /dev/null 2>&1 &
+fi
+
+wait

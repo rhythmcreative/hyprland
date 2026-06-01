@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Brightness control with Dynamic Island notifications
+
+case "$1" in
+    up)
+        brightnessctl -e4 -n2 set 5%+
+        ;;
+    down)
+        brightnessctl -e4 -n2 set 5%-
+        ;;
+esac
+
+# Send Dynamic Island notification via EWW
+~/.local/bin/eww-brightness

@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Script de prueba para verificar sincronización waybar-pywal
+
+echo "🧪 Probando sincronización waybar-pywal..."
+
+# Verificar que waybar esté corriendo
+if ! pgrep -x waybar > /dev/null; then
+    echo "❌ Waybar no está corriendo"
+    exit 1
+fi
+
+# Verificar archivos de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ No se encontraron colores de pywal"
+    echo "💡 Ejecuta 'wal -i /path/to/image' primero"
+    exit 1
+fi
+
+# Mostrar wallpaper actual
+current_wallpaper=$(cat ~/.cache/current-wallpaper 2>/dev/null || echo "No definido")
+echo "🖼️ Wallpaper actual: $current_wallpaper"
+
+# Mostrar colores de pywal actuales
+source "$HOME/.cache/wal/colors.sh"
+echo "🎨 Colores pywal actuales:"
+echo "   Background: $background"
+echo "   Foreground: $foreground"
+echo "   Color4 (azul): $color4"
+
+# Verificar archivo de colores waybar
+if [[ -f "$HOME/.config/waybar/colors-pywal.css" ]]; then
+    echo "✅ Archivo colors-pywal.css existe"
+    # Mostrar primera línea con fecha
+    first_line=$(head -1 "$HOME/.config/waybar/colors-pywal.css")
+    echo "   $first_line"
+else
+    echo "❌ Archivo colors-pywal.css no existe"
+fi
+
+# Probar sincronización manual
+echo ""
+echo "🔄 Ejecutando sincronización manual..."
+~/.local/bin/waybar-pywal-sync
+
+echo ""
+echo "✅ Prueba completada. Verifica que waybar refleje los colores correctos."

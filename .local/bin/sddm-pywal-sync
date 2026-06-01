@@ -1,0 +1,20 @@
+#!/bin/bash
+# Wrapper mejorado para sincronización automática de pywal con SDDM
+# Usa el script sddm-auto-sync-local que es más completo y robusto
+
+echo "🎨 Sincronizando SDDM con pywal..."
+
+# Esperar un poco para asegurar que pywal ha terminado de generar colores
+sleep 2
+
+# Usar el script local más completo que maneja wallpapers, monitores y cursor
+if [[ -f "$HOME/.local/bin/sddm-auto-sync-local" ]]; then
+    echo "📋 Usando sddm-auto-sync-local para sincronización completa"
+    "$HOME/.local/bin/sddm-auto-sync-local" --wallpaper-only
+    echo "✅ Sincronización SDDM completada"
+else
+    echo "❌ Error: sddm-auto-sync-local no encontrado"
+    exit 1
+fi
+
+echo "💡 Para aplicar cambios inmediatamente ejecuta: sddm-auto-sync-local --restart"

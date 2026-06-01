@@ -1,0 +1,254 @@
+#!/bin/bash
+
+# Script para cambiar wallpaper con pywal y sincronizar automáticamente todos los temas
+# Integrado con HyDE, Hyprland y Powerlevel10k
+
+# Configuraciones
+WALLPAPER_DIR="$HOME/wallpapers"
+ALTERNATIVE_DIRS=("$HOME/Pictures/wallpapers" "$HOME/.local/share/wallpapers" "$HOME/Hyde/Source/assets/wallpapers")
+
+# Función para mostrar ayuda
+show_help() {
+    echo "🎨 Cambiador de Wallpaper con PyWal"
+    echo ""
+    echo "Uso: $(basename "$0") [OPCIONES] [IMAGEN]"
+    echo ""
+    echo "Opciones:"
+    echo "  -h, --help        Mostrar esta ayuda"
+    echo "  -r, --random      Seleccionar wallpaper aleatorio"
+    echo "  -s, --select      Mostrar selector interactivo"
+    echo "  -d, --directory   Especificar directorio de wallpapers"
+    echo ""
+    echo "Ejemplos:"
+    echo "  $(basename "$0") ~/Pictures/mi-wallpaper.jpg"
+    echo "  $(basename "$0") --random"
+    echo "  $(basename "$0") --select"
+    echo ""
+}
+
+# Función para encontrar directorio de wallpapers
+find_wallpaper_dir() {
+    if [[ -d "$WALLPAPER_DIR" ]]; then
+        echo "$WALLPAPER_DIR"
+        return 0
+    fi
+    
+    for dir in "${ALTERNATIVE_DIRS[@]}"; do
+        if [[ -d "$dir" ]]; then
+            echo "$dir"
+            return 0
+        fi
+    done
+    
+    echo ""
+    return 1
+}
+
+# Función para seleccionar wallpaper aleatorio
+select_random_wallpaper() {
+    local dir="$1"
+    
+    if [[ ! -d "$dir" ]]; then
+        echo "❌ Directorio no encontrado: $dir"
+        return 1
+    fi
+    
+    # Buscar imágenes comunes
+    local wallpapers=($(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) 2>/dev/null))
+    
+    if [[ ${#wallpapers[@]} -eq 0 ]]; then
+        echo "❌ No se encontraron wallpapers en: $dir"
+        return 1
+    fi
+    
+    # Seleccionar uno aleatorio
+    local random_wallpaper="${wallpapers[$RANDOM % ${#wallpapers[@]}]}"
+    echo "$random_wallpaper"
+}
+
+# Función para selector interactivo con fzf (si está disponible)
+select_interactive_wallpaper() {
+    local dir="$1"
+    
+    if [[ ! -d "$dir" ]]; then
+        echo "❌ Directorio no encontrado: $dir"
+        return 1
+    fi
+    
+    if ! command -v fzf >/dev/null 2>&1; then
+        echo "❌ fzf no está instalado. Usando selector aleatorio..."
+        select_random_wallpaper "$dir"
+        return
+    fi
+    
+    # Buscar imágenes y usar fzf para seleccionar
+    local selected_wallpaper=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) 2>/dev/null | fzf --preview 'echo "📁 {}" && file {}' --height 60% --border --prompt "🎨 Selecciona un wallpaper: ")
+    
+    if [[ -n "$selected_wallpaper" ]]; then
+        echo "$selected_wallpaper"
+    else
+        echo "❌ No se seleccionó ningún wallpaper"
+        return 1
+    fi
+}
+
+# Función principal para cambiar wallpaper
+change_wallpaper() {
+    local wallpaper="$1"
+    
+    if [[ ! -f "$wallpaper" ]]; then
+        echo "❌ Archivo no encontrado: $wallpaper"
+        return 1
+    fi
+    
+    echo "🎨 Cambiando wallpaper y generando esquema de colores..."
+    echo "📄 Wallpaper: $(basename "$wallpaper")"
+    
+    # Aplicar pywal
+    wal -i "$wallpaper" -a 85
+    
+    if [[ $? -ne 0 ]]; then
+        echo "❌ Error al aplicar pywal"
+        return 1
+    fi
+    
+    echo "✅ PyWal aplicado correctamente"
+    
+    # Aplicar wallpaper con swww (Hyprland)
+    if command -v swww >/dev/null 2>&1; then
+        echo "🖼️  Aplicando wallpaper con swww..."
+        swww img "$wallpaper" --transition-type wipe --transition-duration 1
+        
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Wallpaper aplicado con swww"
+        else
+            echo "⚠️  Error al aplicar wallpaper con swww, intentando con hyprctl..."
+            hyprctl hyprpaper wallpaper "eDP-1,$wallpaper" 2>/dev/null || echo "⚠️  hyprctl no disponible"
+        fi
+    elif command -v hyprctl >/dev/null 2>&1; then
+        echo "🖼️  Aplicando wallpaper con hyprctl..."
+        hyprctl hyprpaper wallpaper "eDP-1,$wallpaper" 2>/dev/null || echo "⚠️  Error con hyprctl"
+    else
+        echo "⚠️  No se encontró swww ni hyprctl, solo se aplicaron los colores"
+    fi
+    
+    # Recargar configuraciones relacionadas
+    echo "🔄 Recargando configuraciones..."
+    
+    # Recargar waybar si está corriendo
+    if pgrep -x "waybar" >/dev/null; then
+        echo "📊 Recargando Waybar..."
+        killall waybar
+        waybar &>/dev/null & disown
+    fi
+    
+    # Recargar dunst si está corriendo
+    if pgrep -x "dunst" >/dev/null; then
+        echo "🔔 Recargando Dunst..."
+        killall dunst
+        dunst &>/dev/null & disown
+    fi
+    
+    # Aplicar colores a terminal actual (si es posible)
+    if [[ -n "$TMUX" ]]; then
+        echo "🖥️  Aplicando colores a tmux..."
+        tmux source-file ~/.tmux.conf 2>/dev/null || true
+    fi
+    
+    echo ""
+    echo "✨ ¡Cambio de tema completado!"
+    echo "🎯 Wallpaper: $(basename "$wallpaper")"
+    echo "🎨 Colores generados automáticamente con pywal"
+    echo "📝 Los colores de Powerlevel10k se actualizarán en la próxima sesión de terminal"
+    echo "💡 Para aplicar inmediatamente: ejecuta 'source ~/.zshrc'"
+}
+
+# Función principal
+main() {
+    case "${1:-}" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -r|--random)
+            local dir=$(find_wallpaper_dir)
+            if [[ -z "$dir" ]]; then
+                echo "❌ No se encontró ningún directorio de wallpapers"
+                echo "💡 Crea el directorio $WALLPAPER_DIR y coloca tus wallpapers ahí"
+                exit 1
+            fi
+            
+            local wallpaper=$(select_random_wallpaper "$dir")
+            if [[ -n "$wallpaper" ]]; then
+                change_wallpaper "$wallpaper"
+            else
+                exit 1
+            fi
+            ;;
+        -s|--select)
+            local dir=$(find_wallpaper_dir)
+            if [[ -z "$dir" ]]; then
+                echo "❌ No se encontró ningún directorio de wallpapers"
+                echo "💡 Crea el directorio $WALLPAPER_DIR y coloca tus wallpapers ahí"
+                exit 1
+            fi
+            
+            local wallpaper=$(select_interactive_wallpaper "$dir")
+            if [[ -n "$wallpaper" ]]; then
+                change_wallpaper "$wallpaper"
+            else
+                exit 1
+            fi
+            ;;
+        -d|--directory)
+            if [[ -z "$2" ]]; then
+                echo "❌ Debes especificar un directorio"
+                show_help
+                exit 1
+            fi
+            WALLPAPER_DIR="$2"
+            local wallpaper=$(select_random_wallpaper "$WALLPAPER_DIR")
+            if [[ -n "$wallpaper" ]]; then
+                change_wallpaper "$wallpaper"
+            else
+                exit 1
+            fi
+            ;;
+        "")
+            # Sin argumentos, usar selector interactivo
+            local dir=$(find_wallpaper_dir)
+            if [[ -z "$dir" ]]; then
+                echo "❌ No se encontró ningún directorio de wallpapers"
+                echo "💡 Crea el directorio $WALLPAPER_DIR y coloca tus wallpapers ahí"
+                exit 1
+            fi
+            
+            local wallpaper=$(select_interactive_wallpaper "$dir")
+            if [[ -n "$wallpaper" ]]; then
+                change_wallpaper "$wallpaper"
+            else
+                exit 1
+            fi
+            ;;
+        *)
+            # Wallpaper específico
+            if [[ -f "$1" ]]; then
+                change_wallpaper "$1"
+            else
+                echo "❌ Archivo no encontrado: $1"
+                show_help
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+# Verificar dependencias básicas
+if ! command -v wal >/dev/null 2>&1; then
+    echo "❌ PyWal no está instalado"
+    echo "💡 Instala con: pip install pywal"
+    exit 1
+fi
+
+# Ejecutar función principal
+main "$@"

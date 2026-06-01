@@ -1,0 +1,423 @@
+#!/bin/bash
+
+# nm-applet Manager - Gestión completa con inicio automático y sincronización pywal
+# Maneja tanto el inicio como la sincronización automática de colores
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/nm-applet-manager.log"
+LOCK_FILE="/tmp/nm-applet-manager.lock"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🌐 nm-applet" "$1" -t 3000 -i network-wireless 2>/dev/null || true
+}
+
+# Verificar lock para evitar ejecuciones múltiples
+check_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            log "⏳ nm-applet-manager ya está ejecutándose (PID: $lock_pid)"
+            exit 0
+        fi
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+# Limpiar al salir
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT INT TERM
+
+# Función para verificar si nm-applet está corriendo
+is_nm_applet_running() {
+    pgrep -x nm-applet > /dev/null
+}
+
+# Función para obtener colores de pywal
+get_pywal_colors() {
+    local colors_file="$HOME/.cache/wal/colors.sh"
+    
+    if [[ ! -f "$colors_file" ]]; then
+        log "⚠️ Archivo de colores pywal no encontrado: $colors_file"
+        log "🎨 Aplicando colores por defecto..."
+        
+        # Colores por defecto en caso de que pywal no esté disponible
+        export WAYBAR_BG="#1e1e2e"
+        export WAYBAR_FG="#cdd6f4"
+        export WAYBAR_ACCENT="#89b4fa"
+        export WAYBAR_HIGHLIGHT="#a6e3a1"
+        return 0
+    fi
+    
+    # Cargar colores de pywal de forma segura
+    source "$colors_file"
+    
+    # Exportar colores limpiando comillas
+    export WAYBAR_BG=$(echo "$background" | tr -d "'\"")
+    export WAYBAR_FG=$(echo "$foreground" | tr -d "'\"")
+    export WAYBAR_ACCENT=$(echo "$color4" | tr -d "'\"")
+    export WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'\"")
+    
+    # Validar que los colores tienen formato válido
+    if [[ ! "$WAYBAR_BG" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+        log "⚠️ Color de fondo inválido: $WAYBAR_BG - usando por defecto"
+        export WAYBAR_BG="#1e1e2e"
+    fi
+    
+    log "✅ Colores pywal extraídos:"
+    log "  BG: $WAYBAR_BG, FG: $WAYBAR_FG, ACCENT: $WAYBAR_ACCENT"
+    
+    return 0
+}
+
+# Crear CSS específico para nm-applet
+create_nm_applet_css() {
+    local gtk3_dir="$HOME/.config/gtk-3.0"
+    local gtk4_dir="$HOME/.config/gtk-4.0"
+    
+    mkdir -p "$gtk3_dir" "$gtk4_dir"
+    
+    # CSS para GTK3
+    local css_file="$gtk3_dir/nm-applet-pywal.css"
+    
+    log "🎨 Creando CSS nm-applet con colores pywal..."
+    
+    cat > "$css_file" << EOF
+/* nm-applet pywal CSS - Generado $(date) */
+/* Colores: BG=$WAYBAR_BG, FG=$WAYBAR_FG, ACCENT=$WAYBAR_ACCENT */
+
+/* NetworkManager applet ventana principal */
+.nm-applet,
+.nm-applet-window,
+window.background,
+#NetworkManager {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+    border-radius: 6px;
+}
+
+/* Menú desplegable de redes */
+menu,
+menuitem {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+}
+
+menuitem:hover,
+menuitem:selected {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Lista de redes WiFi */
+treeview,
+list,
+listbox {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border-radius: 4px;
+}
+
+treeview row,
+list row,
+listbox row {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    padding: 6px 10px;
+    border-radius: 3px;
+}
+
+treeview row:hover,
+list row:hover,
+listbox row:hover {
+    background-color: $WAYBAR_ACCENT;
+}
+
+/* Botones */
+button {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_HIGHLIGHT;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+}
+
+button:hover {
+    background-color: $WAYBAR_HIGHLIGHT;
+    opacity: 0.9;
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+/* Campos de entrada (contraseñas) */
+entry {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 2px solid $WAYBAR_ACCENT;
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+entry:focus {
+    border-color: $WAYBAR_HIGHLIGHT;
+    box-shadow: 0 0 0 2px alpha($WAYBAR_HIGHLIGHT, 0.3);
+}
+
+/* Popover y diálogos */
+popover,
+dialog {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Separadores */
+separator {
+    background-color: $WAYBAR_ACCENT;
+    opacity: 0.3;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: $WAYBAR_BG;
+    border-radius: 10px;
+}
+
+scrollbar slider {
+    background-color: $WAYBAR_ACCENT;
+    border-radius: 10px;
+    min-width: 8px;
+    min-height: 8px;
+}
+
+scrollbar slider:hover {
+    background-color: $WAYBAR_HIGHLIGHT;
+}
+
+/* Indicadores de conexión */
+.connection-active {
+    color: $WAYBAR_ACCENT;
+    font-weight: bold;
+}
+
+/* Icono en system tray - específico para waybar */
+.system-tray .nm-applet-icon {
+    color: $WAYBAR_FG;
+    padding: 2px;
+}
+
+/* Headers y títulos */
+headerbar,
+.titlebar {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border-bottom: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Labels y texto */
+label {
+    color: $WAYBAR_FG;
+}
+
+/* Checkboxes y radio buttons */
+checkbutton,
+radiobutton {
+    color: $WAYBAR_FG;
+}
+
+checkbutton:checked,
+radiobutton:checked {
+    color: $WAYBAR_ACCENT;
+}
+EOF
+
+    # Copiar a GTK4
+    cp "$css_file" "$gtk4_dir/nm-applet-pywal.css"
+    
+    log "✅ CSS nm-applet creado: $css_file"
+}
+
+# Actualizar archivos GTK principales
+update_gtk_imports() {
+    local gtk3_css="$HOME/.config/gtk-3.0/gtk.css"
+    local gtk4_css="$HOME/.config/gtk-4.0/gtk.css"
+    
+    # GTK3
+    if [[ ! -f "$gtk3_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk3_css"; then
+        echo '@import "nm-applet-pywal.css";' >> "$gtk3_css"
+        log "✅ Importado nm-applet CSS en GTK3"
+    fi
+    
+    # GTK4  
+    if [[ ! -f "$gtk4_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk4_css"; then
+        echo '@import "nm-applet-pywal.css";' >> "$gtk4_css"
+        log "✅ Importado nm-applet CSS en GTK4"
+    fi
+}
+
+# Aplicar configuraciones GTK
+apply_gtk_settings() {
+    log "🔧 Aplicando configuraciones GTK..."
+    
+    # Variables de entorno
+    export GTK_THEME="Arc-Dark"
+    export GDK_BACKEND="wayland,x11"
+    
+    # gsettings
+    if command -v gsettings &> /dev/null; then
+        gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+        log "✅ gsettings aplicado"
+    fi
+    
+    # Señales D-Bus para recargar temas
+    if command -v dbus-send &> /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+            string:"gtk-theme-name" string:"Arc-Dark" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        log "✅ Señales D-Bus enviadas"
+    fi
+}
+
+# Función para iniciar nm-applet con configuración correcta
+start_nm_applet() {
+    log "🚀 Iniciando nm-applet con configuración pywal..."
+    
+    # Configurar variables de entorno
+    export GTK_THEME="Arc-Dark"
+    export GDK_BACKEND="wayland,x11"
+    export XDG_CURRENT_DESKTOP="Hyprland"
+    
+    # Iniciar nm-applet
+    nohup nm-applet > /dev/null 2>&1 &
+    local nm_pid=$!
+    
+    # Esperar y verificar
+    sleep 3
+    
+    if is_nm_applet_running; then
+        log "✅ nm-applet iniciado exitosamente (PID: $nm_pid)"
+        notify "✅ NetworkManager iniciado"
+        return 0
+    else
+        log "❌ Error: no se pudo iniciar nm-applet"
+        notify "❌ Error iniciando NetworkManager"
+        return 1
+    fi
+}
+
+# Función para sincronizar colores sin reiniciar
+sync_colors() {
+    log "🎨 Sincronizando colores de nm-applet..."
+    
+    # Obtener colores actuales
+    get_pywal_colors
+    
+    # Crear nuevo CSS
+    create_nm_applet_css
+    
+    # Actualizar imports
+    update_gtk_imports
+    
+    # Aplicar configuraciones
+    apply_gtk_settings
+    
+    # Enviar señales para recargar sin reiniciar
+    if command -v dbus-send > /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        log "✅ Señales de recarga enviadas"
+    fi
+    
+    notify "🎨 Colores sincronizados"
+    log "✅ Sincronización de colores completada"
+}
+
+# Función principal
+main() {
+    local action="${1:-start}"
+    
+    check_lock
+    
+    case "$action" in
+        "start")
+            log "=== Iniciando nm-applet manager ==="
+            
+            # Verificar si ya está corriendo
+            if is_nm_applet_running; then
+                log "ℹ️ nm-applet ya está ejecutándose"
+                sync_colors
+            else
+                # Preparar configuración
+                get_pywal_colors
+                create_nm_applet_css
+                update_gtk_imports
+                apply_gtk_settings
+                
+                # Iniciar nm-applet
+                start_nm_applet
+            fi
+            ;;
+            
+        "sync")
+            log "=== Sincronizando colores nm-applet ==="
+            sync_colors
+            ;;
+            
+        "restart")
+            log "=== Reiniciando nm-applet ==="
+            
+            # Cerrar instancias existentes
+            if is_nm_applet_running; then
+                pkill nm-applet
+                sleep 2
+            fi
+            
+            # Preparar y iniciar
+            get_pywal_colors
+            create_nm_applet_css
+            update_gtk_imports
+            apply_gtk_settings
+            start_nm_applet
+            ;;
+            
+        "stop")
+            log "=== Deteniendo nm-applet ==="
+            if is_nm_applet_running; then
+                pkill nm-applet
+                log "✅ nm-applet detenido"
+                notify "🛑 NetworkManager detenido"
+            else
+                log "ℹ️ nm-applet no estaba ejecutándose"
+            fi
+            ;;
+            
+        *)
+            echo "Uso: $0 [start|sync|restart|stop]"
+            echo "  start   - Iniciar nm-applet con configuración pywal (por defecto)"
+            echo "  sync    - Sincronizar colores sin reiniciar"
+            echo "  restart - Reiniciar nm-applet completamente"
+            echo "  stop    - Detener nm-applet"
+            exit 1
+            ;;
+    esac
+    
+    log "🎉 nm-applet manager completado ($action)"
+}
+
+# Ejecutar función principal
+main "$@"

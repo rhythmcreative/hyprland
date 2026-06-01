@@ -1,0 +1,189 @@
+#!/bin/bash
+
+# Script para mantener nm-applet siempre sincronizado con waybar
+# Se ejecuta en background y vigila cambios de colores
+
+LOCK_FILE="/tmp/nm-applet-sync.lock"
+LOG_FILE="/tmp/nm-applet-sync-monitor.log"
+
+log() {
+    echo "$(date '+%H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+# Función para verificar si ya hay una instancia corriendo
+check_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            log "Monitor ya está corriendo (PID: $pid)"
+            exit 0
+        else
+            rm -f "$LOCK_FILE"
+        fi
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+# Función para limpiar al salir
+cleanup() {
+    rm -f "$LOCK_FILE"
+    log "Monitor de sincronización detenido"
+    exit 0
+}
+
+# Función para obtener colores actuales de waybar
+get_current_waybar_colors() {
+    if [[ -f "$HOME/.config/waybar/colors-pywal.css" ]]; then
+        local bg=$(grep "@define-color background" "$HOME/.config/waybar/colors-pywal.css" | cut -d' ' -f3 | tr -d ';')
+        local fg=$(grep "@define-color foreground" "$HOME/.config/waybar/colors-pywal.css" | cut -d' ' -f3 | tr -d ';')
+        local accent=$(grep "@define-color color4" "$HOME/.config/waybar/colors-pywal.css" | cut -d' ' -f3 | tr -d ';')
+        echo "${bg}:${fg}:${accent}"
+    else
+        echo ""
+    fi
+}
+
+# Función para obtener colores actuales de nm-applet
+get_current_nm_applet_colors() {
+    if [[ -f "$HOME/.config/gtk-3.0/nm-applet-waybar.css" ]]; then
+        local bg=$(grep "background-color:" "$HOME/.config/gtk-3.0/nm-applet-waybar.css" | head -1 | cut -d':' -f2 | tr -d '; ')
+        local fg=$(grep "color:" "$HOME/.config/gtk-3.0/nm-applet-waybar.css" | head -1 | cut -d':' -f2 | tr -d '; ')
+        local accent=$(grep "border: 1px solid" "$HOME/.config/gtk-3.0/nm-applet-waybar.css" | head -1 | cut -d':' -f3 | tr -d '; ')
+        echo "${bg}:${fg}:${accent}"
+    else
+        echo ""
+    fi
+}
+
+# Función principal de sincronización
+sync_colors() {
+    local waybar_colors=$(get_current_waybar_colors)
+    local nm_applet_colors=$(get_current_nm_applet_colors)
+    
+    if [[ -n "$waybar_colors" && "$waybar_colors" != "$nm_applet_colors" ]]; then
+        log "🔄 Colores desincronizados, actualizando nm-applet..."
+        log "  Waybar: $waybar_colors"
+        log "  nm-applet: $nm_applet_colors"
+        
+        # Ejecutar script de sincronización
+        if /home/rhythmcreative/.local/bin/nm-applet-waybar-sync > /dev/null 2>&1; then
+            log "✅ Sincronización completada"
+        else
+            log "❌ Error en la sincronización"
+        fi
+    fi
+}
+
+# Función para verificar si nm-applet está corriendo
+ensure_nm_applet_running() {
+    if ! pgrep -x nm-applet > /dev/null; then
+        log "🚀 nm-applet no está corriendo, iniciando..."
+        GTK_THEME="Adwaita:dark" GDK_BACKEND="wayland,x11" nm-applet > /dev/null 2>&1 &
+        sleep 2
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado exitosamente"
+        else
+            log "❌ Error al iniciar nm-applet"
+        fi
+    fi
+}
+
+# Función para monitorear archivos de colores
+monitor_color_files() {
+    local waybar_colors_file="$HOME/.config/waybar/colors-pywal.css"
+    local wal_colors_file="$HOME/.cache/wal/colors.sh"
+    
+    # Usar inotify para monitorear cambios en archivos de colores
+    if command -v inotifywait > /dev/null; then
+        log "📁 Monitoreando cambios en archivos de colores..."
+        inotifywait -m -e modify,create,moved_to "$HOME/.config/waybar/" "$HOME/.cache/wal/" 2>/dev/null | while read path action file; do
+            if [[ "$file" == "colors-pywal.css" || "$file" == "colors.sh" ]]; then
+                log "🎨 Detectado cambio en $file, sincronizando..."
+                sleep 1  # Esperar a que el archivo termine de escribirse
+                sync_colors
+            fi
+        done &
+        MONITOR_PID=$!
+    else
+        log "⚠️ inotifywait no disponible, usando polling cada 10 segundos"
+        # Fallback: polling cada 10 segundos
+        while true; do
+            sleep 10
+            sync_colors
+        done &
+        MONITOR_PID=$!
+    fi
+}
+
+# Función principal
+main() {
+    check_lock
+    trap cleanup EXIT INT TERM
+    
+    log "🎨 Iniciando monitor de sincronización nm-applet ↔ waybar"
+    
+    # Sincronización inicial
+    ensure_nm_applet_running
+    sync_colors
+    
+    # Monitorear cambios en archivos
+    monitor_color_files
+    
+    # Loop principal - verificar cada 30 segundos
+    while true; do
+        sleep 30
+        ensure_nm_applet_running
+        sync_colors
+    done
+}
+
+# Función para modo daemon
+daemon_mode() {
+    if [[ "$1" == "--daemon" ]]; then
+        log "🔄 Iniciando en modo daemon..."
+        main > /dev/null 2>&1 &
+        echo "Monitor iniciado en background (PID: $!)"
+        echo "Log: $LOG_FILE"
+    else
+        main
+    fi
+}
+
+# Verificar argumentos
+if [[ "$1" == "--stop" ]]; then
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid"
+            rm -f "$LOCK_FILE"
+            log "Monitor detenido"
+        else
+            log "Monitor no estaba corriendo"
+            rm -f "$LOCK_FILE"
+        fi
+    else
+        log "Monitor no está corriendo"
+    fi
+    exit 0
+elif [[ "$1" == "--status" ]]; then
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "Monitor está corriendo (PID: $pid)"
+            echo "Log: $LOG_FILE"
+        else
+            echo "Monitor no está corriendo (archivo lock huérfano)"
+            rm -f "$LOCK_FILE"
+        fi
+    else
+        echo "Monitor no está corriendo"
+    fi
+    exit 0
+elif [[ "$1" == "--sync-now" ]]; then
+    log "🔄 Sincronización manual solicitada"
+    ensure_nm_applet_running
+    sync_colors
+    exit 0
+else
+    daemon_mode "$1"
+fi

@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Script para iniciar nwg-dock-hyprland con configuración elegante y tema GTK
+
+# Aplicar variables de entorno GTK
+export GTK_THEME="PywalGTK"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+export GDK_BACKEND="wayland,x11"
+
+# Matar cualquier instancia previa
+pkill -f nwg-dock-hyprland
+
+# Esperar a que termine completamente
+sleep 1
+
+# Iniciar nwg-dock-hyprland con configuración elegante y variables GTK
+GTK_THEME="PywalGTK" GTK2_RC_FILES="$HOME/.gtkrc-2.0" nwg-dock-hyprland \
+    -p bottom \
+    -a center \
+    -l overlay \
+    -mb 6 \
+    -i 48 \
+    -s ~/.config/nwg-dock-hyprland/style.css \
+    --nolauncher &
+
+# Opcional: mostrar mensaje de éxito
+notify-send "🚀 Dock + GTK" "nwg-dock-hyprland iniciado con tema sincronizado" -t 2000

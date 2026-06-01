@@ -1,0 +1,267 @@
+#!/bin/bash
+
+# Script de sincronización COMPLETA: Wallpaper + Waybar + Pywal + P10k + nm-applet
+# Versión mejorada que garantiza la sincronización de TODOS los componentes
+# Ejecutado por: Super + Shift + W en Hyprland
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/complete-wallpaper-sync.log"
+LOCK_FILE="/tmp/complete-wallpaper-sync.lock"
+
+# Función de logging con timestamp
+log() {
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$message" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    notify-send "🎨 Sincronización Completa" "$1" -t 3000 2>/dev/null || true
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Sincronización ya en progreso (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Cleanup function
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+log "🚀 === INICIANDO SINCRONIZACIÓN COMPLETA ==="
+notify "Iniciando sincronización completa..."
+
+# PASO 1: Wallpaper + Pywal (SIN múltiples reinicios de Waybar)
+log "📸 PASO 1: Cambiando wallpaper y aplicando Pywal (método seguro)..."
+if [[ -x "$HOME/.local/bin/simple-wallpaper-changer" ]]; then
+    if "$HOME/.local/bin/simple-wallpaper-changer"; then
+        log "✅ PASO 1 completado: Wallpaper + Pywal sincronizados (sin reiniciar Waybar)"
+        sleep 1  # Esperar a que pywal genere todos los archivos
+    else
+        log "❌ ERROR en PASO 1: Falló wallpaper/pywal"
+        notify "❌ Error en wallpaper/pywal"
+        exit 1
+    fi
+else
+    log "⚠️ Script simple-wallpaper-changer no encontrado, usando método básico..."
+    # Método básico: solo cambiar wallpaper y aplicar pywal
+    WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+    if [[ -d "$WALLPAPER_DIR" ]]; then
+        # Seleccionar wallpaper aleatorio como fallback
+        current_wallpaper=$(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" \) | shuf -n1)
+        if [[ -n "$current_wallpaper" ]]; then
+            swww img "$current_wallpaper" --transition-type grow --transition-duration 1.5
+            wal -i "$current_wallpaper" -n -q
+            echo "$current_wallpaper" > "$HOME/.cache/current-wallpaper"
+            log "✅ PASO 1 completado: Wallpaper básico aplicado"
+        fi
+    fi
+fi
+
+# PASO 2: Powerlevel10k
+log "🎨 PASO 2: Sincronizando Powerlevel10k..."
+if [[ -x "$HOME/.local/bin/p10k-auto-sync" ]]; then
+    if "$HOME/.local/bin/p10k-auto-sync"; then
+        log "✅ PASO 2 completado: Powerlevel10k sincronizado"
+    else
+        log "⚠️ ADVERTENCIA: Falló p10k-auto-sync, continuando..."
+    fi
+else
+    log "⚠️ ADVERTENCIA: p10k-auto-sync no encontrado, omitiendo..."
+fi
+
+# PASO 3: Oh My Posh
+log "🎵 PASO 3: Sincronizando Oh My Posh..."
+if [[ -x "$HOME/.local/bin/sync-omp-pywal" ]]; then
+    if "$HOME/.local/bin/sync-omp-pywal"; then
+        log "✅ PASO 3 completado: Oh My Posh sincronizado"
+    else
+        log "⚠️ ADVERTENCIA: Falló sync-omp-pywal, continuando..."
+    fi
+else
+    log "⚠️ ADVERTENCIA: sync-omp-pywal no encontrado, omitiendo..."
+fi
+
+# PASO 4: Configurar temas GTK (Arc + Tela circle black) - CRÍTICO DESPUÉS DE PYWAL
+log "🎨 PASO 4: Configurando temas GTK - Arc widgets y Tela circle black icons..."
+
+# Esperar un momento adicional para que pywal termine completamente
+sleep 1
+
+# Configurar tema de widgets Arc (FORZAR después de pywal)
+log "🎭 Aplicando tema Arc (sobrescribiendo PywalDark)..."
+if gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null; then
+    log "✅ Tema de widgets Arc-Dark aplicado (sobrescribió PywalDark)"
+    # Verificar que se aplicó correctamente
+    current_gtk_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "unknown")
+    log "📋 Tema GTK actual: $current_gtk_theme"
+else
+    log "⚠️ Arc-Dark falló, intentando con Arc..."
+    if gsettings set org.gnome.desktop.interface gtk-theme "Arc" 2>/dev/null; then
+        log "✅ Tema de widgets Arc aplicado (sobrescribió PywalDark)"
+        current_gtk_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "unknown")
+        log "📋 Tema GTK actual: $current_gtk_theme"
+    else
+        log "⚠️ ADVERTENCIA: No se pudo aplicar tema Arc, manteniéndose PywalDark"
+    fi
+fi
+
+# Configurar tema de iconos Tela circle black
+log "🎯 Aplicando iconos Tela circle black..."
+if gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null; then
+    log "✅ Tema de iconos Tela-circle-black-dark aplicado"
+    # Verificar que se aplicó correctamente
+    current_icon_theme=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo "unknown")
+    log "📋 Tema de iconos actual: $current_icon_theme"
+else
+    log "⚠️ Tela-circle-black-dark falló, intentando con Tela-circle-black..."
+    if gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black" 2>/dev/null; then
+        log "✅ Tema de iconos Tela-circle-black aplicado"
+        current_icon_theme=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo "unknown")
+        log "📋 Tema de iconos actual: $current_icon_theme"
+    else
+        log "⚠️ ADVERTENCIA: No se pudo aplicar tema Tela circle black"
+    fi
+fi
+
+# También configurar para aplicaciones que usan Qt
+if command -v qt5ct >/dev/null 2>&1; then
+    export QT_QPA_PLATFORMTHEME=qt5ct
+    log "✅ Variable Qt5ct configurada"
+fi
+
+# Configurar variables de entorno adicionales para asegurar consistencia
+export GTK_THEME="Arc-Dark"
+log "✅ Variable GTK_THEME=Arc-Dark exportada"
+
+log "🎨 PASO 4 completado: Temas GTK configurados y verificados"
+
+# PASO 5: Asegurar que Waybar tenga los colores pywal SIN reiniciar
+log "📱 PASO 5: Sincronizando CSS de Waybar de forma segura..."
+if pgrep -x waybar > /dev/null; then
+    log "✅ Waybar está corriendo, recargando solo CSS..."
+    # Solo recargar CSS con SIGUSR2 (no reinicia el proceso)
+    if pkill -USR2 waybar 2>/dev/null; then
+        log "✅ CSS de Waybar recargado exitosamente"
+        sleep 1
+        # Verificar que waybar sigue funcionando
+        if pgrep -x waybar > /dev/null; then
+            log "✅ Waybar verificado - sigue funcionando correctamente"
+        else
+            log "⚠️ Waybar se cerró después de recargar CSS, reiniciando..."
+            waybar > /dev/null 2>&1 &
+            sleep 2
+        fi
+    else
+        log "ℹ️ No se pudo enviar señal USR2 a Waybar, mantiene configuración anterior"
+    fi
+else
+    log "🚀 Waybar no está corriendo, iniciándolo..."
+    waybar > /dev/null 2>&1 &
+    sleep 2
+fi
+log "✅ PASO 5 completado: Waybar CSS sincronizado de forma segura"
+
+# PASO 5B: nm-applet - PRESERVAR COMPLETAMENTE (no tocar)
+log "📶 PASO 5B: Preservando nm-applet intacto..."
+log "ℹ️ nm-applet NO se reinicia ni modifica para evitar pérdida"
+log "ℹ️ Los colores de nm-applet se aplicarán automáticamente via gsettings/dbus"
+log "✅ PASO 5B completado: nm-applet preservado completamente"
+
+# PASO 6: SDDM (opcional)
+log "🔐 PASO 6: Sincronizando SDDM..."
+if [[ -x "$HOME/.local/bin/sddm-auto-sync-complete" ]]; then
+    # Ejecutar SDDM sync en segundo plano para no bloquear
+    "$HOME/.local/bin/sddm-auto-sync-complete" &
+    sddm_pid=$!
+    
+    # Dar 10 segundos máximo para SDDM
+    if timeout 10s wait $sddm_pid 2>/dev/null; then
+        log "✅ PASO 6 completado: SDDM sincronizado"
+    else
+        log "⚠️ SDDM sync continuando en segundo plano..."
+        disown $sddm_pid 2>/dev/null || true
+    fi
+else
+    log "ℹ️ SDDM sync no disponible, omitiendo..."
+fi
+
+# PASO 7: Verificación final y notificación
+log "🔍 PASO 7: Verificación final de componentes..."
+
+# Verificar que los componentes críticos estén funcionando
+components_ok=true
+
+# Verificar Waybar
+if pgrep -x waybar > /dev/null; then
+    log "✅ Waybar está funcionando"
+else
+    log "⚠️ Waybar no está corriendo"
+    components_ok=false
+fi
+
+# Verificar nm-applet (SOLO VERIFICACIÓN - no intentar restaurar)
+if pgrep -x nm-applet > /dev/null; then
+    log "✅ nm-applet está funcionando correctamente"
+else
+    log "ℹ️ nm-applet no está corriendo (esto es normal si el usuario lo detuvo manualmente)"
+    log "ℹ️ No se intenta restaurar automáticamente para evitar interferencias"
+fi
+
+# Verificar archivos pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "✅ Colores pywal disponibles"
+else
+    log "⚠️ Archivos pywal no encontrados"
+    components_ok=false
+fi
+
+# Verificar temas GTK finales
+final_gtk_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "'unknown'")
+final_icon_theme=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo "'unknown'")
+
+log "📋 Verificación final de temas:"
+log "   • GTK Theme: $final_gtk_theme"
+log "   • Icon Theme: $final_icon_theme"
+
+# Validar si los temas están como esperamos
+if [[ "$final_gtk_theme" == "'Arc-Dark'" ]] || [[ "$final_gtk_theme" == "'Arc'" ]]; then
+    log "✅ Tema GTK Arc confirmado"
+else
+    log "⚠️ Tema GTK no es Arc (actual: $final_gtk_theme)"
+fi
+
+if [[ "$final_icon_theme" == "'Tela-circle-black-dark'" ]] || [[ "$final_icon_theme" == "'Tela-circle-black'" ]]; then
+    log "✅ Tema de iconos Tela circle black confirmado"
+else
+    log "⚠️ Tema de iconos no es Tela circle black (actual: $final_icon_theme)"
+fi
+
+# Resultado final
+if $components_ok; then
+    log "🎉 === SINCRONIZACIÓN COMPLETA EXITOSA ==="
+    notify "🎉 Sincronización completa exitosa!"
+    
+    # Mostrar resumen
+    current_wallpaper=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || echo "Desconocido")
+    log "📸 Wallpaper: $(basename "$current_wallpaper")"
+    log "🎨 Todos los componentes sincronizados con pywal"
+    log "🎭 Tema GTK: Arc (widgets) + Tela circle black (iconos)"
+    log "📱 Waybar, nm-applet y demás componentes funcionando correctamente"
+else
+    log "⚠️ === SINCRONIZACIÓN PARCIAL - ALGUNOS COMPONENTES FALLARON ==="
+    notify "⚠️ Sincronización parcial - revisar logs"
+fi
+
+log "📋 Log completo disponible en: $LOG_FILE"
+exit 0

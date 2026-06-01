@@ -173,11 +173,16 @@ if gum confirm "¿Quieres aplicar las configuraciones (stow) ahora?"; then
 fi
 
 section "Fondos de Pantalla"
-if gum confirm "¿Quieres descargar la colección de wallpapers?"; then
+if gum confirm "¿Quieres instalar la colección de wallpapers?"; then
     WALL_DIR="$HOME/Pictures/Wallpapers"
     mkdir -p "$WALL_DIR"
-    if [ -z "$(ls -A "$WALL_DIR" 2>/dev/null)" ]; then
-        info "Descargando wallpapers desde el repositorio..."
+    
+    if [ -d "$DOTFILES_DIR/wallpapers" ] && [ -f "$DOTFILES_DIR/wallpapers/extract.sh" ]; then
+        info "Instalando wallpapers locales..."
+        cd "$DOTFILES_DIR/wallpapers" && bash extract.sh
+        cd "$DOTFILES_DIR"
+    elif [ -z "$(ls -A "$WALL_DIR" 2>/dev/null)" ]; then
+        info "Descargando wallpapers desde el repositorio externo..."
         git clone https://github.com/bjarneo/wallpapers.git /tmp/wallpapers-repo > /dev/null 2>&1
         cp -r /tmp/wallpapers-repo/* "$WALL_DIR/"
         rm -rf /tmp/wallpapers-repo

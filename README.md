@@ -45,7 +45,7 @@ Personal arch linux configuration built around **hyprland**, featuring a dynamic
 Clone the repository:
 
 ```bash
-git clone https://github.com/rhythmcreative/Hyprland.git ~/Hyprland
+git clone https://github.com/rhythmcreative/Hyprland.git
 ```
 
 Run the installation script:

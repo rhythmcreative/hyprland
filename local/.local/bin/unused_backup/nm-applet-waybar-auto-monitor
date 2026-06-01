@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# Script de monitoreo automático para mantener nm-applet sincronizado con waybar
+# Se ejecuta en background y mantiene la sincronización
+
+MONITOR_LOG="$HOME/.cache/nm-applet-waybar-monitor.log"
+SYNC_SCRIPT="$HOME/.local/bin/nm-applet-waybar-sync-fixed"
+
+echo "🔍 Iniciando monitor de sincronización nm-applet ↔ Waybar..." | tee "$MONITOR_LOG"
+
+# Función para verificar si los procesos están corriendo
+check_processes() {
+    local waybar_running=$(pgrep -x waybar > /dev/null && echo "1" || echo "0")
+    local nm_applet_running=$(pgrep -x nm-applet > /dev/null && echo "1" || echo "0")
+    
+    echo "$waybar_running:$nm_applet_running"
+}
+
+# Función para sincronizar cuando sea necesario
+sync_if_needed() {
+    local current_time=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$current_time] Verificando sincronización..." >> "$MONITOR_LOG"
+    
+    local processes=$(check_processes)
+    local waybar_running=${processes%:*}
+    local nm_applet_running=${processes#*:}
+    
+    if [[ "$waybar_running" == "1" && "$nm_applet_running" == "1" ]]; then
+        echo "[$current_time] ✅ Ambos procesos están corriendo - Sincronizando colores..." >> "$MONITOR_LOG"
+        
+        # Ejecutar sincronización en background
+        bash "$SYNC_SCRIPT" >> "$MONITOR_LOG" 2>&1 &
+        
+        return 0
+    else
+        echo "[$current_time] ⚠️  Procesos faltantes - Waybar: $waybar_running, nm-applet: $nm_applet_running" >> "$MONITOR_LOG"
+        return 1
+    fi
+}
+
+# Función principal de monitoreo
+monitor_loop() {
+    local check_interval=30  # Verificar cada 30 segundos
+    local last_sync_time=0
+    local sync_interval=300  # Re-sincronizar cada 5 minutos
+    
+    while true; do
+        local current_timestamp=$(date +%s)
+        
+        # Verificar si necesitamos sincronizar
+        if (( current_timestamp - last_sync_time >= sync_interval )); then
+            if sync_if_needed; then
+                last_sync_time=$current_timestamp
+            fi
+        fi
+        
+        # Esperar antes del siguiente check
+        sleep $check_interval
+    done
+}
+
+# Función para limpiar al salir
+cleanup() {
+    echo "🔚 Deteniendo monitor de sincronización nm-applet ↔ Waybar..." | tee -a "$MONITOR_LOG"
+    exit 0
+}
+
+# Configurar trap para limpieza
+trap cleanup SIGTERM SIGINT
+
+# Ejecutar sincronización inicial
+sync_if_needed
+
+# Iniciar loop de monitoreo
+echo "🔄 Monitor activo - verificando cada 30s, sincronizando cada 5min" | tee -a "$MONITOR_LOG"
+monitor_loop

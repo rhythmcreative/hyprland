@@ -1,0 +1,180 @@
+#!/bin/bash
+
+# Notificaciones de volumen estilo Cyberpunk/Neon
+# Diseño futurista con caracteres especiales
+
+TIMEOUT=2500
+URGENT="low"
+
+# Generar barra de volumen cyberpunk
+generate_cyber_bar() {
+    local percent=$1
+    local width=12
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    local bar=""
+    # Caracteres cyberpunk
+    for ((i=0; i<filled; i++)); do
+        bar+="▰"
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="▱"
+    done
+    
+    echo "$bar"
+}
+
+# Crear marco ASCII cyberpunk
+generate_cyber_frame() {
+    local content="$1"
+    echo "┌─────────────────┐"
+    echo "│ $content │"
+    echo "└─────────────────┘"
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo
+get_device() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-15)
+    if [ -z "$device" ]; then
+        echo "AUDIO_DEVICE"
+    else
+        echo "$device" | tr '[:lower:]' '[:upper:]'
+    fi
+}
+
+# Notificación cyberpunk
+show_cyber_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "⚡ AUDIO MUTED ⚡" \
+                   "┌─────────────────┐
+│   >>> MUTED <<<  │
+│  ▰▱▱▱▱▱▱▱▱▱▱▱  │
+└─────────────────┘
+
+>> $device <<"
+    else
+        local bar="$(generate_cyber_bar $volume)"
+        local level=""
+        local icon="⚡"
+        
+        # Determinar nivel cyberpunk
+        if [ "$volume" -lt 25 ]; then
+            level="LOW_POWER"
+            icon="⚡"
+        elif [ "$volume" -lt 50 ]; then
+            level="MID_RANGE"
+            icon="🔋"
+        elif [ "$volume" -lt 75 ]; then
+            level="HIGH_VOLT"
+            icon="⚡"
+        else
+            level="MAX_POWER"
+            icon="🔥"
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$icon VOLUME: $level $icon" \
+                   "┌─────────────────┐
+│    >>> $volume% <<<    │
+│  $bar  │
+└─────────────────┘
+
+>> $device <<"
+    fi
+}
+
+# Notificación de audio cyberpunk
+show_cyber_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_device)"
+    local bar="$(generate_cyber_bar $volume)"
+    
+    local icon="🎵"
+    local cyber_title=$(echo "$title" | tr '[:lower:]' '[:upper:]')
+    
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon MEDIA: $cyber_title $icon" \
+               "$message
+
+┌─────────────────┐
+│    VOL: $volume%     │
+│  $bar  │
+└─────────────────┘
+
+>> $device <<"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_cyber_audio_notification "${2:-AUDIO}" "${3:->>> PLAYING MEDIA <<<"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing cyberpunk volume notifications..."
+        echo "Low volume..."
+        show_cyber_notification "20" "false" "$(get_device)"
+        sleep 3
+        echo "High volume..."
+        show_cyber_notification "85" "false" "$(get_device)"
+        sleep 3
+        echo "Muted..."
+        show_cyber_notification "0" "true" "$(get_device)"
+        sleep 3
+        echo "Audio notification..."
+        show_cyber_audio_notification "Spotify" ">>> NOW PLAYING: CYBER TRACK <<<"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_device)"
+
+show_cyber_notification "$volume" "$muted" "$device"
+exit 0

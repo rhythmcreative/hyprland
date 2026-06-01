@@ -1,0 +1,54 @@
+[global]
+# Configuración ultra minimalista para notificaciones generales
+width = 320
+height = (0, 80)
+origin = top-right
+offset = (15, 15)
+frame_width = 2
+frame_color = "{color1}"
+corner_radius = 8
+gap_size = 8
+
+# Fuente pequeña y discreta
+font = JetBrainsMono Nerd Font 10
+
+# Comportamiento minimalista
+padding = 12
+horizontal_padding = 14
+format = "<b>%s</b>\n%b"
+alignment = left
+word_wrap = yes
+show_age_threshold = -1
+show_indicators = no
+stack_duplicates = true
+max_icon_size = 24
+icon_position = left
+
+# Solo para notificaciones que NO son de volumen
+[urgency_low]
+background = "{background}E6"
+foreground = "{foreground}"
+frame_color = "{color8}"
+timeout = 3
+
+[urgency_normal]
+background = "{background}F0"
+foreground = "{foreground}"  
+frame_color = "{color1}"
+timeout = 5
+
+[urgency_critical]
+background = "{color1}E6"
+foreground = "{background}"
+frame_color = "{color9}"
+timeout = 0
+
+# Ignorar notificaciones de volumen/brillo (las manejará wob)
+[summary~"Volume"]
+skip_display = true
+
+[summary~"Brightness"]
+skip_display = true
+
+[summary~"Audio"]
+skip_display = true

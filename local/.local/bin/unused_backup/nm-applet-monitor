@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# Monitor simple para sincronizar nm-applet con waybar automáticamente
+# Este script se ejecuta en background y vigila cambios en los colores
+
+PIDFILE="/tmp/nm-applet-monitor.pid"
+LOGFILE="/tmp/nm-applet-monitor.log"
+
+# Función de logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOGFILE"
+}
+
+# Función para detener el monitor
+stop_monitor() {
+    if [ -f "$PIDFILE" ]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null
+            rm -f "$PIDFILE"
+            echo "🛑 Monitor detenido"
+            return 0
+        else
+            rm -f "$PIDFILE"
+        fi
+    fi
+    echo "⚠️ El monitor no estaba ejecutándose"
+}
+
+# Función principal del monitor
+start_monitor() {
+    # Verificar si ya está ejecutándose
+    if [ -f "$PIDFILE" ]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "❌ El monitor ya está ejecutándose (PID: $pid)"
+            return 1
+        else
+            rm -f "$PIDFILE"
+        fi
+    fi
+    
+    echo "🚀 Iniciando monitor de sincronización nm-applet ↔ waybar..."
+    
+    # Crear script temporal para el monitor
+    local temp_script="/tmp/nm-applet-monitor-worker.sh"
+    cat > "$temp_script" << 'EOF'
+#!/bin/bash
+PIDFILE="/tmp/nm-applet-monitor.pid"
+LOGFILE="/tmp/nm-applet-monitor.log"
+
+# Función de logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOGFILE"
+}
+
+# Escribir PID
+echo $$ > "$PIDFILE"
+log "Monitor iniciado (PID: $$)"
+
+colors_file="$HOME/.config/waybar/colors-pywal.css"
+sync_script="$HOME/.local/bin/sync-nm-applet-waybar"
+last_checksum=""
+
+# Trap para limpiar al salir
+trap 'rm -f "$PIDFILE"; log "Monitor detenido"; exit' TERM INT EXIT
+
+# Loop de monitorización
+while true; do
+    if [ -f "$colors_file" ]; then
+        current_checksum=$(md5sum "$colors_file" 2>/dev/null | cut -d' ' -f1)
+        
+        if [ "$current_checksum" != "$last_checksum" ] && [ -n "$current_checksum" ]; then
+            if [ -n "$last_checksum" ]; then
+                log "🎨 Cambios detectados, sincronizando nm-applet..."
+                "$sync_script" > /dev/null 2>&1 &
+                log "✅ Sincronización iniciada"
+            fi
+            last_checksum="$current_checksum"
+        fi
+    fi
+    
+    sleep 3
+done
+EOF
+    
+    chmod +x "$temp_script"
+    
+    # Ejecutar con nohup para mayor estabilidad
+    nohup bash "$temp_script" > /dev/null 2>&1 &
+    local monitor_pid=$!
+    
+    # Esperar un momento para verificar que se inició correctamente
+    sleep 2
+    
+    if kill -0 "$monitor_pid" 2>/dev/null; then
+        echo "✅ Monitor iniciado correctamente (PID: $monitor_pid)"
+    else
+        echo "❌ Error al iniciar el monitor"
+        return 1
+    fi
+    echo "📁 Log: $LOGFILE"
+    echo "💡 Para detener: $0 stop"
+}
+
+# Función para mostrar estado
+status_monitor() {
+    if [ -f "$PIDFILE" ]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "✅ Monitor ejecutándose (PID: $pid)"
+            echo "📁 Log: $LOGFILE"
+            if [ -f "$LOGFILE" ]; then
+                echo "📊 Últimas líneas:"
+                tail -3 "$LOGFILE" 2>/dev/null | sed 's/^/  /'
+            fi
+            return 0
+        else
+            rm -f "$PIDFILE"
+        fi
+    fi
+    echo "⚠️ El monitor no está ejecutándose"
+    return 1
+}
+
+# Función principal
+case "${1:-start}" in
+    "start")
+        start_monitor
+        ;;
+    "stop")
+        stop_monitor
+        ;;
+    "status")
+        status_monitor
+        ;;
+    "restart")
+        stop_monitor
+        sleep 1
+        start_monitor
+        ;;
+    *)
+        echo "Uso: $0 {start|stop|status|restart}"
+        echo ""
+        echo "  start   - Iniciar monitor (por defecto)"
+        echo "  stop    - Detener monitor"
+        echo "  status  - Ver estado"
+        echo "  restart - Reiniciar monitor"
+        ;;
+esac

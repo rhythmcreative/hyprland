@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Script wrapper para combinar wallpaper changer con sincronización de Powerlevel10k
+# Ejecutado por: Super + Shift + W en Hyprland
+
+echo "🎨 Iniciando sincronización completa: Wallpaper + Waybar + Powerlevel10k"
+
+# Primero ejecutar el selector de wallpaper con sincronización de Waybar
+echo "🖼️ Paso 1: Cambiando wallpaper y sincronizando Waybar..."
+if ~/.local/bin/wallpaper-changer-with-waybar-sync; then
+    echo "✅ Wallpaper y Waybar sincronizados correctamente"
+    
+    # Luego ejecutar la sincronización automática de Powerlevel10k
+    echo "🎨 Paso 2: Sincronizando Powerlevel10k con pywal..."
+    if ~/.local/bin/p10k-auto-sync; then
+        echo "✅ Powerlevel10k sincronizado automáticamente"
+        
+        # Opcional: también ejecutar el script manual para máxima compatibilidad
+        ~/.local/bin/p10k-pywal-sync >/dev/null 2>&1 || true
+        
+        echo "🎉 ¡Sincronización completa exitosa!"
+        echo "💡 Los colores de P10k se aplicarán automáticamente en terminales existentes"
+    else
+        echo "❌ Error al sincronizar Powerlevel10k"
+        exit 1
+    fi
+else
+    echo "❌ Error al cambiar wallpaper/sincronizar Waybar"
+    exit 1
+fi

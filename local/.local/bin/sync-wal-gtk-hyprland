@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# Script para sincronizar wal-gtk-auto en Hyprland
+# Se ejecuta con Super+Shift+W
+
+set -e
+
+# Función para mostrar notificaciones
+notify() {
+    if command -v notify-send &> /dev/null; then
+        notify-send "PyWal GTK" "$1" -i applications-graphics
+    fi
+}
+
+# Función para logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$HOME/.cache/wal/hyprland-sync.log"
+}
+
+main() {
+    log "Iniciando sincronización manual en Hyprland..."
+    
+    # Verificar que existe pywal
+    if ! command -v wal &> /dev/null; then
+        notify "❌ Error: pywal no encontrado"
+        log "ERROR: pywal no encontrado"
+        exit 1
+    fi
+    
+    # Verificar que existen colores
+    if [ ! -f "$HOME/.cache/wal/colors.json" ]; then
+        notify "❌ Error: No hay colores de pywal"
+        log "ERROR: No se encontraron colores de pywal"
+        exit 1
+    fi
+    
+    # Verificar que existe el tema
+    if [ ! -d "$HOME/.themes/wal-gtk-auto" ]; then
+        notify "❌ Error: Tema wal-gtk-auto no encontrado"
+        log "ERROR: Tema wal-gtk-auto no encontrado"
+        exit 1
+    fi
+    
+    # Ejecutar wal -R para asegurar que todo está actualizado
+    log "Ejecutando wal -R..."
+    notify "🔄 Recargando colores pywal..."
+    wal -R &> /dev/null
+    
+    # Esperar un poco para que pywal termine
+    sleep 1
+    
+    # Actualizar el tema wal-gtk-auto
+    if [ -x "$HOME/.local/bin/update-wal-gtk-auto" ]; then
+        log "Actualizando tema wal-gtk-auto..."
+        "$HOME/.local/bin/update-wal-gtk-auto" &> /dev/null
+        log "Tema actualizado correctamente"
+    else
+        log "ERROR: update-wal-gtk-auto no encontrado o no ejecutable"
+        notify "❌ Error: Script de actualización no encontrado"
+        exit 1
+    fi
+    
+    # Recargar tema GTK específico para Hyprland
+    log "Recargando tema GTK en Hyprland..."
+    
+    # Método 1: Cambiar temporalmente el tema y volver
+    if command -v gsettings &> /dev/null; then
+        # Obtener tema actual
+        current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")
+        
+        # Si ya es wal-gtk-auto, cambiar temporalmente a Adwaita
+        if [ "$current_theme" = "wal-gtk-auto" ]; then
+            gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+            sleep 0.5
+        fi
+        
+        # Establecer wal-gtk-auto
+        gsettings set org.gnome.desktop.interface gtk-theme 'wal-gtk-auto'
+        log "Tema GTK establecido via gsettings"
+    fi
+    
+    # Método 2: Limpiar caches GTK
+    log "Limpiando caches GTK..."
+    rm -rf "$HOME/.cache/gtk-3.0" "$HOME/.cache/gtk-4.0" 2>/dev/null || true
+    
+    # Método 3: Actualizar cache de iconos
+    if command -v gtk-update-icon-cache &> /dev/null; then
+        gtk-update-icon-cache -f "$HOME/.themes/wal-gtk-auto" 2>/dev/null || true
+        log "Cache de iconos actualizado"
+    fi
+    
+    # Método 4: Recargar configuración de Hyprland (solo GTK, no toda la config)
+    if command -v hyprctl &> /dev/null; then
+        # Recargar solo variables de entorno GTK
+        hyprctl setcursor "$(gsettings get org.gnome.desktop.interface cursor-theme | tr -d "'")" "$(gsettings get org.gnome.desktop.interface cursor-size)" 2>/dev/null || true
+        log "Configuración de cursor recargada en Hyprland"
+    fi
+    
+    # Método 5: Forzar recarga enviando señales a aplicaciones GTK activas
+    # Esto hace que las aplicaciones GTK detecten el cambio de tema
+    if command -v pgrep &> /dev/null; then
+        # Enviar SIGUSR1 a aplicaciones GTK comunes (si están ejecutándose)
+        for app in nautilus thunar firefox thunderbird code; do
+            pids=$(pgrep -x "$app" 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+                echo "$pids" | while read -r pid; do
+                    kill -USR1 "$pid" 2>/dev/null || true
+                done
+                log "Señal enviada a $app"
+            fi
+        done
+    fi
+    
+    # Método 6: Crear timestamp para forzar que las apps detecten cambios
+    touch "$HOME/.themes/wal-gtk-auto/gtk-3.0/.timestamp"
+    touch "$HOME/.themes/wal-gtk-auto/gtk-4.0/.timestamp"
+    
+    # Mostrar notificación de éxito
+    notify "✅ Tema wal-gtk-auto sincronizado"
+    log "Sincronización completada exitosamente"
+    
+    # Opcional: mostrar colores actuales
+    if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+        source "$HOME/.cache/wal/colors.sh"
+        log "Colores actuales: bg=$background, fg=$foreground, accent=$color1"
+    fi
+}
+
+# Ejecutar función principal
+main "$@"

@@ -1,0 +1,239 @@
+/* 
+ * SwayNotificationCenter CSS - Sincronizado con Pywal
+ * Diseño moderno y elegante que se adapta a tu tema
+ */
+
+@define-color cc-bg {background};
+@define-color noti-border-color {color1};
+@define-color noti-bg {background};
+@define-color noti-bg-darker {background};
+@define-color noti-bg-hover {color8};
+@define-color noti-bg-focus {color1};
+@define-color noti-close-bg {color1};
+@define-color noti-close-bg-hover {color9};
+@define-color text-color {foreground};
+@define-color text-color-disabled {color8};
+
+* {{
+  font-family: 'JetBrainsMono Nerd Font', 'Inter', sans-serif;
+}}
+
+/* Ventana principal de notificaciones */
+.notification-row {{
+  outline: none;
+  margin: 8px 12px;
+  border-radius: 12px;
+}}
+
+.notification-row:focus,
+.notification-row:hover {{
+  background: @noti-bg-hover;
+  border-radius: 12px;
+}}
+
+/* Notificación individual */
+.notification {{
+  border-radius: 12px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid @noti-border-color;
+  background-color: @noti-bg;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}}
+
+.notification-content {{
+  background: transparent;
+  padding: 16px;
+  border-radius: 10px;
+}}
+
+.close-button {{
+  background: @noti-close-bg;
+  color: @text-color;
+  text-shadow: none;
+  padding: 0;
+  border-radius: 50%;
+  margin-top: 8px;
+  margin-right: 8px;
+  min-width: 24px;
+  min-height: 24px;
+  transition: all 0.2s ease;
+}}
+
+.close-button:hover {{
+  background: @noti-close-bg-hover;
+  transform: scale(1.1);
+}}
+
+/* Iconos de notificación */
+.notification-default-action {{
+  border-radius: 12px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  color: @text-color;
+}}
+
+/* Texto de notificaciones */
+.summary {{
+  color: @text-color;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}}
+
+.body {{
+  color: @text-color;
+  font-size: 12px;
+  opacity: 0.9;
+}}
+
+.time {{
+  color: @text-color-disabled;
+  font-size: 11px;
+  margin-right: 6px;
+}}
+
+/* Centro de Control */
+.control-center {{
+  background-color: @cc-bg;
+  border: 2px solid @noti-border-color;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  margin: 12px;
+  padding: 20px;
+}}
+
+.control-center-list {{
+  background: transparent;
+}}
+
+.control-center-list-placeholder {{
+  opacity: 0.7;
+  color: @text-color-disabled;
+  font-size: 14px;
+  margin: 40px 0;
+}}
+
+/* Encabezado del centro de control */
+.widget-title > label {{
+  color: @text-color;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}}
+
+.widget-title > button {{
+  background: @noti-close-bg;
+  color: @text-color;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}}
+
+.widget-title > button:hover {{
+  background: @noti-close-bg-hover;
+  transform: translateY(-1px);
+}}
+
+/* Widget Do Not Disturb */
+.widget-dnd {{
+  background: @noti-bg;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 8px 0;
+  border: 1px solid @noti-border-color;
+}}
+
+.widget-dnd > switch {{
+  border-radius: 24px;
+  background: @noti-bg-darker;
+  border: 2px solid @noti-border-color;
+}}
+
+.widget-dnd > switch:checked {{
+  background: @noti-close-bg;
+}}
+
+.widget-dnd > switch slider {{
+  background: @text-color;
+  border-radius: 50%;
+}}
+
+/* Notificaciones críticas */
+.critical {{
+  border-color: {color9};
+  background-color: {color1}20;
+}}
+
+.critical .notification-content {{
+  background: transparent;
+}}
+
+.critical .summary {{
+  color: {color9};
+}}
+
+/* Notificaciones de baja prioridad */
+.low {{
+  border-color: {color8}60;
+  opacity: 0.8;
+}}
+
+/* Botones de acción */
+.notification-action {{
+  background: @noti-bg-hover;
+  color: @text-color;
+  border: 1px solid @noti-border-color;
+  border-radius: 8px;
+  margin: 4px 2px;
+  padding: 8px 12px;
+  font-size: 11px;
+  transition: all 0.2s ease;
+}}
+
+.notification-action:hover {{
+  background: @noti-close-bg;
+  transform: translateY(-1px);
+}}
+
+/* Animaciones suaves */
+@keyframes notification-slide-in {{
+  from {{
+    transform: translateX(100%);
+    opacity: 0;
+  }}
+  to {{
+    transform: translateX(0);
+    opacity: 1;
+  }}
+}}
+
+.notification {{
+  animation: notification-slide-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}}
+
+/* Scrollbar personalizado */
+scrollbar {{
+  background: transparent;
+  width: 8px;
+}}
+
+scrollbar trough {{
+  background: @noti-bg-darker;
+  border-radius: 4px;
+}}
+
+scrollbar slider {{
+  background: @noti-border-color;
+  border-radius: 4px;
+  min-height: 20px;
+}}
+
+scrollbar slider:hover {{
+  background: @noti-close-bg;
+}}

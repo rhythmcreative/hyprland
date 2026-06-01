@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Script para iniciar Plank con configuración elegante
+
+# Matar cualquier instancia previa de plank
+pkill -f plank
+
+# Esperar a que termine completamente
+sleep 1
+
+# Configurar Plank con un tema moderno
+gsettings set net.launchpad.plank.dock.settings primary-color '#1e1e1e'
+gsettings set net.launchpad.plank.dock.settings secondary-color '#2e2e2e'
+gsettings set net.launchpad.plank.dock.settings dock-items "['firefox.dockitem', 'warp-terminal.dockitem', 'thunar.dockitem', 'code.dockitem']"
+gsettings set net.launchpad.plank.dock.settings icon-size 48
+gsettings set net.launchpad.plank.dock.settings hide-mode 'intelligent'
+gsettings set net.launchpad.plank.dock.settings position 'bottom'
+gsettings set net.launchpad.plank.dock.settings alignment 'center'
+gsettings set net.launchpad.plank.dock.settings theme 'Transparent'
+gsettings set net.launchpad.plank.dock.settings unhide-delay 250
+gsettings set net.launchpad.plank.dock.settings items-alignment 'center'
+
+# Iniciar Plank en background
+plank &
+
+# Mostrar notificación de éxito
+notify-send "🚀 Plank Dock" "Dock moderno iniciado con éxito" -t 2000

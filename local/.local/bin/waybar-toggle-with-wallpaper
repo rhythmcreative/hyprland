@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Script combinado para alternar Waybar Y cambiar wallpaper
+# Método mejorado que maneja ambas funciones sin conflictos
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/waybar-toggle-wallpaper.log"
+LOCK_FILE="/tmp/waybar-toggle-wallpaper.lock"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "⏳ Script ya en ejecución (PID: $lock_pid)"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+# Función de limpieza
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT INT TERM
+
+log "🚀 === INICIANDO TOGGLE WAYBAR + WALLPAPER ==="
+
+# 1. PRIMERO: Alternar waybar (mostrar/ocultar)
+waybar_was_running=false
+if pgrep -x "waybar" > /dev/null; then
+    waybar_was_running=true
+    log "📊 Waybar detectado - ocultando..."
+    pkill waybar
+    notify-send "📊 Waybar" "Waybar oculto" --icon=window-close --timeout=2000 &
+    # Esperar a que waybar se cierre completamente
+    sleep 1
+else
+    log "📊 Waybar no detectado - mostrando..."
+    nohup waybar > /dev/null 2>&1 &
+    notify-send "📊 Waybar" "Waybar mostrado" --icon=window-new --timeout=2000 &
+    sleep 1
+fi
+
+# 2. SEGUNDO: Ejecutar cambio de wallpaper
+log "🖼️ Iniciando cambio de wallpaper..."
+
+# Ejecutar el script de wallpaper en el background para no bloquear
+"$HOME/.local/bin/wallpaper-change-fixed" &
+wallpaper_pid=$!
+
+log "🖼️ Script de wallpaper iniciado (PID: $wallpaper_pid)"
+
+# Esperar un poco y verificar si el proceso sigue corriendo
+sleep 2
+
+if kill -0 "$wallpaper_pid" 2>/dev/null; then
+    log "✅ Script de wallpaper ejecutándose correctamente"
+else
+    log "⚠️ Script de wallpaper terminó rápidamente"
+fi
+
+log "🎉 Toggle waybar + wallpaper completado"
+exit 0

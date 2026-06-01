@@ -1,0 +1,53 @@
+#!/bin/bash
+
+echo "🧪 Probando integración completa de Mako con pywal..."
+echo ""
+
+# Mostrar colores actuales de pywal
+if [[ -f ~/.cache/wal/colors.sh ]]; then
+    source ~/.cache/wal/colors.sh
+    echo "🎨 Colores actuales de pywal:"
+    echo "   Background: $background"
+    echo "   Foreground: $foreground"
+    echo "   Color1: $color1"
+    echo "   Color2: $color2"
+    echo ""
+else
+    echo "⚠️ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Verificar configuración de Mako
+echo "🔧 Verificando configuración de Mako..."
+if [[ -f ~/.config/mako/config ]]; then
+    echo "✅ Configuración encontrada"
+    # Mostrar las primeras líneas que contienen colores
+    echo "📋 Colores configurados en Mako:"
+    grep -E "background-color|text-color|border-color" ~/.config/mako/config | head -3
+    echo ""
+else
+    echo "❌ Configuración no encontrada"
+    exit 1
+fi
+
+# Probar notificaciones con diferentes tipos
+echo "🚀 Enviando notificaciones de prueba..."
+
+# Notificación general
+notify-send "🔔 General" "Esta notificación usa los colores sincronizados de pywal" &
+sleep 1
+
+# Notificación de volumen (estilo simplificado)
+notify-send -a volume "🔊 Volumen" "75% - Estilo simplificado y limpio" &
+sleep 1
+
+# Notificación de audio
+notify-send "🎵 Audio" "Notificación de audio con colores del wallpaper" &
+
+echo ""
+echo "✨ Integración probada exitosamente!"
+echo ""
+echo "💡 Próximos pasos:"
+echo "   - Cambia el wallpaper con Super + Shift + W"
+echo "   - Los colores de Mako se actualizarán automáticamente"
+echo "   - Las notificaciones siempre harán juego con tu wallpaper"

@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Script para iniciar Waybar de forma estable
+# Versión optimizada que evita múltiples instancias
+
+LOCK_FILE="/tmp/waybar-stable.lock"
+LOG_FILE="$HOME/.cache/waybar-stable.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función de limpieza
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+# Verificar si ya está ejecutándose
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log "Waybar ya está siendo administrado por PID: $lock_pid"
+        exit 0
+    fi
+fi
+
+# Crear lock
+echo $$ > "$LOCK_FILE"
+
+log "=== Iniciando Waybar Estable ==="
+
+# Terminar instancias existentes de waybar
+if pgrep -x waybar > /dev/null; then
+    log "Terminando instancias existentes de waybar"
+    pkill -TERM waybar
+    sleep 2
+    
+    # Force kill si aún existe
+    if pgrep -x waybar > /dev/null; then
+        pkill -KILL waybar
+        sleep 1
+    fi
+fi
+
+# Esperar a que termine completamente
+sleep 1
+
+# Iniciar Waybar
+log "Iniciando nueva instancia de Waybar"
+nohup waybar > /dev/null 2>&1 &
+waybar_pid=$!
+
+# Esperar y verificar que se inició correctamente
+sleep 3
+
+if pgrep -x waybar > /dev/null; then
+    log "✅ Waybar iniciado exitosamente (PID: $waybar_pid)"
+    notify-send "🎯 Waybar" "Iniciado exitosamente" -t 2000 2>/dev/null || true
+else
+    log "❌ Error: No se pudo iniciar Waybar"
+    notify-send "❌ Error" "No se pudo iniciar Waybar" -u critical -t 3000 2>/dev/null || true
+    exit 1
+fi
+
+exit 0

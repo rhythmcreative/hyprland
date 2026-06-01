@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Script para recargar todos los componentes con los colores de pywal
+# Útil cuando se necesita aplicar los colores después de hacer cambios
+
+echo "🔄 Recargando tema pywal..."
+
+# Verificar si existe el archivo de colores
+if [ ! -f ~/.cache/wal/colors.sh ]; then
+    echo "❌ No se encontró el archivo de colores de pywal"
+    echo "Ejecuta 'wal -i /ruta/a/imagen' primero"
+    exit 1
+fi
+
+# Aplicar colores del terminal
+echo "📺 Aplicando colores del terminal..."
+source ~/.cache/wal/colors.sh 2>/dev/null || true
+
+# Recargar waybar
+if pgrep -x waybar > /dev/null; then
+    echo "🔄 Recargando waybar..."
+    pkill -SIGUSR2 waybar 2>/dev/null || (pkill waybar && sleep 1 && waybar &)
+fi
+
+# Recargar kitty
+if pgrep -x kitty > /dev/null; then
+    echo "🐱 Recargando kitty..."
+    killall -SIGUSR1 kitty 2>/dev/null || true
+fi
+
+# Aplicar colores GTK
+if [ -f ~/.cache/wal/gtk3.css ]; then
+    echo "🎨 Aplicando colores GTK3..."
+    mkdir -p ~/.config/gtk-3.0/
+    cp ~/.cache/wal/gtk3.css ~/.config/gtk-3.0/gtk.css 2>/dev/null || true
+fi
+
+if [ -f ~/.cache/wal/gtk4.css ]; then
+    echo "🎨 Aplicando colores GTK4..."
+    mkdir -p ~/.config/gtk-4.0/
+    cp ~/.cache/wal/gtk4.css ~/.config/gtk-4.0/gtk.css 2>/dev/null || true
+fi
+
+# Aplicar configuración de Hyprland
+if [ -f ~/.cache/wal/colors-hyprland.conf ]; then
+    echo "🪟 Aplicando colores a Hyprland..."
+    hyprctl reload 2>/dev/null || true
+fi
+
+# Actualizar nwg-dock-hyprland con nuevos colores
+echo "⚓ Sincronizando nwg-dock-hyprland con pywal..."
+~/.config/nwg-dock-hyprland/sync-dock-pywal.sh &
+
+# Sincronizar rofi style-3 con colores actuales
+echo "🚀 Sincronizando rofi style-3 con pywal..."
+~/.local/bin/sync-rofi-style3-pywal
+
+# Actualizar tema del sistema
+echo "⚙️ Actualizando configuración del sistema..."
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+
+# Notificación
+if [ -f ~/.cache/wal/wal ]; then
+    CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal)
+    WALLPAPER_NAME=$(basename "$CURRENT_WALLPAPER")
+    notify-send "✅ Tema Recargado" "$WALLPAPER_NAME" -i "$CURRENT_WALLPAPER" -t 2000
+else
+    notify-send "✅ Tema Recargado" "Colores aplicados" -t 2000
+fi
+
+echo "✅ Tema pywal recargado completamente"

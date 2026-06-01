@@ -1,0 +1,279 @@
+#!/bin/bash
+
+# Wallpaper Selector con Previews - Versión MEJORADA que maneja pywal correctamente
+# Incluye manejo robusto de errores y logging
+
+# Configuración más permisiva - no salir en errores menores
+set -u  # Solo falla en variables no definidas
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_FILE="/tmp/rofi_wallpaper_$$"
+LOG_FILE="$HOME/.cache/wallpaper-selector.log"
+
+# Crear directorios necesarios
+mkdir -p "$CACHE_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "$1"
+}
+
+# Función para reiniciar waybar de forma segura
+restart_waybar_safely() {
+    local max_attempts=3
+    local attempt=1
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        log "Intento $attempt/$max_attempts para reiniciar waybar"
+        
+        # Verificar si waybar está corriendo
+        if ! pgrep -x waybar > /dev/null; then
+            log "Waybar no está corriendo, iniciándolo directamente"
+            if nohup waybar > /dev/null 2>&1 & then
+                log "Waybar iniciado exitosamente"
+                return 0
+            else
+                log "ERROR: No se pudo iniciar waybar en intento $attempt"
+            fi
+        else
+            # Waybar está corriendo, reiniciarlo suavemente
+            log "Deteniendo waybar suavemente (SIGTERM)"
+            if pkill -TERM waybar 2>/dev/null; then
+                # Esperar a que se cierre
+                local timeout=10
+                while pgrep -x waybar > /dev/null && [[ $timeout -gt 0 ]]; do
+                    sleep 0.5
+                    ((timeout--))
+                done
+                
+                # Si aún está corriendo, forzar cierre
+                if pgrep -x waybar > /dev/null; then
+                    log "Forzando cierre de waybar (SIGKILL)"
+                    pkill -KILL waybar 2>/dev/null || true
+                    sleep 1
+                fi
+                
+                # Iniciar waybar nuevamente
+                log "Iniciando waybar nuevamente"
+                if nohup waybar > /dev/null 2>&1 & then
+                    sleep 1
+                    if pgrep -x waybar > /dev/null; then
+                        log "Waybar reiniciado exitosamente"
+                        return 0
+                    else
+                        log "ERROR: Waybar no se inició correctamente en intento $attempt"
+                    fi
+                else
+                    log "ERROR: No se pudo ejecutar waybar en intento $attempt"
+                fi
+            else
+                log "ERROR: No se pudo enviar SIGTERM a waybar en intento $attempt"
+            fi
+        fi
+        
+        ((attempt++))
+        sleep 2
+    done
+    
+    log "ERROR: No se pudo reiniciar waybar después de $max_attempts intentos"
+    notify-send "⚠️ Advertencia" "No se pudo reiniciar waybar, hazlo manualmente si es necesario" -t 5000
+    return 1
+}
+
+# Función de limpieza mejorada
+cleanup() {
+    local exit_code=$?
+    rm -f "$TEMP_FILE"* 2>/dev/null || true
+    if [[ $exit_code -ne 0 ]]; then
+        log "ERROR: Script terminó con código de salida $exit_code"
+        notify-send "❌ Error Wallpaper" "El script falló. Ver log en ~/.cache/wallpaper-selector.log" -u critical
+    fi
+}
+
+# Registrar traps
+trap cleanup EXIT INT TERM
+
+log "Iniciando wallpaper selector"
+
+# Verificar directorio
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Verificar swww
+if ! command -v swww &> /dev/null; then
+    log "ERROR: swww no está instalado"
+    notify-send "❌ Error" "swww no está instalado"
+    exit 1
+fi
+
+# Buscar imágenes
+log "Buscando imágenes en $WALLPAPER_DIR"
+cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
+shopt -s nullglob
+mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^\./||' | sort)
+
+# Verificar que hay imágenes
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes en $WALLPAPER_DIR"
+    notify-send "❌ Error" "No se encontraron imágenes en $WALLPAPER_DIR" -u critical
+    exit 1
+fi
+
+log "Procesando ${#images[@]} imágenes..."
+
+# Crear archivo temporal para rofi
+> "$TEMP_FILE"
+
+# Procesar cada imagen
+for img in "${images[@]}"; do
+    # Verificar que el archivo existe
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Crear preview si no existe
+    if [[ ! -f "$preview_file" ]]; then
+        echo "Creando preview para: $img"
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null
+        fi
+    fi
+    
+    # Agregar entrada si el preview existe
+    if [[ -f "$preview_file" ]]; then
+        echo -e "$clean_name\\0icon\\x1f$preview_file" >> "$TEMP_FILE"
+    else
+        echo "$clean_name" >> "$TEMP_FILE"
+    fi
+done
+
+# Verificar que tenemos entradas
+if [[ ! -s "$TEMP_FILE" ]]; then
+    log "ERROR: No se pudieron procesar las imágenes"
+    notify-send "❌ Error" "No se pudieron procesar las imágenes" -u critical
+    exit 1
+fi
+
+log "Mostrando selector de wallpapers..."
+
+# Ejecutar rofi con el tema personalizado
+selected=$(rofi -dmenu -i \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -show-icons \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    < "$TEMP_FILE")
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    log "No se seleccionó ningún wallpaper, saliendo..."
+    exit 0
+fi
+
+log "Wallpaper seleccionado: $selected"
+
+# Buscar el archivo correspondiente
+selected_file=""
+for img in "${images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+# Verificar archivo
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    log "ERROR: Archivo no encontrado: $selected"
+    notify-send "❌ Error" "Archivo no encontrado: $selected" -u critical
+    exit 1
+fi
+
+log "Aplicando wallpaper: $selected_file"
+
+# Iniciar swww-daemon si no está corriendo
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    notify-send "🔄 Iniciando swww..." "Preparando sistema de wallpapers"
+    swww-daemon --format xrgb &
+    sleep 2
+fi
+
+# Aplicar wallpaper
+notify-send "🎨 Aplicando Wallpaper" "$selected" -t 2000
+swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
+
+# Guardar wallpaper actual
+echo "$selected_file" > "$HOME/.cache/current-wallpaper"
+
+# Aplicar pywal si está disponible - VERSIÓN MEJORADA
+if command -v wal > /dev/null 2>&1; then
+    log "Aplicando pywal con imagen: $selected_file"
+    notify-send "🌈 Aplicando colores..." "Generando tema con pywal" -t 1500
+    
+    # Aplicar pywal con manejo de errores mejorado
+    if wal -i "$selected_file" -n -q; then
+        log "Pywal ejecutado exitosamente"
+    else
+        log "WARNING: Pywal falló, pero wallpaper ya fue aplicado"
+        notify-send "⚠️ Advertencia" "Error al generar colores, pero wallpaper aplicado" -t 3000
+        # Continúa el script sin salir
+    fi
+    
+    # Esperar a que pywal termine completamente 
+    sleep 1.5
+    
+    # Verificar archivos generados por pywal
+    pywal_success=false
+    if [[ -f ~/.cache/wal/colors-hyprland.conf ]]; then
+        log "Archivo colors-hyprland.conf encontrado"
+        pywal_success=true
+    else 
+        log "ADVERTENCIA: No se encontró colors-hyprland.conf"
+    fi
+    
+    if [[ -f ~/.cache/wal/colors-waybar.css ]] || [[ -f ~/.cache/wal/colors-pywal.css ]]; then
+        # Copiar archivos de waybar
+        if [[ -f ~/.cache/wal/colors-pywal.css ]]; then
+            if cp ~/.cache/wal/colors-pywal.css ~/.config/waybar/colors-pywal.css 2>/dev/null; then
+                log "Archivo colors-pywal.css copiado a waybar"
+            else
+                log "WARNING: No se pudo copiar colors-pywal.css"
+            fi
+        fi
+        pywal_success=true
+    else
+        log "ADVERTENCIA: No se encontraron archivos CSS de pywal"
+    fi
+    
+    if [[ "$pywal_success" == "true" ]]; then
+        # Recargar hyprland de forma segura
+        log "Recargando configuración de Hyprland"
+        if ! hyprctl reload > /dev/null 2>&1; then
+            log "WARNING: Error al recargar Hyprland, continuando..."
+        else
+            log "Hyprland recargado correctamente"
+        fi
+        
+        # Reiniciar waybar de forma más robusta
+        log "Reiniciando waybar con nuevos colores"
+        restart_waybar_safely
+        
+        notify-send "✅ Completado" "Wallpaper y tema aplicados correctamente" -t 3000
+    else
+        log "WARNING: Archivos de pywal no generados correctamente"
+        notify-send "⚠️ Parcialmente aplicado" "Wallpaper OK, pero algunos colores pueden no haberse actualizado" -t 4000
+    fi
+else
+    log "Pywal no disponible, solo aplicando wallpaper"
+    notify-send "✅ Wallpaper Aplicado" "$selected" -t 2000
+fi
+
+log "Script completado exitosamente"
+exit 0

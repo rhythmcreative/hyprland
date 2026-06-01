@@ -1,0 +1,209 @@
+#!/bin/bash
+
+# Notificaciones de volumen Premium estilo HyDE
+# Diseño inspirado en el HyDE original con mejoras visuales
+
+TIMEOUT=2500
+URGENT="low"
+
+# Generar barra de progreso con diseño HyDE original
+generate_volume_bar() {
+    local percent=$1
+    local width=20
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    local bar=""
+    local fill_char="█"
+    local empty_char="▒"
+    
+    # Crear la barra con gradiente visual
+    for ((i=0; i<filled; i++)); do
+        bar+="$fill_char"
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="$empty_char"
+    done
+    
+    echo "$bar"
+}
+
+# Crear indicador circular tipo HyDE
+generate_volume_circle() {
+    local percent=$1
+    
+    # Diferentes representaciones según el nivel
+    if [ "$percent" -eq 0 ]; then
+        echo "◯"
+    elif [ "$percent" -le 12 ]; then
+        echo "◔"
+    elif [ "$percent" -le 25 ]; then
+        echo "◑"
+    elif [ "$percent" -le 37 ]; then
+        echo "◕"
+    elif [ "$percent" -le 50 ]; then
+        echo "●"
+    elif [ "$percent" -le 62 ]; then
+        echo "◉"
+    elif [ "$percent" -le 75 ]; then
+        echo "⬤"
+    elif [ "$percent" -le 87 ]; then
+        echo "🔘"
+    else
+        echo "🟢"
+    fi
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo de audio limpio
+get_audio_device_clean() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-30)
+    if [ -z "$device" ]; then
+        echo "Audio Output Device"
+    else
+        echo "$device"
+    fi
+}
+
+# Función principal de notificación HyDE Premium
+show_premium_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        # Notificación de mute
+        local bar="$(generate_volume_bar 0)"
+        local circle="🔇"
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$circle MUTED" \
+                   "<b>Audio Silenciado</b>
+───────────────────────
+$bar 0%
+
+<i>$device</i>"
+    else
+        # Notificación normal con estilo HyDE
+        local bar="$(generate_volume_bar $volume)"
+        local circle="$(generate_volume_circle $volume)"
+        local icon=""
+        local level=""
+        
+        # Determinar icono y nivel
+        if [ "$volume" -eq 0 ]; then
+            icon="🔇"
+            level="Sin Audio"
+        elif [ "$volume" -lt 20 ]; then
+            icon="🔈"
+            level="Muy Bajo"
+        elif [ "$volume" -lt 40 ]; then
+            icon="🔉"
+            level="Bajo"
+        elif [ "$volume" -lt 60 ]; then
+            icon="🔉"
+            level="Medio"
+        elif [ "$volume" -lt 80 ]; then
+            icon="🔊"
+            level="Alto"
+        else
+            icon="🔊"
+            level="Máximo"
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$icon VOLUMEN $level" \
+                   "<b>$volume%</b>  $circle
+───────────────────────
+$bar
+
+<i>$device</i>"
+    fi
+}
+
+# Notificación de audio/música
+show_audio_premium_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_audio_device_clean)"
+    local bar="$(generate_volume_bar $volume)"
+    local circle="$(generate_volume_circle $volume)"
+    
+    local icon="🎵"
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎵"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="▶️"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon $title" \
+               "$message
+
+<b>Volumen: $volume%</b>  $circle
+───────────────────────
+$bar
+
+<i>$device</i>"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_audio_premium_notification "${2:-Audio}" "${3:-Reproduciendo música}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Probando notificaciones Premium HyDE..."
+        echo "Volumen 25%..."
+        show_premium_notification "25" "false" "$(get_audio_device_clean)"
+        sleep 3
+        echo "Volumen 75%..."
+        show_premium_notification "75" "false" "$(get_audio_device_clean)"
+        sleep 3
+        echo "Muted..."
+        show_premium_notification "0" "true" "$(get_audio_device_clean)"
+        sleep 3
+        echo "Audio notification..."
+        show_audio_premium_notification "Spotify" "Reproduciendo: My Favorite Song - Artist"
+        exit 0
+        ;;
+    *)
+        echo "Uso: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_audio_device_clean)"
+
+show_premium_notification "$volume" "$muted" "$device"
+exit 0

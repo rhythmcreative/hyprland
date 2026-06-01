@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Script para establecer una imagen como wallpaper directamente
+# Solo funciona si la imagen ya está en ~/Pictures/Wallpapers/
+
+if [ $# -eq 0 ]; then
+    echo "Error: No se especificó ningún archivo"
+    exit 1
+fi
+
+IMAGE_PATH="$1"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Verificar que el archivo está en el directorio de wallpapers
+if [[ "$(dirname "$IMAGE_PATH")" == "$WALLPAPER_DIR" ]]; then
+    # Establecer como wallpaper
+    if [ -x "$HOME/.local/bin/wallpaper-change-adaptive" ]; then
+        "$HOME/.local/bin/wallpaper-change-adaptive" "$IMAGE_PATH"
+        notify-send "Wallpaper establecido" "$(basename "$IMAGE_PATH")" -i preferences-desktop-wallpaper
+    else
+        notify-send "Error" "No se encontró el script wallpaper-change-adaptive" -i dialog-error
+        exit 1
+    fi
+else
+    # Si no está en Wallpapers, preguntar si quiere moverlo
+    notify-send "Información" "Esta imagen no está en tu carpeta de Wallpapers. Usa clic derecho > 'Añadir Wallpaper' para moverla primero." -i dialog-information
+fi

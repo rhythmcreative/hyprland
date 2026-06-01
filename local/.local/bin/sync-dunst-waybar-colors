@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# Script para sincronizar dunst con colores de waybar/pywal
+# Reemplaza placeholders en dunstrc con colores actuales de pywal
+
+set -eo pipefail
+
+DUNST_CONFIG="$HOME/.config/dunst/dunstrc"
+DUNST_TEMPLATE="$HOME/.config/dunst/dunstrc.template"
+COLORS_FILE="$HOME/.cache/wal/colors.sh"
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" >&2
+}
+
+# Verificar que existan los archivos necesarios
+if [[ ! -f "$COLORS_FILE" ]]; then
+    log "ERROR: Archivo de colores de pywal no encontrado: $COLORS_FILE"
+    exit 1
+fi
+
+if [[ ! -f "$DUNST_CONFIG" ]]; then
+    log "ERROR: Archivo de configuración dunst no encontrado: $DUNST_CONFIG"
+    exit 1
+fi
+
+log "🎨 Sincronizando dunst con colores de waybar/pywal..."
+
+# Cargar colores de pywal
+source "$COLORS_FILE"
+
+# Función para aplicar colores
+apply_colors() {
+    local config="$1"
+    
+    # Reemplazar placeholders con colores reales
+    sed -i "s/@background@/${background}/g" "$config"
+    sed -i "s/@foreground@/${foreground}/g" "$config"
+    sed -i "s/@color0@/${color0}/g" "$config"
+    sed -i "s/@color1@/${color1}/g" "$config"
+    sed -i "s/@color2@/${color2}/g" "$config"
+    sed -i "s/@color3@/${color3}/g" "$config"
+    sed -i "s/@color4@/${color4}/g" "$config"
+    sed -i "s/@color5@/${color5}/g" "$config"
+    sed -i "s/@color6@/${color6}/g" "$config"
+    sed -i "s/@color7@/${color7}/g" "$config"
+    sed -i "s/@color8@/${color8}/g" "$config"
+    sed -i "s/@color9@/${color9}/g" "$config"
+    sed -i "s/@color10@/${color10}/g" "$config"
+    sed -i "s/@color11@/${color11}/g" "$config"
+    sed -i "s/@color12@/${color12}/g" "$config"
+    sed -i "s/@color13@/${color13}/g" "$config"
+    sed -i "s/@color14@/${color14}/g" "$config"
+    sed -i "s/@color15@/${color15}/g" "$config"
+}
+
+# Si existe un template, usarlo como base
+if [[ -f "$DUNST_TEMPLATE" ]]; then
+    log "📋 Usando template dunstrc..."
+    cp "$DUNST_TEMPLATE" "$DUNST_CONFIG"
+fi
+
+# Verificar si el archivo contiene placeholders
+if grep -q "@.*@" "$DUNST_CONFIG"; then
+    log "🔄 Aplicando colores de pywal a dunst..."
+    apply_colors "$DUNST_CONFIG"
+    log "✅ Colores aplicados correctamente"
+else
+    log "ℹ️ No se encontraron placeholders, usando configuración actual"
+fi
+
+# Reiniciar dunst para aplicar cambios
+log "🔄 Reiniciando dunst..."
+pkill dunst 2>/dev/null || true
+sleep 1
+
+# Iniciar dunst en segundo plano
+if command -v dunst >/dev/null 2>&1; then
+    dunst > /dev/null 2>&1 &
+    log "✅ Dunst reiniciado exitosamente"
+    
+    # Verificar que dunst esté corriendo
+    sleep 1
+    if pgrep dunst >/dev/null; then
+        log "✅ Dunst verificado como activo"
+        
+        # Enviar notificación de prueba
+        sleep 0.5
+        notify-send "🎨 Dunst Sincronizado" "Colores actualizados con Waybar" -t 2000 2>/dev/null || true
+    else
+        log "⚠️ Dunst podría no haberse iniciado correctamente"
+    fi
+else
+    log "❌ Error: dunst no está instalado"
+    exit 1
+fi
+
+log "🎉 Sincronización de dunst completada"

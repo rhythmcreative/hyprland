@@ -1,0 +1,319 @@
+#!/bin/bash
+
+# nm-applet daemon with pywal auto-sync
+# Mantiene nm-applet corriendo y sincronizado con pywal automáticamente
+
+DAEMON_NAME="nm-applet-daemon-pywal"
+PIDFILE="$HOME/.cache/nm-applet-daemon.pid"
+LOGFILE="$HOME/.cache/nm-applet-logs/daemon.log"
+COLORS_CACHE="$HOME/.cache/wal/colors.sh"
+LAST_COLORS_HASH="$HOME/.cache/nm-applet-last-colors.hash"
+
+# Función de logging con timestamp
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
+}
+
+# Función para obtener hash de colores actuales
+get_colors_hash() {
+    if [[ -f "$COLORS_CACHE" ]]; then
+        sha256sum "$COLORS_CACHE" | cut -d' ' -f1
+    else
+        echo "no-colors"
+    fi
+}
+
+# Función para verificar si nm-applet está corriendo
+is_nm_applet_running() {
+    pgrep -f "^nm-applet" > /dev/null 2>&1
+}
+
+# Función para iniciar nm-applet con configuración correcta
+start_nm_applet() {
+    log "🚀 Iniciando nm-applet con configuración pywal..."
+    
+    # Cargar colores de pywal si existen
+    if [[ -f "$COLORS_CACHE" ]]; then
+        source "$COLORS_CACHE"
+        log "✅ Colores pywal cargados (bg: $background, fg: $foreground)"
+    else
+        log "⚠️ No se encontraron colores de pywal, usando configuración por defecto"
+    fi
+    
+    # Ejecutar script de sincronización CSS antes de iniciar
+    if [[ -f "$HOME/.local/bin/nm-applet-css-only" ]]; then
+        log "🎨 Sincronizando CSS antes de iniciar nm-applet..."
+        "$HOME/.local/bin/nm-applet-css-only" >> "$LOGFILE" 2>&1
+    fi
+    
+    # Iniciar nm-applet con variables de entorno correctas
+    env GTK_THEME="Arc-Dark" \
+        GDK_BACKEND="wayland,x11" \
+        XDG_CURRENT_DESKTOP="Hyprland" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
+        GTK_USE_PORTAL=1 \
+        nm-applet >> "$LOGFILE" 2>&1 &
+    
+    local nm_pid=$!
+    sleep 2
+    
+    if kill -0 "$nm_pid" 2>/dev/null && is_nm_applet_running; then
+        log "✅ nm-applet iniciado exitosamente (PID: $nm_pid)"
+        return 0
+    else
+        log "❌ Error al iniciar nm-applet"
+        return 1
+    fi
+}
+
+# Función para reiniciar nm-applet de forma segura
+restart_nm_applet() {
+    log "🔄 Reiniciando nm-applet..."
+    
+    # Cerrar instancias existentes
+    if is_nm_applet_running; then
+        log "🛑 Cerrando instancias existentes..."
+        pkill -TERM nm-applet
+        sleep 2
+        
+        # Forzar cierre si es necesario
+        if is_nm_applet_running; then
+            log "⚠️ Forzando cierre..."
+            pkill -KILL nm-applet
+            sleep 1
+        fi
+    fi
+    
+    # Iniciar nueva instancia
+    start_nm_applet
+}
+
+# Función de monitoreo de colores
+monitor_colors() {
+    local current_hash
+    local last_hash
+    
+    # Leer hash anterior si existe
+    if [[ -f "$LAST_COLORS_HASH" ]]; then
+        last_hash=$(cat "$LAST_COLORS_HASH")
+    else
+        last_hash="none"
+    fi
+    
+    while true; do
+        current_hash=$(get_colors_hash)
+        
+        if [[ "$current_hash" != "$last_hash" && "$current_hash" != "no-colors" ]]; then
+            log "🎨 Detectado cambio en colores de pywal (hash: $current_hash)"
+            
+            # Sincronizar CSS
+            if [[ -f "$HOME/.local/bin/nm-applet-css-only" ]]; then
+                log "🔄 Ejecutando sincronización de CSS..."
+                "$HOME/.local/bin/nm-applet-css-only" >> "$LOGFILE" 2>&1
+                
+                # Solo reiniciar si nm-applet ya está corriendo
+                if is_nm_applet_running; then
+                    log "🔄 Reiniciando nm-applet para aplicar nuevos colores..."
+                    restart_nm_applet
+                fi
+            fi
+            
+            # Guardar nuevo hash
+            echo "$current_hash" > "$LAST_COLORS_HASH"
+            last_hash="$current_hash"
+        fi
+        
+        # Verificar que nm-applet sigue corriendo
+        if ! is_nm_applet_running; then
+            log "⚠️ nm-applet no está corriendo, reiniciando..."
+            start_nm_applet
+        fi
+        
+        sleep 5  # Chequear cada 5 segundos
+    done
+}
+
+# Función para manejar señales de terminación
+cleanup() {
+    log "🔄 Recibida señal de terminación, limpiando..."
+    
+    # Terminar procesos hijos
+    jobs -p | xargs -r kill 2>/dev/null
+    
+    # Cerrar nm-applet
+    if is_nm_applet_running; then
+        log "🛑 Cerrando nm-applet..."
+        pkill -TERM nm-applet
+        sleep 2
+        pkill -KILL nm-applet 2>/dev/null
+    fi
+    
+    # Remover archivo PID
+    [[ -f "$PIDFILE" ]] && rm -f "$PIDFILE"
+    
+    log "✅ Limpieza completada"
+    exit 0
+}
+
+# Función principal del daemon
+daemon_main() {
+    log "🚀 === INICIANDO DAEMON NM-APPLET CON PYWAL ==="
+    
+    # Crear directorios necesarios
+    mkdir -p "$(dirname "$LOGFILE")" "$(dirname "$PIDFILE")"
+    
+    # Registrar manejadores de señales
+    trap cleanup SIGTERM SIGINT SIGQUIT
+    
+    # Guardar PID
+    echo $$ > "$PIDFILE"
+    
+    # Iniciar nm-applet inicialmente
+    start_nm_applet
+    
+    # Iniciar monitoreo en segundo plano
+    monitor_colors &
+    local monitor_pid=$!
+    
+    log "📊 Monitor de colores iniciado (PID: $monitor_pid)"
+    
+    # Mantener el daemon vivo
+    while true; do
+        # Verificar que el monitor sigue corriendo
+        if ! kill -0 "$monitor_pid" 2>/dev/null; then
+            log "⚠️ Monitor de colores detenido, reiniciando..."
+            monitor_colors &
+            monitor_pid=$!
+        fi
+        
+        sleep 10
+    done
+}
+
+# Función para mostrar ayuda
+show_help() {
+    cat << EOF
+Uso: $0 [OPCIÓN]
+
+Daemon para mantener nm-applet sincronizado con pywal automáticamente.
+
+OPCIONES:
+    start       Iniciar el daemon (por defecto)
+    stop        Detener el daemon
+    restart     Reiniciar el daemon
+    status      Mostrar estado del daemon
+    sync        Ejecutar sincronización manual de CSS
+    help        Mostrar esta ayuda
+
+ARCHIVOS:
+    PID:    $PIDFILE
+    Log:    $LOGFILE
+    Colores: $COLORS_CACHE
+
+EOF
+}
+
+# Función para verificar estado
+check_status() {
+    if [[ -f "$PIDFILE" ]]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "✅ Daemon corriendo (PID: $pid)"
+            if is_nm_applet_running; then
+                echo "✅ nm-applet está corriendo"
+            else
+                echo "⚠️ nm-applet NO está corriendo"
+            fi
+            return 0
+        else
+            echo "❌ Daemon no está corriendo (PID file obsoleto)"
+            rm -f "$PIDFILE"
+            return 1
+        fi
+    else
+        echo "❌ Daemon no está corriendo"
+        return 1
+    fi
+}
+
+# Función para detener daemon
+stop_daemon() {
+    if [[ -f "$PIDFILE" ]]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            log "🛑 Deteniendo daemon (PID: $pid)..."
+            kill -TERM "$pid"
+            sleep 2
+            
+            if kill -0 "$pid" 2>/dev/null; then
+                log "⚠️ Forzando detención..."
+                kill -KILL "$pid"
+            fi
+            
+            rm -f "$PIDFILE"
+            log "✅ Daemon detenido"
+        else
+            echo "❌ Daemon no está corriendo"
+            rm -f "$PIDFILE"
+        fi
+    else
+        echo "❌ Daemon no está corriendo"
+    fi
+}
+
+# Función para sincronización manual
+manual_sync() {
+    log "🎨 Ejecutando sincronización manual..."
+    if [[ -f "$HOME/.local/bin/nm-applet-css-only" ]]; then
+        "$HOME/.local/bin/nm-applet-css-only"
+        if is_nm_applet_running; then
+            restart_nm_applet
+        else
+            start_nm_applet
+        fi
+        log "✅ Sincronización manual completada"
+    else
+        log "❌ Script de sincronización CSS no encontrado"
+        return 1
+    fi
+}
+
+# Main
+case "${1:-start}" in
+    "start")
+        if check_status > /dev/null 2>&1; then
+            echo "⚠️ Daemon ya está corriendo"
+            exit 0
+        fi
+        
+        # Ejecutar en modo daemon (fork)
+        if [[ "$2" != "--foreground" ]]; then
+            exec "$0" start --foreground </dev/null >/dev/null 2>&1 &
+            echo "🚀 Daemon iniciado"
+        else
+            daemon_main
+        fi
+        ;;
+    "stop")
+        stop_daemon
+        ;;
+    "restart")
+        stop_daemon
+        sleep 1
+        exec "$0" start
+        ;;
+    "status")
+        check_status
+        ;;
+    "sync")
+        manual_sync
+        ;;
+    "help"|"--help"|"-h")
+        show_help
+        ;;
+    *)
+        echo "❌ Opción desconocida: $1"
+        show_help
+        exit 1
+        ;;
+esac

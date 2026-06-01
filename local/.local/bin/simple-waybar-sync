@@ -1,0 +1,103 @@
+#!/bin/bash
+
+# Script de sincronización SIMPLE de Waybar
+# Evita múltiples recargas que causan pérdida del módulo de workspaces
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/simple-waybar-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "$1" >&2
+}
+
+# Función para verificar si waybar está corriendo
+is_waybar_running() {
+    pgrep -x waybar > /dev/null
+}
+
+# Función para sincronizar waybar de forma segura
+sync_waybar_safe() {
+    if is_waybar_running; then
+        log "🎨 Recargando configuración CSS de Waybar..."
+        
+        # Obtener PIDs de waybar y enviar señal directamente
+        local waybar_pids=$(pgrep -x waybar)
+        if [[ -n "$waybar_pids" ]]; then
+            # Intentar recarga suave con SIGUSR2
+            if kill -USR2 $waybar_pids 2>/dev/null; then
+                log "✅ Waybar CSS recargado exitosamente"
+                sleep 2
+                
+                # Verificar que waybar sigue funcionando después de la recarga
+                if is_waybar_running; then
+                    log "✅ Waybar verificado - funcionando correctamente"
+                    return 0
+                else
+                    log "⚠️ Waybar se cerró después de la recarga, reiniciando..."
+                    waybar > /dev/null 2>&1 &
+                    sleep 2
+                    return 0
+                fi
+            else
+                log "⚠️ Recarga CSS con USR2 falló, intentando reinicio controlado..."
+                # Terminar waybar suavemente y reiniciar
+                kill -TERM $waybar_pids 2>/dev/null || true
+                sleep 2
+                waybar > /dev/null 2>&1 &
+                sleep 2
+                log "✅ Waybar reiniciado"
+                return 0
+            fi
+        else
+            log "⚠️ No se pudieron obtener PIDs de waybar, reiniciando..."
+            pkill waybar 2>/dev/null || true
+            sleep 1
+            waybar > /dev/null 2>&1 &
+            sleep 2
+            log "✅ Waybar reiniciado"
+            return 0
+        fi
+    else
+        log "🚀 Waybar no está corriendo, iniciándolo..."
+        waybar > /dev/null 2>&1 &
+        sleep 2
+        log "✅ Waybar iniciado"
+        return 0
+    fi
+}
+
+# Función principal
+main() {
+    log "=== Iniciando sincronización simple de Waybar ==="
+    
+    # Verificar que los archivos de pywal existen
+    if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+        log "⚠️ Archivos de pywal no encontrados - aplicando pywal primero"
+        # Si no hay colores de pywal, usar el wallpaper actual
+        current_wallpaper=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || echo "")
+        if [[ -n "$current_wallpaper" && -f "$current_wallpaper" ]]; then
+            log "🎨 Aplicando pywal a wallpaper actual: $(basename "$current_wallpaper")"
+            wal -i "$current_wallpaper" -n -q
+            sleep 1
+        fi
+    fi
+    
+    # Sincronizar waybar
+    sync_waybar_safe
+    
+    # Verificación final
+    if is_waybar_running; then
+        log "🎉 Sincronización exitosa - Waybar funcionando correctamente"
+        notify-send "✅ Waybar Sincronizado" "Configuración aplicada exitosamente" -t 2000 2>/dev/null || true
+    else
+        log "❌ Error: Waybar no está funcionando después de la sincronización"
+        notify-send "❌ Error Waybar" "No se pudo sincronizar correctamente" -t 3000 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Ejecutar función principal
+main "$@"

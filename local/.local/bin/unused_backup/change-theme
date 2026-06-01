@@ -1,0 +1,280 @@
+#!/bin/bash
+
+# ═══════════════════════════════════════════════════════
+# CAMBIO RÁPIDO DE TEMA Y WALLPAPER + LIBREWOLF
+# ═══════════════════════════════════════════════════════
+# Cambia wallpaper, actualiza pywal y sincroniza LibreWolf
+
+set -e
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+# Función para logging
+log() {
+    echo -e "${GREEN}[$(date +'%H:%M:%S')]${NC} $1"
+}
+
+log_info() {
+    echo -e "${BLUE}[$(date +'%H:%M:%S')] INFO:${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[$(date +'%H:%M:%S')] WARNING:${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[$(date +'%H:%M:%S')] ERROR:${NC} $1"
+}
+
+# Función de ayuda
+show_help() {
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║               ${WHITE}🎨 CHANGE-THEME HELPER 🎨${CYAN}               ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${WHITE}Uso:${NC}"
+    echo -e "  ${GREEN}change-theme [imagen]${NC}          - Cambiar tema con imagen específica"
+    echo -e "  ${GREEN}change-theme --random${NC}          - Cambiar a wallpaper aleatorio"
+    echo -e "  ${GREEN}change-theme --dark${NC}            - Aplicar tema oscuro"
+    echo -e "  ${GREEN}change-theme --light${NC}           - Aplicar tema claro"
+    echo -e "  ${GREEN}change-theme --list${NC}            - Listar wallpapers disponibles"
+    echo -e "  ${GREEN}change-theme --current${NC}         - Mostrar wallpaper actual"
+    echo -e "  ${GREEN}change-theme --help${NC}            - Mostrar esta ayuda"
+    echo
+    echo -e "${WHITE}Ejemplos:${NC}"
+    echo -e "  ${YELLOW}change-theme ~/Pictures/wallpaper.jpg${NC}"
+    echo -e "  ${YELLOW}change-theme --random${NC}"
+    echo -e "  ${YELLOW}change-theme --dark${NC}"
+    echo
+}
+
+# Obtener wallpaper actual
+get_current_wallpaper() {
+    if [ -f "$HOME/.cache/wal/colors.json" ]; then
+        if command -v jq &> /dev/null; then
+            jq -r '.wallpaper' "$HOME/.cache/wal/colors.json"
+        else
+            grep -o '"wallpaper": "[^"]*"' "$HOME/.cache/wal/colors.json" | cut -d'"' -f4
+        fi
+    else
+        echo "No hay wallpaper configurado"
+    fi
+}
+
+# Listar wallpapers disponibles
+list_wallpapers() {
+    local wallpaper_dirs=(
+        "$HOME/Pictures/Wallpapers"
+        "$HOME/Pictures"
+        "$HOME/Wallpapers"
+        "/usr/share/pixmaps"
+        "/usr/share/backgrounds"
+    )
+    
+    log_info "Buscando wallpapers en directorios comunes..."
+    echo
+    
+    local count=0
+    for dir in "${wallpaper_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            log_info "📁 $dir:"
+            find "$dir" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) 2>/dev/null | head -10 | while read -r file; do
+                echo "   • $(basename "$file")"
+                ((count++))
+            done
+            echo
+        fi
+    done
+    
+    if [ $count -eq 0 ]; then
+        log_warn "No se encontraron wallpapers en los directorios comunes"
+        echo -e "${WHITE}Puedes colocar tus wallpapers en: $HOME/Pictures/Wallpapers${NC}"
+    fi
+}
+
+# Obtener wallpaper aleatorio
+get_random_wallpaper() {
+    local wallpaper_dirs=(
+        "$HOME/Pictures/Wallpapers"
+        "$HOME/Pictures"
+        "$HOME/Wallpapers"
+    )
+    
+    local wallpapers=()
+    for dir in "${wallpaper_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            while IFS= read -r -d '' file; do
+                wallpapers+=("$file")
+            done < <(find "$dir" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) -print0 2>/dev/null)
+        fi
+    done
+    
+    if [ ${#wallpapers[@]} -eq 0 ]; then
+        log_error "No se encontraron wallpapers para selección aleatoria"
+        exit 1
+    fi
+    
+    local random_index=$((RANDOM % ${#wallpapers[@]}))
+    echo "${wallpapers[$random_index]}"
+}
+
+# Aplicar wallpaper y actualizar tema
+apply_wallpaper() {
+    local wallpaper="$1"
+    local extra_flags="$2"
+    
+    if [ ! -f "$wallpaper" ]; then
+        log_error "El archivo '$wallpaper' no existe"
+        exit 1
+    fi
+    
+    log "🖼️ Aplicando wallpaper: $(basename "$wallpaper")"
+    
+    # Aplicar con pywal
+    if ! wal -i "$wallpaper" $extra_flags; then
+        log_error "Error al aplicar wallpaper con pywal"
+        exit 1
+    fi
+    
+    log "✅ Wallpaper aplicado exitosamente"
+    
+    # Actualizar LibreWolf automáticamente
+    if command -v update-librewolf-theme &> /dev/null; then
+        log "🦊 Actualizando tema de LibreWolf..."
+        update-librewolf-theme --auto
+    else
+        log_warn "Script de actualización de LibreWolf no encontrado"
+    fi
+    
+    # Mostrar información del tema aplicado
+    show_current_info
+}
+
+# Mostrar información del tema actual
+show_current_info() {
+    local current_wallpaper=$(get_current_wallpaper)
+    
+    echo
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║                 ${WHITE}🎨 TEMA ACTUAL 🎨${CYAN}                     ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${WHITE}📸 Wallpaper:${NC} $(basename "$current_wallpaper")"
+    echo -e "${WHITE}📁 Ruta:${NC} $current_wallpaper"
+    
+    if [ -f "$HOME/.cache/wal/colors.json" ]; then
+        if command -v jq &> /dev/null; then
+            local bg=$(jq -r '.special.background' "$HOME/.cache/wal/colors.json")
+            local fg=$(jq -r '.special.foreground' "$HOME/.cache/wal/colors.json")
+            local color4=$(jq -r '.colors.color4' "$HOME/.cache/wal/colors.json")
+            
+            echo -e "${WHITE}🎨 Colores principales:${NC}"
+            echo -e "   • Fondo: $bg"
+            echo -e "   • Texto: $fg"
+            echo -e "   • Acento: $color4"
+        fi
+    fi
+    
+    echo
+    echo -e "${GREEN}✨ Tema sincronizado con:${NC}"
+    echo -e "${WHITE}  • LibreWolf (navegador)${NC}"
+    echo -e "${WHITE}  • Terminal${NC}"
+    echo -e "${WHITE}  • Aplicaciones compatibles${NC}"
+    echo
+}
+
+# Función principal
+main() {
+    case "${1:-}" in
+        --help|-h)
+            show_help
+            ;;
+        --list|-l)
+            echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║             ${WHITE}📋 WALLPAPERS DISPONIBLES 📋${CYAN}             ║${NC}"
+            echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+            echo
+            list_wallpapers
+            ;;
+        --current|-c)
+            show_current_info
+            ;;
+        --random|-r)
+            echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║              ${WHITE}🎲 WALLPAPER ALEATORIO 🎲${CYAN}               ║${NC}"
+            echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+            echo
+            local random_wallpaper=$(get_random_wallpaper)
+            apply_wallpaper "$random_wallpaper"
+            ;;
+        --dark|-d)
+            echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║                ${WHITE}🌙 TEMA OSCURO 🌙${CYAN}                     ║${NC}"
+            echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+            echo
+            local current_wallpaper=$(get_current_wallpaper)
+            if [ "$current_wallpaper" != "No hay wallpaper configurado" ]; then
+                apply_wallpaper "$current_wallpaper" "--saturate 0.7"
+            else
+                log_error "No hay wallpaper configurado. Usa primero: change-theme [imagen]"
+                exit 1
+            fi
+            ;;
+        --light|-L)
+            echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║                ${WHITE}☀️ TEMA CLARO ☀️${CYAN}                      ║${NC}"
+            echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+            echo
+            local current_wallpaper=$(get_current_wallpaper)
+            if [ "$current_wallpaper" != "No hay wallpaper configurado" ]; then
+                apply_wallpaper "$current_wallpaper" "-l"
+            else
+                log_error "No hay wallpaper configurado. Usa primero: change-theme [imagen]"
+                exit 1
+            fi
+            ;;
+        "")
+            log_error "Debes especificar una imagen o usar una opción"
+            echo -e "${YELLOW}Usa: ${WHITE}change-theme --help${YELLOW} para ver la ayuda${NC}"
+            exit 1
+            ;;
+        *)
+            # Imagen específica
+            local wallpaper="$1"
+            
+            # Si es un path relativo, intentar convertir a absoluto
+            if [[ "$wallpaper" != /* ]]; then
+                if [ -f "$PWD/$wallpaper" ]; then
+                    wallpaper="$PWD/$wallpaper"
+                elif [ -f "$HOME/Pictures/Wallpapers/$wallpaper" ]; then
+                    wallpaper="$HOME/Pictures/Wallpapers/$wallpaper"
+                elif [ -f "$HOME/Pictures/$wallpaper" ]; then
+                    wallpaper="$HOME/Pictures/$wallpaper"
+                fi
+            fi
+            
+            echo -e "${CYAN}╔═══════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║              ${WHITE}🎨 APLICANDO TEMA NUEVO 🎨${CYAN}              ║${NC}"
+            echo -e "${CYAN}╚═══════════════════════════════════════════════════════╝${NC}"
+            echo
+            apply_wallpaper "$wallpaper"
+            ;;
+    esac
+}
+
+# Verificar dependencias básicas
+if ! command -v wal &> /dev/null; then
+    log_error "pywal no está instalado. Instala con: pip install pywal"
+    exit 1
+fi
+
+# Ejecutar función principal
+main "$@"

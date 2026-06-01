@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# Script to generate nwg-dock-hyprland CSS with pywal colors
+
+# Source pywal colors
+source ~/.cache/wal/colors.sh
+
+# Create CSS file with pywal colors (simple version)
+cat > ~/.config/nwg-dock-hyprland/simple.css << EOF
+/* nwg-dock-hyprland style with pywal colors - Generated automatically */
+
+window {
+    background-color: rgba($(python3 -c "print(','.join(str(int('${background#\#}'[i:i+2], 16)) for i in (0, 2, 4)))"), 0.8);
+    border-radius: 10px;
+    border: 2px solid ${color1};
+    padding: 5px;
+    margin: 5px;
+}
+
+#box {
+    background-color: transparent;
+    padding: 3px;
+}
+
+button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    margin: 2px;
+    padding: 8px;
+    transition: all 200ms ease;
+}
+
+button:hover {
+    background-color: ${color1};
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+button:focus {
+    background-color: ${color2};
+    outline: none;
+}
+
+button:active {
+    background-color: ${color3};
+}
+
+image {
+    opacity: 0.9;
+}
+
+button:hover image {
+    opacity: 1.0;
+}
+
+/* Active window indicator */
+.active {
+    background-color: ${color4} !important;
+    border: 1px solid ${color6};
+}
+
+/* Urgent window indicator */
+.urgent {
+    background-color: ${color9} !important;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+/* Tooltip styling */
+tooltip {
+    background-color: ${background};
+    color: ${foreground};
+    border: 1px solid ${color1};
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+/* Workspace indicator dots */
+.ws-button {
+    min-height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background-color: ${color8};
+    margin: 2px;
+}
+
+.ws-button:hover {
+    background-color: ${color7};
+}
+
+.ws-button.focused {
+    background-color: ${color3};
+}
+
+.ws-button.occupied {
+    background-color: ${color5};
+}
+
+/* Minimize/close buttons */
+.minimize {
+    background-color: ${color3};
+}
+
+.close {
+    background-color: ${color1};
+}
+
+.minimize:hover,
+.close:hover {
+    opacity: 0.8;
+}
+EOF
+
+echo "CSS generated with current pywal colors"

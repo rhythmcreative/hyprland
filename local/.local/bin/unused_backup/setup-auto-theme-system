@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Configuración completa del sistema automático de temas wal+GTK+nwg-look
+
+echo "🎨 CONFIGURACIÓN SISTEMA AUTOMÁTICO DE TEMAS"
+echo "============================================="
+echo ""
+
+# Función de éxito
+success() {
+    echo "✓ $1"
+}
+
+# Función de información
+info() {
+    echo "ℹ $1"
+}
+
+# Configurar sistema base
+info "Configurando sistema base..."
+~/.local/bin/setup-nwg-wal
+
+echo ""
+info "Generando tema GTK inicial..."
+~/.local/bin/wal-gtk-theme-generator
+
+echo ""
+info "Verificando configuración..."
+
+# Verificar que todos los scripts existen
+scripts=(
+    "wal-auto"
+    "wal-gtk-theme-generator" 
+    "setup-nwg-wal"
+    "wallpaper-monitor"
+    "wallpaper-selector"
+)
+
+for script in "${scripts[@]}"; do
+    if [[ -x "$HOME/.local/bin/$script" ]]; then
+        success "Script $script configurado"
+    else
+        echo "❌ Script $script no encontrado o no es ejecutable"
+    fi
+done
+
+# Verificar hook de wal
+if [[ -x "$HOME/.config/wal/post.sh" ]]; then
+    success "Hook de wal configurado"
+else
+    echo "❌ Hook de wal no configurado"
+fi
+
+echo ""
+echo "🎯 SISTEMA CONFIGURADO - Cómo usar:"
+echo "===================================="
+echo ""
+echo "🔧 MÉTODO AUTOMÁTICO (Recomendado):"
+echo "   Super+Shift+W  -> Selector de wallpaper con tema automático"
+echo ""
+echo "📱 COMANDOS RÁPIDOS:"
+echo "   theme imagen.jpg          -> Cambiar tema completo"
+echo "   theme-restore             -> Restaurar último tema"
+echo "   nwg                       -> Abrir nwg-look"
+echo "   theme-gtk                 -> Regenerar tema GTK manualmente"
+echo ""
+echo "🤖 MONITOR AUTOMÁTICO (Opcional):"
+echo "   monitor-start             -> Iniciar detección automática"
+echo "   monitor-stop              -> Detener monitor"
+echo "   monitor-status            -> Ver estado"
+echo ""
+echo "📂 UBICACIONES:"
+echo "   ~/.themes/wal-gtk-auto    -> Tema GTK generado"
+echo "   ~/.cache/wal/             -> Colores y configuraciones"
+echo "   ~/.config/nwg-look/       -> Configuración nwg-look"
+echo ""
+
+# Preguntar si quiere iniciar el monitor automático
+echo "¿Quieres iniciar el monitor automático de wallpaper? (y/N)"
+read -r response
+if [[ "$response" =~ ^[Yy]$ ]]; then
+    ~/.local/bin/wallpaper-monitor start
+    echo ""
+    success "Monitor automático iniciado"
+    echo "Ahora cualquier cambio de wallpaper actualizará el tema automáticamente"
+fi
+
+echo ""
+echo "🎉 ¡CONFIGURACIÓN COMPLETA!"
+echo ""
+echo "Prueba cambiar el wallpaper con Super+Shift+W"
+echo "El tema GTK se aplicará automáticamente y estará disponible en nwg-look"
+echo ""
+echo "Para más ayuda, ejecuta cualquier script sin argumentos para ver la ayuda."

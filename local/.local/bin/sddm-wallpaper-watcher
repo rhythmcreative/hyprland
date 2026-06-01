@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# SDDM Wallpaper Watcher
+# Este script monitorea cambios en el archivo current-wallpaper
+# y sincroniza automáticamente el wallpaper con SDDM
+
+LOG_FILE="$HOME/.cache/sddm-wallpaper-watcher.log"
+CURRENT_WALLPAPER_FILE="$HOME/.cache/current-wallpaper"
+SYNC_SCRIPT="$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+PID_FILE="$HOME/.cache/sddm-wallpaper-watcher.pid"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función de limpieza al recibir señal de terminación
+cleanup() {
+    log "Recibida señal de terminación, limpiando..."
+    rm -f "$PID_FILE"
+    exit 0
+}
+
+# Configurar trap para limpieza
+trap cleanup SIGTERM SIGINT
+
+# Crear archivo PID
+echo $$ > "$PID_FILE"
+
+log "Iniciando SDDM Wallpaper Watcher"
+log "Monitoreando: $CURRENT_WALLPAPER_FILE"
+
+# Verificar que el script de sincronización existe
+if [[ ! -f "$SYNC_SCRIPT" ]]; then
+    log "ERROR: Script de sincronización no encontrado: $SYNC_SCRIPT"
+    exit 1
+fi
+
+# Verificar que inotify está disponible
+if ! command -v inotifywait > /dev/null 2>&1; then
+    log "ERROR: inotifywait no está instalado. Instala inotify-tools"
+    notify-send "SDDM Watcher" "Error: Instala inotify-tools para monitoreo automático"
+    exit 1
+fi
+
+log "Iniciando monitoreo automático de cambios en wallpaper"
+
+# Sincronizar una vez al inicio si el archivo existe
+if [[ -f "$CURRENT_WALLPAPER_FILE" ]]; then
+    log "Sincronizando wallpaper actual al inicio"
+    "$SYNC_SCRIPT" &
+fi
+
+# Monitorear cambios en el archivo current-wallpaper
+while true; do
+    # Esperar por modificaciones en el archivo current-wallpaper
+    inotifywait -e modify,create "$CURRENT_WALLPAPER_FILE" 2>/dev/null
+    
+    if [[ $? -eq 0 ]]; then
+        log "Detectado cambio en wallpaper, iniciando sincronización con SDDM"
+        
+        # Pequeña pausa para asegurar que el archivo esté completamente escrito
+        sleep 1
+        
+        # Ejecutar sincronización en background
+        "$SYNC_SCRIPT" &
+        SYNC_PID=$!
+        
+        log "Sincronización iniciada con PID: $SYNC_PID"
+        
+        # Opcional: esperar a que termine la sincronización
+        wait $SYNC_PID
+        if [[ $? -eq 0 ]]; then
+            log "Sincronización completada exitosamente"
+        else
+            log "WARNING: La sincronización pudo haber fallado"
+        fi
+    else
+        log "Error en inotifywait, reintentando en 5 segundos..."
+        sleep 5
+    fi
+done

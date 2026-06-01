@@ -1,0 +1,1 @@
+python /home/rhythmcreative/update_rmpc_theme.py

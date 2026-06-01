@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# Script para limpiar y optimizar el sistema waybar
+# Evita múltiples reinicios y consolida la gestión
+
+LOG_FILE="$HOME/.cache/waybar-cleanup.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Iniciando limpieza y optimización de waybar ==="
+
+# 1. Detener todos los procesos waybar actuales
+log "🛑 Deteniendo todos los procesos waybar..."
+if pgrep -x waybar > /dev/null; then
+    pkill -TERM waybar
+    sleep 2
+    if pgrep -x waybar > /dev/null; then
+        log "⚡ Forzando cierre de procesos waybar persistentes..."
+        pkill -KILL waybar
+        sleep 1
+    fi
+fi
+
+# 2. Limpiar archivos de lock y estado temporal
+log "🧹 Limpiando archivos de lock y estado temporal..."
+rm -f /tmp/waybar-restart.lock
+rm -f /tmp/waybar_master_sync.lock
+rm -f /tmp/waybar_pywal_hook.lock
+rm -f /tmp/waybar-last-restart
+rm -f /tmp/waybar_master_last_sync
+rm -f /tmp/waybar_wallpaper_sync.lock
+rm -f /tmp/waybar-pywal-sync.lock
+rm -f "$HOME/.cache/waybar-watchdog.pid" 
+rm -f "$HOME/.cache/sddm-wallpaper-watcher.pid"
+
+# 3. Detener scripts de monitoreo conflictivos temporalmente
+log "⏸️ Pausando scripts de monitoreo conflictivos..."
+watchdog_pids=$(pgrep -f "waybar-watchdog" || true)
+sddm_watcher_pids=$(pgrep -f "sddm-wallpaper-watcher" || true)
+
+if [[ -n "$watchdog_pids" ]]; then
+    kill -STOP $watchdog_pids 2>/dev/null || true
+    log "⏸️ Waybar watchdog pausado (PIDs: $watchdog_pids)"
+fi
+
+if [[ -n "$sddm_watcher_pids" ]]; then
+    kill -STOP $sddm_watcher_pids 2>/dev/null || true
+    log "⏸️ SDDM wallpaper watcher pausado (PIDs: $sddm_watcher_pids)"
+fi
+
+# 4. Detener cualquier script de sincronización waybar-pywal en ejecución
+log "🛑 Deteniendo scripts de sincronización waybar-pywal..."
+scripts_to_stop=(
+    "waybar-pywal-sync"
+    "sync-waybar-pywal" 
+    "waybar-fix-wallpaper-sync"
+    "waybar-pywal-universal-sync"
+    "waybar-pywal-auto-sync"
+    "waybar-single-restart"
+)
+
+for script in "${scripts_to_stop[@]}"; do
+    pids=$(pgrep -f "$script" | head -5) # Solo los primeros 5 para evitar problemas
+    if [[ -n "$pids" ]]; then
+        log "⚡ Deteniendo $script (PIDs: $pids)"
+        echo "$pids" | xargs kill -TERM 2>/dev/null || true
+        sleep 0.5
+    fi
+done
+
+# Esperar un momento para que se estabilice
+sleep 2
+
+# 5. Verificar configuración waybar
+log "🔍 Verificando configuración de waybar..."
+if [[ ! -f "$HOME/.config/waybar/config" ]]; then
+    log "⚠️ Configuración principal de waybar no encontrada"
+else
+    log "✅ Configuración waybar encontrada"
+fi
+
+if [[ ! -f "$HOME/.config/waybar/style.css" ]]; then
+    log "⚠️ Archivo de estilos de waybar no encontrado"
+else
+    log "✅ Archivo de estilos waybar encontrado"
+fi
+
+# 6. Verificar colores de pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    log "✅ Colores de pywal disponibles"
+    # Actualizar colores de waybar si es necesario
+    if [[ -x "$HOME/.local/bin/waybar-master-sync" ]]; then
+        log "🎨 Actualizando colores con script maestro..."
+        "$HOME/.local/bin/waybar-master-sync" &
+        master_pid=$!
+        if timeout 10 wait $master_pid 2>/dev/null; then
+            log "✅ Colores actualizados exitosamente"
+        else
+            log "⚠️ Actualización de colores continuando en background"
+            disown $master_pid 2>/dev/null || true
+        fi
+    fi
+else
+    log "⚠️ No se encontraron colores de pywal"
+fi
+
+# 7. Iniciar waybar una sola vez si no está corriendo
+if ! pgrep -x waybar > /dev/null; then
+    log "🚀 Iniciando waybar (instancia única)..."
+    waybar > /dev/null 2>&1 &
+    waybar_pid=$!
+    sleep 2
+    
+    if kill -0 "$waybar_pid" 2>/dev/null && pgrep -x waybar > /dev/null; then
+        log "✅ Waybar iniciado exitosamente (PID: $waybar_pid)"
+    else
+        log "❌ Error al iniciar waybar"
+    fi
+else
+    log "✅ Waybar ya está corriendo"
+fi
+
+# 8. Reactivar scripts de monitoreo
+sleep 2
+if [[ -n "$watchdog_pids" ]]; then
+    for pid in $watchdog_pids; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -CONT "$pid" 2>/dev/null || true
+            log "▶️ Waybar watchdog reactivado (PID: $pid)"
+        fi
+    done
+fi
+
+if [[ -n "$sddm_watcher_pids" ]]; then
+    for pid in $sddm_watcher_pids; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -CONT "$pid" 2>/dev/null || true
+            log "▶️ SDDM wallpaper watcher reactivado (PID: $pid)"
+        fi
+    done
+fi
+
+# 9. Resumen final
+log "📊 Estado final del sistema waybar:"
+waybar_count=$(pgrep -x waybar | wc -l)
+log "   - Instancias de waybar corriendo: $waybar_count"
+
+if [[ $waybar_count -eq 1 ]]; then
+    log "✅ Sistema waybar optimizado correctamente"
+    notify-send "✅ Waybar Optimizado" "Sistema limpio con 1 instancia corriendo" -t 3000 2>/dev/null || true
+elif [[ $waybar_count -eq 0 ]]; then
+    log "⚠️ Waybar no está corriendo"
+    notify-send "⚠️ Waybar" "No hay instancias corriendo" -t 3000 2>/dev/null || true
+else
+    log "⚠️ Múltiples instancias de waybar detectadas ($waybar_count)"
+    notify-send "⚠️ Waybar" "Se detectaron $waybar_count instancias" -t 3000 2>/dev/null || true
+fi
+
+log "=== Limpieza y optimización completada ==="

@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Script para probar la nueva configuración estable de wallpaper
+
+echo "🔧 === PRUEBA DE CONFIGURACIÓN ESTABLE ==="
+echo ""
+
+# Verificar scripts
+echo "📝 Verificando scripts..."
+echo "  ✓ stable-wallpaper-sync: $(ls -la ~/.local/bin/stable-wallpaper-sync 2>/dev/null | cut -d' ' -f1 || echo 'NO ENCONTRADO')"
+echo "  ✓ waybar-watchdog: $(ls -la ~/.local/bin/waybar-watchdog 2>/dev/null | cut -d' ' -f1 || echo 'NO ENCONTRADO')"
+echo "  ✓ waybar-stable-start: $(ls -la ~/.local/bin/waybar-stable-start 2>/dev/null | cut -d' ' -f1 || echo 'NO ENCONTRADO')"
+echo ""
+
+# Verificar procesos activos
+echo "🔍 Verificando procesos activos..."
+if pgrep -x waybar > /dev/null; then
+    echo "  ✅ Waybar: FUNCIONANDO (PID: $(pgrep -x waybar))"
+else
+    echo "  ❌ Waybar: NO ESTÁ CORRIENDO"
+fi
+
+if pgrep -x nm-applet > /dev/null; then
+    echo "  ✅ nm-applet: FUNCIONANDO (PID: $(pgrep -x nm-applet))"
+else
+    echo "  ⚠️ nm-applet: NO ESTÁ CORRIENDO"
+fi
+
+if pgrep -x swww-daemon > /dev/null; then
+    echo "  ✅ swww-daemon: FUNCIONANDO (PID: $(pgrep -x swww-daemon))"
+else
+    echo "  ❌ swww-daemon: NO ESTÁ CORRIENDO"
+fi
+
+echo ""
+
+# Verificar archivos de configuración
+echo "📁 Verificando archivos de configuración..."
+if [[ -f "$HOME/.config/waybar/colors-pywal.css" ]]; then
+    echo "  ✅ colors-pywal.css: EXISTE"
+else
+    echo "  ⚠️ colors-pywal.css: NO EXISTE (se creará con el primer wallpaper)"
+fi
+
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    echo "  ✅ current-wallpaper: EXISTE ($(basename "$(cat ~/.cache/current-wallpaper 2>/dev/null)"))"
+else
+    echo "  ⚠️ current-wallpaper: NO EXISTE"
+fi
+
+if [[ -d "$HOME/Pictures/Wallpapers" ]]; then
+    wallpaper_count=$(find "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" \) | wc -l)
+    echo "  ✅ Directorio wallpapers: EXISTE ($wallpaper_count imágenes)"
+else
+    echo "  ❌ Directorio wallpapers: NO EXISTE"
+fi
+
+echo ""
+
+# Verificar logs
+echo "📋 Logs recientes..."
+if [[ -f "$HOME/.cache/stable-wallpaper-sync.log" ]]; then
+    echo "  📄 Log stable-wallpaper-sync (últimas 3 líneas):"
+    tail -3 "$HOME/.cache/stable-wallpaper-sync.log" 2>/dev/null | sed 's/^/    /' || echo "    (vacío)"
+fi
+
+if [[ -f "$HOME/.cache/waybar-watchdog.log" ]]; then
+    echo "  📄 Log waybar-watchdog (últimas 3 líneas):"
+    tail -3 "$HOME/.cache/waybar-watchdog.log" 2>/dev/null | sed 's/^/    /' || echo "    (vacío)"
+fi
+
+echo ""
+
+# Estado del sistema
+echo "🎯 Estado del sistema..."
+current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || echo "'no disponible'")
+current_icons=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo "'no disponible'")
+echo "  🎨 Tema GTK: $current_theme"
+echo "  🎯 Iconos: $current_icons"
+
+echo ""
+echo "🚀 === CONFIGURACIÓN LISTA PARA USAR ==="
+echo ""
+echo "📌 Para cambiar wallpaper, usa: Super + Shift + W"
+echo "📌 Para recargar waybar: Super + Alt + R"
+echo "📌 Para emergencias de waybar: Super + Ctrl + R"
+echo ""
+echo "✨ ¡El sistema está optimizado para evitar problemas con workspaces y nm-applet!"

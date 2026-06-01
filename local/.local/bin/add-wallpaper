@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Script para añadir una imagen como wallpaper
+# Mueve la imagen a ~/Pictures/Wallpapers/ y la establece como fondo
+
+# Verificar que se pasó un archivo
+if [ $# -eq 0 ]; then
+    echo "Error: No se especificó ningún archivo"
+    exit 1
+fi
+
+# Obtener la ruta completa del archivo
+IMAGE_PATH="$1"
+IMAGE_NAME=$(basename "$IMAGE_PATH")
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Crear el directorio si no existe
+mkdir -p "$WALLPAPER_DIR"
+
+# Verificar que el archivo es una imagen válida
+if [[ ! "$IMAGE_NAME" =~ \.(jpg|jpeg|png|gif|JPG|JPEG|PNG|GIF)$ ]]; then
+    notify-send "Error" "El archivo no es una imagen válida (jpg, png, gif)" -i dialog-error
+    exit 1
+fi
+
+# Si el archivo ya está en el directorio de wallpapers, solo establecerlo
+if [[ "$(dirname "$IMAGE_PATH")" == "$WALLPAPER_DIR" ]]; then
+    echo "La imagen ya está en el directorio de wallpapers"
+    FINAL_PATH="$IMAGE_PATH"
+else
+    # Mover el archivo al directorio de wallpapers
+    # Si ya existe un archivo con el mismo nombre, añadir un número
+    if [ -f "$WALLPAPER_DIR/$IMAGE_NAME" ]; then
+        # Generar un nombre único
+        BASE_NAME="${IMAGE_NAME%.*}"
+        EXTENSION="${IMAGE_NAME##*.}"
+        COUNTER=1
+        while [ -f "$WALLPAPER_DIR/${BASE_NAME}_${COUNTER}.${EXTENSION}" ]; do
+            ((COUNTER++))
+        done
+        NEW_NAME="${BASE_NAME}_${COUNTER}.${EXTENSION}"
+        FINAL_PATH="$WALLPAPER_DIR/$NEW_NAME"
+    else
+        FINAL_PATH="$WALLPAPER_DIR/$IMAGE_NAME"
+    fi
+    
+    # Copiar el archivo (usar cp en lugar de mv para no perder el original si algo falla)
+    cp "$IMAGE_PATH" "$FINAL_PATH"
+    
+    if [ $? -eq 0 ]; then
+        # Si la copia fue exitosa, eliminar el original
+        rm "$IMAGE_PATH"
+        notify-send "Wallpaper añadido" "La imagen se movió a Wallpapers" -i emblem-photos
+    else
+        notify-send "Error" "No se pudo mover la imagen" -i dialog-error
+        exit 1
+    fi
+fi
+
+# Establecer como wallpaper usando el script wallpaper-change-adaptive
+if [ -x "$HOME/.local/bin/wallpaper-change-adaptive" ]; then
+    "$HOME/.local/bin/wallpaper-change-adaptive" "$FINAL_PATH"
+    notify-send "Wallpaper establecido" "$(basename "$FINAL_PATH")" -i preferences-desktop-wallpaper
+else
+    notify-send "Error" "No se encontró el script wallpaper-change-adaptive" -i dialog-error
+    exit 1
+fi

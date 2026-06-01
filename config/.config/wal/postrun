@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Hook de pywal - Se ejecuta después de generar colores
+# Sincroniza automáticamente los colores con todos los componentes
+
+echo "🎨 Ejecutando post-hook de pywal..."
+
+# Ejecutar sincronización completa del sistema
+# Esto incluye teclado ASUS, Waybar, Dunst, nm-applet, etc.
+if [[ -f "$HOME/.local/bin/full-system-color-sync" ]]; then
+    nohup "$HOME/.local/bin/full-system-color-sync" &>/dev/null &
+else
+    # Fallback al script de asus si el completo no existe
+    nohup "$HOME/.local/bin/pywal-asusctl-sync" &>/dev/null &
+fi
+
+# Sincronizar LibreWolf con los nuevos colores
+if [[ -f "$HOME/.config/wal/scripts/librewolf-sync.sh" ]]; then
+    nohup "$HOME/.config/wal/scripts/librewolf-sync.sh" &>/dev/null &
+fi
+
+echo "✅ Post-hook finalizado (procesos de sincronización lanzados en background)"

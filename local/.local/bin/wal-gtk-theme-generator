@@ -1,0 +1,266 @@
+#!/bin/bash
+
+# Script para generar temas GTK3 automáticamente desde wal
+# Funciona como HyDE - genera temas dinámicos
+
+WAL_CACHE="$HOME/.cache/wal"
+THEMES_DIR="$HOME/.themes"
+THEME_NAME="wal-gtk-auto"
+
+# Verificar que existe wal
+if [ ! -f "$WAL_CACHE/colors.json" ]; then
+    echo "Error: No se encontraron colores de wal. Ejecuta 'wal -i imagen' primero."
+    exit 1
+fi
+
+# Leer colores de wal
+source "$WAL_CACHE/colors.sh"
+
+# Crear directorio del tema
+THEME_DIR="$THEMES_DIR/$THEME_NAME"
+mkdir -p "$THEME_DIR/gtk-3.0"
+mkdir -p "$THEME_DIR/gtk-2.0"
+
+# Función para crear el tema GTK3
+create_gtk3_theme() {
+    cat > "$THEME_DIR/gtk-3.0/gtk.css" << EOF
+/* Tema GTK3 generado automáticamente por wal */
+
+@define-color theme_fg_color ${foreground};
+@define-color theme_bg_color ${background};
+@define-color theme_selected_bg_color ${color1};
+@define-color theme_selected_fg_color ${background};
+@define-color insensitive_bg_color ${color8};
+@define-color insensitive_fg_color ${color7};
+@define-color theme_unfocused_fg_color ${color7};
+@define-color theme_unfocused_bg_color ${color8};
+@define-color borders ${color8};
+@define-color unfocused_borders ${color0};
+
+/* Ventanas */
+window {
+    background-color: ${background};
+    color: ${foreground};
+}
+
+/* Barras de título */
+headerbar {
+    background: linear-gradient(to bottom, ${color8}, ${background});
+    color: ${foreground};
+    border-bottom: 1px solid ${color0};
+}
+
+headerbar:backdrop {
+    background: ${color8};
+    color: ${color7};
+}
+
+/* Botones */
+button {
+    background: linear-gradient(to bottom, ${color8}, ${color0});
+    color: ${foreground};
+    border: 1px solid ${color0};
+    border-radius: 4px;
+    padding: 8px 16px;
+}
+
+button:hover {
+    background: linear-gradient(to bottom, ${color1}, ${color8});
+    color: ${background};
+    border-color: ${color1};
+}
+
+button:active {
+    background: ${color1};
+    color: ${background};
+}
+
+/* Entradas de texto */
+entry {
+    background-color: ${background};
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 4px;
+    padding: 8px;
+}
+
+entry:focus {
+    border-color: ${color1};
+    box-shadow: 0 0 0 1px ${color1};
+}
+
+/* Menús */
+menu {
+    background-color: ${background};
+    border: 1px solid ${color8};
+}
+
+menuitem {
+    color: ${foreground};
+    padding: 4px 8px;
+}
+
+menuitem:hover {
+    background-color: ${color1};
+    color: ${background};
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: ${color0};
+}
+
+scrollbar slider {
+    background-color: ${color8};
+    border-radius: 10px;
+}
+
+scrollbar slider:hover {
+    background-color: ${color1};
+}
+
+/* Notebook tabs */
+notebook tab {
+    background-color: ${color8};
+    color: ${foreground};
+    border: 1px solid ${color0};
+    padding: 8px 16px;
+}
+
+notebook tab:checked {
+    background-color: ${color1};
+    color: ${background};
+}
+
+/* Selectores */
+checkbutton check,
+radiobutton radio {
+    background-color: ${background};
+    border: 1px solid ${color8};
+}
+
+checkbutton check:checked,
+radiobutton radio:checked {
+    background-color: ${color1};
+    color: ${background};
+}
+
+/* Barras de progreso */
+progressbar progress {
+    background-color: ${color1};
+}
+
+progressbar trough {
+    background-color: ${color8};
+}
+
+/* Tooltips */
+tooltip {
+    background-color: ${color0};
+    color: ${foreground};
+    border: 1px solid ${color8};
+    border-radius: 4px;
+}
+
+/* Selección de texto */
+selection {
+    background-color: ${color1};
+    color: ${background};
+}
+
+/* Separadores */
+separator {
+    background-color: ${color8};
+}
+
+EOF
+}
+
+# Función para crear configuración GTK2
+create_gtk2_theme() {
+    cat > "$THEME_DIR/gtk-2.0/gtkrc" << EOF
+# Tema GTK2 generado automáticamente por wal
+
+gtk-color-scheme = "fg_color:${foreground}\\nbg_color:${background}\\nselected_bg_color:${color1}\\nselected_fg_color:${background}\\ntooltip_bg_color:${color0}\\ntooltip_fg_color:${foreground}"
+
+style "default" {
+    fg[NORMAL] = "${foreground}"
+    fg[PRELIGHT] = "${foreground}"
+    fg[ACTIVE] = "${foreground}"
+    fg[SELECTED] = "${background}"
+    fg[INSENSITIVE] = "${color7}"
+    
+    bg[NORMAL] = "${background}"
+    bg[PRELIGHT] = "${color8}"
+    bg[ACTIVE] = "${color0}"
+    bg[SELECTED] = "${color1}"
+    bg[INSENSITIVE] = "${color8}"
+    
+    base[NORMAL] = "${background}"
+    base[PRELIGHT] = "${color1}"
+    base[ACTIVE] = "${color1}"
+    base[SELECTED] = "${color1}"
+    base[INSENSITIVE] = "${color8}"
+    
+    text[NORMAL] = "${foreground}"
+    text[PRELIGHT] = "${background}"
+    text[ACTIVE] = "${background}"
+    text[SELECTED] = "${background}"
+    text[INSENSITIVE] = "${color7}"
+}
+
+class "GtkWidget" style "default"
+EOF
+}
+
+# Crear index.theme
+create_theme_index() {
+    cat > "$THEME_DIR/index.theme" << EOF
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Wal GTK Auto
+Comment=Tema GTK generado automáticamente desde wal
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=wal-gtk-auto
+MetacityTheme=wal-gtk-auto
+EOF
+}
+
+# Generar tema
+echo "Generando tema GTK desde colores de wal..."
+create_gtk3_theme
+create_gtk2_theme
+create_theme_index
+
+# Aplicar el tema automáticamente
+echo "Aplicando tema GTK..."
+
+# Para GTK3
+gsettings set org.gnome.desktop.interface gtk-theme "$THEME_NAME"
+
+# Para GTK2
+if [ ! -f "$HOME/.gtkrc-2.0" ]; then
+    echo "include \"$THEME_DIR/gtk-2.0/gtkrc\"" > "$HOME/.gtkrc-2.0"
+else
+    # Actualizar si ya existe
+    sed -i '/wal-gtk-auto/d' "$HOME/.gtkrc-2.0"
+    echo "include \"$THEME_DIR/gtk-2.0/gtkrc\"" >> "$HOME/.gtkrc-2.0"
+fi
+
+# Vincular CSS de wal directamente para mayor integración
+if [ -f "$WAL_CACHE/gtk3.css" ]; then
+    echo "" >> "$THEME_DIR/gtk-3.0/gtk.css"
+    echo "/* Estilos adicionales de wal */" >> "$THEME_DIR/gtk-3.0/gtk.css"
+    cat "$WAL_CACHE/gtk3.css" >> "$THEME_DIR/gtk-3.0/gtk.css"
+fi
+
+echo "✓ Tema GTK '$THEME_NAME' generado y aplicado"
+echo "✓ Ahora está disponible en nwg-look y en todo el sistema"
+echo "✓ Se actualiza automáticamente cuando cambies colores con wal"
+
+# Recargar configuración GTK
+if command -v nwg-look >/dev/null 2>&1; then
+    echo "Tema disponible en nwg-look: $THEME_NAME"
+fi

@@ -1,0 +1,187 @@
+#!/bin/bash
+
+# Script para sincronización completa de wallpaper en SDDM (SIN SUDO)
+# Autor: rhythmcreative
+# Trabaja solo con configuración local de usuario
+
+LOG_FILE="/tmp/sddm-auto-sync-complete.log"
+USER_HOME="/home/rhythmcreative"
+SDDM_THEME_DIR="$USER_HOME/.config/sddm-theme"
+SDDM_LOCAL_THEME_DIR="$USER_HOME/.local/share/sddm/themes/sddm-astronaut-theme"
+SDDM_CONFIG_DIR="$USER_HOME/.config/sddm"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Sync (Complete)" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    # Intentar obtener wallpaper desde pywal
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        cat "$USER_HOME/.cache/wal/wal" 2>/dev/null
+        return 0
+    fi
+    
+    # Fallback: buscar en archivos de configuración de swww
+    if [[ -f "$USER_HOME/.cache/current-wallpaper" ]]; then
+        cat "$USER_HOME/.cache/current-wallpaper" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+# Crear script temporal para ejecutar con privilegios
+create_system_script() {
+    local wallpaper="$1"
+    local filename="$2"
+    
+    cat > "$TEMP_SCRIPT" << EOF
+#!/bin/bash
+
+WALLPAPER_SRC="$wallpaper"
+WALLPAPER_NAME="$filename"
+SYSTEM_DEST="/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds/\$WALLPAPER_NAME"
+CONFIG_FILE="/usr/share/sddm/themes/sddm-astronaut-theme/Themes/theme1.conf"
+
+echo "🔧 Aplicando cambios al sistema SDDM..."
+
+# Crear directorio si no existe
+mkdir -p "/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds"
+
+# Copiar wallpaper
+if cp "\$WALLPAPER_SRC" "\$SYSTEM_DEST" 2>/dev/null; then
+    chmod 644 "\$SYSTEM_DEST"
+    echo "✅ Wallpaper \$WALLPAPER_NAME copiado al sistema"
+else
+    echo "❌ Error al copiar wallpaper"
+    exit 1
+fi
+
+# Actualizar configuración del sistema
+if [[ -f "\$CONFIG_FILE" ]]; then
+    # Crear backup
+    cp "\$CONFIG_FILE" "\$CONFIG_FILE.backup.\$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+    
+    # Actualizar Background con ruta relativa
+    sed -i "s|^Background=.*|Background=\"Backgrounds/\$WALLPAPER_NAME\"|g" "\$CONFIG_FILE"
+    
+    # Aplicar fondo más oscuro - ajustar BackgroundColor para que sea más oscuro
+    # Si existe la línea BackgroundColor, la actualiza; si no, la agrega
+    if grep -q "^BackgroundColor=" "\$CONFIG_FILE"; then
+        sed -i "s|^BackgroundColor=.*|BackgroundColor=#0a0a0a|g" "\$CONFIG_FILE"
+    else
+        echo "BackgroundColor=#0a0a0a" >> "\$CONFIG_FILE"
+    fi
+    
+    # También ajustar la opacidad del formulario de login para mejor contraste
+    if grep -q "^FormBackground=" "\$CONFIG_FILE"; then
+        sed -i "s|^FormBackground=.*|FormBackground=#1a1a1a|g" "\$CONFIG_FILE"
+    else
+        echo "FormBackground=#1a1a1a" >> "\$CONFIG_FILE"
+    fi
+    
+    # Configurar blur para suavizar el fondo
+    if grep -q "^BlurBackground=" "\$CONFIG_FILE"; then
+        sed -i "s|^BlurBackground=.*|BlurBackground=true|g" "\$CONFIG_FILE"
+    else
+        echo "BlurBackground=true" >> "\$CONFIG_FILE"
+    fi
+    
+    # Intensidad del blur
+    if grep -q "^BlurRadius=" "\$CONFIG_FILE"; then
+        sed -i "s|^BlurRadius=.*|BlurRadius=25|g" "\$CONFIG_FILE"
+    else
+        echo "BlurRadius=25" >> "\$CONFIG_FILE"
+    fi
+    
+    echo "✅ Configuración del sistema actualizada para: \$WALLPAPER_NAME (con fondo más oscuro)"
+else
+    echo "❌ Archivo de configuración del sistema no encontrado"
+    exit 1
+fi
+
+echo "🎉 Cambios aplicados al sistema. Visible en el próximo logout/reinicio."
+EOF
+
+    chmod +x "$TEMP_SCRIPT"
+}
+
+# Función principal de sincronización completa
+sync_wallpaper_complete() {
+    local wallpaper="$1"
+    local filename=$(basename "$wallpaper")
+    
+    log "📱 Sincronización completa de SDDM..."
+    log "📸 Wallpaper: $filename"
+    
+    # Crear script temporal para aplicar cambios al sistema
+    create_system_script "$wallpaper" "$filename"
+    
+    # Ejecutar con pkexec (GUI sudo) automáticamente
+    log "🔐 Solicitando permisos de administrador con pkexec..."
+    echo "🔐 Solicitando permisos de administrador..."
+    
+    if pkexec "$TEMP_SCRIPT"; then
+        log "✅ Cambios aplicados correctamente al sistema SDDM"
+        notify_user "✅ SDDM sincronizado con $filename"
+        
+        # Limpiar archivo temporal
+        rm -f "$TEMP_SCRIPT" 2>/dev/null || true
+        
+        return 0
+    else
+        log "❌ Error al aplicar cambios o permisos denegados"
+        notify_user "❌ Error: permisos denegados o cancelado"
+        rm -f "$TEMP_SCRIPT" 2>/dev/null || true
+        return 1
+    fi
+}
+
+main() {
+    log "🔐 Iniciando sincronización completa de SDDM..."
+    echo "🚀 SDDM Auto-Sync Complete - Sincronización automática"
+    echo "======================================================"
+    echo ""
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+        log "❌ No se pudo obtener el wallpaper actual"
+        notify_user "❌ Wallpaper no encontrado"
+        exit 1
+    fi
+    
+    log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    echo "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    echo ""
+    
+    # Sincronización completa
+    if sync_wallpaper_complete "$CURRENT_WALLPAPER"; then
+        log "🎉 Sincronización completa exitosa"
+        echo ""
+        echo "✅ Sincronización completa terminada"
+        echo "🔄 Los cambios estarán visibles en el próximo logout/reinicio"
+        echo ""
+    else
+        log "❌ Error en la sincronización"
+        exit 1
+    fi
+}
+
+# Permitir wallpaper específico como argumento
+if [[ "$1" == "--wallpaper" ]] && [[ -n "$2" ]] && [[ -f "$2" ]]; then
+    log "🖼️ Sincronizando con wallpaper específico: $2"
+    CURRENT_WALLPAPER="$2"
+    sync_wallpaper_complete "$CURRENT_WALLPAPER"
+else
+    main
+fi

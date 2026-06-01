@@ -1,0 +1,207 @@
+#!/bin/bash
+
+# Notificaciones de volumen estilo retro gaming
+# Inspirado en consolas clásicas y arcade
+
+TIMEOUT=2000
+URGENT="low"
+
+# Generar barra estilo retro
+generate_retro_bar() {
+    local percent=$1
+    local segments=10
+    local filled=$((percent * segments / 100))
+    
+    local bar="["
+    for ((i=0; i<segments; i++)); do
+        if [ $i -lt $filled ]; then
+            bar+="▓"  # Bloque lleno estilo retro
+        else
+            bar+="░"  # Bloque vacío
+        fi
+    done
+    bar+="]"
+    
+    echo "$bar"
+}
+
+# Generar corazones para niveles como en videojuegos
+generate_health_hearts() {
+    local percent=$1
+    local hearts=5
+    local full_hearts=$((percent * hearts / 100))
+    local empty_hearts=$((hearts - full_hearts))
+    
+    local display=""
+    for ((i=0; i<full_hearts; i++)); do
+        display+="❤️"
+    done
+    for ((i=0; i<empty_hearts; i++)); do
+        display+="🖤"
+    done
+    
+    echo "$display"
+}
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Obtener dispositivo
+get_device() {
+    local device=$(wpctl status | grep -A 20 "Sinks:" | grep "\\*" | head -1 | sed 's/.*\. //' | sed 's/ \[.*$//' | cut -c1-12)
+    if [ -z "$device" ]; then
+        echo "AUDIO"
+    else
+        echo "$device"
+    fi
+}
+
+# Notificación estilo retro gaming
+show_retro_notification() {
+    local volume=$1
+    local muted=$2
+    local device="$3"
+    
+    if [ "$muted" = "true" ]; then
+        # Mute estilo game over
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "🔇 AUDIO MUTED" \
+                   "╔═══════════════════╗
+║    GAME  OVER     ║
+║ [░░░░░░░░░░] 00%  ║
+║ 🖤🖤🖤🖤🖤          ║
+╚═══════════════════╝
+
+>>> $device <<<"
+    else
+        local bar="$(generate_retro_bar $volume)"
+        local hearts="$(generate_health_hearts $volume)"
+        local level_name=""
+        local icon="🎮"
+        
+        # Determinar nivel como en videojuegos
+        if [ "$volume" -le 20 ]; then
+            level_name="LEVEL 1"
+            icon="🎮"
+        elif [ "$volume" -le 40 ]; then
+            level_name="LEVEL 2"
+            icon="🕹️"
+        elif [ "$volume" -le 60 ]; then
+            level_name="LEVEL 3"
+            icon="🎯"
+        elif [ "$volume" -le 80 ]; then
+            level_name="LEVEL 4"
+            icon="🚀"
+        else
+            level_name="BOSS LV"
+            icon="👑"
+        fi
+        
+        # Formatear porcentaje como puntaje de arcade
+        local score=$(printf "%03d" $volume)
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "$icon VOLUME $level_name" \
+                   "╔═══════════════════╗
+║   SCORE: ${score}%    ║
+║ $bar    ║
+║ $hearts          ║
+╚═══════════════════╝
+
+>>> $device <<<"
+    fi
+}
+
+# Notificación de audio estilo retro
+show_retro_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    local device="$(get_device)"
+    local bar="$(generate_retro_bar $volume)"
+    local hearts="$(generate_health_hearts $volume)"
+    
+    local icon="🎵"
+    local clean_title=$(echo "$title" | cut -c1-8)
+    
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    fi
+    
+    local score=$(printf "%03d" $volume)
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$icon $clean_title PLAYING" \
+               "$message
+
+╔═══════════════════╗
+║   VOL: ${score}%      ║
+║ $bar    ║
+║ $hearts          ║
+╚═══════════════════╝
+
+>>> $device <<<"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_retro_audio_notification "${2:-MUSIC}" "${3:-♪ NOW PLAYING ♪}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing retro gaming style..."
+        echo "Testing Level 1 (15%)..."
+        show_retro_notification "15" "false" "$(get_device)"
+        sleep 2.5
+        echo "Testing Level 3 (55%)..."
+        show_retro_notification "55" "false" "$(get_device)"
+        sleep 2.5
+        echo "Testing Boss Level (95%)..."
+        show_retro_notification "95" "false" "$(get_device)"
+        sleep 2.5
+        echo "Testing Game Over..."
+        show_retro_notification "0" "true" "$(get_device)"
+        sleep 2.5
+        echo "Testing audio notification..."
+        show_retro_audio_notification "Spotify" "♪ 8-BIT BEAT ACTIVATED ♪"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+device="$(get_device)"
+
+show_retro_notification "$volume" "$muted" "$device"
+exit 0

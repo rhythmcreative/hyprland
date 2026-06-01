@@ -1,0 +1,149 @@
+# HyDE Style Dunst Configuration - Adaptado para pywal
+# Basado en la configuración oficial de HyDE
+# ------------------------------------------------------------------------------
+
+[global]
+# Estilo HyDE con bordes redondeados elegantes
+corner_radius = 10
+icon_corner_radius = 10
+dmenu = /usr/bin/rofi -dmenu -p dunst:
+icon_theme = "Papirus-Dark,Adwaita"
+
+# Configuraciones especiales de HyDE
+[Type-1]
+appname = "HyDE Alert"
+format = "<b>%s</b>"
+
+[Type-2]
+appname = "HyDE Notify"
+format = "<span size=\"250%\">%s</span>\n%b"
+
+# Notificaciones críticas con estilo HyDE
+[urgency_critical]
+background = "{color1}E6"
+foreground = "{background}"
+frame_color = "{color9}"
+timeout = 0
+
+# ------------------------------------------------------------------------------
+
+[global]
+# Posicionamiento y geometría HyDE
+monitor = 0
+follow = mouse
+enable_posix_regex = true
+width = 300
+origin = top-right
+offset = (20,20)
+scale = 0
+notification_limit = 20
+
+# Barra de progreso estilo HyDE
+progress_bar = true
+progress_bar_height = 10
+progress_bar_frame_width = 0
+progress_bar_min_width = 125
+progress_bar_max_width = 250
+progress_bar_corner_radius = 4
+
+# Apariencia HyDE
+indicate_hidden = yes
+transparency = 10
+separator_height = 2
+padding = 8
+horizontal_padding = 8
+text_icon_padding = 10
+frame_width = 5
+gap_size = 5
+separator_color = auto
+sort = yes
+
+# Texto estilo HyDE
+line_height = 3
+markup = full
+format = "%s\n%b"
+alignment = left
+vertical_alignment = center
+show_age_threshold = 60
+ellipsize = middle
+ignore_newline = no
+stack_duplicates = true
+hide_duplicate_count = false
+show_indicators = yes
+
+# Iconos HyDE
+enable_recursive_icon_lookup = true
+icon_position = left
+min_icon_size = 64
+max_icon_size = 128
+
+# Comportamiento HyDE
+sticky_history = yes
+history_length = 20
+browser = /usr/bin/xdg-open
+always_run_script = true
+title = Dunst
+class = Dunst
+ignore_dbusclose = false
+force_xwayland = false
+force_xinerama = false
+
+# Interacciones HyDE
+mouse_left_click = context, close_current
+mouse_middle_click = do_action, close_current
+mouse_right_click = close_all
+
+[experimental]
+per_monitor_dpi = true
+
+# Aplicaciones específicas
+[slack]
+desktop_entry = "^Slack$"
+new_icon = slack
+
+[telegram]
+desktop_entry = "^Telegram Desktop$"
+new_icon = telegram-desktop
+
+[skype]
+desktop_entry = "^Skype$"
+new_icon = skype
+
+# ------------------------------------------------------------------------------
+# Sección HyDE Obligatoria con colores pywal
+# ------------------------------------------------------------------------------
+
+[global]
+# Fuente HyDE (puedes cambiar si prefieres)
+font = JetBrainsMono Nerd Font 9
+dmenu = /usr/bin/rofi -dmenu -p dunst:
+
+# ------------------------------------------------------------------------------
+# Sección Wallbash con colores pywal
+# ------------------------------------------------------------------------------
+
+[urgency_low]
+    background = "{background}CC"
+    foreground = "{foreground}E6"
+    frame_color = "{color8}30"
+    timeout = 5
+
+[urgency_normal]
+    background = "{background}E6"
+    foreground = "{foreground}E6"
+    frame_color = "{color1}50"
+    timeout = 8
+
+# Notificaciones de volumen con estilo HyDE
+[summary~"Volume"]
+    background = "{color4}CC"
+    foreground = "{background}"
+    frame_color = "{color6}80"
+    timeout = 2
+
+# Notificaciones de música con estilo HyDE  
+[summary~"Music"]
+    background = "{color5}CC"
+    foreground = "{foreground}"
+    frame_color = "{color7}80"
+    timeout = 4

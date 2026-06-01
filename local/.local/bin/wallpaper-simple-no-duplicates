@@ -1,0 +1,192 @@
+#!/bin/bash
+
+# Script SIMPLIFICADO - Selector de wallpaper sin duplicar waybar
+# Solución definitiva para Super+Shift+W
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+TEMP_DIR="/tmp/rofi-wallpaper-$$"
+
+# Limpiar al salir
+cleanup() {
+    rm -rf "$TEMP_DIR"
+    # Mostrar waybar si estaba oculto
+    if pgrep -x waybar > /dev/null; then
+        pkill -SIGUSR2 waybar 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+# Verificaciones básicas
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+for dep in convert wal swww rofi; do
+    if ! command -v "$dep" > /dev/null 2>&1; then
+        notify-send "❌ Error" "$dep no está instalado" -u critical
+        exit 1
+    fi
+done
+
+# Crear directorios
+mkdir -p "$CACHE_DIR" "$TEMP_DIR"
+
+# Buscar imágenes
+cd "$WALLPAPER_DIR" || exit 1
+shopt -s nullglob
+images=(*.{jpg,jpeg,png,gif,webp,bmp})
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No se encontraron imágenes válidas" -u critical
+    exit 1
+fi
+
+# Ocultar waybar temporalmente
+if pgrep -x waybar > /dev/null; then
+    pkill -SIGUSR1 waybar 2>/dev/null || true
+fi
+
+# Generar opciones para rofi
+options=""
+valid_images=()
+
+for img in "${images[@]}"; do
+    [[ ! -f "$img" ]] && continue
+    
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    
+    # Generar preview si no existe
+    if [[ ! -f "$preview_file" ]]; then
+        if [[ "$img" == *.gif ]]; then
+            convert "$img[0]" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+        else
+            convert "$img" -resize "200x150^" -gravity center -extent "200x150" "$preview_file" 2>/dev/null &
+        fi
+    fi
+    
+    valid_images+=("$img")
+    options+="$clean_name\\0icon\\x1f$preview_file\\n"
+done
+
+# Esperar a que terminen las conversiones
+wait
+
+# Filtrar opciones válidas
+final_options=""
+final_images=()
+for img in "${valid_images[@]}"; do
+    clean_name="${img%.*}"
+    preview_file="$CACHE_DIR/preview_${clean_name}.png"
+    if [[ -f "$preview_file" ]]; then
+        final_images+=("$img")
+        final_options+="$clean_name\\0icon\\x1f$preview_file\\n"
+    fi
+done
+
+if [[ ${#final_images[@]} -eq 0 ]]; then
+    notify-send "❌ Error" "No se pudieron generar previews" -u critical
+    exit 1
+fi
+
+# Crear archivo para rofi
+options_file="$TEMP_DIR/options"
+printf "$final_options" > "$options_file"
+
+# Mostrar selector
+theme_file="$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi"
+
+selected=$(cat "$options_file" | rofi -dmenu -i \
+    -theme "$theme_file" \
+    -p "🖼️ Seleccionar Wallpaper" \
+    -show-icons \
+    -markup-rows \
+    -no-custom)
+
+[[ -z "$selected" ]] && exit 0
+
+# Buscar archivo seleccionado
+selected_file=""
+for img in "${final_images[@]}"; do
+    if [[ "${img%.*}" == "$selected" ]]; then
+        selected_file="$WALLPAPER_DIR/$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
+    notify-send "❌ Error" "Archivo no encontrado: $selected" -u critical
+    exit 1
+fi
+
+# Aplicar cambios
+notify-send "🎨 Aplicando Wallpaper" "$selected" -t 1500
+
+# 1. Cambiar wallpaper
+swww img "$selected_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.2 &
+
+# 2. Guardar selección
+echo "$selected_file" > ~/.cache/current-wallpaper
+
+# 3. Aplicar pywal
+if [[ "${selected_file,,}" == *.gif ]]; then
+    gif_frame_temp="/tmp/wal_gif_$$.png"
+    convert "$selected_file[0]" "$gif_frame_temp" 2>/dev/null
+    wal -i "$gif_frame_temp" -n > /dev/null 2>&1
+    rm -f "$gif_frame_temp" 2>/dev/null || true
+else
+    wal -i "$selected_file" -n > /dev/null 2>&1
+fi
+
+# 4. Recargar Hyprland
+hyprctl reload > /dev/null 2>&1 || true
+
+# 5. SINCRONIZACIÓN MEJORADA PARA WAYBAR
+if pgrep -x waybar > /dev/null; then
+    # Mostrar waybar si estaba oculto
+    pkill -SIGUSR2 waybar 2>/dev/null || true
+    sleep 0.3
+    
+    # Sincronización específica según el tipo de archivo
+    if [[ "${selected_file,,}" == *.gif ]]; then
+        # Para GIFs: usar script específico y esperar un poco más
+        ~/.local/bin/waybar-gif-colors-sync &
+        sleep 0.5
+    else
+        # Para imágenes estáticas: recargar waybar normalmente
+        pkill -USR2 waybar 2>/dev/null || true
+        sleep 0.2
+    fi
+else
+    # Si waybar no está corriendo, iniciarlo con un delay
+    {
+        sleep 0.5
+        nohup waybar > /dev/null 2>&1 &
+    } &
+fi
+
+# 6. OPTIMIZACIÓN ESPECIAL PARA GIFs
+if [[ "${selected_file,,}" == *.gif ]]; then
+    {
+        # Esperar a que pywal y waybar se sincronicen
+        sleep 2
+        
+        # Verificar que swww-daemon esté corriendo
+        if ! pgrep -x "swww-daemon" > /dev/null; then
+            swww-daemon --format xrgb &
+            sleep 2
+        fi
+        
+        # Aplicar el GIF nuevamente para asegurar la animación
+        swww img "$selected_file" --transition-type none --transition-duration 0.1 > /dev/null 2>&1 || true
+        
+        # Segunda sincronización de colores después de aplicar el GIF
+        sleep 1
+        ~/.local/bin/waybar-gif-colors-sync
+        
+    } &
+fi
+
+notify-send "✅ Wallpaper Aplicado" "Cambio completado exitosamente" -t 2000

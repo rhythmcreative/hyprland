@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Wrapper para pywal con sincronización automática de nm-applet y wal-gtk-auto
+# Uso: wal-auto -i /path/to/wallpaper [opciones adicionales de wal]
+
+echo "🎨 WAL-AUTO: Wrapper con sincronización automática (nm-applet + wal-gtk-auto)"
+
+# Verificar que pywal esté instalado
+if ! command -v wal > /dev/null 2>&1; then
+    echo "❌ Error: pywal no está instalado"
+    exit 1
+fi
+
+# Verificar argumentos
+if [[ $# -eq 0 ]]; then
+    echo "Uso: wal-auto -i /path/to/wallpaper [opciones]"
+    echo "O simplemente: wal-auto [argumentos de wal]"
+    exit 1
+fi
+
+# Ejecutar pywal con los argumentos proporcionados
+echo "🚀 Ejecutando pywal..."
+if wal "$@"; then
+    echo "✅ pywal completado exitosamente"
+    
+    # Ejecutar hook de wal-gtk-auto
+    if [[ -x "$HOME/.cache/wal/wal-gtk-auto-hook.sh" ]]; then
+        echo "🎨 Sincronizando tema wal-gtk-auto..."
+        "$HOME/.cache/wal/wal-gtk-auto-hook.sh"
+    else
+        echo "⚠️  Hook wal-gtk-auto no encontrado o no ejecutable"
+    fi
+    
+    # Ejecutar nuestro post-script
+    if [[ -x "$HOME/.config/wal/post.sh" ]]; then
+        echo "🔧 Ejecutando post-procesamiento..."
+        "$HOME/.config/wal/post.sh"
+    else
+        echo "⚠️  Post-script no encontrado o no ejecutable"
+    fi
+    
+    echo "🎉 wal-auto completado!"
+else
+    echo "❌ Error: pywal falló"
+    exit 1
+fi

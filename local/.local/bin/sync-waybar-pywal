@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Script mejorado para sincronizar waybar con pywal automáticamente
+# Este script puede ser llamado después de cambiar wallpapers
+
+# Función de logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a /tmp/waybar-sync.log
+}
+
+# Verificar si pywal está instalado
+if ! command -v wal &> /dev/null; then
+    log "❌ Error: pywal no está instalado"
+    exit 1
+fi
+
+# Verificar argumentos
+if [ $# -eq 0 ]; then
+    log "📋 Uso: $0 <imagen_wallpaper> [opciones_wal]"
+    log "📋 Ejemplo: $0 ~/Pictures/wallpaper.jpg"
+    log "📋 O simplemente: $0 --reload (para recargar waybar con colores actuales)"
+    exit 1
+fi
+
+# Opción para solo recargar waybar sin cambiar wallpaper
+if [ "$1" = "--reload" ]; then
+    log "🔄 Recargando waybar con colores actuales (optimizado)..."
+    # Usar el script optimizado de waybar-pywal-sync
+    if [ -x "$HOME/.local/bin/waybar-pywal-sync" ]; then
+        "$HOME/.local/bin/waybar-pywal-sync"
+        log "✅ Waybar recargado con waybar-pywal-sync (sin reinicios múltiples)"
+    else
+        # Fallback simple sin reinicio
+        waybar_pids=$(pgrep -x waybar)
+        if [[ -n "$waybar_pids" ]]; then
+            kill -USR2 $waybar_pids 2>/dev/null || true
+            log "✅ Waybar CSS recargado con señal USR2"
+        fi
+    fi
+    exit 0
+fi
+
+# Verificar si el archivo de imagen existe
+if [ ! -f "$1" ]; then
+    log "❌ Error: El archivo '$1' no existe"
+    exit 1
+fi
+
+log "🎨 Cambiando wallpaper y sincronizando waybar..."
+log "📂 Archivo: $1"
+
+# Aplicar pywal con el wallpaper
+log "🔧 Ejecutando pywal..."
+wal_output=$(wal -i "$1" "${@:2}" 2>&1)
+wal_exit_code=$?
+
+if [ $wal_exit_code -ne 0 ]; then
+    log "❌ Error ejecutando pywal: $wal_output"
+    exit 1
+fi
+
+log "✅ Pywal ejecutado correctamente"
+
+# Esperar un momento para asegurar que los archivos se hayan generado
+sleep 0.5
+
+# Verificar si se generaron los templates de waybar
+if [ ! -f "$HOME/.cache/wal/waybar-style.css" ]; then
+    log "⚠️  Advertencia: Template waybar-style.css no encontrado"
+fi
+
+if [ ! -f "$HOME/.cache/wal/waybar-style-varied.css" ]; then
+    log "⚠️  Advertencia: Template waybar-style-varied.css no encontrado"
+fi
+
+# Usar el script optimizado waybar-pywal-sync (sin reinicios múltiples)
+log "🔄 Actualizando waybar (script optimizado)..."
+if [ -x "$HOME/.local/bin/waybar-pywal-sync" ]; then
+    "$HOME/.local/bin/waybar-pywal-sync"
+    log "✅ Waybar actualizado correctamente (sin reinicios múltiples)"
+else
+    log "⚠️ Script optimizado no encontrado, usando recarga simple..."
+    waybar_pids=$(pgrep -x waybar)
+    if [[ -n "$waybar_pids" ]]; then
+        kill -USR2 $waybar_pids 2>/dev/null || {
+            kill -TERM $waybar_pids 2>/dev/null
+            sleep 1
+            waybar > /dev/null 2>&1 &
+        }
+        log "✅ Waybar recargado (fallback simple)"
+    fi
+fi
+
+# Sincronizar nm-applet con los colores de waybar
+log "🎨 Sincronizando nm-applet con colores de waybar..."
+if [ -x "$HOME/.local/bin/sync-nm-applet-waybar" ]; then
+    "$HOME/.local/bin/sync-nm-applet-waybar" > /dev/null 2>&1 &
+    log "✅ nm-applet sincronizado automáticamente con waybar"
+else
+    log "⚠️ Script de sincronización nm-applet no encontrado"
+fi
+
+log "🎉 Sincronización completa: wallpaper y waybar actualizados"
+log "📷 Wallpaper: $(basename "$1")"
+log "🎨 Tema: $current_theme"

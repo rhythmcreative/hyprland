@@ -1,0 +1,314 @@
+#!/bin/bash
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║                    PYWAL AUTO-SYNC MASTER SCRIPT                            ║
+# ║        Sincronización automática de Powerlevel10k y Kitty con pywal         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+LOG_FILE="$HOME/.cache/pywal-auto-sync.log"
+LOCK_FILE="/tmp/pywal-auto-sync.lock"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIONES AUXILIARES ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+cleanup() {
+    rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+check_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local lock_pid
+        lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            log "⚠️ Sincronización ya en progreso (PID: $lock_pid)"
+            exit 0
+        else
+            rm -f "$LOCK_FILE"
+        fi
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIONES DE VALIDACIÓN ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+validate_pywal() {
+    local colors_file="$HOME/.cache/wal/colors.sh"
+    local colors_json="$HOME/.cache/wal/colors.json"
+    
+    if [[ ! -f "$colors_file" ]] || [[ ! -f "$colors_json" ]]; then
+        log "❌ Archivos de pywal no encontrados. Ejecuta 'wal -i /ruta/a/imagen' primero."
+        return 1
+    fi
+    
+    # Verificar que los archivos no estén vacíos y sean recientes
+    local file_age
+    file_age=$(( $(date +%s) - $(stat -c %Y "$colors_json" 2>/dev/null || echo 0) ))
+    if (( file_age > 86400 )); then  # 24 horas
+        log "⚠️ Archivos de pywal parecen obsoletos (${file_age}s de antigüedad)"
+    fi
+    
+    return 0
+}
+
+load_pywal_colors() {
+    local colors_json="$HOME/.cache/wal/colors.json"
+    
+    if command -v jq >/dev/null 2>&1; then
+        # Usar jq para extraer colores de forma segura
+        background=$(jq -r '.special.background' "$colors_json" 2>/dev/null || echo "#000000")
+        foreground=$(jq -r '.special.foreground' "$colors_json" 2>/dev/null || echo "#ffffff")
+        
+        # Extraer los primeros 8 colores
+        for i in {0..7}; do
+            declare -g "color$i=$(jq -r ".colors.color$i" "$colors_json" 2>/dev/null || echo "#000000")"
+        done
+    else
+        # Método de respaldo usando el archivo colors.sh
+        local colors_file="$HOME/.cache/wal/colors.sh"
+        source "$colors_file"
+    fi
+    
+    log "✅ Colores de pywal cargados:"
+    log "   Background: $background"
+    log "   Foreground: $foreground"
+    log "   Accent colors: $color1, $color2, $color3, $color4"
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ SINCRONIZACIÓN P10K ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sync_powerlevel10k() {
+    log "🎨 Sincronizando Powerlevel10k..."
+    
+    # Función para convertir color hex a número de terminal
+    hex_to_color_num() {
+        local hex_color="$1"
+        hex_color="${hex_color#\#}"
+        
+        local r=$((16#${hex_color:0:2}))
+        local g=$((16#${hex_color:2:2}))
+        local b=$((16#${hex_color:4:2}))
+        
+        printf "%d" $(( (r * 5 / 255) * 36 + (g * 5 / 255) * 6 + (b * 5 / 255) + 16 ))
+    }
+    
+    # Convertir colores
+    local bg_num fg_num
+    bg_num=$(hex_to_color_num "$background")
+    fg_num=$(hex_to_color_num "$foreground")
+    
+    local color_nums=()
+    for i in {1..6}; do
+        local var_name="color$i"
+        color_nums[i]=$(hex_to_color_num "${!var_name}")
+    done
+    
+    # Crear archivo de colores dinámicos para P10k
+    local p10k_colors_file="$HOME/.cache/wal/p10k-colors.zsh"
+    cat > "$p10k_colors_file" << EOF
+# Configuración dinámica de colores para Powerlevel10k generada por pywal
+# Generado automáticamente: $(date)
+
+# Colores principales basados en pywal
+export P10K_PYWAL_BG="$bg_num"
+export P10K_PYWAL_FG="$fg_num"
+export P10K_PYWAL_COLOR1="${color_nums[1]}"  # rojo
+export P10K_PYWAL_COLOR2="${color_nums[2]}"  # verde
+export P10K_PYWAL_COLOR3="${color_nums[3]}"  # amarillo
+export P10K_PYWAL_COLOR4="${color_nums[4]}"  # azul
+export P10K_PYWAL_COLOR5="${color_nums[5]}"  # magenta
+export P10K_PYWAL_COLOR6="${color_nums[6]}"  # cian
+
+# Aplicar colores dinámicamente si p10k está cargado
+if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
+    # OS icon
+    typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND="\$P10K_PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Directory
+    typeset -g POWERLEVEL9K_DIR_BACKGROUND="\$P10K_PYWAL_COLOR4"
+    typeset -g POWERLEVEL9K_DIR_FOREGROUND="\$P10K_PYWAL_FG"
+    typeset -g POWERLEVEL9K_DIR_SHORTENED_FOREGROUND="\$P10K_PYWAL_COLOR6"
+    
+    # Git status
+    typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND="\$P10K_PYWAL_COLOR3"
+    typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_VCS_CONFLICTED_BACKGROUND="\$P10K_PYWAL_COLOR1"
+    
+    # Context (user@host)
+    typeset -g POWERLEVEL9K_CONTEXT_BACKGROUND="\$P10K_PYWAL_COLOR5"
+    typeset -g POWERLEVEL9K_CONTEXT_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Prompt char
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND="\$P10K_PYWAL_COLOR2"
+    typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND="\$P10K_PYWAL_COLOR1"
+    
+    # Command execution time
+    typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND="\$P10K_PYWAL_COLOR3"
+    typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND="\$P10K_PYWAL_FG"
+    
+    # Background jobs
+    typeset -g POWERLEVEL9K_BACKGROUND_JOBS_BACKGROUND="\$P10K_PYWAL_COLOR5"
+    typeset -g POWERLEVEL9K_BACKGROUND_JOBS_FOREGROUND="\$P10K_PYWAL_FG"
+fi
+
+# Función para aplicar colores inmediatamente
+apply_p10k_colors() {
+    if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
+        typeset -g POWERLEVEL9K_OS_ICON_BACKGROUND="${color_nums[4]}"
+        typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND="$fg_num"
+        typeset -g POWERLEVEL9K_DIR_BACKGROUND="${color_nums[4]}"
+        typeset -g POWERLEVEL9K_DIR_FOREGROUND="$fg_num"
+        typeset -g POWERLEVEL9K_VCS_CLEAN_BACKGROUND="${color_nums[2]}"
+        typeset -g POWERLEVEL9K_VCS_MODIFIED_BACKGROUND="${color_nums[3]}"
+        typeset -g POWERLEVEL9K_VCS_UNTRACKED_BACKGROUND="${color_nums[2]}"
+        typeset -g POWERLEVEL9K_VCS_CONFLICTED_BACKGROUND="${color_nums[1]}"
+        typeset -g POWERLEVEL9K_CONTEXT_BACKGROUND="${color_nums[5]}"
+        typeset -g POWERLEVEL9K_CONTEXT_FOREGROUND="$fg_num"
+        typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND="${color_nums[2]}"
+        typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND="${color_nums[1]}"
+        typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND="${color_nums[3]}"
+        typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND="$fg_num"
+        typeset -g POWERLEVEL9K_BACKGROUND_JOBS_BACKGROUND="${color_nums[5]}"
+        typeset -g POWERLEVEL9K_BACKGROUND_JOBS_FOREGROUND="$fg_num"
+        
+        # Recargar p10k si está disponible
+        if [[ "\${+functions[p10k]}" == 1 ]]; then
+            p10k reload
+        fi
+    fi
+}
+
+# Auto-ejecutar al cargar
+apply_p10k_colors 2>/dev/null || true
+EOF
+    
+    log "✅ Archivo de colores P10k creado: $p10k_colors_file"
+    return 0
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ SINCRONIZACIÓN KITTY ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sync_kitty() {
+    log "🐱 Sincronizando Kitty..."
+    
+    # Generar colores para kitty (pywal ya lo hace automáticamente)
+    if command -v wal >/dev/null 2>&1; then
+        # Regenerar template de kitty si es necesario
+        wal -q -R 2>/dev/null || true
+    fi
+    
+    # Personalizar configuración adicional de kitty con colores de pywal
+    local kitty_colors_file="$HOME/.cache/wal/colors-kitty.conf"
+    
+    if [[ -f "$kitty_colors_file" ]]; then
+        # Agregar configuraciones adicionales específicas
+        cat >> "$kitty_colors_file" << EOF
+
+# Configuraciones adicionales sincronizadas automáticamente
+active_border_color $color4
+inactive_border_color $color0
+bell_border_color $color1
+url_color $color4
+cursor $foreground
+cursor_text_color $background
+selection_foreground $background
+selection_background $color4
+EOF
+        
+        # Recargar kitty si está en ejecución
+        if command -v kitty >/dev/null 2>&1; then
+            # Enviar señal a todas las instancias de kitty para recargar colores
+            pkill -USR1 kitty 2>/dev/null || true
+            
+            # Usar kitty remote control si está disponible
+            if [[ -S /tmp/kitty-socket ]]; then
+                kitty @ --to unix:/tmp/kitty-socket set-colors --all "$kitty_colors_file" 2>/dev/null || true
+            fi
+        fi
+        
+        log "✅ Colores de Kitty sincronizados"
+    else
+        log "⚠️ Archivo de colores de Kitty no encontrado"
+        return 1
+    fi
+    
+    return 0
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ NOTIFICACIÓN DE TERMINALES ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+notify_terminals() {
+    log "📡 Notificando a terminales activos..."
+    
+    # Buscar sesiones de zsh activas y enviarles señal para recargar
+    local zsh_pids
+    readarray -t zsh_pids < <(pgrep -x zsh 2>/dev/null || true)
+    
+    for pid in "${zsh_pids[@]}"; do
+        if [[ -n "$pid" ]] && [[ -e "/proc/$pid" ]]; then
+            kill -USR1 "$pid" 2>/dev/null || true
+            log "📤 Señal enviada a zsh PID: $pid"
+        fi
+    done
+    
+    # Notificación al usuario
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "🎨 Pywal Sync" \
+            "Powerlevel10k y Kitty sincronizados automáticamente.\nReinicia terminales para ver todos los cambios." \
+            -t 4000 -u low 2>/dev/null || true
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIÓN PRINCIPAL ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+main() {
+    log "🚀 === Iniciando sincronización automática con pywal ==="
+    
+    check_lock
+    
+    if ! validate_pywal; then
+        log "❌ Validación de pywal fallida"
+        exit 1
+    fi
+    
+    load_pywal_colors
+    
+    local sync_success=true
+    
+    # Sincronizar Powerlevel10k
+    if ! sync_powerlevel10k; then
+        log "❌ Error sincronizando Powerlevel10k"
+        sync_success=false
+    fi
+    
+    # Sincronizar Kitty
+    if ! sync_kitty; then
+        log "❌ Error sincronizando Kitty"
+        sync_success=false
+    fi
+    
+    if [[ "$sync_success" == "true" ]]; then
+        notify_terminals
+        log "🎉 === Sincronización completada exitosamente ==="
+        echo "🎉 ¡Sincronización completa! Powerlevel10k y Kitty actualizados con colores de pywal."
+        echo "💡 Para aplicar cambios inmediatamente: ejecuta 'source ~/.zshrc' en cada terminal"
+    else
+        log "⚠️ === Sincronización completada con errores ==="
+        echo "⚠️ Sincronización completada con algunos errores. Revisa el log: $LOG_FILE"
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ EJECUCIÓN ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Si se ejecuta directamente (no como source)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

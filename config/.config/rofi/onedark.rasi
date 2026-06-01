@@ -1,0 +1,134 @@
+/*
+ * ROFI OneDark Theme
+ * User: rhythmcreative
+ * Copyright: 2024
+ */
+
+* {
+    /* OneDark color scheme */
+    bg-col:  #282c34;
+    bg-col-light: #353b45;
+    border-col: #61afef;
+    selected-col: #61afef;
+    blue: #61afef;
+    fg-col: #abb2bf;
+    fg-col2: #e06c75;
+    grey: #5c6370;
+    red: #e06c75;
+    green: #98c379;
+    yellow: #e5c07b;
+    orange: #d19a66;
+    purple: #c678dd;
+    cyan: #56b6c2;
+
+    /* Override defaults */
+    background-color: @bg-col;
+    text-color: @fg-col;
+    border-color: @border-col;
+    selected-background: @selected-col;
+    selected-foreground: @bg-col;
+}
+
+element-text, element-icon , mode-switcher {
+    background-color: inherit;
+    text-color:       inherit;
+}
+
+window {
+    height: 360px;
+    border: 3px;
+    border-color: @border-col;
+    background-color: @bg-col;
+    border-radius: 10px;
+}
+
+mainbox {
+    background-color: @bg-col;
+    padding: 10px;
+}
+
+inputbar {
+    children: [prompt,entry];
+    background-color: @bg-col-light;
+    border-radius: 5px;
+    padding: 8px;
+    margin: 0px 0px 10px 0px;
+}
+
+prompt {
+    background-color: @blue;
+    padding: 6px;
+    text-color: @bg-col;
+    border-radius: 3px;
+    margin: 0px 10px 0px 0px;
+}
+
+textbox-prompt-colon {
+    expand: false;
+    str: ":";
+}
+
+entry {
+    padding: 6px;
+    margin: 0px 0px 0px 10px;
+    text-color: @fg-col;
+    background-color: @bg-col-light;
+}
+
+listview {
+    border: 0px 0px 0px;
+    padding: 6px 0px 0px;
+    margin: 10px 0px 0px 0px;
+    columns: 1;
+    lines: 8;
+    background-color: @bg-col;
+}
+
+element {
+    padding: 8px;
+    background-color: @bg-col;
+    text-color: @fg-col;
+    border-radius: 5px;
+    margin: 2px 0px;
+}
+
+element-icon {
+    size: 25px;
+    margin: 0px 10px 0px 0px;
+}
+
+element selected {
+    background-color: @selected-col;
+    text-color: @bg-col;
+}
+
+mode-switcher {
+    spacing: 0;
+}
+
+button {
+    padding: 10px;
+    background-color: @bg-col-light;
+    text-color: @grey;
+    vertical-align: 0.5; 
+    horizontal-align: 0.5;
+}
+
+button selected {
+  background-color: @selected-col;
+  text-color: @bg-col;
+}
+
+message {
+    background-color: @bg-col-light;
+    margin: 2px;
+    padding: 2px;
+    border-radius: 5px;
+}
+
+textbox {
+    padding: 6px;
+    margin: 20px 0px 0px 20px;
+    text-color: @blue;
+    background-color: @bg-col-light;
+}

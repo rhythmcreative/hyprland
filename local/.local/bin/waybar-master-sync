@@ -1,0 +1,247 @@
+#!/bin/bash
+
+# Script maestro optimizado para waybar-pywal sync
+# Evita múltiples reinicios y coordina todas las actualizaciones
+# Diseñado para ser llamado una sola vez por cambio de wallpaper
+
+# Variables globales
+MASTER_LOCK="/tmp/waybar_master_sync.lock"
+LOG_FILE="/tmp/waybar-master-sync.log"
+PID_FILE="/tmp/waybar_master.pid"
+LAST_SYNC_FILE="/tmp/waybar_master_last_sync"
+MAX_LOCK_WAIT=10
+DEBOUNCE_SECONDS=5  # Tiempo mínimo entre sincronizaciones
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') [MASTER] - $1" | tee -a "$LOG_FILE"
+}
+
+# Función de cleanup
+cleanup() {
+    rm -f "$MASTER_LOCK" "$PID_FILE"
+    log "🧹 Cleanup del script maestro completado"
+}
+trap cleanup EXIT
+
+# Función para verificar debouncing de sincronización
+check_sync_debouncing() {
+    if [[ -f "$LAST_SYNC_FILE" ]]; then
+        local last_sync=$(cat "$LAST_SYNC_FILE" 2>/dev/null || echo "0")
+        local current_time=$(date +%s)
+        local time_diff=$((current_time - last_sync))
+        
+        if [[ $time_diff -lt $DEBOUNCE_SECONDS ]]; then
+            log "⏰ Master debouncing: Última sincronización hace ${time_diff}s (mín: ${DEBOUNCE_SECONDS}s)"
+            log "🚫 Sincronización cancelada para evitar exceso de reinicios"
+            notify-send "⏱️ Waybar" "Sincronización omitida (muy reciente)" -t 1000 2>/dev/null || true
+            exit 0
+        fi
+    fi
+    
+    # Registrar tiempo actual
+    echo "$(date +%s)" > "$LAST_SYNC_FILE"
+}
+
+# Verificar si ya hay una instancia del script maestro ejecutándose
+check_master_running() {
+    if [[ -f "$MASTER_LOCK" ]]; then
+        local existing_pid=$(cat "$MASTER_LOCK" 2>/dev/null)
+        if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+            log "⏳ Instancia maestra ya ejecutándose (PID: $existing_pid)"
+            
+            # Esperar un poco a que termine
+            local wait_count=0
+            while [[ -f "$MASTER_LOCK" && $wait_count -lt $MAX_LOCK_WAIT ]]; do
+                sleep 0.5
+                wait_count=$((wait_count + 1))
+            done
+            
+            if [[ -f "$MASTER_LOCK" ]]; then
+                log "⚠️ Instancia maestra tomando demasiado tiempo, continuando..."
+                rm -f "$MASTER_LOCK"
+            else
+                log "✅ Instancia anterior terminó, continuando"
+            fi
+        else
+            log "🔓 Lock file obsoleto removido"
+            rm -f "$MASTER_LOCK"
+        fi
+    fi
+}
+
+# Crear lock del script maestro
+create_master_lock() {
+    echo $$ > "$MASTER_LOCK"
+    echo $$ > "$PID_FILE"
+    log "🔒 Lock maestro creado (PID: $$)"
+}
+
+# Función para matar instancias de scripts secundarios
+kill_secondary_scripts() {
+    log "🛑 Deteniendo scripts secundarios de waybar..."
+    
+    # Lista de scripts que pueden estar interfiriendo
+    local scripts=(
+        "waybar-pywal-sync"
+        "sync-waybar-pywal" 
+        "waybar-fix-wallpaper-sync"
+        "waybar-pywal-universal-sync"
+        "waybar-pywal-auto-sync"
+    )
+    
+    for script in "${scripts[@]}"; do
+        local pids=$(pgrep -f "$script" | grep -v $$)
+        if [[ -n "$pids" ]]; then
+            log "⚡ Deteniendo $script (PIDs: $pids)"
+            echo "$pids" | xargs kill -TERM 2>/dev/null || true
+            sleep 0.3
+        fi
+    done
+    
+    # Limpiar locks de scripts secundarios
+    rm -f /tmp/waybar_pywal_hook.lock
+    rm -f /tmp/waybar_wallpaper_sync.lock
+    rm -f /tmp/waybar-pywal-sync.lock
+    
+    log "✅ Scripts secundarios detenidos y locks limpiados"
+}
+
+# Función optimizada para reiniciar waybar UNA SOLA VEZ
+restart_waybar_once() {
+    log "🔄 Iniciando reinicio único de waybar..."
+    
+    local waybar_pids=$(pgrep -x waybar)
+    local pid_count=0
+    
+    if [[ -n "$waybar_pids" ]]; then
+        pid_count=$(echo "$waybar_pids" | wc -l)
+        log "📊 Instancias de waybar encontradas: $pid_count"
+        
+        # Terminar todas las instancias de waybar suavemente
+        log "🛑 Terminando waybar (todas las instancias)..."
+        kill -TERM $waybar_pids 2>/dev/null || true
+        
+        # Esperar a que terminen
+        local wait_count=0
+        while pgrep -x waybar >/dev/null && [[ $wait_count -lt 10 ]]; do
+            sleep 0.5
+            wait_count=$((wait_count + 1))
+        done
+        
+        # Forzar si aún hay instancias
+        if pgrep -x waybar >/dev/null; then
+            log "⚡ Forzando terminación de waybar"
+            pkill -KILL waybar 2>/dev/null || true
+            sleep 1
+        fi
+    fi
+    
+    # Iniciar waybar UNA SOLA VEZ
+    log "🚀 Iniciando waybar (instancia única)..."
+    waybar > /dev/null 2>&1 &
+    local new_pid=$!
+    
+    # Verificar que se inició correctamente
+    sleep 1.5
+    if kill -0 "$new_pid" 2>/dev/null; then
+        log "✅ Waybar iniciado exitosamente (PID: $new_pid)"
+        return 0
+    else
+        log "❌ Error al iniciar waybar"
+        return 1
+    fi
+}
+
+# Función para actualizar colores de waybar
+update_waybar_colors() {
+    log "🎨 Actualizando colores de waybar..."
+    
+    local waybar_config_dir="$HOME/.config/waybar"
+    local wal_colors_sh="$HOME/.cache/wal/colors.sh"
+    
+    # Verificar que existan los colores de pywal
+    if [[ ! -f "$wal_colors_sh" ]]; then
+        log "⚠️ Colores de pywal no encontrados"
+        return 1
+    fi
+    
+    # Cargar colores
+    source "$wal_colors_sh"
+    
+    # Crear archivo de colores actualizado
+    cat > "$waybar_config_dir/colors-pywal.css" << EOF
+/* Colores generados por waybar-master-sync - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    
+    log "✅ Colores actualizados correctamente"
+    return 0
+}
+
+# Función principal
+main() {
+    log "🎯 Iniciando sincronización maestra waybar-pywal..."
+    
+    # Verificar debouncing antes de cualquier otra acción
+    check_sync_debouncing
+    
+    # Verificar y crear lock maestro
+    check_master_running
+    create_master_lock
+    
+    # Detener scripts secundarios que puedan estar interfiriendo
+    kill_secondary_scripts
+    
+    # Esperar un momento para asegurar estabilidad
+    sleep 0.5
+    
+    # Actualizar colores
+    if update_waybar_colors; then
+        log "🎨 Colores actualizados, reiniciando waybar..."
+        
+        # Reiniciar waybar UNA SOLA VEZ
+        if restart_waybar_once; then
+            log "🎉 Sincronización maestra completada exitosamente"
+            notify-send "🎨 Waybar Sync" "Waybar sincronizado con nuevo wallpaper" -t 2000 2>/dev/null || true
+        else
+            log "❌ Error al reiniciar waybar"
+            notify-send "❌ Error Waybar" "No se pudo reiniciar waybar" -u critical -t 3000 2>/dev/null || true
+            return 1
+        fi
+    else
+        log "⚠️ No se pudieron actualizar los colores"
+        return 1
+    fi
+    
+    log "✨ Script maestro finalizado"
+}
+
+# Mostrar uso si se solicita
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "Uso: waybar-master-sync"
+    echo "Script maestro para sincronizar waybar con pywal sin múltiples reinicios"
+    echo "Diseñado para ser llamado una sola vez por cambio de wallpaper"
+    exit 0
+fi
+
+# Ejecutar función principal
+main "$@"

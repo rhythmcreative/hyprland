@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Monitor automático de cambios de volumen
+# Detecta cambios de volumen y muestra notificaciones automáticamente
+
+SCRIPT_PATH="$HOME/.local/bin/volume-notify"
+
+# Función para monitorear cambios de volumen
+monitor_volume() {
+    if command -v pactl >/dev/null 2>&1; then
+        pactl subscribe | grep --line-buffered "change" | while read -r line; do
+            if echo "$line" | grep -q "sink"; then
+                # Pequeño delay para evitar múltiples notificaciones
+                sleep 0.1
+                $SCRIPT_PATH show
+            fi
+        done
+    else
+        echo "Error: pactl no está disponible"
+        exit 1
+    fi
+}
+
+case "${1:-monitor}" in
+    "monitor")
+        echo "Iniciando monitor de volumen automático..."
+        monitor_volume
+        ;;
+    "start")
+        # Iniciar en background
+        nohup $0 monitor >/dev/null 2>&1 &
+        echo "Monitor de volumen iniciado en segundo plano"
+        ;;
+    "stop")
+        # Detener procesos del monitor
+        pkill -f "volume-monitor monitor"
+        echo "Monitor de volumen detenido"
+        ;;
+    "status")
+        if pgrep -f "volume-monitor monitor" >/dev/null; then
+            echo "Monitor de volumen está corriendo"
+        else
+            echo "Monitor de volumen no está corriendo"
+        fi
+        ;;
+    *)
+        echo "Uso: $0 {monitor|start|stop|status}"
+        echo "  monitor - Ejecutar monitor en primer plano"
+        echo "  start   - Iniciar monitor en segundo plano"
+        echo "  stop    - Detener monitor"
+        echo "  status  - Ver estado del monitor"
+        exit 1
+        ;;
+esac

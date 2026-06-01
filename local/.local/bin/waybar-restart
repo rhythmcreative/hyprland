@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Script simple para reiniciar waybar de forma independiente
+# Se ejecuta en background sin interferir con otros procesos
+
+{
+    # Esperar un poco para que se complete cualquier proceso anterior
+    sleep 1
+    
+    # Cerrar waybar actual
+    if pgrep waybar >/dev/null; then
+        pkill waybar
+        sleep 2
+        
+        # Si no se cerró, forzar
+        if pgrep waybar >/dev/null; then
+            pkill -9 waybar
+            sleep 1
+        fi
+    fi
+    
+    # Iniciar waybar
+    cd "$HOME" || exit 1
+    waybar >/dev/null 2>&1 &
+    
+} </dev/null >/dev/null 2>&1 &
+
+exit 0

@@ -1,0 +1,115 @@
+#!/bin/bash
+
+# Notificaciones ultra minimalistas estilo teléfono premium
+# Sin marcos, sin barras, solo lo esencial
+
+TIMEOUT=1500
+URGENT="low"
+
+# Obtener volumen
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%.0f", $2 * 100}'
+}
+
+# Verificar mute
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q "MUTED"
+}
+
+# Notificación ultra minimalista
+show_ultra_notification() {
+    local volume=$1
+    local muted=$2
+    
+    if [ "$muted" = "true" ]; then
+        # Mute ultra simple
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "" \
+                   "🔇"
+    else
+        # Solo icono y número, nada más
+        local icon=""
+        
+        if [ "$volume" -eq 0 ]; then
+            icon="🔇"
+        elif [ "$volume" -lt 33 ]; then
+            icon="🔈"
+        elif [ "$volume" -lt 66 ]; then
+            icon="🔉"
+        else
+            icon="🔊"
+        fi
+        
+        notify-send -a "volume" -u "$URGENT" -t "$TIMEOUT" \
+                   -h string:x-canonical-private-synchronous:volume \
+                   "" \
+                   "$icon $volume"
+    fi
+}
+
+# Notificación de audio ultra simple
+show_ultra_audio_notification() {
+    local title="$1"
+    local message="$2"
+    local volume=$(get_volume)
+    
+    local icon="🎵"
+    if [[ "$title" == *"Spotify"* ]]; then
+        icon="🎶"
+    elif [[ "$title" == *"YouTube"* ]]; then
+        icon="📺"
+    fi
+    
+    notify-send -a "audio" -u "$URGENT" -t "$TIMEOUT" \
+               -h string:x-canonical-private-synchronous:audio \
+               "$title" \
+               "$icon $message"
+}
+
+# Procesar argumentos
+case $1 in
+    up)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+        current=$(get_volume)
+        if [ "$current" -gt 100 ]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 100%
+        fi
+        ;;
+    down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+    audio)
+        show_ultra_audio_notification "${2:-Audio}" "${3:-Now playing}"
+        exit 0
+        ;;
+    test)
+        echo "🧪 Testing ultra minimalist style..."
+        echo "Volume 25%..."
+        show_ultra_notification "25" "false"
+        sleep 2
+        echo "Volume 75%..."
+        show_ultra_notification "75" "false"
+        sleep 2
+        echo "Muted..."
+        show_ultra_notification "0" "true"
+        sleep 2
+        echo "Audio notification..."
+        show_ultra_audio_notification "Spotify" "♪ Playing music"
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {up|down|mute|audio [title] [message]|test}"
+        exit 1
+        ;;
+esac
+
+# Obtener estado y mostrar notificación
+volume=$(get_volume)
+muted=$(is_muted && echo "true" || echo "false")
+
+show_ultra_notification "$volume" "$muted"
+exit 0

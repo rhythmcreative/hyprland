@@ -1,0 +1,220 @@
+#!/bin/bash
+
+# Script de gestión para el daemon de sincronización P10k-Pywal
+# Facilita el control del daemon con comandos simples
+
+SERVICE_NAME="p10k-pywal-sync"
+LOG_FILE="$HOME/.cache/p10k-pywal-daemon.log"
+PID_FILE="$HOME/.cache/p10k-pywal-daemon.pid"
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Función para mostrar el estado del daemon
+show_status() {
+    echo -e "${CYAN}🔍 Estado del daemon P10k-Pywal:${NC}\n"
+    
+    # Estado del servicio systemd
+    if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Servicio systemd: ACTIVO${NC}"
+        if systemctl --user is-enabled "$SERVICE_NAME" >/dev/null 2>&1; then
+            echo -e "${GREEN}   📌 Habilitado para inicio automático${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  No habilitado para inicio automático${NC}"
+        fi
+    else
+        echo -e "${RED}❌ Servicio systemd: INACTIVO${NC}"
+    fi
+    
+    # Estado del proceso
+    if [[ -f "$PID_FILE" ]]; then
+        local pid=$(cat "$PID_FILE" 2>/dev/null)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            echo -e "${GREEN}✅ Proceso daemon: EJECUTÁNDOSE (PID: $pid)${NC}"
+            
+            # Mostrar tiempo de funcionamiento
+            local start_time=$(ps -o lstart= -p "$pid" 2>/dev/null | head -n1)
+            if [[ -n "$start_time" ]]; then
+                echo -e "${BLUE}   🕒 Iniciado: $start_time${NC}"
+            fi
+            
+            # Mostrar uso de recursos
+            local cpu_mem=$(ps -o %cpu,%mem -p "$pid" --no-headers 2>/dev/null)
+            if [[ -n "$cpu_mem" ]]; then
+                echo -e "${BLUE}   💻 CPU/MEM: $cpu_mem${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Archivo PID existe pero proceso no activo${NC}"
+            rm -f "$PID_FILE" 2>/dev/null
+        fi
+    else
+        echo -e "${RED}❌ Proceso daemon: NO EJECUTÁNDOSE${NC}"
+    fi
+    
+    # Mostrar información del archivo de log
+    if [[ -f "$LOG_FILE" ]]; then
+        local log_size=$(du -h "$LOG_FILE" 2>/dev/null | cut -f1)
+        local last_mod=$(stat -c %y "$LOG_FILE" 2>/dev/null | cut -d. -f1)
+        echo -e "${BLUE}📝 Log: $log_size (Último: $last_mod)${NC}"
+    fi
+    
+    echo
+}
+
+# Función para mostrar ayuda
+show_help() {
+    echo -e "${CYAN}🔧 Gestor del daemon P10k-Pywal Sync${NC}\n"
+    echo -e "${PURPLE}Uso: $(basename $0) [comando]${NC}\n"
+    echo -e "${YELLOW}Comandos disponibles:${NC}"
+    echo -e "  ${GREEN}start${NC}     - Iniciar el daemon"
+    echo -e "  ${GREEN}stop${NC}      - Detener el daemon" 
+    echo -e "  ${GREEN}restart${NC}   - Reiniciar el daemon"
+    echo -e "  ${GREEN}status${NC}    - Mostrar estado del daemon"
+    echo -e "  ${GREEN}enable${NC}    - Habilitar inicio automático"
+    echo -e "  ${GREEN}disable${NC}   - Deshabilitar inicio automático"
+    echo -e "  ${GREEN}logs${NC}      - Mostrar logs del daemon"
+    echo -e "  ${GREEN}logs -f${NC}   - Seguir logs en tiempo real"
+    echo -e "  ${GREEN}test${NC}      - Probar sincronización manual"
+    echo -e "  ${GREEN}clean${NC}     - Limpiar archivos temporales"
+    echo -e "  ${GREEN}help${NC}      - Mostrar esta ayuda\n"
+    echo -e "${BLUE}💡 Ejemplos:${NC}"
+    echo -e "  $0 start           # Iniciar daemon"
+    echo -e "  $0 status          # Ver estado"
+    echo -e "  $0 logs -f         # Ver logs en vivo"
+    echo
+}
+
+# Función para limpiar archivos temporales
+clean_temp_files() {
+    echo -e "${YELLOW}🧹 Limpiando archivos temporales...${NC}"
+    
+    local cleaned=false
+    
+    if [[ -f "$PID_FILE" ]]; then
+        echo -e "  ${CYAN}Eliminando archivo PID...${NC}"
+        rm -f "$PID_FILE"
+        cleaned=true
+    fi
+    
+    if [[ -f "$LOG_FILE" ]] && [[ $(stat -c%s "$LOG_FILE" 2>/dev/null) -gt 10485760 ]]; then
+        echo -e "  ${CYAN}Rotando log (>10MB)...${NC}"
+        mv "$LOG_FILE" "$LOG_FILE.old" 2>/dev/null
+        touch "$LOG_FILE"
+        cleaned=true
+    fi
+    
+    if $cleaned; then
+        echo -e "${GREEN}✅ Limpieza completada${NC}"
+    else
+        echo -e "${BLUE}ℹ️  No hay archivos que limpiar${NC}"
+    fi
+}
+
+# Función para probar sincronización
+test_sync() {
+    echo -e "${YELLOW}🧪 Probando sincronización manual...${NC}"
+    
+    if [[ -x "$HOME/.local/bin/p10k-auto-sync" ]]; then
+        if "$HOME/.local/bin/p10k-auto-sync"; then
+            echo -e "${GREEN}✅ Sincronización manual exitosa${NC}"
+        else
+            echo -e "${RED}❌ Error en sincronización manual${NC}"
+            return 1
+        fi
+    else
+        echo -e "${RED}❌ Script p10k-auto-sync no encontrado${NC}"
+        return 1
+    fi
+}
+
+# Procesar argumentos
+case "${1:-help}" in
+    "start")
+        echo -e "${YELLOW}🚀 Iniciando daemon P10k-Pywal...${NC}"
+        if systemctl --user start "$SERVICE_NAME"; then
+            echo -e "${GREEN}✅ Daemon iniciado correctamente${NC}"
+            sleep 2
+            show_status
+        else
+            echo -e "${RED}❌ Error al iniciar daemon${NC}"
+            exit 1
+        fi
+        ;;
+    
+    "stop")
+        echo -e "${YELLOW}🛑 Deteniendo daemon P10k-Pywal...${NC}"
+        if systemctl --user stop "$SERVICE_NAME" 2>/dev/null; then
+            echo -e "${GREEN}✅ Daemon detenido correctamente${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Daemon ya estaba detenido${NC}"
+        fi
+        ;;
+    
+    "restart")
+        echo -e "${YELLOW}🔄 Reiniciando daemon P10k-Pywal...${NC}"
+        systemctl --user restart "$SERVICE_NAME"
+        echo -e "${GREEN}✅ Daemon reiniciado${NC}"
+        sleep 2
+        show_status
+        ;;
+    
+    "status")
+        show_status
+        ;;
+    
+    "enable")
+        echo -e "${YELLOW}📌 Habilitando inicio automático...${NC}"
+        if systemctl --user enable "$SERVICE_NAME"; then
+            echo -e "${GREEN}✅ Inicio automático habilitado${NC}"
+        else
+            echo -e "${RED}❌ Error al habilitar inicio automático${NC}"
+            exit 1
+        fi
+        ;;
+    
+    "disable")
+        echo -e "${YELLOW}📌 Deshabilitando inicio automático...${NC}"
+        if systemctl --user disable "$SERVICE_NAME"; then
+            echo -e "${GREEN}✅ Inicio automático deshabilitado${NC}"
+        else
+            echo -e "${RED}❌ Error al deshabilitar inicio automático${NC}"
+            exit 1
+        fi
+        ;;
+    
+    "logs")
+        if [[ "${2:-}" == "-f" ]]; then
+            echo -e "${CYAN}📋 Siguiendo logs del daemon (Ctrl+C para salir):${NC}\n"
+            if [[ -f "$LOG_FILE" ]]; then
+                tail -f "$LOG_FILE"
+            else
+                echo -e "${YELLOW}⚠️  Archivo de log no existe aún${NC}"
+            fi
+        else
+            if [[ -f "$LOG_FILE" ]]; then
+                echo -e "${CYAN}📋 Últimas 50 líneas del log:${NC}\n"
+                tail -n 50 "$LOG_FILE"
+            else
+                echo -e "${YELLOW}⚠️  Archivo de log no existe aún${NC}"
+            fi
+        fi
+        ;;
+    
+    "test")
+        test_sync
+        ;;
+    
+    "clean")
+        clean_temp_files
+        ;;
+    
+    "help"|*)
+        show_help
+        ;;
+esac

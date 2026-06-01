@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Script optimizado para aplicar temas de pywal a Steam usando wal_steam
+# Uso: apply-steam-theme [--force-update]
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+STEAM_SKIN_DIR="$HOME/.steam/skins"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEAM] $1" >> "$LOG_FILE"
+}
+
+# Verificar si Steam está instalado
+if ! command -v steam > /dev/null 2>&1; then
+    log "WARNING: Steam no está instalado"
+    exit 0
+fi
+
+# Verificar si wal_steam está disponible
+if ! command -v wal_steam > /dev/null 2>&1; then
+    log "ERROR: wal_steam no está instalado"
+    exit 1
+fi
+
+# Verificar si pywal ha generado colores
+if [ ! -f "$HOME/.cache/wal/colors" ]; then
+    log "ERROR: No se encontraron colores de pywal"
+    exit 1
+fi
+
+log "Iniciando aplicación de tema a Steam"
+
+# Crear directorio de skins si no existe
+mkdir -p "$STEAM_SKIN_DIR"
+
+# Aplicar tema con wal_steam
+if [[ "$1" == "--force-update" ]]; then
+    log "Aplicando tema de Steam con actualización forzada"
+    timeout 15 wal_steam -w -u -d 2>&1 | while IFS= read -r line; do
+        log "$line"
+    done
+    RESULT=${PIPESTATUS[0]}
+else
+    log "Aplicando tema de Steam"
+    timeout 15 wal_steam -w -d 2>&1 | while IFS= read -r line; do
+        log "$line"
+    done
+    RESULT=${PIPESTATUS[0]}
+fi
+
+# Verificar el resultado
+if [ $RESULT -eq 0 ]; then
+    log "Tema de Steam aplicado exitosamente"
+    
+    # Verificar si Steam está corriendo y sugerir reinicio
+    if pgrep -x "steam" > /dev/null; then
+        log "Steam está corriendo - el tema se aplicará al reiniciar Steam"
+        # Opcional: Notificar al usuario
+        notify-send "🎮 Tema Steam Aplicado" "Reinicia Steam para ver los cambios" 2>/dev/null || true
+    else
+        log "Steam no está corriendo - el tema se aplicará cuando inicies Steam"
+    fi
+elif [ $RESULT -eq 124 ]; then
+    log "WARNING: wal_steam tardó más de lo esperado (timeout)"
+else
+    log "ERROR: wal_steam falló con código de salida $RESULT"
+fi
+
+exit $RESULT

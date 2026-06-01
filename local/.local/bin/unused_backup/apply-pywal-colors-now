@@ -1,0 +1,181 @@
+#!/bin/bash
+
+# Script para aplicar colores de pywal inmediatamente en la sesión actual
+# Este script debe ejecutarse DESPUÉS de pywal-sync para aplicar cambios visualmente
+
+set -euo pipefail
+
+echo "🔄 Aplicando colores de pywal inmediatamente..."
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ APLICAR COLORES DE KITTY ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+apply_kitty_colors() {
+    local kitty_colors="$HOME/.cache/wal/colors-kitty.conf"
+    
+    if [[ ! -f "$kitty_colors" ]]; then
+        echo "❌ Archivo de colores de Kitty no encontrado: $kitty_colors"
+        return 1
+    fi
+    
+    echo "🐱 Aplicando colores a Kitty..."
+    
+    # Método 1: Remote control (más efectivo)
+    if [[ -S /tmp/kitty-socket ]] && command -v kitty >/dev/null 2>&1; then
+        if kitty @ --to unix:/tmp/kitty-socket set-colors --all "$kitty_colors" 2>/dev/null; then
+            echo "✅ Colores aplicados a Kitty via remote control"
+            return 0
+        else
+            echo "⚠️ Remote control falló, probando otros métodos..."
+        fi
+    fi
+    
+    # Método 2: Recargar configuración completa de Kitty
+    if command -v kitty >/dev/null 2>&1; then
+        # Enviar señal de recarga a todas las instancias
+        pkill -USR1 kitty 2>/dev/null || true
+        echo "📤 Señal de recarga enviada a Kitty"
+        
+        # Si estamos en una sesión de Kitty, recargar configuración
+        if [[ "${TERM}" == "xterm-kitty" ]] || [[ "${KITTY_WINDOW_ID:-}" ]]; then
+            # Usar escape sequences para recargar colores
+            printf '\e]0;Reloading Kitty colors...\a'
+            
+            # Leer colores del archivo y aplicarlos via escape sequences
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^(foreground|background|cursor|selection_foreground|selection_background|url_color)\ (.+)$ ]]; then
+                    local property="${BASH_REMATCH[1]}"
+                    local color="${BASH_REMATCH[2]}"
+                    
+                    case "$property" in
+                        "foreground") printf '\e]10;%s\a' "$color" ;;
+                        "background") printf '\e]11;%s\a' "$color" ;;
+                        "cursor") printf '\e]12;%s\a' "$color" ;;
+                    esac
+                fi
+            done < "$kitty_colors"
+            
+            echo "🎨 Escape sequences enviadas para actualizar colores"
+        fi
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ APLICAR COLORES DE POWERLEVEL10K ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+apply_p10k_colors() {
+    local p10k_colors="$HOME/.cache/wal/p10k-colors.zsh"
+    
+    if [[ ! -f "$p10k_colors" ]]; then
+        echo "❌ Archivo de colores de P10k no encontrado: $p10k_colors"
+        return 1
+    fi
+    
+    echo "🎨 Aplicando colores a Powerlevel10k..."
+    
+    # Solo funciona si estamos en una sesión de zsh
+    if [[ "${SHELL##*/}" != "zsh" ]] && [[ -z "${ZSH_VERSION:-}" ]]; then
+        echo "⚠️ No estamos en zsh, aplicando via señales a procesos zsh..."
+        
+        # Enviar señal a todos los procesos zsh
+        local zsh_pids
+        readarray -t zsh_pids < <(pgrep -x zsh 2>/dev/null || true)
+        
+        for pid in "${zsh_pids[@]}"; do
+            if [[ -n "$pid" ]] && [[ -e "/proc/$pid" ]]; then
+                kill -USR1 "$pid" 2>/dev/null || true
+                echo "📤 Señal USR1 enviada a zsh PID: $pid"
+            fi
+        done
+        return 0
+    fi
+    
+    # Si estamos en zsh, aplicar directamente
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        echo "🎯 Aplicando en sesión zsh actual..."
+        
+        # Cargar el archivo de colores
+        source "$p10k_colors"
+        
+        # Verificar si powerlevel10k está cargado
+        if [[ "${+functions[p10k]}" == 1 ]]; then
+            echo "🔄 Recargando Powerlevel10k..."
+            p10k reload
+            echo "✅ Powerlevel10k recargado con nuevos colores"
+        else
+            echo "⚠️ Powerlevel10k no está cargado en esta sesión"
+        fi
+        
+        # Forzar actualización del prompt actual
+        if [[ "${+functions[zle]}" == 1 ]]; then
+            zle reset-prompt 2>/dev/null || true
+        fi
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ APLICAR COLORES DE TERMINAL ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+apply_terminal_colors() {
+    echo "🖥️ Aplicando colores base del terminal..."
+    
+    # Aplicar secuencias de pywal si están disponibles
+    local sequences_file="$HOME/.cache/wal/sequences"
+    if [[ -f "$sequences_file" ]]; then
+        cat "$sequences_file"
+        echo "🎨 Secuencias de colores aplicadas"
+    fi
+    
+    # Aplicar colores TTY si están disponibles
+    local tty_colors="$HOME/.cache/wal/colors-tty.sh"
+    if [[ -f "$tty_colors" ]]; then
+        source "$tty_colors"
+        echo "🖥️ Colores TTY aplicados"
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIÓN PRINCIPAL ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+main() {
+    echo "🚀 Aplicando colores de pywal inmediatamente..."
+    echo "📍 Terminal actual: ${TERM:-unknown}"
+    echo "🐚 Shell actual: ${SHELL##*/} ${ZSH_VERSION:-${BASH_VERSION:-unknown}}"
+    echo ""
+    
+    local success=true
+    
+    # Aplicar colores base del terminal primero
+    apply_terminal_colors
+    echo ""
+    
+    # Aplicar colores de Kitty
+    if ! apply_kitty_colors; then
+        echo "⚠️ Algunos problemas aplicando colores de Kitty"
+        success=false
+    fi
+    echo ""
+    
+    # Aplicar colores de Powerlevel10k
+    if ! apply_p10k_colors; then
+        echo "⚠️ Algunos problemas aplicando colores de Powerlevel10k"
+        success=false
+    fi
+    echo ""
+    
+    if [[ "$success" == "true" ]]; then
+        echo "🎉 ¡Colores aplicados exitosamente!"
+        echo "💡 Si no ves cambios inmediatos, prueba abrir un nuevo terminal"
+    else
+        echo "⚠️ Aplicación completada con algunas advertencias"
+        echo "🔄 Para aplicar completamente: reinicia el terminal o ejecuta 'source ~/.zshrc'"
+    fi
+    
+    # Consejo final
+    echo ""
+    echo "🎯 CONSEJOS:"
+    echo "  • Para Kitty: Los cambios se aplican mejor con Ctrl+Shift+F5 (recargar config)"
+    echo "  • Para P10k: Los cambios se ven mejor en terminales nuevos"
+    echo "  • Ejecuta 'source ~/.zshrc' para cargar completamente los cambios"
+}
+
+# Ejecutar si se llama directamente
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -1,0 +1,204 @@
+#!/bin/bash
+
+# Script para generar tema CSS de Mission Center basado en colores de pywal
+# Autor: Asistente AI
+
+PYWAL_JSON="$HOME/.cache/wal/colors.json"
+GTK3_CSS="$HOME/.config/gtk-3.0/gtk.css"
+GTK4_CSS="$HOME/.config/gtk-4.0/gtk.css"
+
+if [ ! -f "$PYWAL_JSON" ]; then
+    echo "Error: No se encontraron colores de pywal en $PYWAL_JSON"
+    exit 1
+fi
+
+# Extraer colores de pywal usando python
+eval $(python3 -c "
+import json
+with open('$PYWAL_JSON', 'r') as f:
+    data = json.load(f)
+print('BACKGROUND=' + data['special']['background'])
+print('FOREGROUND=' + data['special']['foreground'])
+print('COLOR1=' + data['colors']['color1'])
+print('COLOR2=' + data['colors']['color2'])
+print('COLOR3=' + data['colors']['color3'])
+print('COLOR4=' + data['colors']['color4'])
+print('COLOR5=' + data['colors']['color5'])
+print('COLOR8=' + data['colors']['color8'])
+")
+
+# Crear el archivo CSS temporal
+cat << EOF > /tmp/mission_center_theme.css
+/* Mission Center - Tema Pywal personalizado */
+
+/* Aplicación específica Mission Center */
+window[title*="Mission Center"],
+.missioncenter,
+#missioncenter {
+    background: $BACKGROUND;
+    color: $FOREGROUND;
+}
+
+/* Paneles principales */
+window[title*="Mission Center"] .content-view,
+window[title*="Mission Center"] .sidebar,
+window[title*="Mission Center"] .main-content {
+    background: $BACKGROUND;
+    color: $FOREGROUND;
+}
+
+/* Headers y toolbars */
+window[title*="Mission Center"] headerbar,
+window[title*="Mission Center"] .titlebar,
+window[title*="Mission Center"] toolbar {
+    background: $COLOR8;
+    color: $FOREGROUND;
+    border-bottom: 1px solid $COLOR1;
+}
+
+/* Gráficas y medidores */
+window[title*="Mission Center"] .chart-area,
+window[title*="Mission Center"] .graph {
+    background: $BACKGROUND;
+    border: 1px solid $COLOR1;
+}
+
+/* Barras de progreso y medidores */
+window[title*="Mission Center"] progressbar progress,
+window[title*="Mission Center"] .progress-bar {
+    background: linear-gradient(90deg, $COLOR1, $COLOR3, $COLOR5);
+    border-radius: 4px;
+}
+
+window[title*="Mission Center"] progressbar trough {
+    background: $COLOR8;
+    border-radius: 4px;
+}
+
+/* Listas y filas */
+window[title*="Mission Center"] listbox row,
+window[title*="Mission Center"] .list-row {
+    background: $COLOR8;
+    color: $FOREGROUND;
+    border-bottom: 1px solid $COLOR1;
+}
+
+window[title*="Mission Center"] listbox row:hover,
+window[title*="Mission Center"] .list-row:hover {
+    background: $COLOR1;
+    color: $BACKGROUND;
+}
+
+window[title*="Mission Center"] listbox row:selected,
+window[title*="Mission Center"] .list-row:selected {
+    background: $COLOR3;
+    color: $BACKGROUND;
+}
+
+/* Botones */
+window[title*="Mission Center"] button {
+    background: $COLOR2;
+    color: $BACKGROUND;
+    border: 1px solid $COLOR3;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+
+window[title*="Mission Center"] button:hover {
+    background: $COLOR3;
+    border-color: $COLOR4;
+}
+
+window[title*="Mission Center"] button:active,
+window[title*="Mission Center"] button:checked {
+    background: $COLOR1;
+    border-color: $COLOR5;
+}
+
+/* Entradas de texto */
+window[title*="Mission Center"] entry {
+    background: $COLOR8;
+    color: $FOREGROUND;
+    border: 1px solid $COLOR1;
+    border-radius: 4px;
+}
+
+window[title*="Mission Center"] entry:focus {
+    border-color: $COLOR3;
+    box-shadow: 0 0 4px $COLOR3;
+}
+
+/* Notebooks y tabs */
+window[title*="Mission Center"] notebook tab {
+    background: $COLOR8;
+    color: $FOREGROUND;
+    border: 1px solid $COLOR1;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    padding: 8px 16px;
+}
+
+window[title*="Mission Center"] notebook tab:checked,
+window[title*="Mission Center"] notebook tab:active {
+    background: $BACKGROUND;
+    border-bottom: 2px solid $COLOR1;
+}
+
+window[title*="Mission Center"] notebook > stack {
+    background: $BACKGROUND;
+    border: 1px solid $COLOR1;
+    border-radius: 0 0 6px 6px;
+}
+
+/* Scrollbars */
+window[title*="Mission Center"] scrollbar slider {
+    background: $COLOR1;
+    border-radius: 10px;
+}
+
+window[title*="Mission Center"] scrollbar trough {
+    background: $COLOR8;
+}
+
+/* Separadores */
+window[title*="Mission Center"] separator {
+    background: $COLOR1;
+}
+
+/* Tooltips */
+window[title*="Mission Center"] tooltip {
+    background: $COLOR8;
+    color: $FOREGROUND;
+    border: 1px solid $COLOR1;
+    border-radius: 4px;
+}
+EOF
+
+# Leer el CSS generado
+MISSION_CENTER_CSS=$(cat /tmp/mission_center_theme.css)
+
+# Agregar el CSS a los archivos de GTK existentes
+if [ -f "$GTK3_CSS" ]; then
+    # Eliminar CSS anterior de Mission Center si existe
+    sed -i '/\/\* Mission Center - Tema Pywal personalizado \*\//,/\/\* Fin Mission Center \*\//d' "$GTK3_CSS"
+    echo -e "\n$MISSION_CENTER_CSS\n/* Fin Mission Center */" >> "$GTK3_CSS"
+    echo "✅ Tema Mission Center agregado a GTK3"
+fi
+
+if [ -f "$GTK4_CSS" ]; then
+    # Eliminar CSS anterior de Mission Center si existe
+    sed -i '/\/\* Mission Center - Tema Pywal personalizado \*\//,/\/\* Fin Mission Center \*\//d' "$GTK4_CSS"
+    echo -e "\n$MISSION_CENTER_CSS\n/* Fin Mission Center */" >> "$GTK4_CSS"
+    echo "✅ Tema Mission Center agregado a GTK4"
+fi
+
+echo "🎨 Tema de Mission Center actualizado con colores de pywal"
+echo "📋 Colores utilizados:"
+echo "   Background: $BACKGROUND"
+echo "   Foreground: $FOREGROUND"
+echo "   Accent: $COLOR1"
+echo "   Secondary: $COLOR3"
+echo "   Tertiary: $COLOR5"
+
+echo ""
+echo "🔄 Reinicia Mission Center para ver los cambios."

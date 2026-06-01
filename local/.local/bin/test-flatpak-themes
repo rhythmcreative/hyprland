@@ -1,0 +1,27 @@
+#!/bin/bash
+# Script para probar temas en aplicaciones Flatpak
+
+echo "🎨 Probando tema pywal en aplicaciones Flatpak..."
+echo
+
+echo "📱 Abriendo Mission Center..."
+flatpak run io.missioncenter.MissionCenter &
+MISSION_PID=$!
+sleep 2
+
+echo "🍷 Abriendo Sober..."
+flatpak run org.vinegarhq.Sober &
+SOBER_PID=$!
+
+echo
+echo "✅ Aplicaciones abiertas. Verifica que los temas se apliquen correctamente."
+echo "💡 Los colores deberían coincidir con tu tema pywal actual."
+echo
+echo "Presiona Enter para cerrar las aplicaciones de prueba..."
+read
+
+# Cerrar aplicaciones
+flatpak kill io.missioncenter.MissionCenter 2>/dev/null || kill $MISSION_PID 2>/dev/null || true
+flatpak kill org.vinegarhq.Sober 2>/dev/null || kill $SOBER_PID 2>/dev/null || true
+
+echo "🔄 Aplicaciones cerradas."

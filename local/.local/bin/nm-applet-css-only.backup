@@ -1,0 +1,452 @@
+#!/bin/bash
+
+# nm-applet CSS updater with auto-restart - VERSIÓN LOCAL
+# Actualiza SOLO los CSS de nm-applet sin afectar configuraciones globales
+# NO modifica archivos CSS globales ni configuraciones del sistema
+
+echo "🎨 Actualizando CSS de nm-applet (SOLO LOCAL) con colores de pywal..."
+
+# Verificar pywal
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Cargar colores
+source "$HOME/.cache/wal/colors.sh"
+
+echo "✅ Usando colores: bg=$background, fg=$foreground, accent=$color4"
+
+# Crear SOLO directorio específico para nm-applet (NO directorios globales)
+mkdir -p "$HOME/.config/nm-applet"
+mkdir -p "$HOME/.themes/NmAppletOnly/gtk-3.0" "$HOME/.themes/NmAppletOnly/gtk-4.0"
+
+# Crear CSS específico SOLO para nm-applet (no global)
+cat > "$HOME/.config/nm-applet/nm-applet-pywal.css" << EOF
+/* nm-applet pywal CSS - SOLO PARA NM-APPLET (no afecta otros componentes) */
+
+/* Selectores específicos para nm-applet únicamente */
+#nm-applet-menu,
+.nm-applet,
+.nm-applet *,
+.context-menu.nm-applet,
+.context-menu.nm-applet * {
+    background-color: $background !important;
+    color: $foreground !important;
+    border-color: $color4 !important;
+    -gtk-theme-bg-color: $background !important;
+    -gtk-theme-fg-color: $foreground !important;
+}
+
+/* Menús de nm-applet específicamente */
+.nm-applet menu,
+.nm-applet .menu,
+#nm-applet-menu {
+    background-color: $background !important;
+    color: $foreground !important;
+    border: 1px solid $color4 !important;
+    border-radius: 8px !important;
+}
+
+/* Items de menú de nm-applet */
+.nm-applet menuitem,
+.nm-applet .menuitem,
+#nm-applet-menu menuitem {
+    background-color: $background !important;
+    color: $foreground !important;
+    padding: 8px 12px !important;
+    border: none !important;
+}
+
+/* Items hover de nm-applet */
+.nm-applet menuitem:hover,
+.nm-applet .menuitem:hover,
+#nm-applet-menu menuitem:hover {
+    background-color: $color4 !important;
+    color: $background !important;
+    border-radius: 4px !important;
+}
+
+/* Botones de nm-applet */
+.nm-applet button,
+.nm-applet .button {
+    background-color: $color4 !important;
+    color: $background !important;
+    border: 1px solid $color4 !important;
+    border-radius: 6px !important;
+}
+
+/* Labels de nm-applet */
+.nm-applet label,
+.nm-applet .label {
+    color: $foreground !important;
+    background: transparent !important;
+}
+EOF
+
+# Crear tema personalizado PywalDark
+cat > "$HOME/.themes/PywalDark/gtk-3.0/gtk.css" << EOF
+/* PywalDark - Tema personalizado con colores pywal */
+@import url('resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css');
+
+/* Override con colores pywal */
+@define-color theme_bg_color $background;
+@define-color theme_fg_color $foreground;
+@define-color theme_base_color $background;
+@define-color theme_text_color $foreground;
+@define-color theme_selected_bg_color $color4;
+@define-color theme_selected_fg_color $background;
+@define-color borders alpha($color4, 0.5);
+@define-color unfocused_borders alpha($color4, 0.3);
+
+/* Forzar colores específicos */
+* {
+    background-color: $background !important;
+    color: $foreground !important;
+}
+
+menu, .menu {
+    background-color: $background !important;
+    color: $foreground !important;
+    border: 1px solid $color4 !important;
+}
+
+menuitem:hover {
+    background-color: $color4 !important;
+    color: $background !important;
+}
+
+button {
+    background-color: $color4 !important;
+    color: $background !important;
+    border: 1px solid $color4 !important;
+}
+EOF
+
+# Copiar tema a GTK4
+cp "$HOME/.themes/PywalDark/gtk-3.0/gtk.css" "$HOME/.themes/PywalDark/gtk-4.0/gtk.css"
+
+# Copiar a GTK4
+cp "$HOME/.config/gtk-3.0/nm-applet-pywal.css" "$HOME/.config/gtk-4.0/nm-applet-pywal.css"
+
+# Aplicar configuración GTK con múltiples métodos
+echo "🎨 Aplicando tema PywalDark..."
+
+# Crear configuración específica para nm-applet PRIMERO
+cat > "$HOME/.config/gtk-3.0/nm-applet-override.css" << EOF
+/* OVERRIDE AGRESIVO PARA NM-APPLET - Aplicar colores pywal */
+
+/* Forzar colores de fondo y texto para TODOS los elementos */
+.nm-applet,
+.nm-applet *,
+GtkMenu,
+GtkMenu *,
+GtkMenuItem,
+GtkMenuItem *,
+GtkButton,
+GtkButton *,
+GtkLabel,
+GtkLabel *,
+GtkBox,
+GtkBox *,
+GtkImage,
+GtkImage *,
+GtkSeparator,
+GtkSeparator *,
+GtkCheckButton,
+GtkCheckButton *,
+.context-menu,
+.context-menu *,
+.menu,
+.menu *,
+.menuitem,
+.menuitem *,
+.button,
+.button *,
+window,
+window *,
+popover,
+popover *,
+dialog,
+dialog * {
+    background-color: $background !important;
+    background-image: none !important;
+    color: $foreground !important;
+    border-color: $color4 !important;
+    -gtk-theme-bg-color: $background !important;
+    -gtk-theme-fg-color: $foreground !important;
+    -gtk-theme-text-color: $foreground !important;
+    -gtk-theme-base-color: $background !important;
+    -gtk-theme-selected-bg-color: $color4 !important;
+    -gtk-theme-selected-fg-color: $background !important;
+}
+
+/* Estados hover y activo */
+.nm-applet *:hover,
+GtkMenuItem:hover,
+GtkMenuItem:hover *,
+GtkButton:hover,
+GtkButton:hover *,
+.menuitem:hover,
+.menuitem:hover *,
+.button:hover,
+.button:hover * {
+    background-color: $color4 !important;
+    color: $background !important;
+    border-color: $color4 !important;
+}
+
+/* Estados seleccionados y activos */
+.nm-applet *:selected,
+.nm-applet *:active,
+GtkMenuItem:selected,
+GtkMenuItem:active,
+GtkMenuItem:selected *,
+GtkMenuItem:active *,
+.menuitem:selected,
+.menuitem:active,
+.menuitem:selected *,
+.menuitem:active * {
+    background-color: $color4 !important;
+    color: $background !important;
+    border-color: $color4 !important;
+}
+
+/* Checkboxes y elementos de control */
+.nm-applet GtkCheckButton:checked,
+.nm-applet GtkCheckButton:checked *,
+GtkCheckButton:checked,
+GtkCheckButton:checked * {
+    background-color: $color4 !important;
+    color: $background !important;
+}
+
+/* Separadores */
+.nm-applet GtkSeparator,
+GtkSeparator {
+    background-color: $color8 !important;
+    color: $color8 !important;
+}
+
+/* Ventanas y contenedores principales */
+.nm-applet window,
+GtkWindow {
+    background-color: $background !important;
+    color: $foreground !important;
+    border: 1px solid $color4 !important;
+    border-radius: 8px !important;
+}
+EOF
+
+# Crear tema completo personalizado para nm-applet
+cat > "$HOME/.themes/NmAppletPywal/gtk-3.0/gtk.css" << EOF
+/* Tema completo personalizado para nm-applet con colores pywal */
+@import url('resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css');
+
+/* Definir colores base pywal */
+@define-color theme_bg_color $background;
+@define-color theme_fg_color $foreground;
+@define-color theme_base_color $background;
+@define-color theme_text_color $foreground;
+@define-color theme_selected_bg_color $color4;
+@define-color theme_selected_fg_color $background;
+@define-color borders $color8;
+@define-color unfocused_borders alpha($color8, 0.5);
+@define-color warning_color $color3;
+@define-color error_color $color1;
+@define-color success_color $color5;
+@define-color theme_unfocused_bg_color $background;
+@define-color theme_unfocused_fg_color mix($foreground, $background, 0.7);
+@define-color theme_unfocused_text_color mix($foreground, $background, 0.7);
+@define-color theme_unfocused_base_color $background;
+@define-color theme_unfocused_selected_bg_color alpha($color4, 0.8);
+@define-color theme_unfocused_selected_fg_color $foreground;
+@define-color theme_button_background_normal $background;
+@define-color theme_button_foreground_normal $foreground;
+@define-color theme_button_background_active $color4;
+@define-color theme_button_foreground_active $background;
+@define-color theme_button_background_hover alpha($color4, 0.8);
+@define-color theme_button_foreground_hover $foreground;
+@define-color theme_button_background_backdrop $background;
+@define-color theme_button_foreground_backdrop mix($foreground, $background, 0.7);
+
+/* Aplicar colores agresivamente */
+* {
+    background-color: $background;
+    color: $foreground;
+}
+
+window {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color8;
+}
+
+menu,
+.menu {
+    background-color: $background;
+    color: $foreground;
+    border: 1px solid $color4;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+menuitem,
+.menuitem {
+    background-color: transparent;
+    color: $foreground;
+    padding: 8px 12px;
+    border-radius: 4px;
+}
+
+menuitem:hover,
+.menuitem:hover {
+    background-color: $color4;
+    color: $background;
+}
+
+button {
+    background-color: $color4;
+    color: $background;
+    border: 1px solid $color4;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: $foreground;
+    color: $background;
+    border-color: $foreground;
+}
+
+label {
+    color: $foreground;
+    background: transparent;
+}
+
+separator {
+    background-color: $color8;
+    color: $color8;
+    margin: 4px 0;
+    min-height: 1px;
+}
+
+checkbutton,
+radiobutton {
+    color: $foreground;
+    background-color: transparent;
+}
+
+checkbutton:checked,
+radiobutton:checked {
+    color: $color4;
+    background-color: alpha($color4, 0.2);
+}
+EOF
+
+# Crear directorio del tema si no existe
+mkdir -p "$HOME/.themes/NmAppletPywal/gtk-3.0"
+mkdir -p "$HOME/.themes/NmAppletPywal/gtk-4.0"
+
+# Copiar a GTK4
+cp "$HOME/.themes/NmAppletPywal/gtk-3.0/gtk.css" "$HOME/.themes/NmAppletPywal/gtk-4.0/gtk.css"
+
+# Método 1: GSSettings - Usar nuestro tema personalizado
+gsettings set org.gnome.desktop.interface gtk-theme "NmAppletPywal" 2>/dev/null || true
+gsettings set org.gnome.desktop.interface icon-theme "Adwaita" 2>/dev/null || true
+gsettings set org.gnome.desktop.interface cursor-theme "Adwaita" 2>/dev/null || true
+gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+
+# Método 2: Variables de entorno
+export GTK_THEME="NmAppletPywal"
+export GTK_CSS_FILE="$HOME/.config/gtk-3.0/gtk.css"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+
+# Método 3: Crear gtkrc-2.0 para aplicaciones GTK2
+cat > "$HOME/.gtkrc-2.0" << EOF
+gtk-theme-name="NmAppletPywal"
+gtk-icon-theme-name="Adwaita"
+gtk-cursor-theme-name="Adwaita"
+gtk-color-scheme="base_color:$background\nfg_color:$foreground\nbg_color:$background\ntext_color:$foreground\nselected_bg_color:$color4\nselected_fg_color:$background"
+EOF
+
+# Método 4: Forzar recarga de base de datos de temas
+gtk-update-icon-cache -f -t "$HOME/.themes/NmAppletPywal/" 2>/dev/null || true
+
+# Actualizar gtk.css para incluir todos nuestros overrides
+for dir in "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"; do
+    css="$dir/gtk.css"
+    
+    # Crear gtk.css con nuestros imports
+    cat > "$css" << EOF
+@import "nm-applet-pywal.css";
+@import "nm-applet-override.css";
+EOF
+    
+    echo "✅ Actualizado $css con imports pywal"
+done
+
+# Copiar override a GTK4
+cp "$HOME/.config/gtk-3.0/nm-applet-override.css" "$HOME/.config/gtk-4.0/nm-applet-override.css"
+
+# Reiniciar nm-applet para aplicar los cambios inmediatamente
+echo "🔄 Reiniciando nm-applet para aplicar los nuevos colores..."
+
+# Obtener PID actual del script para excluirlo
+SCRIPT_PID=$$
+echo "🔍 Script PID: $SCRIPT_PID"
+
+# Terminar solo procesos nm-applet ejecutables, no scripts
+# Usar pgrep para obtener PIDs específicos y evitar matar el script
+NM_PIDS=$(pgrep -x nm-applet 2>/dev/null || true)
+if [[ -n "$NM_PIDS" ]]; then
+    echo "🔄 Terminando procesos nm-applet existentes: $NM_PIDS"
+    for pid in $NM_PIDS; do
+        # Solo matar si no es el PID del script actual
+        if [[ "$pid" != "$SCRIPT_PID" ]]; then
+            kill "$pid" 2>/dev/null || true
+        fi
+    done
+    sleep 1
+    
+    # Segunda pasada con SIGKILL si es necesario
+    for pid in $NM_PIDS; do
+        if [[ "$pid" != "$SCRIPT_PID" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+else
+    echo "ℹ️  No se encontraron procesos nm-applet ejecutándose"
+fi
+
+sleep 1
+
+# Limpiar cache de GTK para forzar recarga
+rm -rf "$HOME/.cache/gtk-3.0" 2>/dev/null || true
+rm -rf "$HOME/.cache/gtk-4.0" 2>/dev/null || true
+
+echo "📡 Iniciando nm-applet con los nuevos colores..."
+
+# Iniciar nm-applet con variables de entorno específicas
+# Usar Arc-Dark en lugar de PywalDark para mayor compatibilidad
+GTK_THEME="Arc-Dark" GTK_CSS_FILE="$HOME/.config/gtk-3.0/gtk.css" nohup nm-applet > /dev/null 2>&1 &
+NM_NEW_PID=$!
+
+# Esperar y verificar que se haya iniciado correctamente
+sleep 2
+if kill -0 "$NM_NEW_PID" 2>/dev/null && pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet iniciado correctamente (PID: $NM_NEW_PID)"
+else
+    echo "⚠️  Reintentando iniciar nm-applet..."
+    # Intento de respaldo sin variables específicas
+    nohup nm-applet > /dev/null 2>&1 &
+    sleep 2
+    if pgrep -x nm-applet > /dev/null; then
+        echo "✅ nm-applet iniciado en modo de respaldo"
+    else
+        echo "❌ ERROR: No se pudo iniciar nm-applet"
+    fi
+fi
+
+echo "✅ CSS actualizado y nm-applet reiniciado con los nuevos colores"
+notify-send "🎨 nm-applet" "Reiniciado con colores de pywal" -t 2000 2>/dev/null || true

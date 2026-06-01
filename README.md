@@ -31,11 +31,10 @@ Personal arch linux configuration built around **hyprland**, featuring a dynamic
 ### Bar & ui
 * Waybar
 * Rofi
-* Mako (notifications)
 * Quickshell
 
 ### Utilities
-* Pywal (color synchronization)
+* Pywal
 * Fastfetch
 * Hyprlock & hypridle
 * Thunar & dolphin

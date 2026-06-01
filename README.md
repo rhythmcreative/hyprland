@@ -1,48 +1,139 @@
-# Rhythm arch Hyprland
+# Sistema Automático de Wallpapers con Hellwal
 
-Personal Hyprland for a hyprland-based arch linux setup.
+Este sistema permite cambiar automáticamente el fondo de pantalla en Hyprland y sincronizar los colores con Kitty usando `hellwal`.
 
-## Features
-- Window manager: hyprland
-- Terminal: kitty
-- Shell: zsh (with starship & oh-my-zsh)
-- Styling: pywal (automated color schemes)
-- Bar: waybar
-- Launcher: rofi
-- Notifications: mako
-- Custom scripts: a large collection of scripts in `~/.local/bin` for theme management, wallpaper switching, and system sync.
+## Características
 
-## Installation
+- ✅ Cambio automático de wallpaper con `hellwal`
+- ✅ Generación automática de colores para Hyprland y Kitty
+- ✅ Daemon para cambio automático cada X minutos
+- ✅ Keybindings integrados en Hyprland
+- ✅ Templates personalizados para hellwal
+- ✅ Recarga automática de configuraciones
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/Hyprland.git ~/Hyprland
-   cd ~/Hyprland
-   ```
+## Estructura de Archivos
 
-2. Run the installation script:
-   ```bash
-   ./install.sh
-   ```
+```
+~/.local/bin/
+├── change-wallpaper.sh     # Script principal para cambiar wallpaper
+├── auto-wallpaper.sh       # Daemon para cambio automático
+└── README.md               # Este archivo
 
-The script will:
-- Install yay if not present.
-- Install all necessary packages from packages.txt.
-- Symlink configuration files using stow.
-- Set up zsh and oh-my-zsh.
+~/.config/hellwal/templates/
+├── colors.conf             # Template para Hyprland
+└── colors-kitty.conf       # Template para Kitty
 
-## Structure
-- `config/`: contents of `~/.config/`.
-- `local/`: contents of `~/.local/bin/`.
-- `zsh/`: zsh configuration.
-- `bash/`: bash configuration.
-- `packages.txt`: list of explicitly installed packages via pacman/aur.
-- `flatpaks.txt`: list of installed flatpak applications.
-- Wallpapers: the installer automatically downloads a high-quality wallpaper collection from `bjarneo/wallpapers` if your folder is empty.
+~/Pictures/wallpapers/      # Directorio de wallpapers
+```
 
-## Custom scripts
-This setup includes many scripts in `~/.local/bin`. Some key ones:
-- `change-theme`: switch between different system-wide themes.
-- `change-wallpaper`: update wallpaper and sync colors via pywal.
-- `waybar-restart`: restart the waybar.
-- `sync-pywal-all`: synchronize colors across all supported applications.
+## Uso Manual
+
+### Cambiar wallpaper una vez
+
+```bash
+# Cambiar a un wallpaper aleatorio
+change-wallpaper.sh --random
+
+# Cambiar a un wallpaper específico
+change-wallpaper.sh imagen.jpg
+
+# Listar wallpapers disponibles
+change-wallpaper.sh --list
+
+# Usar directorio personalizado
+change-wallpaper.sh --dir ~/Images --random
+```
+
+### Sistema Automático
+
+```bash
+# Iniciar daemon (cambio cada 30 minutos por defecto)
+auto-wallpaper.sh --start
+
+# Iniciar con intervalo personalizado (15 minutos)
+auto-wallpaper.sh --start --interval 15
+
+# Ver estado del daemon
+auto-wallpaper.sh --status
+
+# Detener daemon
+auto-wallpaper.sh --stop
+
+# Reiniciar daemon
+auto-wallpaper.sh --restart
+```
+
+## Keybindings en Hyprland
+
+- `Super + W`: Cambiar wallpaper aleatorio
+- `Super + Shift + W`: Ver estado del daemon automático
+
+## Agregar Wallpapers
+
+1. Coloca tus imágenes en `~/Pictures/wallpapers/`
+2. Formatos soportados: JPG, PNG, WEBP
+3. Las imágenes se seleccionarán aleatoriamente
+
+```bash
+# Ejemplo: copiar imágenes
+cp ~/Downloads/*.jpg ~/Pictures/wallpapers/
+cp ~/Downloads/*.png ~/Pictures/wallpapers/
+```
+
+## Configuración Automática al Inicio
+
+Para que se inicie automáticamente con tu sesión de Hyprland:
+
+```bash
+# Habilitar servicio systemd
+systemctl --user enable auto-wallpaper.service
+```
+
+## Solución de Problemas
+
+### El wallpaper no cambia
+- Verifica que `hyprpaper` esté corriendo: `pgrep hyprpaper`
+- Revisa que las imágenes estén en el directorio correcto
+- Verifica permisos: `ls -la ~/Pictures/wallpapers/`
+
+### Los colores no se aplican a Kitty
+- Verifica que Kitty esté corriendo: `pgrep kitty`
+- Revisa el archivo de colores: `~/.config/kitty/colors.conf`
+- Reinicia Kitty manualmente
+
+### Hellwal falla
+- Verifica instalación: `which hellwal`
+- Revisa que la imagen sea válida: `file imagen.jpg`
+- Verifica templates: `ls ~/.config/hellwal/templates/`
+
+### Ver logs
+```bash
+# Ver output del daemon
+journalctl --user -u auto-wallpaper.service -f
+```
+
+## Personalización
+
+### Cambiar intervalo por defecto
+Edita `auto-wallpaper.sh` y cambia `DEFAULT_INTERVAL=1800` (en segundos)
+
+### Personalizar templates de hellwal
+Edita los archivos en `~/.config/hellwal/templates/` para personalizar cómo se generan los colores.
+
+### Agregar más aplicaciones
+Modifica `change-wallpaper.sh` para incluir más aplicaciones que usen los colores generados por hellwal.
+
+## Dependencias
+
+- `hellwal`: Generador de colores
+- `hyprpaper`: Gestor de wallpapers para Hyprland
+- `kitty`: Terminal (opcional)
+- `find`, `shuf`: Utilidades del sistema
+
+## Archivos de Configuración Modificados
+
+- `~/.config/hypr/hyprland.conf`: Keybindings y source de colores
+- `~/.config/hypr/hyprpaper.conf`: Configuración de wallpaper
+- `~/.config/hypr/colors.conf`: Colores generados por hellwal
+- `~/.config/kitty/colors.conf`: Colores para Kitty
+- `~/.bashrc`: PATH actualizado

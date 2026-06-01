@@ -130,12 +130,22 @@ step_software() {
     if [[ $SELECTED_SW == *"Flatpaks"* ]]; then
         if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
             header "Instalando Flatpaks"
-            flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+            # Asegurar que flatpak esté instalado (ya está en CORE_PKGS, pero por si acaso)
+            if ! command -v flatpak > /dev/null; then
+                sudo pacman -S --needed --noconfirm flatpak
+            fi
+            
+            # Añadir remoto de forma global para evitar problemas de permisos de usuario en el primer run
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+            
             while read -r app; do
                 [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
                 info "Instalando: $app"
-                flatpak install --user -y flathub "$app" > /dev/null 2>&1
+                # Quitamos el redireccionamiento a /dev/null para que el usuario vea el progreso o errores
+                flatpak install -y flathub "$app"
             done < "$DOTFILES_DIR/flatpaks.txt"
+        else
+            warn "No se encontró flatpaks.txt"
         fi
     fi
 }

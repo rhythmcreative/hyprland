@@ -6,6 +6,7 @@ Personal Arch config, for personal use.
   <img src="https://img.shields.io/badge/Wayland-Hyprland-111827?style=flat-square" />
   <img src="https://img.shields.io/badge/Shell-Zsh-f97316?style=flat-square" />
 </p>
+
 ## Preview
 
 <p align="center">

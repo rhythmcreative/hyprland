@@ -142,12 +142,23 @@ if [ ! -z "$EXTRA_PKGS" ]; then
 fi
 
 # 3. INSTALACIÓN DE FLATPAKS (Si se seleccionó en la lista)
-if [[ $SELECTED_SW == *"Flatpak"* ]] && [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
-    info "Instalando aplicaciones Flatpak..."
-    while read -r app; do
-        [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
-        flatpak install --user -y flathub "$app"
-    done < "$DOTFILES_DIR/flatpaks.txt"
+if [[ $SELECTED_SW == *"Flatpak"* ]]; then
+    if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
+        section "Instalando aplicaciones Flatpak"
+        
+        # Asegurar que el remoto flathub existe
+        info "Añadiendo repositorio Flathub..."
+        flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        
+        while read -r app; do
+            [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
+            info "Descargando e instalando: $app"
+            flatpak install --user -y flathub "$app"
+        done < "$DOTFILES_DIR/flatpaks.txt"
+        info "Instalación de Flatpaks finalizada."
+    else
+        warn "No se encontró flatpaks.txt, saltando..."
+    fi
 fi
 
 section "Configuraciones (Dotfiles)"

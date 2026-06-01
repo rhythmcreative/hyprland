@@ -91,8 +91,6 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The script will automatically detect your hardware, install dependencies, set up symlinks using stow, and configure your shell.
-
 ## Keybindings
 
 | Binding | Action |

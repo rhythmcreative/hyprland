@@ -92,7 +92,7 @@ section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
 # Incluye base, ui, audio, red, bluetooth, polkit y estética
-CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow"
+CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow"
 
 # 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
 SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
@@ -214,12 +214,20 @@ if gum confirm "¿Quieres habilitar los servicios esenciales (Red, Bluetooth, SD
     sudo systemctl enable NetworkManager
     sudo systemctl enable bluetooth
     sudo systemctl enable sddm
+    
+    # Instalar tema SDDM local
+    if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
+        info "Instalando tema SDDM local..."
+        sudo mkdir -p /usr/share/sddm/themes
+        sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+    fi
+
     # Configurar el tema astronaut
     if [ ! -d "/etc/sddm.conf.d" ]; then
         sudo mkdir -p /etc/sddm.conf.d
     fi
     echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf
-    info "Servicios de sistema habilitados."
+    info "Servicios de sistema habilitados y SDDM configurado."
 fi
 
 # Añadir usuario a grupos necesarios

@@ -1,5 +1,5 @@
 # Dotfiles
-Personal arch linux configuration built around **hyprland**, featuring a dynamic workflow, pywal integration for automated styling, and a powerful collection of custom scripts.
+Personal Arch config, for personal use.
 
 ## Preview
 

@@ -86,7 +86,7 @@ step_software() {
     header "Selección de Software"
     
     # Core packages are always installed
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip"
     
     info "Instalando núcleo del sistema (Hyprland + Estética)..."
     yay -S --needed --noconfirm $CORE_PKGS

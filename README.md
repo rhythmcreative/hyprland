@@ -1,5 +1,11 @@
-# Dotfiles
-Personal Arch config, for personal use.
+<div align="center">
+
+# 〔 rhythmcreative dotfiles 〕
+
+*Personal Arch config, for personal use.*
+
+</div>
+
 <p align="center">
   <img src="https://img.shields.io/badge/Hyprland-Rice-6b7280?style=flat-square" />
   <img src="https://img.shields.io/badge/Arch-Linux-1793d1?style=flat-square&logo=arch-linux&logoColor=white" />

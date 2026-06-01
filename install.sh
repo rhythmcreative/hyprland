@@ -135,6 +135,21 @@ if gum confirm "¿Quieres aplicar las configuraciones (stow) ahora?"; then
     info "Configuraciones aplicadas."
 fi
 
+section "Fondos de Pantalla"
+if gum confirm "¿Quieres descargar la colección de wallpapers?"; then
+    WALL_DIR="$HOME/Pictures/Wallpapers"
+    mkdir -p "$WALL_DIR"
+    if [ -z "$(ls -A "$WALL_DIR" 2>/dev/null)" ]; then
+        info "Descargando wallpapers desde el repositorio..."
+        git clone https://github.com/bjarneo/wallpapers.git /tmp/wallpapers-repo > /dev/null 2>&1
+        cp -r /tmp/wallpapers-repo/* "$WALL_DIR/"
+        rm -rf /tmp/wallpapers-repo
+        info "Wallpapers instalados en $WALL_DIR."
+    else
+        warn "La carpeta de wallpapers ya tiene contenido, saltando descarga."
+    fi
+fi
+
 section "Entorno de Shell"
 if gum confirm "¿Quieres configurar Zsh como shell por defecto?"; then
     [ "$SHELL" != "$(which zsh)" ] && sudo chsh -s "$(which zsh)" "$USER"

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 〔 rhythmcreative dotfiles 〕
+# rhythmcreative dotfiles 
 
 *Personal Arch config, for personal use.*
 

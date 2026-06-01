@@ -91,7 +91,7 @@ info "Dependencias iniciales listas."
 section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
-CORE_PKGS="hyprland hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd"
+CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd"
 
 # 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
 SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
@@ -158,6 +158,18 @@ if gum confirm "¿Quieres configurar Zsh como shell por defecto?"; then
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1
     fi
     info "Zsh configurado."
+fi
+
+section "Servicios del Sistema"
+if gum confirm "¿Quieres habilitar el gestor de inicio (SDDM)?"; then
+    sudo systemctl enable sddm
+    info "SDDM habilitado."
+fi
+
+# Habilitar servicios de hardware si se instalaron
+if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
+    info "Habilitando servicios ASUS..."
+    sudo systemctl enable --now asusd.service supergfxd.service
 fi
 
 print_banner

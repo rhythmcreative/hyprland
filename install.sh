@@ -3,9 +3,28 @@
 # --- Rhythm arch Hyprland installer ---
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PACKAGES_FILE="$PACKAGES_FILE" # This was defined earlier but let's be explicit
 PACKAGES_FILE="$DOTFILES_DIR/packages.txt"
 
+# --- SEGURIDAD: No correr como root ---
+if [ "$EUID" -eq 0 ]; then
+    echo "❌ ERROR: No ejecutes este script como root (usuario root)."
+    echo "Arch Linux no permite compilar paquetes (makepkg) como root por seguridad."
+    echo "Por favor, crea un usuario normal, dale privilegios sudo y ejecuta el script con ese usuario."
+    echo ""
+    echo "Ejemplo para crear usuario:"
+    echo "  useradd -m -G wheel usuario"
+    echo "  passwd usuario"
+    echo "  EDITOR=nano visudo  # Descomenta la línea %wheel ALL=(ALL:ALL) ALL"
+    echo "  su - usuario"
+    exit 1
+fi
+
 echo "Iniciando instalación de Hyprland..."
+
+# 0. Instalación de dependencias críticas iniciales
+echo "Instalando dependencias base (stow, git, zsh, base-devel)..."
+sudo pacman -S --needed --noconfirm git base-devel stow zsh
 
 # 1. Detección de hardware
 echo "Detectando hardware..."
@@ -13,12 +32,12 @@ IS_LAPTOP=false
 IS_ASUS=false
 IS_NVIDIA=false
 
-if [ -d /sys/class/power_supply/BAT0 ]; then
+if [ -d /sys/class/power_supply/BAT0 ] || [ -d /sys/class/power_supply/BAT1 ]; then
     IS_LAPTOP=true
     echo "  Laptop detectada."
 fi
 
-if cat /sys/class/dmi/id/board_vendor | grep -qi "ASUS"; then
+if [ -f /sys/class/dmi/id/board_vendor ] && grep -qi "ASUS" /sys/class/dmi/id/board_vendor; then
     IS_ASUS=true
     echo "  Hardware asus detectado."
 fi
@@ -28,7 +47,7 @@ if lspci | grep -qi "NVIDIA"; then
     echo "  Gpu nvidia detectada."
 fi
 
-# 2. Configuración de repositorios especiales
+# 2. Configuración de repositorios especiales (ASUS)
 if [ "$IS_ASUS" = true ]; then
     if ! grep -q "\[g14\]" /etc/pacman.conf; then
         echo "Configurando repositorio g14 (asus)..."
@@ -42,7 +61,6 @@ fi
 # 3. Instalación de yay (AUR helper)
 if ! command -v yay > /dev/null; then
     echo "Instalando yay..."
-    sudo pacman -S --needed git base-devel
     git clone https://aur.archlinux.org/yay.git /tmp/yay
     cd /tmp/yay && makepkg -si --noconfirm
     cd "$DOTFILES_DIR"
@@ -60,6 +78,7 @@ if [ -f "$PACKAGES_FILE" ]; then
         PACKAGES=$(echo "$PACKAGES" | grep -vE "nvidia")
     fi
 
+    # Usar pacman para los paquetes oficiales primero (más rápido) y yay para el resto
     echo "$PACKAGES" | yay -S --needed --noconfirm -
 else
     echo "Aviso: $PACKAGES_FILE no encontrado."
@@ -71,7 +90,7 @@ if [ -f "$FLATPAKS_FILE" ]; then
     if command -v flatpak > /dev/null; then
         echo "Instalando aplicaciones flatpak..."
         while read -r app; do
-            [ -z "$app" ] && continue
+            [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
             flatpak install --user -y flathub "$app"
         done < "$FLATPAKS_FILE"
     else
@@ -81,7 +100,7 @@ fi
 
 # 4.2 Descarga de wallpapers
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-if [ ! -d "$WALLPAPER_DIR" ] || [ -z "$(ls -A "$WALLPAPER_DIR")" ]; then
+if [ ! -d "$WALLPAPER_DIR" ] || [ -z "$(ls -A "$WALLPAPER_DIR" 2>/dev/null)" ]; then
     echo "Descargando colección de wallpapers..."
     mkdir -p "$WALLPAPER_DIR"
     git clone https://github.com/bjarneo/wallpapers.git /tmp/wallpapers-repo
@@ -93,31 +112,37 @@ fi
 
 # 5. Enlaces simbólicos con stow
 echo "Creando enlaces simbólicos..."
-# Aseguramos que existan las carpetas base en el home
 mkdir -p ~/.config
 mkdir -p ~/.local/bin
 
-# Stow crea los symlinks desde el root del repositorio al home del usuario
-# -v: verbose, -R: restow (sobrescribe symlinks existentes), -t: target directory
-stow -v -R -t ~ .config
-stow -v -R -t ~ .local
-stow -v -R -t ~ zsh
-stow -v -R -t ~ bash
-stow -v -R -t ~ gtk
+# Asegurar que stow esté instalado antes de usarlo
+if command -v stow > /dev/null; then
+    stow -v -R -t ~ .config
+    stow -v -R -t ~ .local
+    stow -v -R -t ~ zsh
+    stow -v -R -t ~ bash
+    stow -v -R -t ~ gtk
+else
+    echo "❌ ERROR: stow no se instaló correctamente."
+fi
 
 # 6. Post-instalación
 echo "Configuraciones finales..."
 
 # Zsh como shell por defecto
-if [[ $SHELL != *"zsh"* ]]; then
-    echo "  Cambiando shell a zsh..."
-    chsh -s $(which zsh)
-fi
-
-# Oh-my-zsh
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    echo "  Instalando oh-my-zsh..."
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+if command -v zsh > /dev/null; then
+    if [[ $SHELL != *"zsh"* ]]; then
+        echo "  Cambiando shell a zsh..."
+        sudo chsh -s $(which zsh) $USER
+    fi
+    
+    # Oh-my-zsh
+    if [ ! -d "$HOME/.oh-my-zsh" ]; then
+        echo "  Instalando oh-my-zsh..."
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    fi
+else
+    echo "  ⚠️ Zsh no encontrado, saltando configuración de shell."
 fi
 
 # Habilitar servicios de hardware
@@ -128,3 +153,4 @@ if [ "$IS_ASUS" = true ]; then
 fi
 
 echo "Instalación completada. Reinicia tu sesión para ver los cambios."
+

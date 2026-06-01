@@ -74,6 +74,7 @@
 * Extensive script collection for system management
 * Optimized for high performance and fast startup
 * Comprehensive flatpak application support
+* Supports both image and GIF's
 
 ## Installation
 

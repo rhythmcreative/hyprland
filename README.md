@@ -121,7 +121,7 @@ The script will automatically detect your hardware, install dependencies, set up
 └── kvantum
 
 .local/bin/
-└── (over 100+ custom scripts)
+└── (~60 optimized essential scripts)
 ```
 
 Configurations are adapted and customized for personal use. :)

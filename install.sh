@@ -91,8 +91,8 @@ info "Dependencias iniciales listas."
 section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
-# Incluye base, ui, audio, red, bluetooth, polkit y estética
-CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow"
+# Incluye base, ui, audio, red, bluetooth, polkit, estética y dependencias de tema SDDM
+CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative"
 
 info "Instalando núcleo del sistema y estética base..."
 yay -S --needed --noconfirm $CORE_PKGS
@@ -209,20 +209,26 @@ if gum confirm "¿Quieres habilitar los servicios esenciales (Red, Bluetooth, SD
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
     fi
 
-    # Configurar el tema astronaut
+    # Configurar el tema astronaut (Método robusto: d.conf + conf principal)
     if [ ! -d "/etc/sddm.conf.d" ]; then
         sudo mkdir -p /etc/sddm.conf.d
     fi
-    echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf
+    # Crear archivo de tema
+    echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+    # Asegurar que el archivo principal no tenga conflictos
+    if [ -f "/etc/sddm.conf" ]; then
+        sudo sed -i 's/^Current=.*/Current=sddm-astronaut-theme/' /etc/sddm.conf 2>/dev/null || true
+    fi
+
     info "Servicios de sistema habilitados y SDDM configurado."
 fi
 
 # Añadir usuario a grupos necesarios
 info "Configurando permisos de usuario..."
-sudo usermod -aG video,input,render $USER
+sudo usermod -aG video,input,render,wheel $USER
 
 # Habilitar servicios de hardware si se instalaron
-if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
+if [[ $SELECTED_SW == *"Herramientas ASUS"* ]]; then
     info "Habilitando servicios ASUS..."
     sudo systemctl enable --now asusd.service supergfxd.service
 fi
@@ -235,4 +241,9 @@ fi
 
 print_banner
 echo -e "${CLR_GREEN}${CLR_BOLD}Instalación completada con éxito.${CLR_NC}"
-echo -e "Reinicia la sesión para aplicar todos los cambios."
+
+if gum confirm "¿Quieres iniciar el entorno gráfico ahora?"; then
+    sudo systemctl start sddm
+else
+    echo -e "Reinicia la sesión manualmente para aplicar todos los cambios."
+fi

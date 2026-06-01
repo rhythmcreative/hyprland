@@ -178,9 +178,20 @@ if gum confirm "¿Quieres instalar la colección de wallpapers?"; then
     mkdir -p "$WALL_DIR"
     
     if [ -d "$DOTFILES_DIR/wallpapers" ] && [ -f "$DOTFILES_DIR/wallpapers/extract.sh" ]; then
-        info "Instalando wallpapers locales..."
-        cd "$DOTFILES_DIR/wallpapers" && bash extract.sh
-        cd "$DOTFILES_DIR"
+        CHOICE=$(gum choose "Instalar todos los packs" "Instalar un pack específico" "Cancelar")
+        
+        if [ "$CHOICE" == "Instalar todos los packs" ]; then
+            info "Instalando todos los wallpapers..."
+            cd "$DOTFILES_DIR/wallpapers" && bash extract.sh
+            cd "$DOTFILES_DIR"
+        elif [ "$CHOICE" == "Instalar un pack específico" ]; then
+            PACK_NUM=$(gum input --placeholder "Número de pack (1-49)" --value "1")
+            if [ ! -z "$PACK_NUM" ]; then
+                info "Instalando pack $PACK_NUM..."
+                cd "$DOTFILES_DIR/wallpapers" && bash extract.sh "$PACK_NUM"
+                cd "$DOTFILES_DIR"
+            fi
+        fi
     elif [ -z "$(ls -A "$WALL_DIR" 2>/dev/null)" ]; then
         info "Descargando wallpapers desde el repositorio externo..."
         git clone https://github.com/bjarneo/wallpapers.git /tmp/wallpapers-repo > /dev/null 2>&1

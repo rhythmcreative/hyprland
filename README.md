@@ -27,6 +27,23 @@
 <img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
 
+## Preview Pywal
+
+<table>
+  <tr>
+    <td width="50%"><img width="2560" height="1437" alt="image" src="https://github.com/user-attachments/assets/73f129b8-e4ac-4999-9c2e-2964240b5425" />
+</td>
+    <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/5f5d5810-f6eb-4062-9dbf-bd8f82faa93e" />
+</td>
+  </tr>
+  <tr>
+    <td width="50%"><img width="2560" height="1435" alt="image" src="https://github.com/user-attachments/assets/64a58511-9b9c-4936-a30f-2e80ee652d7e" />
+</td>
+    <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/b4ff5795-e24a-4189-82f2-1d4529afa6d0" />
+</td>
+  </tr>
+</table>
+
 ## Components
 
 ### Window manager

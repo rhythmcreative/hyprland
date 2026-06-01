@@ -91,7 +91,8 @@ info "Dependencias iniciales listas."
 section "Selección de Software"
 
 # 1. CORE (Mandatorio: Siempre se instala)
-CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty network-manager-applet pipewire pipewire-pulse playerctl swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww"
+# Incluye base, ui, audio, red, bluetooth, polkit y estética
+CORE_PKGS="hyprland sddm sddm-astronaut-theme hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow"
 
 # 2. SELECCIÓN DE HARDWARE Y APPS (Opcional)
 SOFTWARE_CHOICE=$(gum choose --no-limit --header "Selecciona hardware y aplicaciones adicionales (Espacio para marcar, Enter para confirmar)" \
@@ -209,20 +210,32 @@ if gum confirm "¿Quieres configurar Zsh como shell por defecto?"; then
 fi
 
 section "Servicios del Sistema"
-if gum confirm "¿Quieres habilitar el gestor de inicio (SDDM)?"; then
+if gum confirm "¿Quieres habilitar los servicios esenciales (Red, Bluetooth, SDDM)?"; then
+    sudo systemctl enable NetworkManager
+    sudo systemctl enable bluetooth
     sudo systemctl enable sddm
     # Configurar el tema astronaut
     if [ ! -d "/etc/sddm.conf.d" ]; then
         sudo mkdir -p /etc/sddm.conf.d
     fi
     echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf
-    info "SDDM habilitado con el tema astronaut."
+    info "Servicios de sistema habilitados."
 fi
+
+# Añadir usuario a grupos necesarios
+info "Configurando permisos de usuario..."
+sudo usermod -aG video,input,render $USER
 
 # Habilitar servicios de hardware si se instalaron
 if [[ $SOFTWARE_CHOICE == *"Herramientas ASUS"* ]]; then
     info "Habilitando servicios ASUS..."
     sudo systemctl enable --now asusd.service supergfxd.service
+fi
+
+# Sincronización final de tema
+if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
+    info "Aplicando sincronización de tema definitiva..."
+    bash "$HOME/.local/bin/modern-pywal-sync" > /dev/null 2>&1
 fi
 
 print_banner

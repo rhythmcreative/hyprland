@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-shopt -s extglob
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 export BINDIR="${BINDIR:-$HOME/.local/bin}"
 
@@ -295,7 +294,7 @@ case "$1" in
 
     ###################################################################################################
 
-*--disable-*osu* | *--disable-memory*)
+*--disable-@(*osu*|memory*))
     rm -f "$OSUPATH/launch_with_memory.bat"
     Info "Memory reader (tosu/gosumemory) disabled."
     ;;

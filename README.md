@@ -86,8 +86,6 @@ The script will automatically detect your hardware, install dependencies, set up
 | `Super + E` | File manager (thunar) |
 | `Super + W` | Toggle floating |
 | `Super + L` | Lock screen |
-| `Super + B` | Change wallpaper (random) |
-| `Super + C` | Toggle waybar |
 | `Super + P` | Screenshot (area) |
 | `Super + BackSpace` | Power menu |
 

@@ -5,8 +5,15 @@ Personal arch linux configuration built around **hyprland**, featuring a dynamic
 ## Preview
 
 <p align="center">
-  <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" />
+  <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" /
+</p>
 
+<p align="center">
+  <img width="2556" height="1438" alt="image" src="https://github.com/user-attachments/assets/2b599399-f833-4fdd-ae62-f85fab68a1ff" />
+</p>
+
+<p align="center">
+<img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
 
 ## Components

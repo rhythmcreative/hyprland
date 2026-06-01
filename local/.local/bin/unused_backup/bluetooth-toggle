@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# Script para activar/desactivar Bluetooth con notificación
+# Autor: rhythmcreative
+
+# Función de logging
+log_debug() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$HOME/.cache/bluetooth-toggle.log"
+}
+
+# Verificar estado actual del Bluetooth
+get_bluetooth_status() {
+    if bluetoothctl show | grep -q "Powered: yes"; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+# Función para activar Bluetooth
+enable_bluetooth() {
+    log_debug "Activando Bluetooth..."
+    bluetoothctl power on
+    
+    # Esperar un momento para que se active completamente
+    sleep 1
+    
+    # Notificación
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "Bluetooth" "Activado" -i bluetooth-active -t 2000
+    fi
+    
+    log_debug "Bluetooth activado"
+}
+
+# Función para desactivar Bluetooth
+disable_bluetooth() {
+    log_debug "Desactivando Bluetooth..."
+    bluetoothctl power off
+    
+    # Notificación
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "Bluetooth" "Desactivado" -i bluetooth-disabled -t 2000
+    fi
+    
+    log_debug "Bluetooth desactivado"
+}
+
+# Función principal - alternar estado
+toggle_bluetooth() {
+    local current_status=$(get_bluetooth_status)
+    
+    log_debug "Estado actual del Bluetooth: $current_status"
+    
+    if [ "$current_status" = "on" ]; then
+        disable_bluetooth
+    else
+        enable_bluetooth
+    fi
+}
+
+# Crear directorio de logs si no existe
+mkdir -p "$(dirname "$HOME/.cache/bluetooth-toggle.log")"
+
+# Verificar que bluetoothctl esté disponible
+if ! command -v bluetoothctl > /dev/null 2>&1; then
+    log_debug "ERROR: bluetoothctl no está disponible"
+    if command -v notify-send > /dev/null 2>&1; then
+        notify-send "Error" "bluetoothctl no está disponible" -i dialog-error -t 3000
+    fi
+    exit 1
+fi
+
+# Manejar argumentos
+case "${1:-toggle}" in
+    toggle)
+        toggle_bluetooth
+        ;;
+    on|enable)
+        enable_bluetooth
+        ;;
+    off|disable)
+        disable_bluetooth
+        ;;
+    status)
+        status=$(get_bluetooth_status)
+        echo "Bluetooth está: $status"
+        log_debug "Estado consultado: $status"
+        ;;
+    *)
+        echo "Uso: $0 {toggle|on|off|status}"
+        echo "  toggle  - Alternar estado (por defecto)"
+        echo "  on      - Activar Bluetooth"
+        echo "  off     - Desactivar Bluetooth"  
+        echo "  status  - Mostrar estado actual"
+        exit 1
+        ;;
+esac

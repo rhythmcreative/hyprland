@@ -1,0 +1,302 @@
+#!/bin/bash
+
+# nm-applet AUTO-SYNC con colores de Waybar
+# Versión mejorada con sincronización automática y confiable
+# Se ejecuta automáticamente después de cambios de wallpaper/pywal
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/nm-applet-auto-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para extraer colores de pywal
+get_pywal_colors() {
+    local colors_file="$HOME/.cache/wal/colors.sh"
+    
+    if [[ ! -f "$colors_file" ]]; then
+        log "❌ Archivo de colores pywal no encontrado: $colors_file"
+        return 1
+    fi
+    
+    # Cargar colores de pywal de forma segura
+    source "$colors_file"
+    
+    # Exportar colores limpiando comillas
+    export WAYBAR_BG=$(echo "$background" | tr -d "'\"")
+    export WAYBAR_FG=$(echo "$foreground" | tr -d "'\"")
+    export WAYBAR_ACCENT=$(echo "$color4" | tr -d "'\"")
+    export WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'\"")
+    
+    # Validar que los colores tienen formato válido
+    if [[ ! "$WAYBAR_BG" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+        log "❌ Color de fondo inválido: $WAYBAR_BG"
+        return 1
+    fi
+    
+    log "✅ Colores pywal extraídos:"
+    log "  BG: $WAYBAR_BG, FG: $WAYBAR_FG, ACCENT: $WAYBAR_ACCENT"
+    
+    return 0
+}
+
+# Crear CSS específico para nm-applet
+create_nm_applet_css() {
+    local gtk3_dir="$HOME/.config/gtk-3.0"
+    local gtk4_dir="$HOME/.config/gtk-4.0"
+    
+    mkdir -p "$gtk3_dir" "$gtk4_dir"
+    
+    # CSS para GTK3
+    local css_file="$gtk3_dir/nm-applet-pywal.css"
+    
+    log "🎨 Creando CSS nm-applet con colores pywal..."
+    
+    cat > "$css_file" << EOF
+/* nm-applet auto-sync CSS - Generado $(date) */
+/* Colores: BG=$WAYBAR_BG, FG=$WAYBAR_FG, ACCENT=$WAYBAR_ACCENT */
+
+/* NetworkManager applet ventana principal */
+.nm-applet,
+.nm-applet-window,
+window.background,
+#NetworkManager {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Menú desplegable de redes */
+menu,
+menuitem {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: none;
+    padding: 8px 12px;
+}
+
+menuitem:hover,
+menuitem:selected {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+}
+
+/* Lista de redes WiFi */
+treeview,
+list,
+listbox {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+}
+
+treeview row,
+list row,
+listbox row {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    padding: 4px 8px;
+}
+
+treeview row:hover,
+list row:hover,
+listbox row:hover {
+    background-color: $WAYBAR_ACCENT;
+}
+
+/* Botones */
+button {
+    background-color: $WAYBAR_ACCENT;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_HIGHLIGHT;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: $WAYBAR_HIGHLIGHT;
+    opacity: 0.9;
+}
+
+/* Campos de entrada (contraseñas) */
+entry {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+    border-radius: 4px;
+    padding: 6px;
+}
+
+/* Popover y diálogos */
+popover,
+dialog {
+    background-color: $WAYBAR_BG;
+    color: $WAYBAR_FG;
+    border: 1px solid $WAYBAR_ACCENT;
+}
+
+/* Separadores */
+separator {
+    background-color: $WAYBAR_ACCENT;
+    opacity: 0.3;
+}
+
+/* Scrollbars */
+scrollbar {
+    background-color: $WAYBAR_BG;
+}
+
+scrollbar slider {
+    background-color: $WAYBAR_ACCENT;
+    border-radius: 10px;
+}
+
+/* Indicadores de conexión */
+.connection-active {
+    color: $WAYBAR_ACCENT;
+    font-weight: bold;
+}
+
+/* Icono en system tray */
+.system-tray .nm-applet-icon {
+    color: $WAYBAR_FG;
+}
+EOF
+
+    # Copiar a GTK4
+    cp "$css_file" "$gtk4_dir/nm-applet-pywal.css"
+    
+    log "✅ CSS nm-applet creado: $css_file"
+}
+
+# Actualizar archivos GTK principales
+update_gtk_imports() {
+    local gtk3_css="$HOME/.config/gtk-3.0/gtk.css"
+    local gtk4_css="$HOME/.config/gtk-4.0/gtk.css"
+    
+    # GTK3
+    if [[ ! -f "$gtk3_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk3_css"; then
+        echo '@import "nm-applet-pywal.css";' >> "$gtk3_css"
+        log "✅ Importado nm-applet CSS en GTK3"
+    fi
+    
+    # GTK4  
+    if [[ ! -f "$gtk4_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk4_css"; then
+        echo '@import "nm-applet-pywal.css";' >> "$gtk4_css"
+        log "✅ Importado nm-applet CSS en GTK4"
+    fi
+}
+
+# Aplicar configuraciones GTK
+apply_gtk_settings() {
+    log "🔧 Aplicando configuraciones GTK..."
+    
+    # Variables de entorno
+    export GTK_THEME="PywalGTK-Auto"
+    export GDK_BACKEND="wayland,x11"
+    export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+    
+    # gsettings
+    if command -v gsettings &> /dev/null; then
+        gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
+        log "✅ gsettings aplicado"
+    fi
+    
+    # Señales D-Bus para recargar temas
+    if command -v dbus-send &> /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+            string:"gtk-theme-name" string:"PywalGTK-Auto" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        log "✅ Señales D-Bus enviadas"
+    fi
+}
+
+# Actualizar nm-applet con nuevos colores SIN REINICIAR
+update_nm_applet_css() {
+    log "🎨 Actualizando CSS de nm-applet sin reiniciar proceso..."
+    
+    # Verificar si nm-applet está corriendo
+    local nm_running=false
+    if pgrep -x nm-applet > /dev/null; then
+        nm_running=true
+        log "✅ nm-applet está corriendo, aplicando CSS..."
+    else
+        log "ℹ️ nm-applet no está corriendo, solo se inicializará si es necesario"
+    fi
+    
+    # Aplicar variables de entorno
+    export GTK_THEME="Arc-Dark"
+    export GDK_BACKEND="wayland,x11"
+    export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+    
+    # Enviar señales para recargar temas GTK (sin matar procesos)
+    if command -v dbus-send > /dev/null; then
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
+            string:"gtk-theme-name" string:"Arc-Dark" 2>/dev/null || true
+        dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+        log "✅ Señales D-Bus enviadas para recargar CSS"
+    fi
+    
+    # Solo iniciar nm-applet si NO está corriendo
+    if ! $nm_running; then
+        log "🔄 Iniciando nm-applet con nuevos colores..."
+        nohup nm-applet > /dev/null 2>&1 &
+        sleep 2
+        
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado exitosamente"
+        else
+            log "❌ Error: no se pudo iniciar nm-applet"
+            return 1
+        fi
+    fi
+    
+    # Notificación de éxito
+    if command -v notify-send > /dev/null; then
+        notify-send "🎨 nm-applet CSS Actualizado" \
+            "Colores sincronizados sin reiniciar" \
+            -t 3000 -i network-wireless 2>/dev/null || true
+    fi
+    
+    return 0
+}
+
+# Función principal
+main() {
+    log "=== Iniciando nm-applet auto-sync ==="
+    
+    # Obtener colores de pywal
+    if ! get_pywal_colors; then
+        log "❌ Error obteniendo colores pywal"
+        exit 1
+    fi
+    
+    # Crear CSS personalizado
+    create_nm_applet_css
+    
+    # Actualizar imports GTK
+    update_gtk_imports
+    
+    # Aplicar configuraciones GTK
+    apply_gtk_settings
+    
+    # Actualizar nm-applet CSS sin reiniciar
+    if update_nm_applet_css; then
+        log "🎉 nm-applet auto-sync completado exitosamente"
+        exit 0
+    else
+        log "❌ Error en nm-applet auto-sync"
+        exit 1
+    fi
+}
+
+# Permitir ejecución con wallpaper específico
+if [[ "${1:-}" == "--force" ]]; then
+    log "🚀 Forzando nm-applet auto-sync..."
+fi
+
+# Ejecutar función principal
+main "$@"

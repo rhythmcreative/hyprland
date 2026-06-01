@@ -1,0 +1,190 @@
+#!/bin/bash
+
+# SYNC TERMINALS + PYWAL - Script maestro
+# Sincroniza Kitty + Oh My Posh + P10k automáticamente con pywal
+# Ejecutado después de cambios de wallpaper
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/sync-terminals-pywal.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función de notificación
+notify() {
+    if command -v notify-send &> /dev/null; then
+        notify-send "🎨 Terminal Sync" "$1" -t 3000 -i terminal 2>/dev/null || true
+    fi
+}
+
+# Verificar archivos de pywal
+check_pywal() {
+    if [[ ! -f "$HOME/.cache/wal/colors.json" ]] && [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+        log "❌ Error: Archivos de pywal no encontrados"
+        notify "❌ Archivos de pywal no encontrados"
+        exit 1
+    fi
+    log "✅ Archivos de pywal encontrados"
+}
+
+# Sincronizar Kitty
+sync_kitty() {
+    log "🐱 === SINCRONIZANDO KITTY ==="
+    
+    if [[ -f "$HOME/.cache/wal/colors-kitty.conf" ]]; then
+        log "✅ Kitty ya está sincronizado con pywal"
+        log "📄 Archivo: ~/.cache/wal/colors-kitty.conf"
+        
+        # Verificar que kitty.conf tiene el include
+        if ! grep -q "colors-kitty.conf" "$HOME/.config/kitty/kitty.conf" 2>/dev/null; then
+            log "⚠️ Agregando include de pywal a kitty.conf"
+            echo "# Pywal colors" >> "$HOME/.config/kitty/kitty.conf"
+            echo "include ~/.cache/wal/colors-kitty.conf" >> "$HOME/.config/kitty/kitty.conf"
+        fi
+        
+        # Intentar recargar kitty si está corriendo
+        if pgrep -x kitty > /dev/null; then
+            log "🔄 Enviando señal de recarga a kitty..."
+            kitty @ --to unix:/tmp/kitty-socket set-colors --reset 2>/dev/null || true
+            kitty @ --to unix:/tmp/kitty-socket load-config 2>/dev/null || true
+        fi
+        
+        log "✅ Kitty sincronizado"
+    else
+        log "❌ Error: colors-kitty.conf no encontrado"
+        log "💡 Regenera colores con: wal -R"
+    fi
+}
+
+# Sincronizar Oh My Posh (si está instalado)
+sync_omp() {
+    log "🚀 === SINCRONIZANDO OH MY POSH ==="
+    
+    if ! command -v oh-my-posh &> /dev/null; then
+        log "ℹ️ Oh My Posh no está instalado, omitiendo"
+        return 0
+    fi
+    
+    if [[ -x "$HOME/.local/bin/sync-omp-pywal" ]]; then
+        log "🔄 Ejecutando sync-omp-pywal..."
+        if "$HOME/.local/bin/sync-omp-pywal"; then
+            log "✅ Oh My Posh sincronizado"
+        else
+            log "⚠️ Advertencia: Error en sync-omp-pywal"
+        fi
+    else
+        log "❌ Script sync-omp-pywal no encontrado"
+    fi
+}
+
+# Sincronizar Powerlevel10k (si está activo)
+sync_p10k() {
+    log "⚡ === SINCRONIZANDO POWERLEVEL10K ==="
+    
+    # Verificar si P10k está activo (variable ZSH_THEME o función p10k)
+    if [[ -n "${ZSH_VERSION:-}" ]] && [[ "${ZSH_THEME:-}" == *"powerlevel10k"* ]]; then
+        log "✅ Powerlevel10k detectado en ZSH_THEME"
+        
+        if [[ -x "$HOME/.local/bin/sync-p10k-pywal" ]]; then
+            log "🔄 Ejecutando sync-p10k-pywal..."
+            if "$HOME/.local/bin/sync-p10k-pywal"; then
+                log "✅ Powerlevel10k sincronizado"
+                
+                # Intentar recargar P10k si es posible
+                if [[ -n "${functions[p10k]:-}" ]]; then
+                    log "🔄 Recargando Powerlevel10k..."
+                    p10k reload 2>/dev/null || true
+                fi
+            else
+                log "⚠️ Advertencia: Error en sync-p10k-pywal"
+            fi
+        else
+            log "❌ Script sync-p10k-pywal no encontrado"
+        fi
+    else
+        log "ℹ️ Powerlevel10k no está activo, omitiendo"
+    fi
+}
+
+# Aplicar cambios de terminal inmediatamente
+apply_terminal_changes() {
+    log "⚡ === APLICANDO CAMBIOS DE TERMINAL ==="
+    
+    # Recargar secuencias de color en terminales activos
+    if [[ -f "$HOME/.cache/wal/sequences" ]]; then
+        log "🌈 Aplicando secuencias de color..."
+        cat "$HOME/.cache/wal/sequences" 2>/dev/null || true
+    fi
+    
+    # Exportar variables de entorno de colores
+    if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+        source "$HOME/.cache/wal/colors.sh"
+        log "✅ Variables de colores exportadas"
+    fi
+    
+    # Crear archivo de estado para otros scripts
+    cat > "$HOME/.cache/terminals-sync-status" << EOF
+# Terminal Sync Status - $(date)
+KITTY_SYNCED=true
+OMP_SYNCED=$(command -v oh-my-posh &>/dev/null && echo "true" || echo "false")
+P10K_SYNCED=$([[ "${ZSH_THEME:-}" == *"powerlevel10k"* ]] && echo "true" || echo "false")
+LAST_SYNC=$(date '+%Y-%m-%d %H:%M:%S')
+WALLPAPER_FILE=$(cat ~/.cache/current-wallpaper 2>/dev/null || echo "unknown")
+EOF
+    
+    log "✅ Estado de sincronización guardado"
+}
+
+# Función principal
+main() {
+    log "🎨 === INICIANDO SINCRONIZACIÓN TERMINAL + PYWAL ==="
+    notify "🔄 Sincronizando terminales con pywal..."
+    
+    check_pywal
+    sync_kitty
+    sync_omp
+    sync_p10k
+    apply_terminal_changes
+    
+    log "🎉 === SINCRONIZACIÓN COMPLETADA ==="
+    notify "✅ Terminales sincronizados con pywal"
+    
+    log "📝 NOTAS:"
+    log "• Reinicia terminal para aplicar todos los cambios"
+    log "• Kitty: Cambios aplicados automáticamente"
+    log "• Oh My Posh: Requiere reinicio de terminal"
+    log "• P10k: Recarga automática si está activo"
+}
+
+# Permitir ejecución con argumentos
+case "${1:-}" in
+    "--kitty-only")
+        log "🐱 Sincronizando solo Kitty..."
+        check_pywal
+        sync_kitty
+        ;;
+    "--omp-only")
+        log "🚀 Sincronizando solo Oh My Posh..."
+        check_pywal
+        sync_omp
+        ;;
+    "--p10k-only")
+        log "⚡ Sincronizando solo Powerlevel10k..."
+        check_pywal
+        sync_p10k
+        ;;
+    "--status")
+        if [[ -f "$HOME/.cache/terminals-sync-status" ]]; then
+            echo "📊 Estado de sincronización:"
+            cat "$HOME/.cache/terminals-sync-status"
+        else
+            echo "ℹ️ No hay información de sincronización disponible"
+        fi
+        ;;
+    *)
+        main
+        ;;
+esac

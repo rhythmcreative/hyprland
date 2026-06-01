@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Script para sincronizar el wallpaper de SDDM con el wallpaper actual del usuario
+# Autor: rhythmcreative
+# Fecha: $(date '+%Y-%m-%d')
+
+LOG_FILE="/tmp/sddm-wallpaper-sync.log"
+CURRENT_WALLPAPER_FILE="/home/rhythmcreative/.cache/current-wallpaper"
+USER_HOME="/home/rhythmcreative"
+SDDM_THEME_DIR="/usr/share/sddm/themes/SilentSDDM"
+SDDM_WALLPAPER_DIR="/usr/share/sddm/themes/SilentSDDM/backgrounds"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Verificar si tenemos permisos de administrador
+if [[ $EUID -ne 0 ]]; then
+    log "ERROR: Este script debe ejecutarse con permisos de root"
+    notify-send "SDDM Wallpaper Sync" "Error: Se requieren permisos de administrador"
+    exit 1
+fi
+
+log "Iniciando sincronización de wallpaper de SDDM"
+
+# Verificar que existe el archivo de wallpaper actual
+if [[ ! -f "$CURRENT_WALLPAPER_FILE" ]]; then
+    log "ERROR: No se encontró el archivo de wallpaper actual: $CURRENT_WALLPAPER_FILE"
+    exit 1
+fi
+
+# Leer la ruta del wallpaper actual
+WALLPAPER_PATH=$(cat "$CURRENT_WALLPAPER_FILE")
+
+# Verificar que el archivo de wallpaper existe
+if [[ ! -f "$WALLPAPER_PATH" ]]; then
+    log "ERROR: El archivo de wallpaper no existe: $WALLPAPER_PATH"
+    exit 1
+fi
+
+log "Wallpaper actual detectado: $WALLPAPER_PATH"
+
+# Crear directorio de backgrounds si no existe
+mkdir -p "$SDDM_WALLPAPER_DIR"
+
+# Obtener la extensión del archivo
+EXTENSION="${WALLPAPER_PATH##*.}"
+EXTENSION_LOWER="${EXTENSION,,}"
+
+# Nombre del archivo de destino
+DEST_FILE="$SDDM_WALLPAPER_DIR/current_wallpaper.$EXTENSION_LOWER"
+
+# Para GIFs, convertir a imagen estática (primer frame) ya que SDDM no soporta GIFs animados
+if [[ "$EXTENSION_LOWER" == "gif" ]]; then
+    log "Convirtiendo GIF a imagen estática para SDDM"
+    DEST_FILE="$SDDM_WALLPAPER_DIR/current_wallpaper.jpg"
+    
+    # Extraer el primer frame del GIF y convertir a JPG
+    convert "$WALLPAPER_PATH[0]" -quality 95 "$DEST_FILE" 2>/dev/null
+    
+    if [[ $? -eq 0 ]]; then
+        log "GIF convertido exitosamente a: $DEST_FILE"
+    else
+        log "ERROR: Fallo al convertir GIF"
+        exit 1
+    fi
+else
+    # Para imágenes estáticas, simplemente copiar
+    cp "$WALLPAPER_PATH" "$DEST_FILE" 2>/dev/null
+    
+    if [[ $? -eq 0 ]]; then
+        log "Wallpaper copiado exitosamente a: $DEST_FILE"
+    else
+        log "ERROR: Fallo al copiar wallpaper"
+        exit 1
+    fi
+fi
+
+# Cambiar permisos del archivo
+chmod 644 "$DEST_FILE"
+
+# Crear/actualizar el archivo theme.conf principal basado en la configuración pywal
+THEME_CONF="$SDDM_THEME_DIR/theme.conf"
+PYWAL_CONF="$SDDM_THEME_DIR/configs/pywal.conf"
+
+# Copiar la configuración base de pywal
+if [[ -f "$PYWAL_CONF" ]]; then
+    cp "$PYWAL_CONF" "$THEME_CONF" 2>/dev/null
+    log "Configuración base pywal copiada a theme.conf"
+else
+    log "ERROR: No se encontró la configuración base pywal: $PYWAL_CONF"
+    exit 1
+fi
+
+# Actualizar las rutas del background en la configuración
+BG_FILENAME=$(basename "$DEST_FILE")
+# Actualizar todas las referencias de background posibles
+sed -i "s|background = smoky.jpg|background = backgrounds/$BG_FILENAME|g" "$THEME_CONF"
+sed -i "s|background = backgrounds/.*|background = backgrounds/$BG_FILENAME|g" "$THEME_CONF"
+log "Configuración de background actualizada en theme.conf: backgrounds/$BG_FILENAME"
+
+# Si tenemos colores de pywal del usuario, aplicarlos
+USER_PYWAL_COLORS="/home/rhythmcreative/.cache/wal/colors"
+if [[ -f "$USER_PYWAL_COLORS" ]]; then
+    log "Aplicando colores de pywal del usuario a SDDM"
+    
+    # Leer colores de pywal
+    COLOR0=$(sed -n '1p' "$USER_PYWAL_COLORS")  # background
+    COLOR1=$(sed -n '2p' "$USER_PYWAL_COLORS")  # color1 (rojo)
+    COLOR2=$(sed -n '3p' "$USER_PYWAL_COLORS")  # color2 (verde)
+    COLOR3=$(sed -n '4p' "$USER_PYWAL_COLORS")  # color3 (amarillo)
+    COLOR4=$(sed -n '5p' "$USER_PYWAL_COLORS")  # color4 (azul)
+    COLOR5=$(sed -n '6p' "$USER_PYWAL_COLORS")  # color5 (magenta)
+    COLOR6=$(sed -n '7p' "$USER_PYWAL_COLORS")  # color6 (cyan)
+    COLOR7=$(sed -n '8p' "$USER_PYWAL_COLORS")  # color7 (blanco/foreground)
+    
+    # Actualizar colores en la configuración
+    sed -i "s|background-color = #0f1022|background-color = $COLOR0|g" "$THEME_CONF"
+    sed -i "s|color = #c3c3c7|color = $COLOR7|g" "$THEME_CONF"
+    sed -i "s|content-color = #c3c3c7|content-color = $COLOR7|g" "$THEME_CONF"
+    sed -i "s|background-color = #986E7B|background-color = $COLOR5|g" "$THEME_CONF"
+    sed -i "s|border-color = #605D91|border-color = $COLOR4|g" "$THEME_CONF"
+    sed -i "s|active-border-color = #986E7B|active-border-color = $COLOR5|g" "$THEME_CONF"
+    
+    log "Colores de pywal aplicados a la configuración de SDDM"
+else
+    log "WARNING: No se encontraron colores de pywal del usuario, usando colores por defecto"
+fi
+
+log "Configuración del tema SDDM actualizada"
+
+log "Sincronización de wallpaper de SDDM completada exitosamente"
+
+# Si se ejecuta desde un entorno gráfico, mostrar notificación
+if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+    # Ejecutar como el usuario correcto para la notificación
+    USER_HOME=$(getent passwd 1000 | cut -d: -f6)
+    USER_NAME=$(getent passwd 1000 | cut -d: -f1)
+    
+    sudo -u "$USER_NAME" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" notify-send "SDDM Wallpaper" "Wallpaper sincronizado con SDDM" 2>/dev/null || true
+fi
+
+exit 0

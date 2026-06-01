@@ -1,0 +1,425 @@
+#!/bin/bash
+
+# Directorio de wallpapers
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+CACHE_DIR="$HOME/.cache/wallpaper-previews"
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Crear directorios si no existen
+mkdir -p "$CACHE_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "Error" "Directorio $WALLPAPER_DIR no encontrado"
+    exit 1
+fi
+
+log "Iniciando selector de wallpaper"
+
+# Obtener lista de imágenes y GIFs
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" -o -iname "*.gif" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "Error" "No se encontraron imágenes o GIFs en $WALLPAPER_DIR"
+    exit 1
+fi
+
+# Función para generar miniaturas premium con efectos
+generate_thumbnails() {
+    for img in "${images[@]}"; do
+        local basename_img=$(basename "$img")
+        local thumb_path="$CACHE_DIR/${basename_img%.*}_thumb.jpg"
+        
+        # Generar miniatura premium si no existe o si la imagen es más nueva
+        if [[ ! -f "$thumb_path" ]] || [[ "$img" -nt "$thumb_path" ]]; then
+            # Para GIFs, extraer el primer frame para la miniatura
+            if [[ "${img,,}" == *.gif ]]; then
+                # Miniatura premium para GIFs con efectos visuales
+                convert "$img[0]" \
+                    -resize "280x280^" -gravity center -extent "280x280" \
+                    -unsharp 0x0.75+0.75+0.008 \
+                    -enhance \
+                    -quality 98 \
+                    -strip \
+                    "$thumb_path" 2>/dev/null
+            else
+                # Miniatura premium para imágenes estáticas con mejoras visuales
+                convert "$img" \
+                    -resize "280x280^" -gravity center -extent "280x280" \
+                    -unsharp 0x0.75+0.75+0.008 \
+                    -enhance \
+                    -modulate 105,110,100 \
+                    -quality 98 \
+                    -strip \
+                    "$thumb_path" 2>/dev/null
+            fi
+        fi
+    done
+}
+
+# Generar miniaturas
+generate_thumbnails
+
+# Crear lista mejorada para rofi con nombres elegantes
+image_list=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_ext="${img##*.}"
+    file_ext_upper="${file_ext^^}"
+    
+    # Formatear nombre de archivo de manera elegante
+    clean_name="${basename_img%.*}"
+    # Reemplazar guiones y guiones bajos con espacios
+    clean_name="${clean_name//_/ }"
+    clean_name="${clean_name//-/ }"
+    # Capitalizar primera letra de cada palabra
+    clean_name=$(echo "$clean_name" | sed 's/\b\w/\U&/g')
+    
+    # Añadir emoji e indicadores premium
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎦 $clean_name • $file_ext_upper"
+    else
+        case "${file_ext,,}" in
+            png) display_name="🇾 $clean_name • $file_ext_upper" ;;
+            jpg|jpeg) display_name="🖼️ $clean_name • $file_ext_upper" ;;
+            webp) display_name="🌐 $clean_name • $file_ext_upper" ;;
+            *) display_name="🖼️ $clean_name • $file_ext_upper" ;;
+        esac
+    fi
+    
+    # Usar miniatura premium si está disponible, sino crear una estándar
+    thumb_path="$CACHE_DIR/${basename_img%.*}_thumb.jpg"
+    if [[ ! -f "$thumb_path" ]]; then
+        if [[ "${img,,}" == *.gif ]]; then
+            convert "$img[0]" -resize "280x280^" -gravity center -extent "280x280" \
+                -unsharp 0x0.75+0.75+0.008 -enhance -quality 98 -strip \
+                "$thumb_path" 2>/dev/null &
+        else
+            convert "$img" -resize "280x280^" -gravity center -extent "280x280" \
+                -unsharp 0x0.75+0.75+0.008 -enhance -modulate 105,110,100 \
+                -quality 98 -strip "$thumb_path" 2>/dev/null &
+        fi
+    fi
+    
+    image_list="$image_list$display_name\0icon\x1f$thumb_path\n"
+done
+
+# Esperar a que se generen las miniaturas
+wait
+
+# Obtener colores de pywal para el tema
+if [[ -f "$HOME/.cache/wal/colors" ]]; then
+    # Leer colores de pywal
+    mapfile -t colors < "$HOME/.cache/wal/colors"
+    bg_color="${colors[0]}"          # Color de fondo principal
+    fg_color="${colors[7]}"          # Color de texto principal
+    accent_color="${colors[1]}"      # Color de acento
+    secondary_color="${colors[2]}"   # Color secundario
+    selected_color="${colors[3]}"    # Color para elementos seleccionados
+else
+    # Colores por defecto si pywal no está disponible
+    bg_color="#1e1e2e"
+    fg_color="#cdd6f4"
+    accent_color="#89b4fa"
+    secondary_color="#313244"
+    selected_color="#a6e3a1"
+fi
+
+# Generar tema de rofi dinámico con colores actuales
+if [[ -f "$HOME/.local/bin/generate-rofi-theme" ]]; then
+    "$HOME/.local/bin/generate-rofi-theme"
+fi
+
+# Mostrar selector con rofi usando archivo de tema
+selected=$(echo -e "$image_list" | rofi -dmenu -i \
+    -p "🎨 Seleccionar Wallpaper" \
+    -theme "$HOME/.config/rofi/wallpaper-theme.rasi" \
+    -show-icons)
+
+# Si no se seleccionó nada, salir
+if [[ -z "$selected" ]]; then
+    exit 0
+fi
+
+# Encontrar la ruta completa del archivo seleccionado
+selected_path=""
+for img in "${images[@]}"; do
+    basename_img=$(basename "$img")
+    file_ext="${img##*.}"
+    file_ext_upper="${file_ext^^}"
+    
+    # Formatear nombre de archivo de manera elegante (igual que en la lista)
+    clean_name="${basename_img%.*}"
+    # Reemplazar guiones y guiones bajos con espacios
+    clean_name="${clean_name//_/ }"
+    clean_name="${clean_name//-/ }"
+    # Capitalizar primera letra de cada palabra
+    clean_name=$(echo "$clean_name" | sed 's/\b\w/\U&/g')
+    
+    # Recrear el nombre como se mostró en el selector
+    if [[ "${img,,}" == *.gif ]]; then
+        display_name="🎦 $clean_name • $file_ext_upper"
+    else
+        case "${file_ext,,}" in
+            png) display_name="🇾 $clean_name • $file_ext_upper" ;;
+            jpg|jpeg) display_name="🖼️ $clean_name • $file_ext_upper" ;;
+            webp) display_name="🌐 $clean_name • $file_ext_upper" ;;
+            *) display_name="🖼️ $clean_name • $file_ext_upper" ;;
+        esac
+    fi
+    
+    if [[ "$display_name" == "$selected" ]]; then
+        selected_path="$img"
+        break
+    fi
+done
+
+if [[ -z "$selected_path" ]]; then
+    notify-send "Error" "No se pudo encontrar el archivo seleccionado"
+    exit 1
+fi
+
+log "Aplicando wallpaper: $selected_path"
+
+# Guardar el wallpaper seleccionado para inicio automático
+echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+log "Wallpaper guardado en cache para inicio automático: $selected_path"
+
+# Aplicar wallpaper con swww (funciona tanto para imágenes como GIFs)
+log "Aplicando wallpaper con swww: $selected_path"
+
+# Verificar que swww-daemon está corriendo
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "WARNING: swww-daemon no está corriendo, intentando iniciarlo"
+    swww-daemon --format xrgb &
+    sleep 2
+fi
+
+if [[ "${selected_path,,}" == *.gif ]]; then
+    log "Aplicando GIF animado como wallpaper"
+    # Para GIFs, usar transición fade y configuraciones optimizadas
+    swww img "$selected_path" --transition-type fade --transition-duration 0.8 --transition-fps 60 2>/dev/null
+    if [ $? -eq 0 ]; then
+        log "GIF wallpaper aplicado exitosamente"
+    else
+        log "ERROR: Fallo al aplicar GIF wallpaper"
+        notify-send "Error" "No se pudo aplicar el GIF wallpaper"
+    fi
+else
+    log "Aplicando imagen estática como wallpaper"
+    # Para imágenes estáticas, usar la transición original
+    swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5 2>/dev/null
+    if [ $? -eq 0 ]; then
+        log "Imagen wallpaper aplicada exitosamente"
+    else
+        log "ERROR: Fallo al aplicar imagen wallpaper"
+        notify-send "Error" "No se pudo aplicar el wallpaper"
+    fi
+fi
+
+# Aplicar colores con wal si está instalado
+if command -v wal > /dev/null 2>&1; then
+    log "Generando paleta de colores con pywal"
+    
+    # Para GIFs, usar el primer frame para generar colores
+    if [[ "${selected_path,,}" == *.gif ]]; then
+        log "Extrayendo colores del primer frame del GIF"
+        # Crear una imagen temporal del primer frame en un directorio más seguro
+        temp_image="$HOME/.cache/gif_frame_for_wal_$(basename "$selected_path" .gif).png"
+        convert "$selected_path[0]" "$temp_image" 2>/dev/null
+        wal -i "$temp_image" --backend wal > /dev/null 2>&1
+        # NO eliminamos la imagen temporal aquí, la eliminamos después de reaplicar el GIF
+    else
+        # Generar colores con pywal usando backend automático y sin saturación
+        wal -i "$selected_path" --backend wal > /dev/null 2>&1
+    fi
+    
+    # Verificar que se generó el template de Hyprland
+    if [ ! -f "$HOME/.cache/wal/colors-hyprland.conf" ]; then
+        log "WARNING: Template de Hyprland no generado, ejecutando wal -R"
+        wal -R > /dev/null 2>&1
+    fi
+    
+    # Llamar al script de aplicación de temas
+    if [[ -f "$HOME/.local/bin/apply-pywal-themes" ]]; then
+        log "Ejecutando aplicación de temas"
+        "$HOME/.local/bin/apply-pywal-themes" &
+        THEMES_PID=$!
+    else
+        log "Script de temas no encontrado, aplicando temas individualmente"
+        
+        # Aplicar tema a Steam usando script optimizado
+        if [[ -f "$HOME/.local/bin/apply-steam-theme" ]]; then
+            log "Aplicando tema a Steam con script optimizado"
+            "$HOME/.local/bin/apply-steam-theme" &
+            STEAM_THEME_PID=$!
+            log "Script apply-steam-theme ejecutado con PID: $STEAM_THEME_PID"
+        elif command -v wal_steam > /dev/null 2>&1; then
+            log "Aplicando tema a Steam con wal_steam directo"
+            timeout 10 wal_steam -w -d > /dev/null 2>&1 &
+            WAL_STEAM_PID=$!
+            log "wal_steam ejecutado con PID: $WAL_STEAM_PID"
+        else
+            log "WARNING: wal_steam no está disponible"
+        fi
+        
+        # Aplicar tema a Discord si está instalado
+        if command -v pywal-discord > /dev/null 2>&1; then
+            log "Aplicando tema a Discord con tema default"
+            pywal-discord -t default -d > /dev/null 2>&1 &
+        fi
+        
+        # Aplicar tema a Telegram si está instalado
+        if command -v wal-telegram > /dev/null 2>&1; then
+            log "Aplicando tema a Telegram"
+            wal-telegram > /dev/null 2>&1 &
+        fi
+        
+        # Aplicar tema a Firefox con Pywalfox si está instalado (modo monocromático)
+        if command -v pywalfox > /dev/null 2>&1; then
+            log "Aplicando tema a Firefox con pywalfox (modo monocromático)"
+            # Esperar un momento para que pywal genere los colores
+            sleep 2
+            
+            # Configurar pywalfox para usar solo color principal (background y foreground)
+            # Primero obtener el color principal
+            MAIN_COLOR=$(cat ~/.cache/wal/colors | head -n1)
+            BG_COLOR=$(cat ~/.cache/wal/colors | sed -n '1p')
+            FG_COLOR=$(cat ~/.cache/wal/colors | sed -n '8p')
+            
+            # Crear configuración simplificada para pywalfox
+            mkdir -p ~/.config/pywalfox
+            cat > ~/.config/pywalfox/config.json << EOF
+{
+    "theme": {
+        "background": "$BG_COLOR",
+        "foreground": "$FG_COLOR",
+        "mono": true,
+        "borderless": true
+    }
+}
+EOF
+            
+            # Ejecutar pywalfox normalmente
+            pywalfox update
+            if [ $? -eq 0 ]; then
+                log "Pywalfox actualizado exitosamente (configuración monocromática)"
+            else
+                log "ERROR: Fallo al actualizar pywalfox"
+            fi
+        fi
+        
+        # Aplicar tema a Chromium/Chrome si está instalado
+        if python3 -c "import pywalfox" 2>/dev/null; then
+            if pgrep -x "chromium" > /dev/null || pgrep -x "google-chrome" > /dev/null; then
+                log "Aplicando tema a Chromium/Chrome"
+                python3 -c "from pywalfox.pywal import PywalColors; from pywalfox.chrome import Chrome; Chrome().update(PywalColors().colors)" > /dev/null 2>&1 &
+            fi
+        fi
+        
+        # Recargar waybar si está corriendo
+        if pgrep -x "waybar" > /dev/null; then
+            log "Recargando waybar"
+            pkill -SIGUSR2 waybar > /dev/null 2>&1 &
+        fi
+        
+        # Recargar Hyprland con nuevos colores
+        if pgrep -x "Hyprland" > /dev/null; then
+            log "Recargando configuración de Hyprland con nuevos colores"
+            # Primero asegurar que pywal genere el template de colors-hyprland.conf
+            sleep 1
+            if [ -f "$HOME/.cache/wal/colors-hyprland.conf" ]; then
+                hyprctl reload > /dev/null 2>&1 &
+                log "Configuración de Hyprland recargada con nuevos colores"
+            else
+                log "ERROR: No se encontró colors-hyprland.conf, regenerando..."
+                # Regenerar específicamente el template de Hyprland
+                wal -R > /dev/null 2>&1
+                sleep 1
+                hyprctl reload > /dev/null 2>&1 &
+            fi
+        fi
+        
+        # Sincronizar nwg-dock-hyprland con nuevos colores
+        if [[ -f "$HOME/.config/nwg-dock-hyprland/update-dock-colors.sh" ]]; then
+            log "Sincronizando nwg-dock-hyprland con nuevos colores"
+            "$HOME/.config/nwg-dock-hyprland/update-dock-colors.sh" &
+        fi
+        
+        # Aplicar colores a kitty si está instalado y corriendo
+        if command -v kitty > /dev/null 2>&1 && pgrep -x "kitty" > /dev/null; then
+            log "Aplicando tema a kitty"
+            kitty @ set-colors --all --configured ~/.cache/wal/colors-kitty.conf > /dev/null 2>&1 &
+        fi
+        
+        # Aplicar tema a VSCode si está instalado y corriendo
+        if command -v code > /dev/null 2>&1; then
+            log "Aplicando tema de pywal a VSCode"
+            # Verificar si VSCode está corriendo
+            if pgrep -x "code" > /dev/null || pgrep -f "code.*--" > /dev/null; then
+                # Si VSCode está corriendo, usar comando para actualizar el tema
+                code --command "walTheme.update" > /dev/null 2>&1 &
+                log "Comando de actualización de tema enviado a VSCode"
+            else
+                # Si VSCode no está corriendo, el tema se aplicará automáticamente al abrirlo
+                log "VSCode no está corriendo, el tema se aplicará automáticamente al abrirlo"
+            fi
+        fi
+    fi
+    
+    # Esperar a que se apliquen los temas
+    if [[ -n "$THEMES_PID" ]]; then
+        wait $THEMES_PID 2>/dev/null || true
+    else
+        sleep 2
+    fi
+    
+    # Para GIFs, reaplicar el GIF original después de aplicar los temas
+    # para asegurar que el GIF animado se mantenga como wallpaper
+    if [[ "${selected_path,,}" == *.gif ]]; then
+        log "Reaplicando GIF animado después de aplicar temas"
+        # Esperar un momento para que los temas se apliquen
+        sleep 1
+        # Reaplicar el GIF con configuraciones optimizadas para animación
+        swww img "$selected_path" --transition-type none --transition-duration 0.1 2>/dev/null
+        if [ $? -eq 0 ]; then
+            log "GIF wallpaper reaplicado exitosamente para mantener animación"
+        else
+            log "WARNING: No se pudo reaplicar el GIF, puede que se muestre estático"
+        fi
+        
+        # Ahora eliminar la imagen temporal del primer frame
+        temp_image="$HOME/.cache/gif_frame_for_wal_$(basename "$selected_path" .gif).png"
+        rm -f "$temp_image" 2>/dev/null || true
+    fi
+else
+    log "ERROR: pywal no está instalado"
+    notify-send "Error" "pywal no está instalado. Instálalo con: pip install pywal"
+fi
+
+
+log "Wallpaper y temas aplicados exitosamente"
+
+# Sincronizar wallpaper con SDDM automáticamente
+if [[ -f "$HOME/.local/bin/sync-sddm-wallpaper-sudo" ]]; then
+    log "Sincronizando wallpaper con SDDM"
+    "$HOME/.local/bin/sync-sddm-wallpaper-sudo" &
+    SDDM_SYNC_PID=$!
+    log "Sincronización de SDDM iniciada con PID: $SDDM_SYNC_PID"
+else
+    log "WARNING: Script de sincronización de SDDM no encontrado"
+fi
+
+# Notificación de éxito con más información
+if [[ "${selected_path,,}" == *.gif ]]; then
+    notify-send "🎬 GIF Wallpaper Aplicado" "$(basename "$selected_path")\n✅ Steam, Discord, Telegram, VSCode, navegadores y SDDM actualizados" 2>/dev/null || true
+else
+    notify-send "🎨 Wallpaper y Temas Aplicados" "$(basename "$selected_path")\n✅ Steam, Discord, Telegram, VSCode, navegadores y SDDM actualizados" 2>/dev/null || true
+fi

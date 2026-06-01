@@ -1,0 +1,275 @@
+#!/bin/bash
+
+# Script mejorado para arreglar el problema de Waybar cerrándose al cambiar wallpaper
+# Previene reinicios múltiples y asegura sincronización estable con pywal
+
+# Variables de configuración
+LOCK_FILE="/tmp/waybar_wallpaper_sync.lock"
+LOG_FILE="/tmp/waybar-fix-sync.log"
+MAX_RETRIES=3
+RETRY_DELAY=2
+
+# Función de logging mejorada
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [$$] - $1" | tee -a "$LOG_FILE"
+}
+
+# Función de cleanup
+cleanup() {
+    rm -f "$LOCK_FILE"
+    log "🧹 Cleanup completado - lock file removido"
+}
+trap cleanup EXIT
+
+# Verificar si ya se está ejecutando otra instancia
+if [[ -f "$LOCK_FILE" ]]; then
+    existing_pid=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+        log "⏳ Otra instancia está ejecutándose (PID: $existing_pid), esperando..."
+        exit 0
+    else
+        log "🔓 Lock file obsoleto removido"
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Crear lock file con PID actual
+echo $$ > "$LOCK_FILE"
+
+log "🔧 Iniciando reparación de waybar-wallpaper sync..."
+
+# Función para verificar si waybar está funcionando correctamente
+check_waybar_health() {
+    local waybar_pids=$(pgrep -x waybar)
+    local pid_count=0
+    
+    if [[ -n "$waybar_pids" ]]; then
+        pid_count=$(echo "$waybar_pids" | wc -l)
+        log "🔍 Encontradas $pid_count instancia(s) de waybar: $waybar_pids"
+        
+        # Verificar si waybar responde a señales
+        for pid in $waybar_pids; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                log "⚠️ Proceso waybar $pid no responde, será eliminado"
+                return 1
+            fi
+        done
+        
+        if [[ $pid_count -gt 1 ]]; then
+            log "⚠️ Múltiples instancias de waybar detectadas - requiere limpieza"
+            return 2
+        fi
+        
+        return 0
+    else
+        log "❌ Waybar no está ejecutándose"
+        return 1
+    fi
+}
+
+# Función para limpiar todas las instancias de waybar
+clean_waybar() {
+    log "🧹 Limpiando todas las instancias de waybar..."
+    
+    # Terminar procesos existentes suavemente
+    pkill -TERM waybar 2>/dev/null
+    sleep 2
+    
+    # Verificar si algún proceso sigue vivo
+    if pgrep -x waybar > /dev/null; then
+        log "⚡ Forzando terminación de waybar..."
+        pkill -KILL waybar 2>/dev/null
+        sleep 1
+    fi
+    
+    # Limpiar archivos temporales relacionados
+    rm -f /tmp/waybar_*.lock 2>/dev/null || true
+    
+    log "✅ Limpieza de waybar completada"
+}
+
+# Función para iniciar waybar de forma segura
+start_waybar() {
+    local retries=0
+    
+    while [[ $retries -lt $MAX_RETRIES ]]; do
+        log "🚀 Iniciando waybar (intento $((retries + 1))/$MAX_RETRIES)..."
+        
+        # Iniciar waybar en background
+        waybar > /dev/null 2>&1 &
+        local waybar_pid=$!
+        
+        # Esperar un momento para que inicie
+        sleep 2
+        
+        # Verificar si se inició correctamente
+        if kill -0 "$waybar_pid" 2>/dev/null; then
+            log "✅ Waybar iniciado correctamente (PID: $waybar_pid)"
+            return 0
+        else
+            log "❌ Fallo al iniciar waybar, reintentando..."
+            retries=$((retries + 1))
+            sleep $RETRY_DELAY
+        fi
+    done
+    
+    log "💥 Error: No se pudo iniciar waybar después de $MAX_RETRIES intentos"
+    return 1
+}
+
+# Función para recargar waybar sin reiniciarlo (más estable)
+reload_waybar() {
+    local waybar_pids=$(pgrep -x waybar)
+    
+    if [[ -z "$waybar_pids" ]]; then
+        log "ℹ️ Waybar no está ejecutándose, iniciándolo..."
+        start_waybar
+        return $?
+    fi
+    
+    local pid_count=$(echo "$waybar_pids" | wc -l)
+    
+    if [[ $pid_count -eq 1 ]]; then
+        log "🔄 Intentando recarga inteligente de waybar (PID: $waybar_pids)..."
+        
+        # Intentar diferentes señales para recargar sin reiniciar
+        for signal in USR2 USR1 HUP; do
+            if kill -$signal $waybar_pids 2>/dev/null; then
+                sleep 1
+                # Verificar si sigue funcionando
+                if kill -0 $waybar_pids 2>/dev/null; then
+                    log "✅ Waybar recargado exitosamente con señal $signal"
+                    return 0
+                fi
+            fi
+        done
+        
+        log "⚠️ Recarga con señales falló, reiniciando waybar..."
+        clean_waybar
+        start_waybar
+    else
+        log "🧹 Múltiples instancias detectadas, limpiando y reiniciando..."
+        clean_waybar
+        start_waybar
+    fi
+}
+
+# Función para actualizar colores de waybar con pywal
+update_waybar_colors() {
+    local waybar_config_dir="$HOME/.config/waybar"
+    local wal_colors_sh="$HOME/.cache/wal/colors.sh"
+    
+    if [[ ! -f "$wal_colors_sh" ]]; then
+        log "⚠️ Colores de pywal no encontrados, intentando generar..."
+        
+        # Intentar aplicar wallpaper actual si existe
+        if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+            local current_wallpaper=$(cat "$HOME/.cache/current-wallpaper")
+            if [[ -f "$current_wallpaper" ]]; then
+                log "🎨 Regenerando colores con wallpaper actual: $current_wallpaper"
+                wal -i "$current_wallpaper" -n --quiet 2>/dev/null || true
+                sleep 1
+            fi
+        fi
+    fi
+    
+    if [[ -f "$wal_colors_sh" ]]; then
+        log "🎨 Actualizando colores de waybar con pywal..."
+        source "$wal_colors_sh"
+        
+        # Crear archivo de colores actualizado
+        cat > "$waybar_config_dir/colors-pywal.css" << EOF
+/* Colores generados automáticamente por waybar-fix-wallpaper-sync - $(date) */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+        
+        # Asegurar que style.css importe los colores
+        if [[ -f "$waybar_config_dir/style.css" ]]; then
+            if ! grep -q "colors-pywal.css" "$waybar_config_dir/style.css"; then
+                # Crear backup del archivo original
+                cp "$waybar_config_dir/style.css" "$waybar_config_dir/style.css.backup.$(date +%s)" 2>/dev/null || true
+                
+                # Añadir import al inicio
+                sed -i '1i@import "colors-pywal.css";' "$waybar_config_dir/style.css"
+                log "✅ Import colors-pywal.css añadido a style.css"
+            fi
+        fi
+        
+        log "✅ Colores de waybar actualizados correctamente"
+        return 0
+    else
+        log "❌ No se pudieron encontrar o generar colores de pywal"
+        return 1
+    fi
+}
+
+# Función principal
+main() {
+    log "🔄 Verificando estado actual de waybar..."
+    
+    # Verificar estado de waybar
+    check_waybar_health
+    local health_status=$?
+    
+    case $health_status in
+        0)
+            log "✅ Waybar está funcionando correctamente (1 instancia)"
+            ;;
+        1)
+            log "⚠️ Waybar no está ejecutándose o no responde"
+            clean_waybar
+            ;;
+        2)
+            log "⚠️ Múltiples instancias de waybar detectadas"
+            clean_waybar
+            ;;
+    esac
+    
+    # Actualizar colores si es necesario
+    if update_waybar_colors; then
+        log "🎨 Colores actualizados, aplicando a waybar..."
+        
+        # Esperar un momento antes de recargar
+        sleep 1
+        
+        # Recargar waybar para aplicar los nuevos colores
+        reload_waybar
+        
+        if [[ $? -eq 0 ]]; then
+            log "🎉 ¡Waybar reparado y sincronizado exitosamente!"
+            
+            # Notificación de éxito
+            notify-send "✅ Waybar Reparado" "Sincronización con wallpaper arreglada" -t 3000 2>/dev/null || true
+        else
+            log "💥 Error durante la reparación de waybar"
+            notify-send "❌ Error Waybar" "No se pudo reparar waybar completamente" -u critical -t 5000 2>/dev/null || true
+            return 1
+        fi
+    else
+        log "⚠️ No se pudieron actualizar colores, pero intentando reparar waybar..."
+        reload_waybar
+    fi
+}
+
+# Ejecutar función principal
+main
+
+log "✨ Script de reparación completado"

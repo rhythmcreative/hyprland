@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# Directorio de wallpapers
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Verificar si el directorio existe
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    notify-send "Error" "Directorio $WALLPAPER_DIR no encontrado" -u critical
+    exit 1
+fi
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    notify-send "Error" "No se encontraron imágenes en $WALLPAPER_DIR" -u critical
+    exit 1
+fi
+
+# Crear directorio temporal para el script
+temp_file=$(mktemp)
+trap "rm -f $temp_file" EXIT
+
+# Escribir la lista de archivos al archivo temporal
+printf '%s\n' "${images[@]}" > "$temp_file"
+
+# Usar feh como selector de wallpapers
+# feh mostrará las imágenes y permitirá navegar con las flechas
+# Presiona Enter para seleccionar, q para salir
+selected_path=$(feh \
+    --fullscreen \
+    --scale-down \
+    --geometry 300x300 \
+    --borderless \
+    --draw-filename \
+    --draw-actions \
+    --action1 'echo %F > /tmp/selected_wallpaper && killall feh' \
+    --title "Selector de Wallpapers - Enter para seleccionar, Q para salir" \
+    "${images[@]}" 2>/dev/null)
+
+# Leer el archivo seleccionado si existe
+if [[ -f /tmp/selected_wallpaper ]]; then
+    selected_path=$(cat /tmp/selected_wallpaper)
+    rm -f /tmp/selected_wallpaper
+else
+    # Si no se seleccionó nada, salir
+    exit 0
+fi
+
+# Verificar que el archivo seleccionado existe
+if [[ ! -f "$selected_path" ]]; then
+    notify-send "Error" "Archivo seleccionado no válido" -u critical
+    exit 1
+fi
+
+# Aplicar wallpaper con transición elegante
+echo "🎨 Aplicando wallpaper: $(basename "$selected_path")"
+swww img "$selected_path" \
+    --transition-type grow \
+    --transition-pos "0.9,0.1" \
+    --transition-duration 1.5 \
+    --transition-fps 60
+
+# Aplicar colores con wal
+if command -v wal > /dev/null 2>&1; then
+    echo "🎨 Generando paleta de colores..."
+    wal -i "$selected_path" -n -q
+    
+    # Aplicar colores generados inmediatamente
+    source ~/.cache/wal/colors.sh 2>/dev/null || true
+    
+    # Recargar waybar si está ejecutándose
+    if pgrep -x waybar > /dev/null; then
+        echo "🔄 Recargando waybar..."
+        pkill -SIGUSR2 waybar 2>/dev/null || (pkill waybar && waybar &)
+    fi
+    
+    # Recargar terminal si está ejecutándose
+    for terminal in kitty alacritty wezterm; do
+        if pgrep -x "$terminal" > /dev/null; then
+            echo "🔄 Recargando $terminal..."
+            case "$terminal" in
+                kitty) killall -SIGUSR1 kitty 2>/dev/null || true ;;
+                alacritty) touch ~/.config/alacritty/alacritty.yml ;;
+                wezterm) touch ~/.config/wezterm/wezterm.lua ;;
+            esac
+        fi
+    done
+    
+    # Aplicar colores de GTK
+    if [ -f ~/.cache/wal/colors-gtk3.css ]; then
+        echo "🎨 Aplicando colores GTK..."
+        mkdir -p ~/.config/gtk-3.0/
+        cp ~/.cache/wal/colors-gtk3.css ~/.config/gtk-3.0/gtk.css 2>/dev/null || true
+    fi
+    
+    # Aplicar tema del sistema
+    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+    
+    # Notificación con preview
+    notify-send "🎨 Tema Aplicado" "$(basename "$selected_path")" \
+        -i "$selected_path" -t 3000
+    
+    echo "✅ Wallpaper y tema aplicados completamente"
+else
+    notify-send "⚠️ Pywal no encontrado" "Solo wallpaper aplicado" -t 2000
+    echo "⚠️ Solo wallpaper aplicado - instala python-pywal para temas automáticos"
+fi

@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# Script de control principal para notificaciones de volumen
+# Interfaz única para manejar volumen con notificaciones visuales
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+VOLUME_NOTIFY="$SCRIPT_DIR/volume-notify"
+VOLUME_MONITOR="$SCRIPT_DIR/volume-monitor"
+
+show_help() {
+    echo "Sistema de Notificaciones de Volumen"
+    echo "===================================="
+    echo ""
+    echo "Uso: $0 [COMANDO]"
+    echo ""
+    echo "Comandos de volumen:"
+    echo "  up        - Subir volumen (+5%)"
+    echo "  down      - Bajar volumen (-5%)"
+    echo "  mute      - Alternar silencio"
+    echo "  show      - Mostrar estado actual"
+    echo ""
+    echo "Comandos del monitor:"
+    echo "  monitor   - Iniciar monitor automático"
+    echo "  start     - Iniciar servicio en segundo plano"
+    echo "  stop      - Detener servicio"
+    echo "  restart   - Reiniciar servicio"
+    echo "  status    - Ver estado del servicio"
+    echo ""
+    echo "Otros comandos:"
+    echo "  test      - Probar notificaciones"
+    echo "  help      - Mostrar esta ayuda"
+    echo ""
+    echo "Características:"
+    echo "• Barra visual con bloques █ (lleno) y ░ (vacío)"
+    echo "• Iconos dinámicos según el nivel de volumen"
+    echo "• Emojis para mejor visualización (🔊/🔇)"
+    echo "• Detección automática de cambios desde cualquier app"
+    echo "• Integración completa con teclas multimedia"
+}
+
+test_notifications() {
+    echo "Probando notificaciones de volumen..."
+    echo "1. Mostrando estado actual..."
+    $VOLUME_NOTIFY show
+    sleep 2
+    
+    echo "2. Subiendo volumen..."
+    $VOLUME_NOTIFY up
+    sleep 2
+    
+    echo "3. Bajando volumen..."
+    $VOLUME_NOTIFY down
+    sleep 2
+    
+    echo "4. Probando silencio..."
+    $VOLUME_NOTIFY mute
+    sleep 2
+    
+    echo "5. Desilenciando..."
+    $VOLUME_NOTIFY mute
+    
+    echo "✅ Prueba completada!"
+}
+
+case "${1:-help}" in
+    "up"|"down"|"mute"|"show")
+        $VOLUME_NOTIFY "$1"
+        ;;
+    "monitor")
+        $VOLUME_MONITOR monitor
+        ;;
+    "start")
+        systemctl --user start volume-monitor.service
+        echo "✅ Servicio de monitor iniciado"
+        ;;
+    "stop")
+        systemctl --user stop volume-monitor.service
+        echo "⏹️  Servicio de monitor detenido"
+        ;;
+    "restart")
+        systemctl --user restart volume-monitor.service
+        echo "🔄 Servicio de monitor reiniciado"
+        ;;
+    "status")
+        echo "Estado del servicio de monitor:"
+        systemctl --user is-active volume-monitor.service >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "✅ Monitor activo"
+        else
+            echo "❌ Monitor inactivo"
+        fi
+        echo ""
+        systemctl --user status volume-monitor.service --no-pager -l
+        ;;
+    "test")
+        test_notifications
+        ;;
+    "help"|*)
+        show_help
+        ;;
+esac

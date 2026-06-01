@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Script para reiniciar Waybar de forma robusta
+# Uso: restart-waybar
+
+echo "Deteniendo Waybar..."
+
+# Intentar detener Waybar suavemente primero
+pkill -TERM waybar
+sleep 2
+
+# Si sigue ejecutándose, forzar el cierre
+if pgrep waybar > /dev/null; then
+    echo "Waybar aún ejecutándose, forzando cierre..."
+    pkill -KILL waybar
+    sleep 1
+fi
+
+# Limpiar cache de weather si existe
+if [ -f "/tmp/weather_cache.json" ]; then
+    echo "Limpiando cache del clima..."
+    rm -f /tmp/weather_cache.json
+fi
+
+echo "Iniciando Waybar..."
+
+# Iniciar Waybar
+waybar &
+
+# Esperar un momento para que se inicie
+sleep 2
+
+if pgrep waybar > /dev/null; then
+    echo "✅ Waybar reiniciado exitosamente"
+else
+    echo "❌ Error al reiniciar Waybar"
+    exit 1
+fi

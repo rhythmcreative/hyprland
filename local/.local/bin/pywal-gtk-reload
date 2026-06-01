@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Script de conveniencia para recargar manualmente la sincronización GTK-pywal
+
+echo "🎨 Reloading pywal-GTK synchronization..."
+
+# Ejecutar el script de sincronización
+if [ -x ~/.config/wal/done.d/gtk-sync.sh ]; then
+    ~/.config/wal/done.d/gtk-sync.sh
+else
+    echo "❌ GTK sync script not found or not executable"
+    exit 1
+fi
+
+echo "✅ Pywal-GTK synchronization completed!"
+echo "📝 If applications don't reflect changes immediately, try restarting them."

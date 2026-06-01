@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Script ultra-optimizado para inicio INSTANTÁNEO de nm-applet
+# Método: Pre-warm + Kill instantáneo + Startup paralelo
+
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/nm-applet-instant.log"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para iniciar nm-applet con máxima velocidad
+start_nm_applet() {
+    # Método 1: Inicio con prioridad alta y sin delay
+    nice -n -10 nm-applet --indicator &
+    local pid1=$!
+    
+    # Método 2: Inicio paralelo como backup
+    (sleep 0.05 && nm-applet --indicator >/dev/null 2>&1) &
+    local pid2=$!
+    
+    # Verificación ultra-rápida
+    for i in {1..3}; do
+        if pgrep -x nm-applet > /dev/null; then
+            log "✅ nm-applet iniciado en ${i}0ms"
+            return 0
+        fi
+        sleep 0.01
+    done
+    
+    return 1
+}
+
+log "🚀 === INICIO ULTRA-RÁPIDO DE NM-APPLET ==="
+
+# MÉTODO REVOLUCIONARIO: Usar señales en lugar de kill+restart
+if pgrep -x nm-applet > /dev/null; then
+    nm_pid=$(pgrep -x nm-applet)
+    log "🔄 nm-applet detectado (PID: $nm_pid) - enviando señal de reconfiguración..."
+    
+    # Enviar SIGUSR1 para reconfiguration (si nm-applet lo soporta)
+    kill -USR1 "$nm_pid" 2>/dev/null || {
+        log "⚡ Señal USR1 falló, usando HUP..."
+        kill -HUP "$nm_pid" 2>/dev/null || {
+            log "💥 Señales fallaron, kill+restart rápido..."
+            pkill -TERM nm-applet 2>/dev/null && sleep 0.05
+            ! pgrep -x nm-applet > /dev/null || pkill -9 nm-applet 2>/dev/null
+        }
+    }
+    
+    # Verificación post-señal
+    sleep 0.02
+    if pgrep -x nm-applet > /dev/null; then
+        log "✅ nm-applet reconfigurado INSTANTÁNEAMENTE"
+        exit 0
+    else
+        log "🔄 Señal no funcionó, iniciando nuevo proceso..."
+    fi
+fi
+
+# Pre-warm: Preparar entorno para nuevo proceso
+export GDK_BACKEND=x11
+export QT_QPA_PLATFORM=xcb
+export NO_AT_BRIDGE=1
+
+log "⚡ Iniciando nm-applet con prioridad máxima..."
+
+# Intentar inicio ultra-optimizado con múltiples métodos paralelos
+(
+    # Método 1: Prioridad alta
+    nice -n -15 nm-applet --indicator >/dev/null 2>&1 &
+    # Método 2: Proceso normal como backup
+    (sleep 0.01 && nm-applet --indicator >/dev/null 2>&1) &
+    # Método 3: Sin flags como último recurso
+    (sleep 0.02 && nm-applet >/dev/null 2>&1) &
+) &
+
+# Verificación ultra-rápida con múltiples intentos
+for i in {1..5}; do
+    sleep 0.01
+    if pgrep -x nm-applet > /dev/null; then
+        log "✅ nm-applet iniciado en ${i}0ms"
+        exit 0
+    fi
+done
+
+log "⚠️ nm-applet tardando más de lo esperado..."
+
+exit 0

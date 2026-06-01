@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# Watcher para sincronización automática nm-applet ↔ waybar
+# Monitorea cambios en los archivos de colores y sincroniza automáticamente
+
+LOG_FILE="$HOME/.cache/nm-applet-watcher.log"
+WAYBAR_COLORS_FILE="$HOME/.config/waybar/colors-pywal.css"
+PYWAL_COLORS_FILE="$HOME/.cache/wal/colors.sh"
+SYNC_SCRIPT="$HOME/.local/bin/nm-applet-waybar-sync"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para limpiar al salir
+cleanup() {
+    log "🛑 Deteniendo watcher nm-applet-waybar..."
+    exit 0
+}
+
+# Configurar señales de salida
+trap cleanup SIGTERM SIGINT
+
+log "👁️ Iniciando watcher nm-applet-waybar..."
+log "📁 Monitoreando: $WAYBAR_COLORS_FILE"
+log "📁 Monitoreando: $PYWAL_COLORS_FILE"
+
+# Verificar dependencias
+if ! command -v inotifywait > /dev/null; then
+    log "❌ ERROR: inotifywait no está instalado (paquete: inotify-tools)"
+    notify-send "❌ Error Watcher" "inotify-tools no está instalado" -u critical
+    exit 1
+fi
+
+if [[ ! -f "$SYNC_SCRIPT" ]]; then
+    log "❌ ERROR: Script de sincronización no encontrado: $SYNC_SCRIPT"
+    exit 1
+fi
+
+# Función de sincronización con throttling
+last_sync_time=0
+sync_with_throttle() {
+    local current_time=$(date +%s)
+    local time_diff=$((current_time - last_sync_time))
+    
+    # Throttling: esperar al menos 2 segundos entre sincronizaciones
+    if [[ $time_diff -lt 2 ]]; then
+        log "⏳ Sincronización throttled (esperando ${time_diff}s más...)"
+        return
+    fi
+    
+    log "🔄 Ejecutando sincronización nm-applet..."
+    last_sync_time=$current_time
+    
+    if bash "$SYNC_SCRIPT" >> "$LOG_FILE" 2>&1; then
+        log "✅ Sincronización completada exitosamente"
+        notify-send "🎨 Auto-Sync" "nm-applet sincronizado con waybar" -t 1500 || true
+    else
+        log "❌ Error en la sincronización"
+        notify-send "❌ Error Auto-Sync" "Fallo en sincronización nm-applet" -u critical -t 3000 || true
+    fi
+}
+
+# Ejecutar sincronización inicial
+log "🚀 Ejecutando sincronización inicial..."
+sync_with_throttle
+
+# Crear directorios si no existen
+mkdir -p "$(dirname "$WAYBAR_COLORS_FILE")"
+mkdir -p "$(dirname "$PYWAL_COLORS_FILE")"
+
+# Función principal de monitoreo
+monitor_changes() {
+    log "👁️ Iniciando monitoreo de archivos..."
+    
+    # Monitorear ambos archivos
+    while true; do
+        # Usar inotifywait para monitorear cambios
+        if inotifywait -e modify,create,close_write -t 300 \
+            "$WAYBAR_COLORS_FILE" "$PYWAL_COLORS_FILE" 2>/dev/null; then
+            
+            log "📝 Detectado cambio en archivos de colores"
+            sleep 0.5  # Pequeña pausa para evitar sincronizaciones múltiples
+            sync_with_throttle
+        else
+            # Timeout - verificar cada 5 minutos si todo sigue funcionando
+            local exit_code=$?
+            if [[ $exit_code -eq 2 ]]; then  # Timeout
+                log "⏰ Timeout de monitoreo (normal) - continuando..."
+                continue
+            else
+                log "⚠️ Error en inotifywait (código: $exit_code) - reintentando..."
+                sleep 5
+                continue
+            fi
+        fi
+    done
+}
+
+# Iniciar monitoreo
+monitor_changes &
+MONITOR_PID=$!
+
+log "✅ Watcher iniciado (PID: $$, Monitor PID: $MONITOR_PID)"
+log "💡 Para detener: kill $$"
+
+# Mantenerse ejecutando y manejar señales
+while true; do
+    sleep 30
+    # Verificar que el proceso de monitoreo siga corriendo
+    if ! kill -0 $MONITOR_PID 2>/dev/null; then
+        log "⚠️ Proceso de monitoreo terminó inesperadamente, reiniciando..."
+        monitor_changes &
+        MONITOR_PID=$!
+    fi
+done

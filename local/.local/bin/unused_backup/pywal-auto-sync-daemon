@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# Pywal Auto-Sync Daemon
+# Detecta cambios en el wallpaper y sincroniza pywal automáticamente
+
+LOG_FILE="$HOME/.cache/pywal-auto-sync.log"
+PID_FILE="$HOME/.cache/pywal-auto-sync.pid"
+WALLPAPER_CACHE="$HOME/.cache/current-wallpaper"
+LAST_WALLPAPER_FILE="$HOME/.cache/last-pywal-wallpaper"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función para limpiar al salir
+cleanup() {
+    log "Daemon detenido"
+    rm -f "$PID_FILE"
+    exit 0
+}
+
+# Manejar señales
+trap cleanup SIGTERM SIGINT
+
+# Verificar si ya hay una instancia corriendo
+if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    echo "Daemon ya está corriendo (PID: $(cat "$PID_FILE"))"
+    exit 1
+fi
+
+# Crear archivo PID
+echo $$ > "$PID_FILE"
+
+# Crear directorio log si no existe
+mkdir -p "$(dirname "$LOG_FILE")"
+
+log "Pywal Auto-Sync Daemon iniciado (PID: $$)"
+
+# Función para aplicar pywal
+apply_pywal() {
+    local wallpaper="$1"
+    log "Aplicando pywal para: $wallpaper"
+    
+    # Verificar que el archivo existe
+    if [[ ! -f "$wallpaper" ]]; then
+        log "ERROR: Archivo no existe: $wallpaper"
+        return 1
+    fi
+    
+    # Detectar si es GIF
+    if [[ "${wallpaper,,}" == *.gif ]]; then
+        log "Detectado GIF - usando método especial para sincronización"
+        
+        # Para GIFs, extraer frame y aplicar pywal
+        local temp_frame="/tmp/gif_frame_$(basename "$wallpaper" .gif).jpg"
+        
+        # Extraer primer frame del GIF
+        if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -i "$wallpaper" -vframes 1 -y "$temp_frame" >/dev/null 2>&1
+            if [[ -f "$temp_frame" ]]; then
+                log "Frame extraído exitosamente de GIF"
+                wal -i "$temp_frame" -n -q
+                rm -f "$temp_frame"
+            else
+                log "ERROR: No se pudo extraer frame del GIF"
+                return 1
+            fi
+        else
+            log "ADVERTENCIA: ffmpeg no disponible, aplicando pywal directamente al GIF"
+            wal -i "$wallpaper" -n -q
+        fi
+    else
+        log "Aplicando pywal a imagen estática"
+        wal -i "$wallpaper" -n -q
+    fi
+    
+    if [ $? -eq 0 ]; then
+        log "Pywal aplicado exitosamente"
+        
+        # Guardar último wallpaper procesado
+        echo "$wallpaper" > "$LAST_WALLPAPER_FILE"
+        
+        # Sincronizar componentes adicionales
+        log "Sincronizando componentes adicionales..."
+        
+        # Reload hyprland colors
+        if command -v hyprctl >/dev/null 2>&1; then
+            hyprctl reload >/dev/null 2>&1
+            log "Hyprland recargado"
+        fi
+        
+        # Sync waybar (en background para no bloquear)
+        (
+            sleep 2
+            if pgrep -x waybar > /dev/null; then
+                pkill waybar
+                sleep 1
+                nohup waybar > /dev/null 2>&1 &
+                log "Waybar reiniciado"
+            fi
+        ) &
+        
+        # Sync nm-applet con pywal (en background)
+        (
+            sleep 3
+            if command -v "$HOME/.local/bin/nm-applet-pywal-sync" > /dev/null; then
+                "$HOME/.local/bin/nm-applet-pywal-sync" >> "$LOG_FILE" 2>&1
+                log "nm-applet sincronizado con pywal"
+            fi
+        ) &
+        
+        # Notificación opcional (comentar si es muy molesto)
+        # notify-send "🎨 Pywal Sync" "Colores actualizados automáticamente" -t 2000
+        
+        return 0
+    else
+        log "ERROR: Fallo al aplicar pywal"
+        return 1
+    fi
+}
+
+# Función para verificar cambios
+check_wallpaper_change() {
+    if [[ -f "$WALLPAPER_CACHE" ]]; then
+        local current_wallpaper=$(cat "$WALLPAPER_CACHE" | tr -d '\n\r')
+        local last_wallpaper=""
+        
+        if [[ -f "$LAST_WALLPAPER_FILE" ]]; then
+            last_wallpaper=$(cat "$LAST_WALLPAPER_FILE" | tr -d '\n\r')
+        fi
+        
+        # Verificar si el wallpaper ha cambiado
+        if [[ "$current_wallpaper" != "$last_wallpaper" ]] && [[ -n "$current_wallpaper" ]]; then
+            log "Cambio detectado: '$last_wallpaper' -> '$current_wallpaper'"
+            apply_pywal "$current_wallpaper"
+        fi
+    fi
+}
+
+# Aplicar pywal al wallpaper actual al inicio
+if [[ -f "$WALLPAPER_CACHE" ]]; then
+    current_wallpaper=$(cat "$WALLPAPER_CACHE" | tr -d '\n\r')
+    if [[ -n "$current_wallpaper" ]]; then
+        log "Aplicando pywal al wallpaper actual al inicio: $current_wallpaper"
+        apply_pywal "$current_wallpaper"
+    fi
+fi
+
+# Monitor principal usando inotifywait
+log "Iniciando monitor de archivo: $WALLPAPER_CACHE"
+
+# Monitor en bucle con inotifywait
+while true; do
+    if [[ -f "$WALLPAPER_CACHE" ]]; then
+        # Usar inotifywait para detectar cambios
+        inotifywait -e modify,create "$WALLPAPER_CACHE" >/dev/null 2>&1
+        
+        # Pequeña pausa para evitar detecciones múltiples
+        sleep 0.5
+        
+        log "Evento detectado en $WALLPAPER_CACHE"
+        check_wallpaper_change
+    else
+        log "Archivo $WALLPAPER_CACHE no existe, esperando..."
+        sleep 2
+    fi
+done

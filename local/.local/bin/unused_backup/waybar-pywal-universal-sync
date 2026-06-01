@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# Script universal para sincronizar Waybar con pywal
+# Funciona tanto con imágenes estáticas como con GIFs
+
+COLORS_CSS_SOURCE="$HOME/.cache/wal/colors.css"
+WAYBAR_COLORS_TARGET="$HOME/.config/waybar/colors-pywal.css"
+CURRENT_WALLPAPER_FILE="$HOME/.cache/current-wallpaper"
+LOG_FILE="$HOME/.cache/waybar-pywal-sync.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "=== Iniciando sincronización universal Waybar-Pywal ==="
+
+# Verificar dependencias críticas
+missing_deps=()
+for dep in wal swww waybar; do
+    if ! command -v "$dep" > /dev/null 2>&1; then
+        missing_deps+=("$dep")
+    fi
+done
+
+if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    log "ERROR: Faltan dependencias: ${missing_deps[*]}"
+    notify-send "❌ Error de Dependencias" "Faltan: ${missing_deps[*]}"
+    exit 1
+fi
+
+# Verificar que pywal ya se ejecutó
+if [[ ! -f "$COLORS_CSS_SOURCE" ]]; then
+    log "ERROR: No se encontró $COLORS_CSS_SOURCE. Pywal no se ha ejecutado."
+    notify-send "⚠️ Advertencia" "Los colores de pywal no están disponibles"
+    exit 1
+fi
+
+# Función para convertir CSS de pywal a formato Waybar
+convert_pywal_to_waybar() {
+    local input_file="$1"
+    local output_file="$2"
+    
+    # Crear directorio si no existe
+    mkdir -p "$(dirname "$output_file")"
+    
+    {
+        echo "/* Waybar colors generated from pywal - $(date) */"
+        
+        # Extraer colores principales
+        grep -E "^\s*--background:" "$input_file" | sed 's/--background: \(.*\);/@define-color background \1;/'
+        grep -E "^\s*--foreground:" "$input_file" | sed 's/--foreground: \(.*\);/@define-color foreground \1;/'
+        grep -E "^\s*--cursor:" "$input_file" | sed 's/--cursor: \(.*\);/@define-color cursor \1;/'
+        
+        # Extraer colores numerados (0-15)
+        for i in {0..15}; do
+            grep -E "^\s*--color$i:" "$input_file" | sed "s/--color$i: \(.*\);/@define-color color$i \1;/"
+        done
+        
+    } > "$output_file"
+    
+    return $?
+}
+
+# Realizar conversión de colores
+log "Convirtiendo colores de pywal a formato Waybar..."
+if convert_pywal_to_waybar "$COLORS_CSS_SOURCE" "$WAYBAR_COLORS_TARGET"; then
+    log "✅ Colores convertidos exitosamente"
+else
+    log "❌ Error en conversión de colores"
+    notify-send "❌ Error" "Falló la conversión de colores"
+    exit 1
+fi
+
+# Función para recargar/reiniciar Waybar de manera inteligente
+reload_waybar() {
+    log "Iniciando recarga de Waybar..."
+    
+    if pgrep -x waybar > /dev/null; then
+        log "Waybar está corriendo, intentando recarga suave..."
+        
+        # Intentar recarga con señal USR2
+        if pkill -USR2 waybar 2>/dev/null; then
+            log "Recarga suave exitosa (USR2)"
+            sleep 0.5
+            
+            # Verificar que waybar sigue corriendo después de la recarga
+            if pgrep -x waybar > /dev/null; then
+                log "✅ Waybar recargado correctamente"
+                return 0
+            else
+                log "⚠️ Waybar se cerró después de la recarga suave, reiniciando..."
+            fi
+        else
+            log "⚠️ Recarga suave falló, procediendo con reinicio..."
+        fi
+        
+        # Si llegamos aquí, necesitamos reiniciar
+        log "Matando proceso de Waybar..."
+        pkill waybar
+        sleep 1
+    else
+        log "Waybar no está corriendo"
+    fi
+    
+    # Iniciar Waybar
+    log "Iniciando Waybar..."
+    nohup waybar > /dev/null 2>&1 &
+    
+    # Esperar a que Waybar esté completamente cargado
+    local attempts=0
+    while [[ $attempts -lt 15 ]] && ! pgrep -x waybar > /dev/null; do
+        sleep 0.3
+        ((attempts++))
+    done
+    
+    if pgrep -x waybar > /dev/null; then
+        log "✅ Waybar iniciado exitosamente"
+        return 0
+    else
+        log "❌ Error: No se pudo iniciar Waybar"
+        return 1
+    fi
+}
+
+# Recargar Waybar
+if reload_waybar; then
+    log "Waybar sincronizado exitosamente"
+    
+    # Verificar tipo de wallpaper para optimizaciones adicionales
+    if [[ -f "$CURRENT_WALLPAPER_FILE" ]]; then
+        current_wallpaper=$(cat "$CURRENT_WALLPAPER_FILE")
+        
+        if [[ -f "$current_wallpaper" && "${current_wallpaper,,}" == *.gif ]]; then
+            log "Wallpaper actual es GIF, aplicando optimizaciones adicionales..."
+            
+            # Para GIFs, asegurar que swww-daemon esté corriendo
+            if ! pgrep -x "swww-daemon" > /dev/null; then
+                log "Iniciando swww-daemon para GIF..."
+                swww-daemon --format xrgb &
+                sleep 2
+            fi
+            
+            # Reaplicar el GIF para asegurar animación
+            {
+                sleep 1
+                swww img "$current_wallpaper" --transition-type none --transition-duration 0.1 > /dev/null 2>&1
+                log "GIF re-aplicado para mantener animación"
+            } &
+            
+            notify-send "🎨✨ Waybar + GIF Sincronizado" "Colores y animación actualizados"
+        else
+            notify-send "🎨 Waybar Sincronizado" "Colores actualizados con pywal"
+        fi
+    else
+        notify-send "🎨 Waybar Sincronizado" "Colores actualizados"
+    fi
+else
+    log "❌ Error en sincronización de Waybar"
+    notify-send "❌ Error" "No se pudo sincronizar Waybar"
+    exit 1
+fi
+
+log "=== Sincronización universal completada ==="

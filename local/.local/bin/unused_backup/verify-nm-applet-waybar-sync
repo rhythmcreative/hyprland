@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Script para verificar que nm-applet está sincronizado con waybar colors
+
+echo "🔍 Verificando sincronización nm-applet ↔ waybar..."
+
+# Load current pywal colors
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+    echo "📊 Colores pywal actuales:"
+    echo "  Background: $background"
+    echo "  Foreground: $foreground" 
+    echo "  Accent: $color4"
+else
+    echo "❌ No se encontraron colores de pywal"
+    exit 1
+fi
+
+# Check if CSS files exist and have correct colors
+GTK3_CSS="$HOME/.config/gtk-3.0/nm-applet-waybar.css"
+GTK4_CSS="$HOME/.config/gtk-4.0/nm-applet-waybar.css"
+
+echo "🎨 Verificando archivos CSS..."
+
+if [[ -f "$GTK3_CSS" ]]; then
+    if grep -q "$background" "$GTK3_CSS" && grep -q "$foreground" "$GTK3_CSS" && grep -q "$color4" "$GTK3_CSS"; then
+        echo "✅ CSS GTK3 tiene colores correctos"
+    else
+        echo "❌ CSS GTK3 necesita actualización"
+        echo "  Ejecuta: nm-applet-waybar-sync"
+    fi
+else
+    echo "❌ CSS GTK3 no existe"
+fi
+
+if [[ -f "$GTK4_CSS" ]]; then
+    if grep -q "$background" "$GTK4_CSS" && grep -q "$foreground" "$GTK4_CSS" && grep -q "$color4" "$GTK4_CSS"; then
+        echo "✅ CSS GTK4 tiene colores correctos"
+    else
+        echo "❌ CSS GTK4 necesita actualización"
+        echo "  Ejecuta: nm-applet-waybar-sync"
+    fi
+else
+    echo "❌ CSS GTK4 no existe"
+fi
+
+# Check if nm-applet is running
+if pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet está ejecutándose"
+else
+    echo "❌ nm-applet no está ejecutándose"
+    echo "  Ejecutando: nm-applet &"
+    nm-applet > /dev/null 2>&1 &
+fi
+
+# Check waybar colors
+WAYBAR_CSS="$HOME/.config/waybar/colors-pywal.css"
+if [[ -f "$WAYBAR_CSS" ]]; then
+    if grep -q "$background" "$WAYBAR_CSS" && grep -q "$foreground" "$WAYBAR_CSS"; then
+        echo "✅ Waybar CSS tiene colores correctos"
+    else
+        echo "❌ Waybar CSS desactualizado"
+    fi
+else
+    echo "❌ Waybar CSS no encontrado"
+fi
+
+echo "🎉 Verificación completada"

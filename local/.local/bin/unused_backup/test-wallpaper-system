@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Script para probar que el sistema de wallpaper + pywal + waybar funciona
+
+echo "🧪 Probando sistema de wallpaper + pywal + waybar..."
+
+# Verificar dependencias
+echo -n "Verificando swww-daemon: "
+if pgrep -x swww-daemon >/dev/null; then
+    echo "✅ Corriendo"
+else
+    echo "❌ No está corriendo"
+    echo "Iniciando swww-daemon..."
+    swww-daemon --format xrgb &
+    sleep 2
+fi
+
+echo -n "Verificando waybar: "
+if pgrep -x waybar >/dev/null; then
+    echo "✅ Corriendo"
+else
+    echo "❌ No está corriendo"
+    echo "Iniciando waybar..."
+    waybar >/dev/null 2>&1 &
+    sleep 2
+fi
+
+echo -n "Verificando pywal: "
+if command -v wal >/dev/null; then
+    echo "✅ Instalado"
+else
+    echo "❌ No está instalado"
+fi
+
+echo -n "Verificando colores actuales: "
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "✅ Disponibles"
+else
+    echo "❌ No hay colores de pywal"
+fi
+
+echo -n "Verificando directorio de wallpapers: "
+if [[ -d "$HOME/Pictures/Wallpapers" ]] && [[ $(find "$HOME/Pictures/Wallpapers" -name "*.jpg" -o -name "*.png" | wc -l) -gt 0 ]]; then
+    echo "✅ OK ($(find "$HOME/Pictures/Wallpapers" -name "*.jpg" -o -name "*.png" | wc -l) imágenes)"
+else
+    echo "❌ No hay wallpapers disponibles"
+fi
+
+echo -n "Verificando CSS de waybar: "
+if [[ -f "$HOME/.config/waybar/colors-pywal.css" ]]; then
+    echo "✅ Existe"
+else
+    echo "❌ No existe"
+fi
+
+echo ""
+echo "📋 Comandos disponibles:"
+echo "  Super + Shift + W  : Cambiar wallpaper con pywal y waybar"
+echo "  Super + Shift + R  : Recargar waybar manualmente"
+echo ""
+echo "📁 Scripts creados:"
+echo "  ~/.local/bin/change-wallpaper-simple"
+echo "  ~/.local/bin/reload-waybar-simple"
+echo ""
+echo "✨ Sistema listo para usar!"

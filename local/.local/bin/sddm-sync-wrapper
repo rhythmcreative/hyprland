@@ -1,0 +1,5 @@
+#!/bin/bash
+# Wrapper para ejecutar sddm-auto-sync-local con privilegios sin interacción
+# Usa pkexec con polkit para evitar pedir contraseña
+
+exec pkexec --user root /home/rhythmcreative/.local/bin/sddm-auto-sync-local "$@"

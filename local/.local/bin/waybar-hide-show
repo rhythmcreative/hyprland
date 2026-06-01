@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Script simple para ocultar/mostrar waybar con Super+Shift+W
+# No cambia wallpapers ni temas, solo oculta/muestra waybar
+
+if pgrep -x waybar > /dev/null; then
+    # Si waybar está corriendo, lo mata
+    pkill waybar
+    echo "Waybar oculto"
+else
+    # Si waybar no está corriendo, lo inicia
+    waybar &
+    echo "Waybar mostrado"
+fi

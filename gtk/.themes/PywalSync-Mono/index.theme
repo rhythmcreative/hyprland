@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=PywalSync-Mono
+Comment=A monochromatic theme synced with Pywal colors
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=PywalSync-Mono
+MetacityTheme=PywalSync-Mono
+IconTheme=Adwaita
+CursorTheme=Bibata-Modern-Ice
+ButtonLayout=menu:minimize,maximize,close

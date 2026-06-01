@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Script para ejecutar nwg-drawer con tema GTK sincronizado
+# Asegura que nwg-drawer use el tema PywalGTK generado por pywal
+
+set -eo pipefail
+
+LOG_FILE="$HOME/.cache/nwg-drawer-gtk.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "🎨 Iniciando nwg-drawer con tema GTK"
+
+# Aplicar variables de entorno GTK para pywal
+export GTK_THEME="PywalGTK"
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+export GDK_BACKEND="wayland,x11"
+export GDK_SCALE=1
+export GDK_DPI_SCALE=1
+
+# Verificar si el tema PywalGTK existe
+if [[ ! -d "$HOME/.themes/PywalGTK" ]]; then
+    log "⚠️ Tema PywalGTK no encontrado, ejecutando sincronización GTK..."
+    if [[ -x "$HOME/.config/hypr/sync-gtk-pywal.sh" ]]; then
+        "$HOME/.config/hypr/sync-gtk-pywal.sh"
+        log "✅ Tema GTK generado"
+    else
+        log "❌ Script de sincronización GTK no encontrado"
+    fi
+fi
+
+# Configurar gsettings para asegurar el tema correcto
+if command -v gsettings &> /dev/null; then
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK"
+    gsettings set org.gnome.desktop.interface icon-theme-name "Adwaita"
+    gsettings set org.gnome.desktop.interface cursor-theme-name "Bibata-Modern-Ice"
+    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+    log "✅ gsettings configurado"
+fi
+
+# Ejecutar nwg-drawer con el tema GTK aplicado
+log "🚀 Ejecutando nwg-drawer con tema PywalGTK"
+
+# Pasar todos los argumentos que se recibieron al script
+GTK_THEME="PywalGTK" GTK2_RC_FILES="$HOME/.gtkrc-2.0" nwg-drawer "$@"
+
+log "📋 nwg-drawer ejecutado con tema GTK"

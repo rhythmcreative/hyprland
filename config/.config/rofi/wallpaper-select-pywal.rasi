@@ -1,0 +1,141 @@
+@import "colors-pywal.rasi"
+
+/* config - Wallpaper select - Versión con Buscador Integrado */
+
+configuration {
+    modi:                        "drun";
+    show-icons:                  true;
+  	drun-display-format:         "{name}";
+    hover-select:                true;
+    font:                        "JetBrainsMono Nerd Font 12";
+}
+
+/* Los colores se importan automáticamente desde colors-pywal.rasi */
+* {
+    bgcolor: rgba(0, 0, 0, 0.4);
+}
+
+/* Main Window */
+window {
+    transparency:                "real";
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  true;
+    width:                       100%;
+    height:                      100%;
+    x-offset:                    0px;
+    y-offset:                    0px;
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    border-color:                @selected;
+    background-color:            @bgcolor;
+    cursor:                      "default";
+}
+
+/* Main Box */
+mainbox {
+    children:                    [ "inputbar", "listview" ];
+    background-color:            transparent;
+    spacing:                     60px;
+    margin:                      0px;
+    padding:                     160px 225px 100px 225px;
+}
+
+/* Inputbar (BUSCADOR) */
+inputbar {
+    enabled:                     false;
+    spacing:                     15px;
+    margin:                      0% 25%;
+    padding:                     15px 25px;
+    border:                      1px solid;
+    border-radius:               18px;
+    border-color:                rgba(255, 255, 255, 0.15);
+    background-color:            rgba(0, 0, 0, 0.3);
+    text-color:                  @foreground;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+
+textbox-prompt-colon {
+    expand:                      false;
+    str:                         "🔍";
+    background-color:            transparent;
+    text-color:                  @color6;
+    font:                        "JetBrainsMono Nerd Font 16";
+    vertical-align:              0.5;
+}
+
+entry {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      text;
+    placeholder:                 "Busca por nombre o color (blue, pink, windmill...)";
+    placeholder-color:           rgba(255, 255, 255, 0.4);
+    font:                        "JetBrainsMono Nerd Font 14";
+    vertical-align:              0.5;
+}
+
+/* Listview (GRID) */
+listview {
+    columns:                     5;
+    lines:                       4;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+
+    background-color:           transparent;
+    text-color:                 @foreground;
+
+    spacing:                     20px;
+    margin:                      0px;
+    padding:                     0px;
+}
+
+/* Elements */
+element {
+    cursor:                      pointer;
+    border-radius:               25px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    spacing:                     15px;
+    margin:                      0px;
+    padding:                     25px 15px;
+    border:                      0px solid;
+}
+
+element normal.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+element selected.normal {
+    background-color:            rgba(255, 255, 255, 0.1);
+    text-color:                  @color6;
+    border:                      2px solid;
+    border-color:                @color6;
+}
+
+element-icon {
+    expand:                      false;
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        250px;
+    cursor:                      inherit;
+}
+
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   inherit;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}

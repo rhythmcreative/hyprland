@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Toggle keyboard layout between English (us) and Spanish (es)
+# Switch layout for main keyboards
+
+# Switch the main Wooting keyboard
+hyprctl switchxkblayout "wooting-wooting-60he-(arm)" next 2>/dev/null
+
+# Switch the ASUS laptop keyboard as backup
+hyprctl switchxkblayout "asus-keyboard" next 2>/dev/null
+
+# Switch the translated keyboard as additional backup
+hyprctl switchxkblayout "at-translated-set-2-keyboard" next 2>/dev/null
+
+# Get current layout from main keyboard
+current_map=$(hyprctl devices -j | jq -r '.keyboards[] | select(.main==true) | .active_keymap' 2>/dev/null)
+
+# Fallback: get from any keyboard if main not found
+if [ -z "$current_map" ] || [ "$current_map" == "null" ]; then
+  current_map=$(hyprctl devices -j | jq -r '.keyboards[0].active_keymap' 2>/dev/null)
+fi
+
+# Show notification (fallback if notify-send not available)
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send "Keyboard Layout" "Active: ${current_map}" -t 1500 -i input-keyboard 2>/dev/null || echo "Keyboard Layout: ${current_map}"
+else
+  echo "Keyboard Layout: ${current_map}"
+fi

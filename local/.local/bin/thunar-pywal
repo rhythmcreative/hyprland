@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Lanzar Thunar con las variables de entorno correctas para PyWal
+export GTK_THEME="PywalSync-Mono"
+export QT_STYLE_OVERRIDE="kvantum"
+export QT_QPA_PLATFORMTHEME="qt5ct"
+
+# Lanzar Thunar
+exec thunar "$@"

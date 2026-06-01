@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ FIX OH MY POSH KITTY ━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Script para optimizar la visualización de Oh My Posh en Kitty
+# Mejora la renderización de fuentes y símbolos
+
+echo "🎨 Optimizando Oh My Posh para Kitty..."
+
+# Verificar que Oh My Posh esté instalado
+if ! command -v oh-my-posh &> /dev/null; then
+    echo "❌ Oh My Posh no está instalado"
+    exit 1
+fi
+
+# Verificar que Kitty esté corriendo
+if ! pgrep -f kitty > /dev/null; then
+    echo "❌ Kitty no está en ejecución"
+    exit 1
+fi
+
+# Variables
+KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
+OMP_CONFIG="$HOME/.config/oh-my-posh/pywal-theme.omp.json"
+
+# Función para aplicar configuraciones de fuente optimizadas
+apply_font_fixes() {
+    echo "🔧 Aplicando configuraciones de fuente optimizadas..."
+    
+    # Crear respaldo de la configuración actual
+    if [[ -f "$KITTY_CONFIG" ]]; then
+        cp "$KITTY_CONFIG" "$KITTY_CONFIG.backup.$(date +%Y%m%d_%H%M%S)"
+        echo "✅ Respaldo creado: $KITTY_CONFIG.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+    
+    # Configuraciones adicionales para mejor renderizado
+    cat >> "$KITTY_CONFIG" << 'EOF'
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━ OH MY POSH OPTIMIZATIONS ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Optimizaciones específicas para Oh My Posh
+text_composition_strategy platform
+disable_ligatures never
+
+# Configuración de símbolos y Unicode para mejor compatibilidad
+symbol_map U+23FB-U+23FE,U+2665,U+26A1,U+2B58,U+E000-U+E00A,U+E0A0-U+E0A3,U+E0B0-U+E0C8,U+E0CA,U+E0CC-U+E0D2,U+E0D4,U+E200-U+E2A9,U+E300-U+E3E3,U+E5FA-U+E62F,U+E700-U+E7C5,U+F000-U+F2E0,U+F300-U+F31C,U+F400-U+F4A9,U+F500-U+F8FF,U+F0001-U+F1AF0 FiraCode Nerd Font Mono
+
+# Configuración adicional para iconos específicos de Oh My Posh
+symbol_map U+F101,U+F116,U+F31B,U+F413,U+F401,U+E602,U+E702,U+E203,U+E20A,U+E20E FiraCode Nerd Font Mono
+
+# Mejoras de rendering para terminal moderno
+clear_all_shortcuts yes
+map ctrl+shift+equal change_font_size all +2.0
+map ctrl+shift+minus change_font_size all -2.0
+map ctrl+shift+backspace change_font_size all 0
+
+EOF
+    
+    echo "✅ Configuraciones aplicadas a Kitty"
+}
+
+# Función para verificar fuentes necesarias
+check_fonts() {
+    echo "🔍 Verificando fuentes disponibles..."
+    
+    REQUIRED_FONTS=(
+        "FiraCode Nerd Font"
+        "JetBrainsMono Nerd Font"
+        "Hack Nerd Font"
+    )
+    
+    AVAILABLE_FONTS=()
+    
+    for font in "${REQUIRED_FONTS[@]}"; do
+        if fc-list : family | grep -i "$font" > /dev/null; then
+            echo "✅ $font disponible"
+            AVAILABLE_FONTS+=("$font")
+        else
+            echo "❌ $font no disponible"
+        fi
+    done
+    
+    if [[ ${#AVAILABLE_FONTS[@]} -eq 0 ]]; then
+        echo "❌ No hay fuentes Nerd Font disponibles"
+        echo "💡 Instala fuentes Nerd Font con: yay -S nerd-fonts"
+        return 1
+    fi
+    
+    echo "✅ ${#AVAILABLE_FONTS[@]} fuentes compatibles encontradas"
+    return 0
+}
+
+# Función para optimizar el tema de Oh My Posh
+optimize_omp_theme() {
+    echo "🎨 Optimizando tema de Oh My Posh..."
+    
+    if [[ -f "$OMP_CONFIG" ]]; then
+        # Crear respaldo del tema
+        cp "$OMP_CONFIG" "$OMP_CONFIG.backup.$(date +%Y%m%d_%H%M%S)"
+        
+        # Actualizar algunos símbolos para mejor compatibilidad
+        sed -i 's/\\u276f/➤/g' "$OMP_CONFIG"
+        sed -i 's/\\ud83d\\udca5/💥/g' "$OMP_CONFIG"
+        sed -i 's/\\u2728/✨/g' "$OMP_CONFIG"
+        sed -i 's/\\ud83d\\udd50/🕐/g' "$OMP_CONFIG"
+        
+        echo "✅ Tema optimizado para mejor compatibilidad"
+    else
+        echo "⚠️ No se encontró el tema personalizado de Oh My Posh"
+    fi
+}
+
+# Función para aplicar variables de entorno
+set_environment() {
+    echo "🔧 Configurando variables de entorno..."
+    
+    # Variables para mejor renderizado de Oh My Posh
+    export TERM=xterm-256color
+    export COLORTERM=truecolor
+    
+    echo "✅ Variables de entorno configuradas"
+}
+
+# Función para refrescar Kitty
+refresh_kitty() {
+    echo "🔄 Refrescando configuración de Kitty..."
+    
+    # Intentar recargar la configuración de Kitty
+    if command -v kitty @ &> /dev/null; then
+        kitty @ load-config || echo "⚠️ No se pudo recargar la configuración automáticamente"
+    fi
+    
+    echo "💡 Reinicia Kitty para aplicar todos los cambios"
+}
+
+# Función para mostrar información útil
+show_info() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━ INFORMACIÓN ÚTIL ━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "🎨 Fuente recomendada aplicada: FiraCode Nerd Font Mono"
+    echo "📏 Tamaño de fuente: 13.0"
+    echo "🎯 Tema activo: pywal-theme.omp.json"
+    echo ""
+    echo "🔧 Comandos útiles:"
+    echo "   fix-omp-kitty       - Ejecutar este script de nuevo"
+    echo "   omp-sync           - Sincronizar tema con pywal"
+    echo "   switch-prompt omp  - Activar Oh My Posh"
+    echo ""
+    echo "💡 Si los símbolos no se ven bien:"
+    echo "   1. Reinicia Kitty completamente"
+    echo "   2. Verifica que la fuente sea correcta en Kitty > Configuración"
+    echo "   3. Ejecuta: kitty +kitten unicode_input"
+    echo ""
+}
+
+# Función principal
+main() {
+    echo "🚀 Iniciando optimización de Oh My Posh para Kitty..."
+    echo ""
+    
+    check_fonts || exit 1
+    apply_font_fixes
+    optimize_omp_theme
+    set_environment
+    refresh_kitty
+    
+    echo ""
+    echo "✅ Optimización completada!"
+    show_info
+}
+
+# Verificar argumentos
+case "${1:-}" in
+    "--help"|"-h")
+        echo "fix-omp-kitty - Optimiza Oh My Posh para Kitty"
+        echo ""
+        echo "Uso: fix-omp-kitty [opciones]"
+        echo ""
+        echo "Opciones:"
+        echo "  --help, -h     Mostrar esta ayuda"
+        echo "  --fonts        Solo verificar fuentes"
+        echo "  --theme        Solo optimizar tema"
+        echo ""
+        exit 0
+        ;;
+    "--fonts")
+        check_fonts
+        exit 0
+        ;;
+    "--theme")
+        optimize_omp_theme
+        exit 0
+        ;;
+    *)
+        main
+        ;;
+esac

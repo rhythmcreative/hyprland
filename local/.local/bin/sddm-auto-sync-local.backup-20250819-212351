@@ -1,0 +1,436 @@
+#!/bin/bash
+
+# Script para sincronización automática de wallpaper en SDDM (MODO AUTOMÁTICO)
+# Autor: rhythmcreative
+# Versión completamente automática - aplica directamente al sistema sin pasos manuales
+# Usa pkexec de forma transparente para sincronizar automáticamente
+
+LOG_FILE="/tmp/sddm-auto-sync-local.log"
+USER_HOME="/home/rhythmcreative"
+SDDM_THEME_DIR="$USER_HOME/.config/sddm-theme"
+SDDM_SYSTEM_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+BG_SDDM_DIR="/home/rhythmcreative/BG-SDDM"
+
+# Crear estructura de directorios locales
+setup_local_dirs() {
+    mkdir -p "$SDDM_THEME_DIR/Backgrounds"
+    mkdir -p "$SDDM_THEME_DIR/Themes"
+    mkdir -p "$SDDM_THEME_DIR/scripts"
+    
+    # Copiar configuración base si existe y no tenemos una local
+    if [[ -f "$SDDM_SYSTEM_DIR/Themes/theme1.conf" ]] && [[ ! -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]]; then
+        cp "$SDDM_SYSTEM_DIR/Themes/theme1.conf" "$SDDM_THEME_DIR/Themes/theme1.conf" 2>/dev/null || {
+            # Si no podemos copiar, crear una configuración básica
+            cat > "$SDDM_THEME_DIR/Themes/theme1.conf" << 'EOF'
+[General]
+#################### General ####################
+
+ScreenWidth="1920"
+ScreenHeight="1080"
+Font="Open Sans"
+KeyboardSize="0.4"
+RoundCorners="20"
+HourFormat="HH:mm"
+DateFormat="dddd d MMMM"
+HeaderText=""
+
+#################### Background ####################
+
+Background="Backgrounds/default.jpg"
+DimBackground="0.8"
+CropBackground="true"
+BackgroundHorizontalAlignment="center"
+BackgroundVerticalAlignment="center"
+
+#################### Colors ####################
+
+HighlightColor="#1a1a1a"
+BackgroundColor="#1a1a1a"
+TextColor="#ffffff"
+PlaceholderColor="#bbbbbb"
+SystemButtonsIconColor="#ffffff"
+HighlightTextColor="#ffffff"
+HoverSessionAndVirtualKeyboard="#333333"
+
+#################### Form ####################
+
+PartialBlur="no"
+FullBlur="true"
+BlurMax="64"
+Blur="1.0"
+HaveFormBackground="false"
+FormPosition="center"
+
+#################### Virtual Keyboard ####################
+
+VirtualKeyboardPosition="center"
+
+#################### Interface Behavior ####################
+
+HideVirtualKeyboard="false"
+HideSystemButtons="false"
+HideLoginButton="true"
+ForceLastUser="true"
+PasswordFocus="true"
+HideCompletePassword="true"
+AllowEmptyPassword="false"
+AllowUppercaseLettersInUsernames="false"
+RightToLeftLayout="false"
+EOF
+        }
+    fi
+}
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Función para mostrar notificaciones
+notify_user() {
+    if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+        notify-send "SDDM Sync (Local)" "$1" 2>/dev/null || true
+    fi
+}
+
+get_current_wallpaper() {
+    # Intentar obtener wallpaper desde pywal
+    if [[ -f "$USER_HOME/.cache/wal/wal" ]]; then
+        cat "$USER_HOME/.cache/wal/wal" 2>/dev/null
+        return 0
+    fi
+    
+    # Fallback: buscar en archivos de configuración de swww
+    if [[ -f "$USER_HOME/.cache/current-wallpaper" ]]; then
+        cat "$USER_HOME/.cache/current-wallpaper" 2>/dev/null
+        return 0
+    fi
+    
+    return 1
+}
+
+# Función principal de sincronización (solo local)
+sync_wallpaper_local() {
+    local wallpaper="$1"
+    log "📱 Sincronización local de SDDM..."
+    
+    setup_local_dirs
+    
+    # Copiar wallpaper al directorio local
+    local filename=$(basename "$wallpaper")
+    local dest_path="$SDDM_THEME_DIR/Backgrounds/$filename"
+    
+    if [[ ! -f "$dest_path" ]] || ! cmp -s "$wallpaper" "$dest_path" 2>/dev/null; then
+        log "📁 Copiando wallpaper: $filename"
+        if cp "$wallpaper" "$dest_path" 2>/dev/null; then
+            chmod 644 "$dest_path" 2>/dev/null || true
+            log "✅ Wallpaper copiado a directorio local"
+        else
+            log "❌ Error al copiar wallpaper"
+            return 1
+        fi
+    fi
+    
+    # Actualizar configuración local
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    if [[ -f "$config_file" ]]; then
+        log "⚙️ Actualizando configuración local..."
+        
+        # Crear backup
+        cp "$config_file" "$config_file.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        
+        # Actualizar configuración local
+        if sed -i "s|^Background=.*|Background=\"Backgrounds/$filename\"|g" "$config_file" 2>/dev/null; then
+            log "✅ Configuración local actualizada para: $filename"
+            
+            # Crear script de aplicación al sistema
+            create_apply_script "$dest_path"
+            
+            return 0
+        else
+            log "❌ Error al actualizar configuración local"
+            return 1
+        fi
+    else
+        log "❌ Archivo de configuración no encontrado: $config_file"
+        return 1
+    fi
+}
+
+# Crear script para aplicar cambios al sistema (opcional)
+create_apply_script() {
+    local wallpaper_path="$1"
+    local apply_script="$SDDM_THEME_DIR/scripts/apply-to-system.sh"
+    local install_script="$SDDM_THEME_DIR/scripts/install-changes.sh"
+    
+    # Script que se ejecutará con pkexec/sudo
+    cat > "$apply_script" << EOF
+#!/bin/bash
+# Script para aplicar cambios locales al sistema SDDM
+
+WALLPAPER_SRC="$wallpaper_path"
+WALLPAPER_NAME="\$(basename "\$WALLPAPER_SRC")"
+SYSTEM_DEST="/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds/\$WALLPAPER_NAME"
+CONFIG_FILE="/usr/share/sddm/themes/sddm-astronaut-theme/Themes/theme1.conf"
+
+echo "🔧 Aplicando cambios al sistema SDDM..."
+
+# Crear directorio si no existe
+mkdir -p "/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds"
+
+# Copiar wallpaper
+if cp "\$WALLPAPER_SRC" "\$SYSTEM_DEST" 2>/dev/null; then
+    chmod 644 "\$SYSTEM_DEST"
+    echo "✅ Wallpaper copiado al sistema"
+else
+    echo "❌ Error al copiar wallpaper"
+    exit 1
+fi
+
+# Copiar configuración local al sistema
+if [[ -f "$SDDM_THEME_DIR/Themes/theme1.conf" ]]; then
+    cp "$SDDM_THEME_DIR/Themes/theme1.conf" "\$CONFIG_FILE"
+    echo "✅ Configuración aplicada al sistema"
+fi
+
+echo "🎉 Cambios aplicados. Los cambios estarán visibles en el próximo reinicio/logout."
+EOF
+
+    chmod +x "$apply_script"
+    
+    # Script wrapper fácil de usar
+    cat > "$install_script" << EOF
+#!/bin/bash
+# Script wrapper para aplicar cambios con diferentes métodos
+
+echo "🔧 SDDM Auto-Sync: Aplicar cambios al sistema"
+echo "=============================================="
+echo ""
+echo "Opciones disponibles:"
+echo "1. Usar pkexec (recomendado)"
+echo "2. Usar sudo"
+echo "3. Solo mostrar comandos para ejecutar manualmente"
+echo ""
+
+read -p "Selecciona una opción (1-3): " option
+
+case \$option in
+    1)
+        echo "Ejecutando con pkexec..."
+        pkexec "$apply_script"
+        ;;
+    2)
+        echo "Ejecutando con sudo..."
+        sudo "$apply_script"
+        ;;
+    3)
+        echo ""
+        echo "Ejecuta manualmente uno de estos comandos:"
+        echo "  pkexec $apply_script"
+        echo "  sudo $apply_script"
+        echo ""
+        ;;
+    *)
+        echo "Opción inválida"
+        exit 1
+        ;;
+esac
+EOF
+
+    chmod +x "$install_script"
+    
+    log "📋 Scripts de aplicación creados:"
+    log "   - Directo: $apply_script"
+    log "   - Interactivo: $install_script"
+}
+
+# Aplicar colores de pywal a configuración local
+sync_pywal_colors_local() {
+    log "🎨 Aplicando colores de pywal a configuración local..."
+    
+    local colors_file="$USER_HOME/.cache/wal/colors"
+    local config_file="$SDDM_THEME_DIR/Themes/theme1.conf"
+    
+    if [[ ! -f "$colors_file" ]]; then
+        log "⚠️ Archivo de colores pywal no encontrado"
+        return 1
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        log "❌ Archivo de configuración local no encontrado"
+        return 1
+    fi
+    
+    # Leer colores
+    local background=$(sed -n '1p' "$colors_file")
+    local foreground=$(sed -n '8p' "$colors_file")
+    local color1=$(sed -n '2p' "$colors_file")
+    local color4=$(sed -n '5p' "$colors_file")
+    local color5=$(sed -n '6p' "$colors_file")
+    
+    # Aplicar colores
+    sed -i "s|background-color = #[0-9a-fA-F]*|background-color = $background|g" "$config_file" 2>/dev/null || true
+    sed -i "s|color = #[0-9a-fA-F]*|color = $foreground|g" "$config_file" 2>/dev/null || true
+    sed -i "s|content-color = #[0-9a-fA-F]*|content-color = $foreground|g" "$config_file" 2>/dev/null || true
+    sed -i "s|border-color = #[0-9a-fA-F]*|border-color = $color4|g" "$config_file" 2>/dev/null || true
+    sed -i "s|active-border-color = #[0-9a-fA-F]*|active-border-color = $color5|g" "$config_file" 2>/dev/null || true
+    
+    log "🎨 Colores pywal aplicados a configuración local"
+}
+
+# Función para crear configuración optimizada de Hyprland
+create_optimized_hyprland_session() {
+    local session_file="/tmp/hyprland-optimized.desktop"
+    log "🚀 Creando sesión optimizada de Hyprland..."
+    
+    cat > "$session_file" << EOF
+[Desktop Entry]
+Name=Hyprland (Ultra Fast)
+Comment=Ultra optimized Hyprland session for fast startup
+Exec=env HYPRLAND_FAST_STARTUP=1 Hyprland
+Type=Application
+DesktopNames=Hyprland
+Keywords=tiling;wayland;compositor;fast;
+EOF
+    
+    # Intentar copiar al sistema con permisos elevados
+    if pkexec cp "$session_file" "/usr/share/wayland-sessions/hyprland-fast.desktop" 2>/dev/null; then
+        pkexec chmod 644 "/usr/share/wayland-sessions/hyprland-fast.desktop" 2>/dev/null
+        log "✅ Sesión Hyprland optimizada creada"
+        return 0
+    else
+        log "⚠️ No se pudo crear sesión optimizada (requiere permisos)"
+        return 1
+    fi
+}
+
+# Función para optimizar configuración SDDM para inicio rápido
+optimize_sddm_for_hyprland() {
+    log "⚡ Aplicando optimizaciones SDDM para Hyprland ultra rápido..."
+    
+    local sddm_config="/tmp/sddm-optimized.conf"
+    
+    cat > "$sddm_config" << EOF
+[General]
+HaltCommand=/usr/bin/systemctl poweroff
+RebootCommand=/usr/bin/systemctl reboot
+Numlock=on
+InputMethod=
+
+[Theme]
+Current=sddm-astronaut-theme
+CursorTheme=Bibata-Modern-Ice
+CursorSize=24
+FacesDir=/usr/share/pixmaps/faces
+ThemeDir=/usr/share/sddm/themes
+
+[Users]
+MaximumUid=60513
+MinimumUid=1000
+HideUsers=
+HideShells=
+RememberLastUser=true
+RememberLastSession=true
+
+[Wayland]
+# Optimizaciones para inicio ultra rápido de Wayland
+SessionDir=/usr/share/wayland-sessions
+CompositorCommand=Hyprland
+
+[X11]
+SessionDir=/usr/share/xsessions
+Xephyr=/usr/bin/Xephyr
+XauthPath=/usr/bin/xauth
+XdisplayStart=0
+XdisplayStop=2
+XserverPath=/usr/bin/X
+XserverArguments=-nolisten tcp
+
+[Autologin]
+# User=
+# Session=hyprland-fast.desktop
+# Relogin=false
+EOF
+
+    # Intentar aplicar configuración optimizada
+    if pkexec cp "$sddm_config" "/etc/sddm.conf" 2>/dev/null; then
+        log "✅ Configuración SDDM optimizada para inicio rápido"
+    else
+        log "⚠️ No se pudo optimizar SDDM (configuración manual requerida)"
+    fi
+}
+
+main() {
+    log "🔐 Iniciando sincronización automática de SDDM (modo local + optimizaciones)..."
+    
+    # NUEVA FUNCIONALIDAD: Optimizaciones para inicio ultra rápido
+    create_optimized_hyprland_session
+    optimize_sddm_for_hyprland
+    
+    # Obtener wallpaper actual
+    CURRENT_WALLPAPER=$(get_current_wallpaper)
+    
+    if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+        log "❌ No se pudo obtener el wallpaper actual"
+        notify_user "❌ No se pudo sincronizar: wallpaper no encontrado"
+        exit 1
+    fi
+    
+    log "📸 Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    
+    # Sincronizar wallpaper (solo local)
+    if sync_wallpaper_local "$CURRENT_WALLPAPER"; then
+        # Aplicar colores de pywal si están disponibles
+        sync_pywal_colors_local
+        
+        log "🎉 Sincronización local completada exitosamente"
+        notify_user "✅ Configuración local sincronizada con $(basename "$CURRENT_WALLPAPER")"
+        
+        log "💡 Configuración guardada en: $SDDM_THEME_DIR"
+        
+        # APLICAR AUTOMÁTICAMENTE AL SISTEMA
+        log "🔄 Aplicando automáticamente al sistema SDDM..."
+        echo "🔄 Aplicando cambios al sistema automáticamente..."
+        
+        if [[ -f "$SDDM_THEME_DIR/scripts/apply-to-system.sh" ]]; then
+            # Ejecutar automáticamente con pkexec (sin interacción)
+            if pkexec "$SDDM_THEME_DIR/scripts/apply-to-system.sh" 2>/dev/null; then
+                log "✅ Cambios aplicados automáticamente al sistema SDDM"
+                notify_user "✅ SDDM completamente sincronizado con $(basename "$CURRENT_WALLPAPER")"
+                echo "✅ SDDM completamente sincronizado"
+                echo "🔄 Los cambios estarán visibles en el próximo logout/reinicio"
+            else
+                log "⚠️ No se pudieron aplicar cambios automáticamente al sistema"
+                notify_user "⚠️ Configuración local lista, pero no aplicada al sistema"
+                echo "⚠️ Configuración preparada pero no aplicada al sistema"
+                echo "💡 Para aplicar manualmente: $SDDM_THEME_DIR/scripts/install-changes.sh"
+            fi
+        else
+            log "❌ Script de aplicación no encontrado"
+            echo "❌ Error: script de aplicación no encontrado"
+        fi
+        
+    else
+        log "❌ Error en la sincronización local"
+        notify_user "❌ Error en sincronización local"
+        exit 1
+    fi
+}
+
+# Permitir argumentos específicos
+if [[ "$1" == "--wallpaper" ]] && [[ -n "$2" ]] && [[ -f "$2" ]]; then
+    log "🖼️ Sincronizando con wallpaper específico: $2"
+    CURRENT_WALLPAPER="$2"
+    sync_wallpaper_local "$CURRENT_WALLPAPER"
+    sync_pywal_colors_local
+elif [[ "$1" == "--apply" ]]; then
+    # Ejecutar directamente el script de aplicación
+    if [[ -f "$SDDM_THEME_DIR/scripts/apply-to-system.sh" ]]; then
+        pkexec "$SDDM_THEME_DIR/scripts/apply-to-system.sh"
+    else
+        echo "❌ No hay configuración para aplicar. Ejecuta el script principal primero."
+        exit 1
+    fi
+else
+    main
+fi

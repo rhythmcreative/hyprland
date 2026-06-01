@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Wrapper para pywal que sincroniza automáticamente con Vesktop
+# Uso: wal-vesktop -i /path/to/wallpaper [otras opciones de wal]
+
+# Ejecutar pywal con todos los argumentos pasados
+wal "$@"
+
+# Verificar que pywal se ejecutó correctamente
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "🎨 Sincronizando colores con Vesktop..."
+    
+    # Ejecutar script de sincronización
+    if [ -x "$HOME/.local/bin/vesktop-pywal-sync" ]; then
+        "$HOME/.local/bin/vesktop-pywal-sync"
+        
+        # Recargar Vesktop automáticamente si está corriendo
+        if pgrep -f "vesktop" >/dev/null 2>&1; then
+            echo ""
+            if [ -x "$HOME/.local/bin/vesktop-reload" ]; then
+                "$HOME/.local/bin/vesktop-reload"
+            else
+                echo "💡 Usa Ctrl+R en Vesktop para recargar los cambios"
+            fi
+        fi
+    else
+        echo "❌ Error: vesktop-pywal-sync no encontrado"
+    fi
+else
+    echo "❌ Error al ejecutar pywal"
+    exit 1
+fi

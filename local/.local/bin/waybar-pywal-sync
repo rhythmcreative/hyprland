@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# Script optimizado para sincronizar waybar con pywal
+# Evita reinicios múltiples y asegura sincronización correcta
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') - $1" | tee -a /tmp/waybar-pywal-sync.log
+}
+
+# Verificar si pywal está instalado
+if ! command -v wal &> /dev/null; then
+    notify-send "❌ Error" "pywal no está instalado" -u critical
+    exit 1
+fi
+
+log "🎨 Iniciando sincronización waybar-pywal..."
+
+# Verificar si existen los archivos de colores de pywal
+if [[ ! -f "$HOME/.cache/wal/colors.css" ]]; then
+    log "⚠️ No se encontraron colores de pywal, aplicando wallpaper actual..."
+    current_wallpaper=$(cat ~/.cache/current-wallpaper 2>/dev/null || echo "")
+    if [[ -n "$current_wallpaper" && -f "$current_wallpaper" ]]; then
+        wal -i "$current_wallpaper" -n
+        sleep 1
+    else
+        log "❌ No se pudo determinar wallpaper actual"
+        exit 1
+    fi
+fi
+
+# Función para recargar waybar de forma eficiente (SÚPER OPTIMIZADA - CERO REINICIOS SI ES POSIBLE)
+reload_waybar_safe() {
+    local waybar_pids=$(pgrep -x waybar)
+    local pid_count=0
+    
+    if [[ -n "$waybar_pids" ]]; then
+        pid_count=$(echo "$waybar_pids" | wc -l)
+    fi
+    
+    # Si waybar no está corriendo, iniciarlo
+    if [[ -z "$waybar_pids" ]]; then
+        log "🚀 Iniciando waybar (no estaba corriendo)..."
+        waybar > /dev/null 2>&1 &
+        sleep 1
+        return 0
+    fi
+    
+    # Si hay múltiples instancias, limpiar y reiniciar UNA SOLA VEZ
+    if [[ $pid_count -gt 1 ]]; then
+        log "🧹 Detectadas $pid_count instancias de waybar, limpiando..."
+        pkill -TERM waybar 2>/dev/null || true
+        sleep 2
+        # Verificar si se cerraron todas
+        remaining=$(pgrep -x waybar || true)
+        if [[ -n "$remaining" ]]; then
+            pkill -9 waybar 2>/dev/null || true
+            sleep 1
+        fi
+        waybar > /dev/null 2>&1 &
+        sleep 1
+        log "✅ Waybar iniciado con instancia única"
+        return 0
+    fi
+    
+    # INSTANCIA ÚNICA: Intentar SOLO recarga de CSS sin reiniciar
+    log "🎨 Recargando estilos de waybar (sin reinicio)..."
+    
+    # Método 1: Recarga de CSS usando SIGUSR2
+    if kill -USR2 $waybar_pids 2>/dev/null; then
+        log "✅ CSS de waybar recargado exitosamente (CERO reinicios)"
+        sleep 1
+        # Verificar que sigue corriendo
+        if kill -0 $waybar_pids 2>/dev/null; then
+            return 0
+        fi
+    fi
+    
+    # Método 2: Si SIGUSR2 falla, usar SIGHUP para recarga completa
+    log "🔄 Intentando recarga completa con SIGHUP..."
+    if kill -HUP $waybar_pids 2>/dev/null; then
+        sleep 1.5
+        # Verificar que sigue corriendo después de SIGHUP
+        if kill -0 $waybar_pids 2>/dev/null; then
+            log "✅ Waybar recargado con SIGHUP (sin reinicio de proceso)"
+            return 0
+        fi
+    fi
+    
+    # ÚLTIMO RECURSO: Solo si waybar se crasheó, reiniciarlo UNA SOLA VEZ
+    log "⚠️ Waybar se cerró durante la recarga, reiniciando (último recurso)..."
+    # Ya no está corriendo, solo iniciarlo
+    waybar > /dev/null 2>&1 &
+    sleep 1
+    if pgrep -x waybar > /dev/null; then
+        log "✅ Waybar reiniciado exitosamente (1 vez únicamente)"
+    else
+        log "❌ ERROR: No se pudo reiniciar waybar"
+        return 1
+    fi
+}
+
+# Actualizar SOLO los colores de waybar con pywal SIN modificar style.css
+update_waybar_colors_only() {
+    local waybar_config_dir="$HOME/.config/waybar"
+    local wal_colors="$HOME/.cache/wal/colors.css"
+    
+    # Verificar que existan los archivos necesarios
+    if [[ ! -f "$wal_colors" ]]; then
+        log "❌ Archivo de colores de pywal no encontrado"
+        return 1
+    fi
+    
+    # Leer colores de pywal
+    source "$HOME/.cache/wal/colors.sh"
+    
+    # Crear/actualizar SOLO el archivo de colores para waybar (NO TOCAR style.css)
+    cat > "$waybar_config_dir/colors-pywal.css" << EOF
+/* Colores generados automáticamente por pywal */
+@define-color background ${background};
+@define-color foreground ${foreground};
+@define-color cursor ${cursor};
+@define-color color0 ${color0};
+@define-color color1 ${color1};
+@define-color color2 ${color2};
+@define-color color3 ${color3};
+@define-color color4 ${color4};
+@define-color color5 ${color5};
+@define-color color6 ${color6};
+@define-color color7 ${color7};
+@define-color color8 ${color8};
+@define-color color9 ${color9};
+@define-color color10 ${color10};
+@define-color color11 ${color11};
+@define-color color12 ${color12};
+@define-color color13 ${color13};
+@define-color color14 ${color14};
+@define-color color15 ${color15};
+EOF
+    
+    log "✅ Colores de waybar actualizados (style.css NO modificado)"
+    
+    # SOLO asegurar que style.css tenga el import si no lo tiene
+    if [[ -f "$waybar_config_dir/style.css" ]]; then
+        if ! grep -q "colors-pywal.css" "$waybar_config_dir/style.css"; then
+            # Añadir import al inicio del archivo SOLO si no existe
+            sed -i '1i@import "colors-pywal.css";' "$waybar_config_dir/style.css"
+            log "✅ Import de colores añadido a tu style.css (resto sin modificar)"
+        else
+            log "✅ Tu style.css ya tiene el import de colores, no se modifica nada más"
+        fi
+    fi
+}
+
+# Ejecutar actualización de colores SOLAMENTE (sin tocar tu style.css)
+update_waybar_colors_only
+
+# Recargar waybar de forma segura
+reload_waybar_safe
+
+log "🎉 Sincronización completada"
+
+# Sincronizar nm-applet automáticamente
+log "🔄 Sincronizando nm-applet con los nuevos colores..."
+if [[ -f "$HOME/.local/bin/nm-applet-waybar-sync" ]]; then
+    "$HOME/.local/bin/nm-applet-waybar-sync" 2>&1 | while read line; do
+        log "nm-applet: $line"
+    done
+    log "✅ nm-applet sincronizado automáticamente"
+else
+    log "⚠️ Script de sincronización nm-applet no encontrado"
+fi
+
+# Intentar enviar notificación, pero no fallar si no funciona
+notify-send "🎨 Waybar + nm-applet Sync" "Colores sincronizados con pywal" -t 2000 2>/dev/null || true

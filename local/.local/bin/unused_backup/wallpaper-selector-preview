@@ -1,0 +1,253 @@
+#!/bin/bash
+
+# Selector de Wallpaper con Preview usando feh
+# Optimizado para Auto-Sync con pywal
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+LOG_FILE="$HOME/.cache/wallpaper-selector-preview.log"
+TEMP_DIR="/tmp/wallpaper-selector"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Limpiar al salir
+cleanup() {
+    log "Limpiando archivos temporales"
+    rm -rf "$TEMP_DIR"
+    pkill -f "feh.*wallpaper-preview"
+}
+trap cleanup EXIT
+
+# Crear directorio temporal
+mkdir -p "$TEMP_DIR"
+
+# Verificar directorio
+if [[ ! -d "$WALLPAPER_DIR" ]]; then
+    log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
+    notify-send "❌ Error" "Directorio $WALLPAPER_DIR no encontrado" -t 3000
+    exit 1
+fi
+
+log "Iniciando selector de wallpaper con preview"
+
+# Obtener lista de imágenes
+mapfile -t images < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.bmp" -o -iname "*.gif" \) | sort)
+
+if [[ ${#images[@]} -eq 0 ]]; then
+    log "ERROR: No se encontraron imágenes"
+    notify-send "❌ Error" "No se encontraron imágenes" -t 3000
+    exit 1
+fi
+
+log "Encontradas ${#images[@]} imágenes"
+
+# Función para generar lista con información detallada
+generate_image_info() {
+    local img="$1"
+    local basename_img=$(basename "$img")
+    local file_ext="${img##*.}"
+    local file_ext_upper="${file_ext^^}"
+    local file_size=$(du -h "$img" | cut -f1)
+    
+    # Obtener dimensiones de la imagen
+    local dimensions=""
+    if command -v identify &> /dev/null; then
+        dimensions=$(identify -format "%wx%h" "$img" 2>/dev/null)
+    fi
+    
+    # Preparar entrada para rofi
+    if [[ "${img,,}" == *.gif ]]; then
+        if [[ -n "$dimensions" ]]; then
+            echo "🎬 ${basename_img%.*} | $file_ext_upper | $file_size | $dimensions"
+        else
+            echo "🎬 ${basename_img%.*} | $file_ext_upper | $file_size"
+        fi
+    else
+        if [[ -n "$dimensions" ]]; then
+            echo "🖼️ ${basename_img%.*} | $file_ext_upper | $file_size | $dimensions"
+        else
+            echo "🖼️ ${basename_img%.*} | $file_ext_upper | $file_size"
+        fi
+    fi
+}
+
+# Generar lista para rofi
+log "Generando lista detallada para rofi"
+image_list=""
+declare -A image_map
+
+for img in "${images[@]}"; do
+    display_name=$(generate_image_info "$img")
+    image_map["$display_name"]="$img"
+    image_list="$image_list$display_name\n"
+done
+
+# Crear tema rofi personalizado para el selector
+rofi_theme="$TEMP_DIR/wallpaper-selector.rasi"
+cat > "$rofi_theme" << 'EOF'
+configuration {
+    show-icons: false;
+    font: "JetBrains Mono Nerd Font 10";
+    display-drun: "🎨 Wallpapers";
+}
+
+* {
+    bg0: #1a1b26;
+    bg1: #24283b;
+    bg2: #414868;
+    fg0: #c0caf5;
+    fg1: #a9b1d6;
+    accent: #7aa2f7;
+}
+
+window {
+    background-color: @bg0;
+    border: 2px;
+    border-color: @accent;
+    border-radius: 10px;
+    width: 60%;
+    height: 70%;
+}
+
+mainbox {
+    background-color: transparent;
+    padding: 20px;
+}
+
+inputbar {
+    background-color: @bg1;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0px 0px 10px 0px;
+}
+
+prompt {
+    background-color: transparent;
+    text-color: @accent;
+    margin: 0px 10px 0px 0px;
+}
+
+entry {
+    background-color: transparent;
+    text-color: @fg0;
+    placeholder: "Buscar wallpaper...";
+    placeholder-color: @fg1;
+}
+
+listview {
+    background-color: transparent;
+    lines: 15;
+    scrollbar: true;
+    scrollbar-width: 4px;
+}
+
+scrollbar {
+    background-color: @bg1;
+    handle-color: @accent;
+    border-radius: 4px;
+}
+
+element {
+    background-color: transparent;
+    text-color: @fg0;
+    padding: 8px;
+    border-radius: 6px;
+}
+
+element selected {
+    background-color: @bg2;
+    text-color: @accent;
+}
+
+element-text {
+    background-color: transparent;
+    text-color: inherit;
+    vertical-align: 0.5;
+}
+EOF
+
+# Mostrar selector usando rofi con preview manual
+log "Mostrando selector rofi"
+selected=$(echo -e "$image_list" | rofi -dmenu -i \
+    -p "🎨 Selecciona Wallpaper:" \
+    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    -format "s" \
+    -selected-row 0)
+
+# Si no se seleccionó nada
+if [[ -z "$selected" ]]; then
+    log "No se seleccionó ningún wallpaper"
+    exit 0
+fi
+
+log "Seleccionado: $selected"
+
+# Obtener path del archivo seleccionado
+selected_path="${image_map[$selected]}"
+
+if [[ -z "$selected_path" ]]; then
+    log "ERROR: No se encontró el archivo seleccionado"
+    notify-send "❌ Error" "No se encontró el archivo seleccionado" -t 3000
+    exit 1
+fi
+
+# Mostrar preview antes de aplicar
+log "Mostrando preview de confirmación"
+pkill -f "feh.*wallpaper-preview" 2>/dev/null
+
+# Obtener resolución de pantalla
+read -r screen_width screen_height <<< $(xrandr | grep '\*' | awk '{print $1}' | head -n1 | sed 's/x/ /')
+
+# Calcular tamaño del preview (50% de la pantalla para confirmación)
+preview_width=$((screen_width * 50 / 100))
+preview_height=$((screen_height * 50 / 100))
+
+# Posición (centro de la pantalla)
+pos_x=$(((screen_width - preview_width) / 2))
+pos_y=$(((screen_height - preview_height) / 2))
+
+# Mostrar preview de confirmación
+feh --title "wallpaper-preview-confirm" \
+    --geometry "${preview_width}x${preview_height}+${pos_x}+${pos_y}" \
+    --scale-down \
+    --auto-zoom \
+    --borderless \
+    "$selected_path" &
+
+# Preguntar confirmación
+if rofi -dmenu -p "¿Aplicar este wallpaper?" -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" <<< $'✅ Sí, aplicar\n❌ No, cancelar' | grep -q "Sí"; then
+    pkill -f "feh.*wallpaper-preview"
+    
+    log "Aplicando wallpaper: $selected_path"
+
+    # Verificar swww-daemon
+    if ! pgrep -x "swww-daemon" > /dev/null; then
+        log "Iniciando swww-daemon..."
+        notify-send "🔄 Iniciando swww-daemon..." -t 2000
+        swww-daemon --format xrgb &
+        sleep 3
+    fi
+
+    # Aplicar wallpaper según tipo
+    if [[ "${selected_path,,}" == *.gif ]]; then
+        log "Aplicando GIF animado"
+        swww img "$selected_path" --transition-type fade --transition-duration 0.8
+        notify-send "🎬 GIF Wallpaper" "$(basename "$selected_path") aplicado - pywal se sincronizará automáticamente" -t 3000
+    else
+        log "Aplicando imagen estática"
+        swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.2
+        notify-send "🖼️ Wallpaper" "$(basename "$selected_path") aplicado - pywal se sincronizará automáticamente" -t 3000
+    fi
+
+    # Guardar wallpaper actual - ESTO DISPARARÁ LA SINCRONIZACIÓN AUTOMÁTICA
+    echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+    log "Wallpaper guardado en cache - sincronización automática iniciada"
+
+    log "Proceso completado exitosamente"
+else
+    pkill -f "feh.*wallpaper-preview"
+    log "Aplicación cancelada por el usuario"
+    notify-send "🚫 Cancelado" "Selección de wallpaper cancelada" -t 2000
+fi

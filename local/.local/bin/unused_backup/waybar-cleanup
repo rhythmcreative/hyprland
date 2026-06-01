@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Script de limpieza para waybar
+# Resuelve problemas de múltiples instancias y procesos colgados
+
+# Función de logging
+log() {
+    echo "$(date '+%H:%M:%S') [CLEANUP] - $1"
+}
+
+log "🧹 Iniciando limpieza de waybar..."
+
+# Matar todos los procesos de waybar
+log "🛑 Deteniendo todos los procesos de waybar..."
+if pgrep -x waybar > /dev/null; then
+    # Intentar terminación suave primero
+    pkill -TERM waybar
+    sleep 2
+    
+    # Si aún quedan procesos, forzar terminación
+    if pgrep -x waybar > /dev/null; then
+        log "⚡ Forzando terminación de waybar..."
+        pkill -KILL waybar
+        sleep 1
+    fi
+fi
+
+# Limpiar archivos de lock
+log "🗑️ Limpiando archivos de lock..."
+rm -f /tmp/waybar_*.lock
+rm -f /tmp/waybar_master_sync.lock
+rm -f /tmp/waybar_master.pid
+
+# Matar scripts de waybar que puedan estar ejecutándose
+log "🛑 Deteniendo scripts de waybar en background..."
+scripts=(
+    "waybar-pywal-sync"
+    "sync-waybar-pywal"
+    "waybar-fix-wallpaper-sync"
+    "waybar-pywal-universal-sync"
+    "waybar-pywal-auto-sync"
+    "waybar-master-sync"
+)
+
+for script in "${scripts[@]}"; do
+    pids=$(pgrep -f "$script")
+    if [[ -n "$pids" ]]; then
+        log "⚡ Deteniendo $script (PIDs: $pids)"
+        echo "$pids" | xargs kill -TERM 2>/dev/null || true
+        sleep 0.3
+    fi
+done
+
+# Verificar que no queden procesos
+remaining=$(pgrep -x waybar)
+if [[ -n "$remaining" ]]; then
+    log "⚠️ Aún quedan procesos de waybar: $remaining"
+    log "🔥 Aplicando terminación forzada final..."
+    echo "$remaining" | xargs kill -KILL 2>/dev/null || true
+    sleep 1
+else
+    log "✅ Todos los procesos de waybar eliminados"
+fi
+
+# Iniciar waybar limpio
+log "🚀 Iniciando waybar limpio..."
+waybar > /dev/null 2>&1 &
+new_pid=$!
+
+# Verificar que se inició correctamente
+sleep 2
+if kill -0 "$new_pid" 2>/dev/null; then
+    log "✅ Waybar iniciado correctamente (PID: $new_pid)"
+    notify-send "🧹 Waybar Limpiado" "Waybar reiniciado con instancia única" -t 3000 2>/dev/null || true
+else
+    log "❌ Error al iniciar waybar"
+    notify-send "❌ Error" "No se pudo iniciar waybar después de la limpieza" -u critical -t 5000 2>/dev/null || true
+    exit 1
+fi
+
+log "🎉 Limpieza de waybar completada exitosamente"

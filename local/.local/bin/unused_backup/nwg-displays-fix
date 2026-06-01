@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Script para ejecutar nwg-displays con las variables correctas para Hyprland
+# Solución para el problema donde el botón Apply no funciona
+
+# Verificar si estamos en Hyprland
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    echo "Error: No se detectó Hyprland. HYPRLAND_INSTANCE_SIGNATURE no está configurado."
+    exit 1
+fi
+
+# Configurar el socket IPC correcto para nwg-displays
+export I3SOCK="/run/user/$(id -u)/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"
+
+# Verificar que el socket existe
+if [ ! -S "$I3SOCK" ]; then
+    echo "Error: Socket de Hyprland no encontrado en $I3SOCK"
+    echo "Verifica que Hyprland esté ejecutándose correctamente."
+    exit 1
+fi
+
+echo "Ejecutando nwg-displays con socket: $I3SOCK"
+
+# Ejecutar nwg-displays con las variables correctas
+exec nwg-displays "$@"

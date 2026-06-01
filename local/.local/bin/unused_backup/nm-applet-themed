@@ -1,0 +1,233 @@
+#!/bin/bash
+
+# nm-applet wrapper that forces custom CSS loading
+# This script ensures nm-applet uses our custom colors
+
+set -eo pipefail
+
+echo "🎨 Iniciando nm-applet con colores personalizados de Waybar..."
+
+# Kill existing nm-applet
+if pgrep -x nm-applet > /dev/null; then
+    echo "🔄 Cerrando nm-applet existente..."
+    pkill nm-applet
+    sleep 2
+fi
+
+# Load pywal colors
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No se encontraron colores de pywal"
+    exit 1
+fi
+
+export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}"
+source "$HOME/.cache/wal/colors.sh"
+
+# Extract colors
+WAYBAR_BG=$(echo "$background" | tr -d "'")
+WAYBAR_FG=$(echo "$foreground" | tr -d "'")
+WAYBAR_ACCENT=$(echo "$color4" | tr -d "'")
+WAYBAR_HIGHLIGHT=$(echo "$color2" | tr -d "'")
+
+echo "📊 Usando colores:"
+echo "  BG: $WAYBAR_BG"
+echo "  FG: $WAYBAR_FG" 
+echo "  Accent: $WAYBAR_ACCENT"
+
+# Create a more comprehensive GTK CSS override
+GTK3_DIR="$HOME/.config/gtk-3.0"
+GTK4_DIR="$HOME/.config/gtk-4.0"
+mkdir -p "$GTK3_DIR" "$GTK4_DIR"
+
+# Create the most comprehensive CSS possible
+cat > "$GTK3_DIR/gtk.css" << EOF
+/* Force nm-applet colors - Generated $(date) */
+
+/* Import any existing theme */
+@import url("file:///usr/share/themes/PywalGTK-Auto/gtk-3.0/gtk.css");
+
+/* Override ALL possible nm-applet selectors with exact colors */
+* {
+  -gtk-icon-palette: success $WAYBAR_ACCENT, warning $WAYBAR_HIGHLIGHT, error #f38ba8;
+}
+
+/* NetworkManager applet - ALL possible selectors */
+.nm-applet,
+.nm-applet *,
+#nm-applet,
+#nm-applet *,
+window[title*="NetworkManager"],
+window[title*="NetworkManager"] *,
+window[title*="Network"],
+window[title*="Network"] *,
+window.background,
+window.background *,
+.background,
+.background * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border-color: $WAYBAR_ACCENT !important;
+}
+
+/* Menu items */
+menuitem,
+menuitem *,
+.menu,
+.menu *,
+menu,
+menu * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: none !important;
+}
+
+menuitem:hover,
+menuitem:hover *,
+.menu:hover,
+.menu:hover *,
+menu:hover,
+menu:hover * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+}
+
+/* Buttons */
+button,
+button *,
+.button,
+.button * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+    border: none !important;
+}
+
+button:hover,
+button:hover *,
+.button:hover,
+.button:hover * {
+    background-color: $WAYBAR_HIGHLIGHT !important;
+    color: $WAYBAR_FG !important;
+    opacity: 0.9 !important;
+}
+
+/* Entry fields */
+entry,
+entry *,
+.entry,
+.entry * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+/* Lists and treeview */
+treeview,
+treeview *,
+listbox,
+listbox *,
+list,
+list *,
+listview,
+listview * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+}
+
+treeview:hover,
+treeview:hover *,
+listbox:hover,
+listbox:hover *,
+list:hover,
+list:hover *,
+listview:hover,
+listview:hover * {
+    background-color: $WAYBAR_ACCENT !important;
+    color: $WAYBAR_FG !important;
+}
+
+/* Popover and tooltips */
+popover,
+popover *,
+tooltip,
+tooltip *,
+.tooltip,
+.tooltip * {
+    background-color: $WAYBAR_BG !important;
+    color: $WAYBAR_FG !important;
+    border: 1px solid $WAYBAR_ACCENT !important;
+}
+
+/* Separators */
+separator,
+.separator {
+    background-color: $WAYBAR_ACCENT !important;
+    opacity: 0.3 !important;
+}
+
+/* Labels */
+label,
+.label {
+    color: $WAYBAR_FG !important;
+}
+
+/* Icons - override system tray colors */
+image {
+    color: $WAYBAR_FG !important;
+    -gtk-icon-palette: success $WAYBAR_ACCENT, warning $WAYBAR_HIGHLIGHT, error #f38ba8;
+}
+EOF
+
+# Copy to GTK4 as well
+cp "$GTK3_DIR/gtk.css" "$GTK4_DIR/gtk.css"
+
+echo "📄 CSS global actualizado para forzar colores nm-applet"
+
+# Set comprehensive environment variables
+export GTK_THEME=PywalGTK-Auto
+export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+export GDK_BACKEND=wayland,x11
+export GTK_CSD=0
+export GTK_OVERLAY_SCROLLING=0
+
+# Additional theme forcing
+export GTK_DEBUG=interactive
+export G_MESSAGES_DEBUG=all
+
+# Force theme reload
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
+sleep 1
+gsettings set org.gnome.desktop.interface gtk-theme 'PywalGTK-Auto'
+
+# Send D-Bus signals
+dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged string:"gtk-theme-name" 2>/dev/null || true
+dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
+
+echo "🔧 Variables de entorno y tema configurados"
+
+# Start nm-applet with all possible environment forcing
+echo "🚀 Iniciando nm-applet..."
+
+# Use env to ensure all variables are passed
+env GTK_THEME=PywalGTK-Auto \
+    GTK2_RC_FILES="$HOME/.gtkrc-2.0" \
+    GDK_BACKEND=wayland,x11 \
+    GTK_CSD=0 \
+    GTK_OVERLAY_SCROLLING=0 \
+    GTK_DEBUG=interactive \
+    nm-applet &
+
+sleep 3
+
+if pgrep -x nm-applet > /dev/null; then
+    echo "✅ nm-applet iniciado con colores personalizados"
+    
+    # Send notification
+    if command -v notify-send > /dev/null; then
+        notify-send "🎨 nm-applet Themed" "Colores personalizados aplicados: BG=$WAYBAR_BG, Accent=$WAYBAR_ACCENT" -t 3000 -i network-wireless 2>/dev/null || true
+    fi
+else
+    echo "❌ Error: no se pudo iniciar nm-applet"
+    exit 1
+fi
+
+echo "🎉 nm-applet con colores personalizados está ejecutándose"

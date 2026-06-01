@@ -1,0 +1,122 @@
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+configuration {
+    show-icons: false;
+}
+
+* {
+    mainbox-spacing: 60px;
+    mainbox-margin: 90px 12%;
+    message-margin: 0 12%;
+    message-padding: 20px;
+    message-border-radius: 15px;
+    listview-spacing: 30px;
+    element-padding: 37 3%;
+    element-border-radius: 25px;
+
+    prompt-font: "JetBrainsMono Nerd Font Bold 36";
+    textbox-font: "JetBrainsMono Nerd Font Medium 14";
+    element-text-font: "JetBrainsMono Nerd Font Bold 39";
+
+    background-window: rgba(0, 0, 0, 0.75);
+    background-normal: @background;
+    background-selected: @selected-normal-background;
+    background-message: rgba(0, 0, 0, 0.65);
+    foreground-normal: @foreground;
+    foreground-selected: @selected-normal-foreground;
+    border-color: @selected-normal-background;
+}
+
+window {
+    transparency: "real";
+    location: center;
+    anchor: center;
+    fullscreen: true;
+    cursor: "default";
+    background-color: var(background-window);
+}
+
+mainbox {
+    enabled: true;
+    spacing: var(mainbox-spacing);
+    margin: var(mainbox-margin);
+    background-color: transparent;
+    children: [ "dummy", "inputbar", "listview", "message", "dummy" ];
+}
+
+inputbar {
+    enabled: true;
+    background-color: transparent;
+    children: [ "dummy", "prompt", "dummy"];
+}
+
+dummy {
+    background-color: transparent;
+}
+
+prompt {
+    enabled: true;
+    font: var(prompt-font);
+    background-color: transparent;
+    text-color: var(foreground-normal);
+}
+
+message {
+    enabled: true;
+    margin: var(message-margin);
+    padding: var(message-padding);
+    border-radius: var(message-border-radius);
+    border: 2px 0px 0px;
+    border-color: var(border-color);
+    background-color: var(background-normal);
+    text-color: var(foreground-normal);
+}
+
+textbox {
+    font: var(textbox-font);
+    background-color: transparent;
+    text-color: inherit;
+    vertical-align: 0.5;
+    horizontal-align: 0.5;
+}
+
+listview {
+    enabled: true;
+    expand: false;
+    columns: 5;
+    lines: 1;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+    layout: vertical;
+    reverse: false;
+    fixed-height: true;
+    fixed-columns: true;
+    spacing: var(listview-spacing);
+    background-color: transparent;
+    border: 0px 0px 0px;
+    cursor: "default";
+}
+
+element {
+    enabled: true;
+    padding: var(element-padding);
+    border-radius: var(element-border-radius);
+    background-color: var(background-normal);
+    text-color: var(foreground-normal);
+    cursor: pointer;
+}
+
+element-text {
+    font: var(element-text-font);
+    background-color: transparent;
+    text-color: inherit;
+    cursor: inherit;
+    vertical-align: 0.5;
+    horizontal-align: 0.5;
+}
+
+element selected.normal {
+    background-color: var(background-selected);
+    text-color: var(foreground-selected);
+}

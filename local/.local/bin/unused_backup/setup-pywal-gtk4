@@ -1,0 +1,429 @@
+#!/bin/bash
+# Script de configuración completa para PyWal GTK4
+
+set -e
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+PURPLE='\033[0;35m'
+NC='\033[0m'
+
+# Función para mostrar banner
+show_banner() {
+    echo -e "${PURPLE}"
+    cat << 'EOF'
+╔═══════════════════════════════════════════════════════════╗
+║                    PyWal GTK4 Theme                       ║
+║              Configuración Automática                     ║
+║                                                           ║
+║    Tema GTK4 que se adapta automáticamente al wallpaper  ║
+╚═══════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+}
+
+# Función para logging
+log_step() {
+    echo -e "${BLUE}[STEP]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[!]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[✗]${NC} $1"
+}
+
+log_info() {
+    echo -e "    $1"
+}
+
+# Función para verificar dependencias
+check_dependencies() {
+    log_step "Verificando dependencias..."
+    
+    local missing_deps=()
+    
+    if ! command -v wal &> /dev/null; then
+        missing_deps+=("pywal")
+    fi
+    
+    if ! command -v systemctl &> /dev/null; then
+        log_warning "systemctl no disponible, el servicio automático no se podrá instalar"
+    fi
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        log_error "Dependencias faltantes: ${missing_deps[*]}"
+        echo
+        echo "Para instalar pywal en Arch Linux:"
+        echo "  sudo pacman -S python-pywal"
+        echo "  # o"
+        echo "  pip install pywal"
+        echo
+        exit 1
+    fi
+    
+    log_success "Todas las dependencias están disponibles"
+}
+
+# Función para configurar template personalizado
+setup_template() {
+    log_step "Configurando template personalizado..."
+    
+    local template_dir="$HOME/.config/wal/templates"
+    mkdir -p "$template_dir"
+    
+    if [ -f "$template_dir/gtk4-theme.css" ]; then
+        log_success "Template personalizado ya existe"
+    else
+        log_error "Template personalizado no encontrado"
+        log_info "Por favor, ejecuta primero la configuración completa"
+        return 1
+    fi
+}
+
+# Función para configurar hooks de pywal
+setup_pywal_hooks() {
+    log_step "Configurando hooks de pywal..."
+    
+    local hooks_dir="$HOME/.config/wal/done.d"
+    mkdir -p "$hooks_dir"
+    
+    # Hook para aplicar tema automáticamente
+    cat > "$hooks_dir/gtk4-theme.sh" << 'EOF'
+#!/bin/bash
+# Hook para aplicar tema GTK4 automáticamente después de pywal
+apply-pywal-gtk4 --apply-only &> /dev/null &
+EOF
+    
+    chmod +x "$hooks_dir/gtk4-theme.sh"
+    log_success "Hook de pywal configurado"
+}
+
+# Función para configurar el servicio systemd
+setup_systemd_service() {
+    if ! command -v systemctl &> /dev/null; then
+        log_warning "systemd no disponible, omitiendo configuración del servicio"
+        return 0
+    fi
+    
+    log_step "Configurando servicio systemd..."
+    
+    # Recargar configuración de systemd
+    systemctl --user daemon-reload
+    
+    # Detener servicio si está ejecutándose
+    if systemctl --user is-active pywal-gtk4.service &> /dev/null; then
+        systemctl --user stop pywal-gtk4.service
+    fi
+    
+    log_success "Servicio systemd configurado"
+}
+
+# Función para configurar aplicación de escritorio
+setup_desktop_entry() {
+    log_step "Creando entrada de aplicación..."
+    
+    apply-pywal-gtk4 --create-desktop
+    
+    # Actualizar base de datos de aplicaciones
+    if command -v update-desktop-database &> /dev/null; then
+        update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+    fi
+    
+    log_success "Entrada de aplicación creada"
+}
+
+# Función para aplicar tema inicial
+apply_initial_theme() {
+    log_step "Aplicando tema inicial..."
+    
+    if [ -f "$HOME/.cache/wal/wal" ]; then
+        local current_wallpaper=$(cat "$HOME/.cache/wal/wal")
+        log_info "Wallpaper actual: $current_wallpaper"
+        
+        apply-pywal-gtk4 --apply-only
+        log_success "Tema inicial aplicado"
+    else
+        log_warning "No hay wallpaper configurado con pywal"
+        log_info "Configura uno con: wal -i /ruta/a/imagen.jpg"
+    fi
+}
+
+# Función para configurar aliases y PATH
+setup_shell_integration() {
+    log_step "Configurando integración con shell..."
+    
+    local shell_rc=""
+    local shell_name=$(basename "$SHELL")
+    
+    case "$shell_name" in
+        bash)
+            shell_rc="$HOME/.bashrc"
+            ;;
+        zsh)
+            shell_rc="$HOME/.zshrc"
+            ;;
+        fish)
+            shell_rc="$HOME/.config/fish/config.fish"
+            ;;
+        *)
+            log_warning "Shell no reconocido: $shell_name"
+            return 0
+            ;;
+    esac
+    
+    # Verificar si ~/.local/bin está en PATH
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        log_warning "~/.local/bin no está en PATH"
+        
+        if [ -f "$shell_rc" ]; then
+            if ! grep -q "/.local/bin" "$shell_rc" 2>/dev/null; then
+                echo "" >> "$shell_rc"
+                echo "# PyWal GTK4 - Agregar ~/.local/bin al PATH" >> "$shell_rc"
+                if [ "$shell_name" = "fish" ]; then
+                    echo "set -gx PATH \$HOME/.local/bin \$PATH" >> "$shell_rc"
+                else
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+                fi
+                log_info "PATH actualizado en $shell_rc"
+            fi
+        fi
+    fi
+    
+    # Crear aliases útiles
+    if [ "$shell_name" != "fish" ] && [ -f "$shell_rc" ]; then
+        if ! grep -q "pywal-gtk4 aliases" "$shell_rc" 2>/dev/null; then
+            echo "" >> "$shell_rc"
+            echo "# PyWal GTK4 - Aliases útiles" >> "$shell_rc"
+            echo "alias wal-theme='apply-pywal-gtk4 --current-wallpaper'" >> "$shell_rc"
+            echo "alias wal-info='apply-pywal-gtk4 --info'" >> "$shell_rc"
+            echo "alias wal-daemon='pywal-gtk4-daemon'" >> "$shell_rc"
+            log_info "Aliases agregados a $shell_rc"
+        fi
+    fi
+    
+    log_success "Integración con shell configurada"
+}
+
+# Función para mostrar información post-instalación
+show_post_install_info() {
+    echo
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗"
+    echo -e "║                 ¡Configuración Completada!                ║"
+    echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo "Tu sistema PyWal GTK4 está listo. Aquí tienes algunos comandos útiles:"
+    echo
+    echo -e "${BLUE}Comandos principales:${NC}"
+    echo "  apply-pywal-gtk4 /ruta/imagen.jpg  - Aplicar tema desde imagen"
+    echo "  apply-pywal-gtk4 --current-wallpaper - Usar wallpaper actual"
+    echo "  apply-pywal-gtk4 --info            - Ver información del tema"
+    echo
+    echo -e "${BLUE}Daemon (monitoreo automático):${NC}"
+    echo "  pywal-gtk4-daemon start           - Iniciar daemon"
+    echo "  pywal-gtk4-daemon status          - Ver estado"
+    echo "  pywal-gtk4-daemon logs            - Ver logs"
+    echo
+    echo -e "${BLUE}Servicio systemd (opcional):${NC}"
+    if command -v systemctl &> /dev/null; then
+        echo "  systemctl --user enable pywal-gtk4.service  - Iniciar automáticamente"
+        echo "  systemctl --user start pywal-gtk4.service   - Iniciar ahora"
+        echo "  systemctl --user status pywal-gtk4.service  - Ver estado"
+    else
+        echo "  (No disponible en este sistema)"
+    fi
+    echo
+    echo -e "${BLUE}Próximos pasos:${NC}"
+    echo "  1. Reinicia tu terminal o ejecuta: source ~/.${shell_name}rc"
+    echo "  2. Configura un wallpaper: wal -i /ruta/a/imagen.jpg"
+    echo "  3. El tema se aplicará automáticamente"
+    echo
+    echo -e "${YELLOW}Nota:${NC} Los cambios en el shell requieren reiniciar la terminal"
+}
+
+# Función para configuración completa
+full_setup() {
+    show_banner
+    
+    check_dependencies
+    setup_template
+    setup_pywal_hooks
+    setup_systemd_service
+    setup_desktop_entry
+    setup_shell_integration
+    apply_initial_theme
+    
+    show_post_install_info
+}
+
+# Función para configuración mínima
+minimal_setup() {
+    log_step "Configuración mínima..."
+    
+    check_dependencies
+    setup_pywal_hooks
+    apply_initial_theme
+    
+    log_success "Configuración mínima completada"
+}
+
+# Función para mostrar ayuda
+show_help() {
+    cat << 'EOF'
+setup-pywal-gtk4 - Configuración del sistema PyWal GTK4
+
+USAGE:
+    setup-pywal-gtk4 [COMMAND]
+
+COMMANDS:
+    full        Configuración completa (por defecto)
+    minimal     Configuración mínima (solo hooks)
+    check       Verificar estado de la configuración
+    uninstall   Desinstalar configuración
+    help        Mostrar esta ayuda
+
+EXAMPLES:
+    # Configuración completa
+    setup-pywal-gtk4 full
+    
+    # Configuración mínima
+    setup-pywal-gtk4 minimal
+    
+    # Verificar estado
+    setup-pywal-gtk4 check
+
+NOTES:
+    - La configuración completa incluye servicio systemd y aliases
+    - La configuración mínima solo instala los hooks básicos
+    - Requiere pywal instalado
+EOF
+}
+
+# Función para verificar estado
+check_setup() {
+    echo -e "${BLUE}Estado de la configuración PyWal GTK4:${NC}"
+    echo
+    
+    # Verificar scripts
+    if [ -x "$HOME/.local/bin/apply-pywal-gtk4" ]; then
+        log_success "Script apply-pywal-gtk4 instalado"
+    else
+        log_error "Script apply-pywal-gtk4 NO instalado"
+    fi
+    
+    if [ -x "$HOME/.local/bin/pywal-gtk4-daemon" ]; then
+        log_success "Script pywal-gtk4-daemon instalado"
+    else
+        log_error "Script pywal-gtk4-daemon NO instalado"
+    fi
+    
+    # Verificar template
+    if [ -f "$HOME/.config/wal/templates/gtk4-theme.css" ]; then
+        log_success "Template personalizado disponible"
+    else
+        log_warning "Template personalizado NO disponible"
+    fi
+    
+    # Verificar hooks
+    if [ -f "$HOME/.config/wal/done.d/gtk4-theme.sh" ]; then
+        log_success "Hook de pywal configurado"
+    else
+        log_warning "Hook de pywal NO configurado"
+    fi
+    
+    # Verificar servicio systemd
+    if command -v systemctl &> /dev/null; then
+        if [ -f "$HOME/.config/systemd/user/pywal-gtk4.service" ]; then
+            log_success "Servicio systemd disponible"
+            if systemctl --user is-enabled pywal-gtk4.service &> /dev/null; then
+                log_info "Servicio habilitado para inicio automático"
+            else
+                log_info "Servicio NO habilitado para inicio automático"
+            fi
+        else
+            log_warning "Servicio systemd NO disponible"
+        fi
+    else
+        log_info "systemd no disponible en el sistema"
+    fi
+    
+    # Verificar tema aplicado
+    if [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
+        log_success "Tema GTK4 aplicado"
+    else
+        log_warning "Tema GTK4 NO aplicado"
+    fi
+    
+    # Verificar daemon
+    if pgrep -f "pywal-gtk4-daemon" > /dev/null; then
+        log_success "Daemon ejecutándose"
+    else
+        log_info "Daemon no ejecutándose"
+    fi
+}
+
+# Función para desinstalar
+uninstall_setup() {
+    log_step "Desinstalando configuración PyWal GTK4..."
+    
+    # Detener daemon y servicio
+    if command -v systemctl &> /dev/null; then
+        systemctl --user stop pywal-gtk4.service 2>/dev/null || true
+        systemctl --user disable pywal-gtk4.service 2>/dev/null || true
+    fi
+    
+    pywal-gtk4-daemon stop 2>/dev/null || true
+    
+    # Eliminar archivos
+    rm -f "$HOME/.local/bin/apply-pywal-gtk4"
+    rm -f "$HOME/.local/bin/pywal-gtk4-daemon"
+    rm -f "$HOME/.local/bin/setup-pywal-gtk4"
+    rm -f "$HOME/.config/systemd/user/pywal-gtk4.service"
+    rm -f "$HOME/.config/wal/done.d/gtk4-theme.sh"
+    rm -f "$HOME/.config/wal/templates/gtk4-theme.css"
+    rm -f "$HOME/.local/share/applications/pywal-gtk4-theme.desktop"
+    
+    # Limpiar cache
+    rm -f "$HOME/.cache/pywal-gtk4-daemon"*
+    
+    log_success "Configuración desinstalada"
+    log_warning "Los temas GTK aplicados permanecen en ~/.config/gtk-{3,4}.0/"
+}
+
+# Función principal
+main() {
+    case "${1:-full}" in
+        full)
+            full_setup
+            ;;
+        minimal)
+            minimal_setup
+            ;;
+        check)
+            check_setup
+            ;;
+        uninstall)
+            uninstall_setup
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            echo "Comando desconocido: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Ejecutar función principal
+main "$@"

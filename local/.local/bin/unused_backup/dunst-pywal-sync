@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# Script para sincronizar Dunst con colores de pywal
+# Crea una configuración de Dunst elegante usando los colores actuales de pywal
+
+DUNST_CONFIG_DIR="$HOME/.config/dunst"
+DUNST_CONFIG="$DUNST_CONFIG_DIR/dunstrc"
+DUNST_CONFIG_BACKUP="$DUNST_CONFIG_DIR/dunstrc.backup"
+
+# Cargar colores de pywal
+if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
+    source "$HOME/.cache/wal/colors.sh"
+else
+    echo "Error: No se encontraron colores de pywal en $HOME/.cache/wal/colors.sh"
+    exit 1
+fi
+
+# Crear backup de la configuración actual
+if [[ -f "$DUNST_CONFIG" ]] && [[ ! -f "$DUNST_CONFIG_BACKUP" ]]; then
+    cp "$DUNST_CONFIG" "$DUNST_CONFIG_BACKUP"
+fi
+
+# Crear nueva configuración de Dunst estilo Waybar (ultra-minimalista)
+cat > "$DUNST_CONFIG" << EOF
+[global]
+    # Tamaño y posición - Estilo Waybar
+    monitor = 0
+    follow = mouse
+    width = 200
+    height = 50
+    origin = top-right
+    offset = 15x45
+    notification_limit = 3
+    
+    # Sin barra de progreso para máximo minimalismo
+    progress_bar = true
+    progress_bar_height = 6
+    progress_bar_frame_width = 0
+    progress_bar_min_width = 150
+    progress_bar_max_width = 200
+    progress_bar_corner_radius = 3
+    
+    # Apariencia minimalista como Waybar
+    indicate_hidden = no
+    transparency = 0
+    separator_height = 0
+    padding = 12
+    horizontal_padding = 16
+    text_icon_padding = 0
+    frame_width = 2
+    gap_size = 5
+    corner_radius = 6
+    
+    # Comportamiento
+    sort = yes
+    idle_threshold = 120
+    
+    # Texto simple como Waybar
+    font = JetBrainsMono Nerd Font 11
+    line_height = 0
+    markup = full
+    format = "%s"
+    alignment = center
+    vertical_alignment = center
+    show_age_threshold = -1
+    ellipsize = end
+    ignore_newline = yes
+    stack_duplicates = true
+    hide_duplicate_count = true
+    show_indicators = no
+    
+    # Sin iconos externos para simplicidad
+    enable_recursive_icon_lookup = false
+    icon_position = off
+    
+    # Historia mínima
+    sticky_history = no
+    history_length = 5
+    
+    # Integración básica
+    dmenu = /usr/bin/rofi -dmenu -p dunst:
+    browser = /usr/bin/firefox -new-tab
+    
+    # Configuración avanzada
+    always_run_script = true
+    title = Dunst
+    class = Dunst
+    ignore_dbusclose = false
+    
+    # Acciones de ratón
+    mouse_left_click = close_current
+    mouse_middle_click = do_action
+    mouse_right_click = close_all
+
+[experimental]
+    per_monitor_dpi = false
+
+# Estilo único para todas las notificaciones - Como módulo de Waybar
+[urgency_low]
+    background = "${color0}"
+    foreground = "${foreground}"
+    frame_color = "${color8}"
+    timeout = 3
+    progress_bar_frame_color = "${color8}"
+    progress_bar_foreground = "${color6}"
+
+[urgency_normal]
+    background = "${color0}"
+    foreground = "${foreground}"
+    frame_color = "${color8}"
+    timeout = 4
+    progress_bar_frame_color = "${color8}"
+    progress_bar_foreground = "${color6}"
+
+[urgency_critical]
+    background = "${color0}"
+    foreground = "${color9}"
+    frame_color = "${color9}"
+    timeout = 0
+    progress_bar_frame_color = "${color9}"
+    progress_bar_foreground = "${color9}"
+
+# Notificaciones de volumen - Exactamente como Waybar
+[volume]
+    category = "Volume"
+    history_ignore = yes
+    timeout = 1200
+    format = "%s"
+    alignment = center
+    width = 180
+    height = 40
+    background = "${color0}"
+    foreground = "${foreground}"
+    frame_color = "${color8}"
+    progress_bar_frame_color = "${color8}"
+    progress_bar_foreground = "${color6}"
+    padding = 8
+    horizontal_padding = 12
+    corner_radius = 6
+
+EOF
+
+echo "✅ Configuración de Dunst actualizada con colores de pywal"
+echo "   Background: $color0"
+echo "   Foreground: $foreground"
+echo "   Accent: $color6"
+
+# Reiniciar dunst para aplicar cambios
+if pgrep -x "dunst" > /dev/null; then
+    killall dunst
+    echo "🔄 Dunst reiniciado"
+fi
+
+# Iniciar dunst si no está corriendo
+if ! pgrep -x "dunst" > /dev/null; then
+    dunst &
+    echo "🚀 Dunst iniciado"
+fi

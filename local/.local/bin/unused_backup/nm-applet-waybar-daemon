@@ -1,0 +1,224 @@
+#!/bin/bash
+
+# Demonio de sincronización automática nm-applet ↔ waybar
+# Este script monitoriza cambios en los colores de waybar y sincroniza nm-applet automáticamente
+
+DAEMON_NAME="nm-applet-waybar-daemon"
+PIDFILE="/tmp/${DAEMON_NAME}.pid"
+LOGFILE="/tmp/${DAEMON_NAME}.log"
+
+# Función de logging
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - [DAEMON] $1" >> "$LOGFILE"
+}
+
+# Verificar si el demonio ya está ejecutándose
+check_daemon() {
+    if [ -f "$PIDFILE" ]; then
+        local pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0  # Demonio ejecutándose
+        else
+            rm -f "$PIDFILE"  # PID file obsoleto
+            return 1  # No ejecutándose
+        fi
+    fi
+    return 1  # No ejecutándose
+}
+
+# Función para iniciar el demonio
+start_daemon() {
+    if check_daemon; then
+        echo "❌ El demonio ya está ejecutándose (PID: $(cat "$PIDFILE"))"
+        return 1
+    fi
+    
+    echo "🚀 Iniciando demonio de sincronización nm-applet ↔ waybar..."
+    log "Iniciando demonio de sincronización"
+    
+    # Iniciar demonio en background
+    (monitor_waybar_colors) &
+    local daemon_pid=$!
+    
+    # Guardar PID
+    echo "$daemon_pid" > "$PIDFILE"
+    
+    sleep 2
+    
+    if kill -0 "$daemon_pid" 2>/dev/null; then
+        echo "✅ Demonio iniciado correctamente (PID: $daemon_pid)"
+        echo "📁 Log: $LOGFILE"
+        return 0
+    else
+        echo "❌ Error al iniciar el demonio"
+        rm -f "$PIDFILE"
+        return 1
+    fi
+}
+
+# Función para detener el demonio
+stop_daemon() {
+    if ! check_daemon; then
+        echo "⚠️ El demonio no está ejecutándose"
+        return 1
+    fi
+    
+    local pid=$(cat "$PIDFILE")
+    echo "🛑 Deteniendo demonio (PID: $pid)..."
+    log "Deteniendo demonio"
+    
+    # Intentar terminación suave
+    if kill -TERM "$pid" 2>/dev/null; then
+        sleep 3
+        
+        # Verificar si se detuvo
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$PIDFILE"
+            echo "✅ Demonio detenido correctamente"
+            return 0
+        fi
+        
+        # Forzar terminación si no se detuvo
+        if kill -KILL "$pid" 2>/dev/null; then
+            rm -f "$PIDFILE"
+            echo "✅ Demonio detenido forzadamente"
+            return 0
+        fi
+    fi
+    
+    echo "❌ Error al detener el demonio"
+    return 1
+}
+
+# Función para monitorizar cambios en colores de waybar
+monitor_waybar_colors() {
+    # Escribir PID del proceso monitor
+    echo $$ > "$PIDFILE"
+    
+    log "Monitor de colores iniciado"
+    
+    local colors_file="$HOME/.config/waybar/colors-pywal.css"
+    local last_checksum=""
+    local sync_script="$HOME/.local/bin/sync-nm-applet-waybar"
+    
+    # Verificar que el script de sincronización existe
+    if [ ! -x "$sync_script" ]; then
+        log "❌ Script de sincronización no encontrado: $sync_script"
+        exit 1
+    fi
+    
+    log "Monitorizando cambios en: $colors_file"
+    
+    # Loop principal de monitorización
+    while true; do
+        if [ -f "$colors_file" ]; then
+            # Calcular checksum del archivo de colores
+            local current_checksum=$(md5sum "$colors_file" 2>/dev/null | cut -d' ' -f1)
+            
+            # Si el checksum cambió, sincronizar
+            if [ "$current_checksum" != "$last_checksum" ] && [ -n "$current_checksum" ]; then
+                if [ -n "$last_checksum" ]; then  # No ejecutar en la primera iteración
+                    log "🎨 Detectados cambios en colores de waybar, sincronizando nm-applet..."
+                    
+                    # Ejecutar sincronización en background
+                    "$sync_script" > /dev/null 2>&1 &
+                    
+                    log "✅ Sincronización de nm-applet iniciada"
+                fi
+                
+                last_checksum="$current_checksum"
+            fi
+        else
+            log "⚠️ Archivo de colores no encontrado: $colors_file"
+        fi
+        
+        # Esperar antes del siguiente chequeo
+        sleep 5
+    done
+}
+
+# Función para mostrar estado
+status_daemon() {
+    if check_daemon; then
+        local pid=$(cat "$PIDFILE")
+        echo "✅ Demonio ejecutándose (PID: $pid)"
+        
+        # Mostrar información adicional
+        if [ -f "$LOGFILE" ]; then
+            echo "📁 Log: $LOGFILE"
+            echo "📊 Últimas líneas del log:"
+            tail -5 "$LOGFILE" 2>/dev/null || echo "  (Sin entradas en el log)"
+        fi
+        
+        return 0
+    else
+        echo "⚠️ El demonio no está ejecutándose"
+        return 1
+    fi
+}
+
+# Función para reiniciar el demonio
+restart_daemon() {
+    echo "🔄 Reiniciando demonio..."
+    stop_daemon
+    sleep 2
+    start_daemon
+}
+
+# Función para mostrar ayuda
+show_help() {
+    cat << EOF
+🎨 Demonio de Sincronización nm-applet ↔ waybar
+
+Uso: $0 {start|stop|restart|status|help}
+
+Comandos:
+  start    - Iniciar el demonio de sincronización
+  stop     - Detener el demonio
+  restart  - Reiniciar el demonio
+  status   - Mostrar estado actual del demonio  
+  help     - Mostrar esta ayuda
+
+Descripción:
+Este demonio monitoriza automáticamente los cambios en los colores de waybar
+y sincroniza nm-applet para que use los mismos colores.
+
+Archivos:
+  PID:  $PIDFILE
+  Log:  $LOGFILE
+  Sync: $HOME/.local/bin/sync-nm-applet-waybar
+EOF
+}
+
+# Función principal
+main() {
+    case "${1:-}" in
+        start)
+            start_daemon
+            ;;
+        stop)
+            stop_daemon
+            ;;
+        restart)
+            restart_daemon
+            ;;
+        status)
+            status_daemon
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        "")
+            echo "❌ Comando requerido. Use '$0 help' para ver la ayuda."
+            exit 1
+            ;;
+        *)
+            echo "❌ Comando desconocido: $1"
+            echo "💡 Use '$0 help' para ver los comandos disponibles."
+            exit 1
+            ;;
+    esac
+}
+
+# Ejecutar función principal con todos los argumentos
+main "$@"

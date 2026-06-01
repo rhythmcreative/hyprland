@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Comando simple para sincronizar nm-applet con waybar
+# Uso: sync-nm-applet
+
+echo "🎨 Sincronizando nm-applet con colores de Waybar..."
+
+# Extraer colores actuales
+BG_COLOR=$(grep "^background=" "$HOME/.cache/wal/colors.sh" | cut -d"'" -f2)
+FG_COLOR=$(grep "^foreground=" "$HOME/.cache/wal/colors.sh" | cut -d"'" -f2)
+ACCENT_COLOR=$(grep "^color4=" "$HOME/.cache/wal/colors.sh" | cut -d"'" -f2)
+
+if [[ -z "$BG_COLOR" || -z "$FG_COLOR" || -z "$ACCENT_COLOR" ]]; then
+    echo "❌ Error: No se pudieron extraer los colores de waybar"
+    echo "   Asegúrate de que pywal esté configurado correctamente"
+    exit 1
+fi
+
+echo "✅ Colores detectados:"
+echo "   • Background: $BG_COLOR"
+echo "   • Foreground: $FG_COLOR" 
+echo "   • Accent: $ACCENT_COLOR"
+
+# Reiniciar nm-applet
+echo "🔄 Reiniciando nm-applet..."
+pkill nm-applet 2>/dev/null
+sleep 1
+nohup nm-applet > /dev/null 2>&1 &
+sleep 2
+
+if pgrep nm-applet > /dev/null; then
+    echo "✅ nm-applet reiniciado exitosamente"
+    
+    # Notificación
+    if command -v notify-send > /dev/null; then
+        notify-send "🎨 Sincronización completa" \
+                   "nm-applet ahora usa los colores de waybar" \
+                   -t 2000 -i network-wireless 2>/dev/null || true
+    fi
+else
+    echo "❌ Error al reiniciar nm-applet"
+    exit 1
+fi
+
+echo "🎉 ¡Sincronización completada!"

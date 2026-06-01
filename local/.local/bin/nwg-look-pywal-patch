@@ -1,0 +1,296 @@
+#!/bin/bash
+
+# Patch para nwg-look que agrega funcionalidad de pywal-gtk4 de forma transparente
+# Este script reemplaza temporalmente nwg-look para interceptar las aplicaciones de temas
+
+ORIGINAL_NWGLOOK="/usr/bin/nwg-look"
+BACKUP_DIR="$HOME/.cache/nwg-look-backup"
+PATCHED_BINARY="$HOME/.local/bin/nwg-look-patched"
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+    echo -e "${BLUE}[nwg-look-pywal]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+show_help() {
+    cat << 'EOF'
+🎨 nwg-look-pywal-patch - Integración de pywal-gtk4 con nwg-look
+
+COMANDOS:
+  install     - Instalar el patch (reemplaza nwg-look temporalmente)
+  uninstall   - Desinstalar el patch (restaura nwg-look original)
+  status      - Mostrar estado del patch
+  create-desktop - Crear entrada de escritorio personalizada
+  
+DESCRIPCIÓN:
+  Este script crea una versión modificada de nwg-look que:
+  • Ejecuta pywal-gtk4 generate automáticamente después de aplicar temas
+  • Mantiene toda la funcionalidad original de nwg-look
+  • Se puede activar/desactivar fácilmente
+
+EJEMPLOS:
+  nwg-look-pywal-patch install          # Activar integración
+  nwg-look-pywal-patch create-desktop   # Crear entrada de menú
+  nwg-look-pywal-patch uninstall        # Desactivar integración
+EOF
+}
+
+check_dependencies() {
+    if [[ ! -f "$ORIGINAL_NWGLOOK" ]]; then
+        error "nwg-look no encontrado en $ORIGINAL_NWGLOOK"
+        return 1
+    fi
+    
+    if [[ ! -x "$HOME/.local/bin/pywal-gtk4" ]]; then
+        error "pywal-gtk4 no encontrado en ~/.local/bin/pywal-gtk4"
+        return 1
+    fi
+    
+    return 0
+}
+
+create_patched_binary() {
+    log "Creando binario modificado..."
+    
+    mkdir -p "$(dirname "$PATCHED_BINARY")"
+    
+    cat > "$PATCHED_BINARY" << 'EOF'
+#!/bin/bash
+
+# Wrapper transparente para nwg-look con integración de pywal-gtk4
+ORIGINAL_NWGLOOK="/usr/bin/nwg-look"
+PYWAL_GTK4="$HOME/.local/bin/pywal-gtk4"
+TEMP_CONFIG="$HOME/.cache/nwg-look-temp-config"
+
+# Función para detectar si se aplicaron cambios
+detect_changes() {
+    local before_hash after_hash
+    
+    # Hash de archivos de configuración GTK antes
+    before_hash=$(find ~/.config/gtk-* ~/.gtkrc-2.0 ~/.config/nwg-look 2>/dev/null | \
+        xargs cat 2>/dev/null | md5sum | cut -d' ' -f1)
+    
+    echo "$before_hash" > "$TEMP_CONFIG"
+}
+
+check_and_regenerate() {
+    local before_hash after_hash
+    
+    if [[ -f "$TEMP_CONFIG" ]]; then
+        before_hash=$(cat "$TEMP_CONFIG")
+        
+        # Hash de archivos después
+        after_hash=$(find ~/.config/gtk-* ~/.gtkrc-2.0 ~/.config/nwg-look 2>/dev/null | \
+            xargs cat 2>/dev/null | md5sum | cut -d' ' -f1)
+        
+        if [[ "$before_hash" != "$after_hash" ]]; then
+            echo "🎨 Detectados cambios de tema, regenerando con pywal-gtk4..."
+            if "$PYWAL_GTK4" generate; then
+                echo "✅ Tema GTK4 actualizado exitosamente"
+                # Enviar notificación si está disponible
+                if command -v notify-send >/dev/null 2>&1; then
+                    notify-send "🎨 pywal-gtk4" "Tema GTK4 actualizado" --icon=preferences-desktop-theme
+                fi
+            else
+                echo "⚠️ Error al actualizar tema GTK4"
+            fi
+        fi
+        
+        rm -f "$TEMP_CONFIG"
+    fi
+}
+
+# Manejo de señales para cleanup
+cleanup() {
+    check_and_regenerate
+    exit 0
+}
+
+trap cleanup EXIT INT TERM
+
+# Detectar estado antes de ejecutar nwg-look
+detect_changes
+
+# Ejecutar nwg-look original con todos los argumentos
+"$ORIGINAL_NWGLOOK" "$@"
+
+# El cleanup se ejecutará automáticamente al salir
+EOF
+
+    chmod +x "$PATCHED_BINARY"
+    success "Binario modificado creado en $PATCHED_BINARY"
+}
+
+install_patch() {
+    log "Instalando patch para nwg-look..."
+    
+    if ! check_dependencies; then
+        return 1
+    fi
+    
+    # Crear backup del original
+    mkdir -p "$BACKUP_DIR"
+    
+    # Verificar si ya está instalado
+    if [[ -f "$BACKUP_DIR/nwg-look.original" ]]; then
+        warn "El patch ya parece estar instalado"
+        read -p "¿Reinstalar? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            return 0
+        fi
+    fi
+    
+    # Backup del original
+    if [[ ! -f "$BACKUP_DIR/nwg-look.original" ]]; then
+        cp "$ORIGINAL_NWGLOOK" "$BACKUP_DIR/nwg-look.original"
+        log "Backup creado en $BACKUP_DIR/nwg-look.original"
+    fi
+    
+    # Crear el binario modificado
+    create_patched_binary
+    
+    # Reemplazar el original (requiere permisos de sudo)
+    log "Reemplazando binario original (se requiere sudo)..."
+    
+    if sudo cp "$PATCHED_BINARY" "$ORIGINAL_NWGLOOK"; then
+        success "Patch instalado exitosamente"
+        log "Ahora nwg-look ejecutará automáticamente pywal-gtk4 generate"
+        return 0
+    else
+        error "Error al instalar el patch"
+        return 1
+    fi
+}
+
+uninstall_patch() {
+    log "Desinstalando patch..."
+    
+    if [[ ! -f "$BACKUP_DIR/nwg-look.original" ]]; then
+        error "No se encontró backup del original"
+        return 1
+    fi
+    
+    log "Restaurando binario original (se requiere sudo)..."
+    
+    if sudo cp "$BACKUP_DIR/nwg-look.original" "$ORIGINAL_NWGLOOK"; then
+        success "Patch desinstalado exitosamente"
+        log "nwg-look restaurado a su estado original"
+        
+        # Limpiar archivos temporales
+        rm -f "$PATCHED_BINARY"
+        
+        return 0
+    else
+        error "Error al desinstalar el patch"
+        return 1
+    fi
+}
+
+show_status() {
+    log "Estado del patch nwg-look-pywal:"
+    echo
+    
+    if [[ -f "$BACKUP_DIR/nwg-look.original" ]]; then
+        # Comparar binarios para ver si el patch está activo
+        if ! cmp -s "$ORIGINAL_NWGLOOK" "$BACKUP_DIR/nwg-look.original" 2>/dev/null; then
+            success "✅ Patch INSTALADO - nwg-look ejecutará pywal-gtk4 automáticamente"
+        else
+            warn "🔄 Patch PARCIALMENTE INSTALADO - binarios idénticos"
+        fi
+    else
+        warn "❌ Patch NO INSTALADO - nwg-look funciona normalmente"
+    fi
+    
+    echo
+    echo "Archivos:"
+    echo "  • Original backup: $BACKUP_DIR/nwg-look.original"
+    echo "  • Binario actual:  $ORIGINAL_NWGLOOK"
+    echo "  • Pywal-gtk4:      $HOME/.local/bin/pywal-gtk4"
+    
+    # Verificar dependencias
+    echo
+    echo "Dependencias:"
+    if [[ -x "$HOME/.local/bin/pywal-gtk4" ]]; then
+        echo "  ✅ pywal-gtk4 disponible"
+    else
+        echo "  ❌ pywal-gtk4 no encontrado"
+    fi
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        echo "  ✅ notify-send disponible (notificaciones)"
+    else
+        echo "  ⚠️  notify-send no disponible (sin notificaciones)"
+    fi
+}
+
+create_desktop_entry() {
+    log "Creando entrada de escritorio personalizada..."
+    
+    local desktop_file="$HOME/.local/share/applications/nwg-look-pywal.desktop"
+    mkdir -p "$(dirname "$desktop_file")"
+    
+    cat > "$desktop_file" << EOF
+[Desktop Entry]
+Type=Application
+Name=GTK Settings (with pywal-gtk4)
+Name[es]=Configuración GTK (con pywal-gtk4)
+GenericName=Adjust Look and Feel with pywal integration
+GenericName[es]=Ajustar apariencia con integración pywal
+Comment=Customizes GTK3 settings and automatically updates pywal-gtk4 themes
+Comment[es]=Personaliza configuración GTK3 y actualiza automáticamente temas pywal-gtk4
+Keywords=windows;preferences;settings;theme;style;appearance;look;pywal;gtk4
+Keywords[es]=ventanas;preferencias;configuración;tema;estilo;apariencia;pywal;gtk4
+Icon=preferences-desktop-theme
+Exec=nwg-look
+NotShowIn=GNOME;KDE;XFCE;MATE;
+StartupNotify=true
+Categories=GTK;Settings;DesktopSettings;
+EOF
+
+    success "Entrada de escritorio creada en $desktop_file"
+    log "Busca 'GTK Settings (with pywal-gtk4)' en tu menú de aplicaciones"
+}
+
+# Procesamiento de argumentos
+case "${1:-}" in
+    "install")
+        install_patch
+        ;;
+    "uninstall") 
+        uninstall_patch
+        ;;
+    "status")
+        show_status
+        ;;
+    "create-desktop")
+        create_desktop_entry
+        ;;
+    "--help"|"help"|"")
+        show_help
+        ;;
+    *)
+        error "Comando desconocido: $1"
+        echo
+        show_help
+        exit 1
+        ;;
+esac

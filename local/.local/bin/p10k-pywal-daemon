@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Daemon para sincronización automática de Powerlevel10k con pywal
+# Este script monitorea continuamente los archivos de colores de pywal
+# y actualiza automáticamente la configuración de powerlevel10k
+
+set -euo pipefail
+
+# Configuración
+PYWAL_COLORS_JSON="$HOME/.cache/wal/colors.json"
+PYWAL_COLORS_SH="$HOME/.cache/wal/colors.sh"
+P10K_COLORS_FILE="$HOME/.cache/wal/p10k-colors.zsh"
+LOG_FILE="$HOME/.cache/p10k-pywal-daemon.log"
+PID_FILE="$HOME/.cache/p10k-pywal-daemon.pid"
+CHECK_INTERVAL=2  # Segundos entre verificaciones
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Función de limpieza al terminar
+cleanup() {
+    log "🛑 Daemon terminando..."
+    rm -f "$PID_FILE"
+    exit 0
+}
+
+# Configurar manejadores de señales
+trap cleanup SIGTERM SIGINT SIGQUIT
+
+# Verificar si ya hay un daemon ejecutándose
+if [[ -f "$PID_FILE" ]]; then
+    old_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+        echo "❌ Ya hay un daemon ejecutándose (PID: $old_pid)"
+        exit 1
+    else
+        rm -f "$PID_FILE"
+    fi
+fi
+
+# Guardar PID actual
+echo $$ > "$PID_FILE"
+
+log "🚀 Iniciando daemon de sincronización P10k-Pywal (PID: $$)"
+
+# Variables para seguimiento de cambios
+last_colors_hash=""
+last_sync_time=0
+
+# Función para obtener hash de los archivos de colores
+get_colors_hash() {
+    if [[ -f "$PYWAL_COLORS_JSON" ]] && [[ -f "$PYWAL_COLORS_SH" ]]; then
+        # Usar md5sum para detectar cambios en los archivos de colores
+        {
+            [[ -f "$PYWAL_COLORS_JSON" ]] && cat "$PYWAL_COLORS_JSON"
+            [[ -f "$PYWAL_COLORS_SH" ]] && cat "$PYWAL_COLORS_SH"
+        } | md5sum | cut -d' ' -f1
+    else
+        echo ""
+    fi
+}
+
+# Función para sincronizar colores
+sync_colors() {
+    local current_time=$(date +%s)
+    
+    # Evitar sincronizaciones demasiado frecuentes
+    if (( current_time - last_sync_time < 1 )); then
+        return 0
+    fi
+    
+    log "🎨 Sincronizando colores P10k con pywal..."
+    
+    # Ejecutar el script de sincronización automática
+    if [[ -x "$HOME/.local/bin/p10k-auto-sync" ]]; then
+        "$HOME/.local/bin/p10k-auto-sync" >> "$LOG_FILE" 2>&1
+        log "✅ Sincronización completada"
+    else
+        log "❌ Script p10k-auto-sync no encontrado o no ejecutable"
+        return 1
+    fi
+    
+    last_sync_time=$current_time
+}
+
+# Función para enviar señal a terminales zsh
+notify_terminals() {
+    # Buscar procesos zsh interactivos y enviar señal USR1 para recargar
+    for pid in $(pgrep -x zsh 2>/dev/null || true); do
+        if [[ -e "/proc/$pid" ]]; then
+            # Solo para terminales interactivas (con tty)
+            if [[ -n "$(ps -p $pid -o tty= 2>/dev/null | grep -v '?')" ]]; then
+                kill -USR1 "$pid" 2>/dev/null || true
+            fi
+        fi
+    done
+}
+
+log "👀 Iniciando monitoreo de archivos de colores..."
+
+# Loop principal del daemon
+while true; do
+    # Obtener hash actual de los archivos de colores
+    current_hash=$(get_colors_hash)
+    
+    # Si hay colores y han cambiado desde la última verificación
+    if [[ -n "$current_hash" ]] && [[ "$current_hash" != "$last_colors_hash" ]]; then
+        if [[ -n "$last_colors_hash" ]]; then  # No sincronizar en la primera ejecución
+            log "🔄 Detectado cambio en colores de pywal"
+            
+            # Sincronizar colores
+            if sync_colors; then
+                # Notificar a terminales activas
+                notify_terminals
+                log "📢 Terminales notificadas para recarga"
+                
+                # Mostrar notificación discreta (si está disponible)
+                if command -v notify-send >/dev/null 2>&1; then
+                    notify-send "🎨 P10k Sync" "Colores sincronizados automáticamente" -t 1500 >/dev/null 2>&1 || true
+                fi
+            fi
+        else
+            log "📊 Colores iniciales cargados (hash: ${current_hash:0:8}...)"
+        fi
+        
+        last_colors_hash="$current_hash"
+    fi
+    
+    # Esperar antes de la siguiente verificación
+    sleep $CHECK_INTERVAL
+done

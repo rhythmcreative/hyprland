@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Fix Waybar Duplicates - Limpia waybar duplicados y lo reinicia limpiamente
+
+# Función para limpiar waybar duplicados
+cleanup_waybar_duplicates() {
+    local waybar_count=$(pgrep -c waybar 2>/dev/null || echo "0")
+    
+    if [[ $waybar_count -eq 0 ]]; then
+        notify-send "🔄 Waybar" "No hay procesos waybar corriendo. Iniciando waybar..." -t 2000
+        waybar &
+        return 0
+    elif [[ $waybar_count -eq 1 ]]; then
+        notify-send "✅ Waybar" "Un solo proceso waybar encontrado. Todo correcto." -t 2000
+        return 0
+    else
+        notify-send "🧹 Waybar" "Encontrados $waybar_count procesos waybar. Limpiando duplicados..." -t 3000
+        
+        # Matar todos los procesos waybar
+        pkill -9 waybar 2>/dev/null
+        
+        # Esperar a que terminen completamente
+        local timeout=15
+        while [[ $timeout -gt 0 ]] && pgrep -x waybar > /dev/null 2>&1; do
+            sleep 0.5
+            ((timeout--))
+        done
+        
+        # Si aún hay procesos después del timeout, forzar eliminación
+        if pgrep -x waybar > /dev/null 2>&1; then
+            sudo pkill -9 waybar 2>/dev/null || pkill -9 waybar 2>/dev/null
+            sleep 1
+        fi
+        
+        # Iniciar waybar limpiamente
+        waybar &
+        sleep 1
+        
+        # Verificar que se inició correctamente
+        if pgrep -x waybar > /dev/null; then
+            notify-send "✅ Waybar" "Waybar reiniciado correctamente. Duplicados eliminados." -t 2000
+        else
+            notify-send "❌ Waybar" "Error al reiniciar waybar. Intenta reiniciar manualmente." -u critical
+            return 1
+        fi
+    fi
+}
+
+# Función principal
+main() {
+    echo "🧹 Limpiando waybar duplicados..."
+    cleanup_waybar_duplicates
+    echo "✅ Operación completada."
+}
+
+# Ejecutar función principal
+main "$@"

@@ -1,0 +1,236 @@
+#!/bin/bash
+# Pywal GTK4 - Comando rápido para gestión del sistema
+# Uso: pywal-gtk4 [comando]
+
+set -e
+
+# Configuración
+SCRIPT_DIR="$HOME/.config/pywal-gtk4"
+GENERATOR="$SCRIPT_DIR/gtk4-generator.py"
+LOG_FILE="$HOME/.cache/wal/gtk4-hook.log"
+
+# Colores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+print_help() {
+    echo -e "${CYAN}🎨 Pywal GTK4 - Generador automático de temas${NC}"
+    echo
+    echo -e "${YELLOW}COMANDOS:${NC}"
+    echo "  generate    - Generar tema GTK4 manualmente"
+    echo "  install     - Instalar/reinstalar el sistema"
+    echo "  uninstall   - Desinstalar el sistema"
+    echo "  status      - Mostrar estado del sistema"
+    echo "  logs        - Ver logs del sistema"
+    echo "  colors      - Mostrar colores actuales de pywal"
+    echo "  reload      - Regenerar y aplicar tema"
+    echo "  help        - Mostrar esta ayuda"
+    echo
+    echo -e "${YELLOW}EJEMPLOS:${NC}"
+    echo "  pywal-gtk4 generate"
+    echo "  pywal-gtk4 status"
+    echo "  pywal-gtk4 logs"
+    echo
+}
+
+generate_theme() {
+    echo -e "${BLUE}🎨 Generando tema GTK4...${NC}"
+    if python3 "$GENERATOR"; then
+        echo -e "${GREEN}✅ Tema generado exitosamente${NC}"
+        echo -e "${YELLOW}💡 Reinicia aplicaciones GTK4 para ver cambios${NC}"
+    else
+        echo -e "${RED}❌ Error al generar tema${NC}"
+        return 1
+    fi
+}
+
+show_status() {
+    echo -e "${CYAN}📊 Estado del sistema Pywal GTK4${NC}"
+    echo
+    
+    # Verificar archivos
+    echo -e "${YELLOW}Archivos del sistema:${NC}"
+    
+    if [ -f "$GENERATOR" ]; then
+        echo -e "  ${GREEN}✅${NC} Generador: $GENERATOR"
+    else
+        echo -e "  ${RED}❌${NC} Generador: No encontrado"
+    fi
+    
+    if [ -f "$HOME/.config/pywal-gtk4/pywal-hook.sh" ]; then
+        echo -e "  ${GREEN}✅${NC} Hook: ~/.config/pywal-gtk4/pywal-hook.sh"
+    else
+        echo -e "  ${RED}❌${NC} Hook: No encontrado"
+    fi
+    
+    if [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
+        echo -e "  ${GREEN}✅${NC} Tema GTK4: ~/.config/gtk-4.0/gtk.css"
+        FILE_SIZE=$(du -h "$HOME/.config/gtk-4.0/gtk.css" | cut -f1)
+        FILE_DATE=$(date -r "$HOME/.config/gtk-4.0/gtk.css" '+%Y-%m-%d %H:%M:%S')
+        echo -e "    ${BLUE}ℹ${NC} Tamaño: $FILE_SIZE, Modificado: $FILE_DATE"
+    else
+        echo -e "  ${RED}❌${NC} Tema GTK4: No encontrado"
+    fi
+    
+    # Verificar pywal
+    echo
+    echo -e "${YELLOW}Estado de Pywal:${NC}"
+    
+    if command -v wal >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✅${NC} Pywal instalado"
+        
+        if [ -f "$HOME/.cache/wal/colors.json" ]; then
+            echo -e "  ${GREEN}✅${NC} Colores disponibles"
+            WALLPAPER=$(jq -r '.wallpaper // "N/A"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "N/A")
+            echo -e "    ${BLUE}ℹ${NC} Wallpaper actual: $WALLPAPER"
+        else
+            echo -e "  ${YELLOW}⚠${NC} No hay colores generados"
+        fi
+    else
+        echo -e "  ${RED}❌${NC} Pywal no encontrado"
+    fi
+    
+    # Verificar logs
+    echo
+    echo -e "${YELLOW}Logs:${NC}"
+    
+    if [ -f "$LOG_FILE" ]; then
+        LINES=$(wc -l < "$LOG_FILE")
+        LAST_LINE=$(tail -n 1 "$LOG_FILE" 2>/dev/null || echo "Sin entradas")
+        echo -e "  ${GREEN}✅${NC} Log disponible ($LINES líneas)"
+        echo -e "    ${BLUE}ℹ${NC} Última entrada: $LAST_LINE"
+    else
+        echo -e "  ${YELLOW}⚠${NC} No hay logs disponibles"
+    fi
+    
+    echo
+}
+
+show_logs() {
+    echo -e "${CYAN}📋 Logs del sistema${NC}"
+    echo
+    
+    if [ -f "$LOG_FILE" ]; then
+        echo -e "${YELLOW}Últimas 20 entradas:${NC}"
+        echo
+        tail -n 20 "$LOG_FILE" | while IFS= read -r line; do
+            if [[ $line == *"✅"* ]]; then
+                echo -e "${GREEN}$line${NC}"
+            elif [[ $line == *"❌"* ]]; then
+                echo -e "${RED}$line${NC}"
+            elif [[ $line == *"🎨"* ]]; then
+                echo -e "${BLUE}$line${NC}"
+            else
+                echo "$line"
+            fi
+        done
+        echo
+        echo -e "${YELLOW}Para ver logs en tiempo real: tail -f $LOG_FILE${NC}"
+    else
+        echo -e "${YELLOW}⚠ No hay logs disponibles${NC}"
+    fi
+}
+
+show_colors() {
+    echo -e "${CYAN}🎨 Colores actuales de Pywal${NC}"
+    echo
+    
+    if [ -f "$HOME/.cache/wal/colors.json" ]; then
+        echo -e "${YELLOW}Información del wallpaper:${NC}"
+        WALLPAPER=$(jq -r '.wallpaper // "N/A"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "N/A")
+        CHECKSUM=$(jq -r '.checksum // "N/A"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "N/A")
+        echo -e "  Wallpaper: $WALLPAPER"
+        echo -e "  Checksum: $CHECKSUM"
+        echo
+        
+        echo -e "${YELLOW}Colores especiales:${NC}"
+        BACKGROUND=$(jq -r '.special.background // "#000000"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "#000000")
+        FOREGROUND=$(jq -r '.special.foreground // "#ffffff"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "#ffffff")
+        CURSOR=$(jq -r '.special.cursor // "#ffffff"' "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "#ffffff")
+        
+        echo -e "  Background: $BACKGROUND"
+        echo -e "  Foreground: $FOREGROUND"
+        echo -e "  Cursor: $CURSOR"
+        echo
+        
+        echo -e "${YELLOW}Paleta de colores:${NC}"
+        for i in {0..15}; do
+            COLOR=$(jq -r ".colors.color$i // \"#000000\"" "$HOME/.cache/wal/colors.json" 2>/dev/null || echo "#000000")
+            printf "  Color%-2d: %s\\n" "$i" "$COLOR"
+        done
+    else
+        echo -e "${RED}❌ No se encontraron colores de pywal${NC}"
+        echo -e "${YELLOW}💡 Ejecuta: wal -i <imagen> para generar colores${NC}"
+    fi
+}
+
+reload_theme() {
+    echo -e "${BLUE}🔄 Recargando tema GTK4...${NC}"
+    
+    # Generar tema
+    if generate_theme; then
+        # Intentar recargar aplicaciones GTK si están disponibles
+        echo -e "${BLUE}🔄 Intentando recargar aplicaciones GTK4...${NC}"
+        
+        # Recargar configuración de GTK
+        if command -v gsettings >/dev/null 2>&1; then
+            # Cambiar y volver a cambiar el tema para forzar recarga
+            CURRENT_THEME=$(gsettings get org.gnome.desktop.interface gtk-theme)
+            gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+            sleep 0.5
+            gsettings set org.gnome.desktop.interface gtk-theme "$CURRENT_THEME"
+            echo -e "${GREEN}✅ Configuración GTK recargada${NC}"
+        fi
+        
+        echo -e "${GREEN}✅ Tema recargado completamente${NC}"
+    fi
+}
+
+# Función principal
+main() {
+    case "${1:-help}" in
+        "generate"|"gen")
+            generate_theme
+            ;;
+        "install")
+            bash "$SCRIPT_DIR/install.sh" install
+            ;;
+        "uninstall")
+            bash "$SCRIPT_DIR/install.sh" uninstall
+            ;;
+        "status"|"info")
+            show_status
+            ;;
+        "logs"|"log")
+            show_logs
+            ;;
+        "colors"|"palette")
+            show_colors
+            ;;
+        "reload"|"refresh")
+            reload_theme
+            ;;
+        "help"|"-h"|"--help")
+            print_help
+            ;;
+        *)
+            echo -e "${RED}❌ Comando desconocido: $1${NC}"
+            echo
+            print_help
+            exit 1
+            ;;
+    esac
+}
+
+# Verificar que jq está disponible para funciones de colores
+if ! command -v jq >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ jq no está instalado. Algunas funciones pueden no funcionar correctamente.${NC}"
+    echo -e "${BLUE}💡 Instala jq con: sudo pacman -S jq${NC}"
+fi
+
+main "$@"

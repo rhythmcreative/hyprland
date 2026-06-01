@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Script específico para sincronizar pywal con GIFs animados
+# Extrae el primer frame del GIF y lo usa para generar colores pywal
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SYNC-GIF-PYWAL: $1" >> "$LOG_FILE"
+}
+
+log "Iniciando sincronización GIF-Pywal"
+
+# Verificar que pywal esté instalado
+if ! command -v wal > /dev/null 2>&1; then
+    notify-send "❌ Error" "pywal no está instalado" -u critical
+    log "ERROR: pywal no está instalado"
+    exit 1
+fi
+
+# Verificar que ImageMagick esté instalado
+if ! command -v convert > /dev/null 2>&1; then
+    notify-send "❌ Error" "ImageMagick no está instalado" -u critical
+    log "ERROR: ImageMagick no está instalado"
+    exit 1
+fi
+
+# Buscar el GIF actual
+CURRENT_WALLPAPER=""
+
+# Primero buscar en el cache de wallpaper actual
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    CURRENT_WALLPAPER=$(cat "$HOME/.cache/current-wallpaper")
+    log "Wallpaper desde cache: $CURRENT_WALLPAPER"
+fi
+
+# Si no hay cache o el archivo no existe, buscar usando swww query
+if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+    if command -v swww > /dev/null 2>&1; then
+        CURRENT_WALLPAPER=$(swww query 2>/dev/null | grep -o '/[^[:space:]]*\.\(gif\|png\|jpg\|jpeg\|webp\|bmp\)' | head -1)
+        log "Wallpaper desde swww query: $CURRENT_WALLPAPER"
+    fi
+fi
+
+# Verificar que tenemos un archivo válido
+if [[ -z "$CURRENT_WALLPAPER" ]] || [[ ! -f "$CURRENT_WALLPAPER" ]]; then
+    notify-send "⚠️ Advertencia" "No se pudo encontrar el wallpaper actual" -u normal
+    log "ERROR: No se pudo encontrar wallpaper actual"
+    exit 1
+fi
+
+# Verificar si es un GIF
+if [[ "${CURRENT_WALLPAPER,,}" != *.gif ]]; then
+    notify-send "ℹ️ Info" "El wallpaper actual no es un GIF, aplicando pywal normalmente" -t 3000
+    log "Wallpaper no es GIF, aplicando pywal normal: $CURRENT_WALLPAPER"
+    wal -i "$CURRENT_WALLPAPER" -n
+else
+    notify-send "🎬 Procesando GIF" "Extrayendo colores del primer frame..." -t 2000
+    log "Procesando GIF: $CURRENT_WALLPAPER"
+    
+    # Extraer primer frame del GIF
+    gif_frame_temp="/tmp/gif_frame_for_pywal_sync_$$.png"
+    
+    if convert "$CURRENT_WALLPAPER[0]" "$gif_frame_temp" 2>/dev/null; then
+        log "Frame extraído exitosamente: $gif_frame_temp"
+        
+        # Aplicar pywal usando el primer frame
+        if wal -i "$gif_frame_temp" -n; then
+            log "Pywal aplicado exitosamente"
+            
+            # Limpiar archivo temporal
+            rm -f "$gif_frame_temp" 2>/dev/null || true
+            
+            notify-send "🎨 Colores Actualizados" "Pywal sincronizado con el GIF" -t 2000
+            
+            # Recargar hyprland para aplicar los nuevos colores
+            if [[ -f ~/.cache/wal/colors-hyprland.conf ]]; then
+                log "Recargando hyprland"
+                hyprctl reload > /dev/null 2>&1 || true
+                sleep 0.5
+                
+                # Reconfirmar el GIF después de recargar hyprland
+                if pgrep -x "swww-daemon" > /dev/null; then
+                    log "Reconfirmando GIF después de recargar hyprland"
+                    swww img "$CURRENT_WALLPAPER" --transition-type none --transition-duration 0.1 > /dev/null 2>&1 || true
+                fi
+            fi
+            
+            notify-send "✅ Sincronización Completa" "GIF animado y colores pywal sincronizados" -t 3000
+            log "Sincronización completada exitosamente"
+        else
+            log "ERROR: Fallo al aplicar pywal"
+            notify-send "❌ Error" "Fallo al aplicar pywal" -u critical
+            rm -f "$gif_frame_temp" 2>/dev/null || true
+            exit 1
+        fi
+    else
+        log "ERROR: Fallo al extraer frame del GIF"
+        notify-send "❌ Error" "No se pudo extraer frame del GIF" -u critical
+        exit 1
+    fi
+fi
+
+log "Script de sincronización GIF-Pywal completado"

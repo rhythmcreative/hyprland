@@ -1,0 +1,81 @@
+#!/bin/bash
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+
+# Función de logging
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log "Iniciando carga del último wallpaper"
+
+# Verificar que swww-daemon está corriendo
+if ! pgrep -x "swww-daemon" > /dev/null; then
+    log "swww-daemon no está corriendo, esperando..."
+    sleep 3
+    if ! pgrep -x "swww-daemon" > /dev/null; then
+        log "ERROR: swww-daemon sigue sin correr"
+        exit 1
+    fi
+fi
+
+# Verificar si existe el archivo con el último wallpaper
+if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
+    WALLPAPER_PATH=$(cat "$HOME/.cache/current-wallpaper")
+    
+    if [[ -f "$WALLPAPER_PATH" ]]; then
+        log "Aplicando último wallpaper: $WALLPAPER_PATH"
+        
+        if [[ "${WALLPAPER_PATH,,}" == *.gif ]]; then
+            log "SKIP: GIF detectado al inicio - usando imagen estática por rendimiento"
+            # CRÍTICO: No cargar GIFs al inicio para prevenir memory leaks
+            # Buscar un wallpaper estático como fallback
+            FALLBACK_STATIC="$HOME/Pictures/Wallpapers"
+            if [[ -d "$FALLBACK_STATIC" ]]; then
+                STATIC_WALLPAPER=$(find "$FALLBACK_STATIC" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.png" \) | head -n 1)
+                if [[ -n "$STATIC_WALLPAPER" ]]; then
+                    log "Usando wallpaper estático de fallback: $(basename "$STATIC_WALLPAPER")"
+                    swww img "$STATIC_WALLPAPER" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.0 2>/dev/null
+                else
+                    log "No se encontraron wallpapers estáticos, usando color sólido"
+                    swww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null
+                fi
+            fi
+        else
+            log "Aplicando imagen estática como wallpaper"
+            swww img "$WALLPAPER_PATH" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5 2>/dev/null
+        fi
+        
+        if [ $? -eq 0 ]; then
+            log "Último wallpaper aplicado exitosamente: $(basename "$WALLPAPER_PATH")"
+        else
+            log "ERROR: Fallo al aplicar último wallpaper"
+            # Fallback al wallpaper de pywal si existe
+            if [[ -f "$HOME/.cache/wal/wal" ]]; then
+                FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
+                log "Aplicando wallpaper de pywal como fallback: $FALLBACK_WALLPAPER"
+                swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+            fi
+        fi
+    else
+        log "ERROR: El archivo de wallpaper no existe: $WALLPAPER_PATH"
+        # Fallback al wallpaper de pywal si existe
+        if [[ -f "$HOME/.cache/wal/wal" ]]; then
+            FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
+            log "Aplicando wallpaper de pywal como fallback: $FALLBACK_WALLPAPER"
+            swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+        fi
+    fi
+else
+    log "No se encontró archivo de último wallpaper, usando pywal"
+    # Usar el wallpaper de pywal si existe
+    if [[ -f "$HOME/.cache/wal/wal" ]]; then
+        FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
+        log "Aplicando wallpaper de pywal: $FALLBACK_WALLPAPER"
+        swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+    else
+        log "No se encontró wallpaper de pywal tampoco"
+    fi
+fi
+
+log "Script de carga de wallpaper completado"

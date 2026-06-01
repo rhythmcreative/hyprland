@@ -1,0 +1,4 @@
+com.github.rafostar.Clapper
+io.missioncenter.MissionCenter
+org.gnome.eog
+org.vinegarhq.Sober

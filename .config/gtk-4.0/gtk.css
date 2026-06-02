@@ -3,39 +3,39 @@
 /* Theme: PyWal Dynamic Theme GTK4 */
 
 /* Base color definitions */
-@define-color accent_bg_color #F7DB9C;
-@define-color accent_fg_color #361718;
-@define-color accent_color #F7DB9C;
-@define-color destructive_bg_color #D39976;
-@define-color destructive_fg_color #361718;
-@define-color destructive_color #D39976;
-@define-color success_bg_color #A97D83;
-@define-color success_fg_color #361718;
-@define-color success_color #A97D83;
-@define-color warning_bg_color #B6898C;
-@define-color warning_fg_color #361718;
-@define-color warning_color #B6898C;
-@define-color error_bg_color #D39976;
-@define-color error_fg_color #361718;
-@define-color error_color #D39976;
-@define-color window_bg_color #361718;
-@define-color window_fg_color #f1e0cb;
-@define-color view_bg_color #361718;
-@define-color view_fg_color #f1e0cb;
-@define-color headerbar_bg_color #361718;
-@define-color headerbar_fg_color #f1e0cb;
-@define-color headerbar_border_color #a89c8e;
-@define-color headerbar_backdrop_color #361718;
+@define-color accent_bg_color #6F8CA8;
+@define-color accent_fg_color #101516;
+@define-color accent_color #6F8CA8;
+@define-color destructive_bg_color #60626B;
+@define-color destructive_fg_color #101516;
+@define-color destructive_color #60626B;
+@define-color success_bg_color #8F7A77;
+@define-color success_fg_color #101516;
+@define-color success_color #8F7A77;
+@define-color warning_bg_color #3C5C84;
+@define-color warning_fg_color #101516;
+@define-color warning_color #3C5C84;
+@define-color error_bg_color #60626B;
+@define-color error_fg_color #101516;
+@define-color error_color #60626B;
+@define-color window_bg_color #101516;
+@define-color window_fg_color #b4c5d9;
+@define-color view_bg_color #101516;
+@define-color view_fg_color #b4c5d9;
+@define-color headerbar_bg_color #101516;
+@define-color headerbar_fg_color #b4c5d9;
+@define-color headerbar_border_color #7d8997;
+@define-color headerbar_backdrop_color #101516;
 @define-color headerbar_shade_color rgba(0, 0, 0, 0.36);
-@define-color card_bg_color #361718;
-@define-color card_fg_color #f1e0cb;
+@define-color card_bg_color #101516;
+@define-color card_fg_color #b4c5d9;
 @define-color card_shade_color rgba(0, 0, 0, 0.36);
-@define-color dialog_bg_color #361718;
-@define-color dialog_fg_color #f1e0cb;
-@define-color popover_bg_color #361718;
-@define-color popover_fg_color #f1e0cb;
+@define-color dialog_bg_color #101516;
+@define-color dialog_fg_color #b4c5d9;
+@define-color popover_bg_color #101516;
+@define-color popover_fg_color #b4c5d9;
 @define-color shade_color rgba(0, 0, 0, 0.36);
-@define-color scrollbar_outline_color #a89c8e;
+@define-color scrollbar_outline_color #7d8997;
 
 /* ========== WINDOWS ========== */
 window {

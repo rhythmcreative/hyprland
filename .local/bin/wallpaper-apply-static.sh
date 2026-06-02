@@ -30,4 +30,4 @@ OUTPUTS=$(IFS=, ; echo "${MONITORS[*]}")
 
 killall linux-wallpaperengine
 
-swww img --outputs "$OUTPUTS" -- "$WALLPAPER_IMAGE"
+awww img --outputs "$OUTPUTS" -- "$WALLPAPER_IMAGE"

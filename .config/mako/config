@@ -16,9 +16,9 @@ markup=1
 actions=1
 
 # Pywal synchronized colors
-background-color=#36171890
-text-color=#f1e0cb
-border-color=#D3997650
+background-color=#10151690
+text-color=#b4c5d9
+border-color=#60626B50
 
 # Top-right positioning
 anchor=top-right
@@ -43,10 +43,10 @@ width=400
 height=120
 border-radius=15
 default-timeout=2000
-border-color=#AD95A1
+border-color=#506C8A
 border-size=2
-background-color=#36171895
-text-color=#f1e0cb
+background-color=#10151695
+text-color=#b4c5d9
 padding=20
 margin=10
 
@@ -55,10 +55,10 @@ width=400
 height=120
 border-radius=15
 default-timeout=2000
-border-color=#AD95A1
+border-color=#506C8A
 border-size=2
-background-color=#36171895
-text-color=#f1e0cb
+background-color=#10151695
+text-color=#b4c5d9
 padding=20
 margin=10
 
@@ -67,10 +67,10 @@ width=400
 height=120
 border-radius=15
 default-timeout=2000
-border-color=#DBAC9A
+border-color=#68768C
 border-size=2
-background-color=#36171895
-text-color=#f1e0cb
+background-color=#10151695
+text-color=#b4c5d9
 padding=20
 margin=10
 
@@ -80,7 +80,7 @@ width=320
 height=70
 border-radius=8
 default-timeout=2000
-border-color=#B6898C60
+border-color=#3C5C8460
 format=<b>%s</b>
 
 [summary~="Brightness"]
@@ -88,26 +88,26 @@ width=320
 height=70
 border-radius=8
 default-timeout=2000
-border-color=#B6898C60
+border-color=#3C5C8460
 
 # Spotify notifications
 [app-name=Spotify]
 width=440
-border-color=#AD95A160
+border-color=#506C8A60
 default-timeout=6000
-background-color=#36171895
+background-color=#10151695
 
 # Urgency levels
 [urgency=low]
-border-color=#a89c8e50
+border-color=#7d899750
 default-timeout=4000
 
 [urgency=normal]
-border-color=#D3997650
+border-color=#60626B50
 default-timeout=6000
 
 [urgency=critical]
-background-color=#36171895
-border-color=#D39976
+background-color=#10151695
+border-color=#60626B
 border-size=2
 default-timeout=0

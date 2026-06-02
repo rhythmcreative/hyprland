@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")"
 
-WALLPAPER_ENGINE_BIN="/home/rhythmcreative/linux-wallpaperengine/build/output/linux-wallpaperengine"
+WALLPAPER_ENGINE_BIN="$HOME/linux-wallpaperengine/build/output/linux-wallpaperengine"
 WALLPAPER_FPS=60
 SCREENSHOT_DIR="$HOME/.cache/wallpaper-screenshots"
 WAL_CMD="wal"

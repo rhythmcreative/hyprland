@@ -1,1 +1,1 @@
-python /home/rhythmcreative/update_rmpc_theme.py
+python "$HOME"/update_rmpc_theme.py

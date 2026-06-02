@@ -26,7 +26,7 @@ echo ""
 
 # Verificar script de clima
 echo "3. Probando script de clima:"
-WEATHER_SCRIPT="/home/rhythmcreative/.config/waybar/scripts/weather.sh"
+WEATHER_SCRIPT="$HOME/.config/waybar/scripts/weather.sh"
 
 if [ -f "$WEATHER_SCRIPT" ]; then
     echo "   ✅ Script encontrado: $WEATHER_SCRIPT"
@@ -78,7 +78,7 @@ echo ""
 
 # Verificar configuración de waybar
 echo "5. Verificando configuración de waybar:"
-WAYBAR_CONFIG="/home/rhythmcreative/.config/waybar/config"
+WAYBAR_CONFIG="$HOME/.config/waybar/config"
 
 if [ -f "$WAYBAR_CONFIG" ]; then
     echo "   ✅ Configuración encontrada: $WAYBAR_CONFIG"

@@ -4,9 +4,18 @@
 # Autor: rhythmcreative
 # Fecha: $(date '+%Y-%m-%d')
 
+# Determinar el HOME del usuario real (no root)
+if [[ $(id -u) -eq 0 ]] && [[ -n "$SUDO_USER" ]]; then
+    REAL_USER="$SUDO_USER"
+    REAL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    REAL_USER="$USER"
+    REAL_HOME="$HOME"
+fi
+
 LOG_FILE="/tmp/sddm-wallpaper-sync.log"
-CURRENT_WALLPAPER_FILE="/home/rhythmcreative/.cache/current-wallpaper"
-USER_HOME="/home/rhythmcreative"
+CURRENT_WALLPAPER_FILE="$REAL_HOME/.cache/current-wallpaper"
+USER_HOME="$REAL_HOME"
 SDDM_THEME_DIR="/usr/share/sddm/themes/SilentSDDM"
 SDDM_WALLPAPER_DIR="/usr/share/sddm/themes/SilentSDDM/backgrounds"
 
@@ -101,7 +110,7 @@ sed -i "s|background = backgrounds/.*|background = backgrounds/$BG_FILENAME|g" "
 log "Configuración de background actualizada en theme.conf: backgrounds/$BG_FILENAME"
 
 # Si tenemos colores de pywal del usuario, aplicarlos
-USER_PYWAL_COLORS="/home/rhythmcreative/.cache/wal/colors"
+USER_PYWAL_COLORS="$REAL_HOME/.cache/wal/colors"
 if [[ -f "$USER_PYWAL_COLORS" ]]; then
     log "Aplicando colores de pywal del usuario a SDDM"
     
@@ -135,10 +144,7 @@ log "Sincronización de wallpaper de SDDM completada exitosamente"
 # Si se ejecuta desde un entorno gráfico, mostrar notificación
 if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
     # Ejecutar como el usuario correcto para la notificación
-    USER_HOME=$(getent passwd 1000 | cut -d: -f6)
-    USER_NAME=$(getent passwd 1000 | cut -d: -f1)
-    
-    sudo -u "$USER_NAME" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" notify-send "SDDM Wallpaper" "Wallpaper sincronizado con SDDM" 2>/dev/null || true
+    sudo -u "$REAL_USER" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" notify-send "SDDM Wallpaper" "Wallpaper sincronizado con SDDM" 2>/dev/null || true
 fi
 
 exit 0

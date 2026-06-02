@@ -3,7 +3,8 @@
 # Script de demostración para la integración de pywal con SDDM astronaut theme
 # Autor: rhythmcreative
 
-THEME_DIR="/home/rhythmcreative/sddm-astronaut-theme/sddm-astronaut-theme"
+# Detectar dinámicamente el directorio del tema
+THEME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== Demo de integración Pywal + SDDM Astronaut Theme ==="
 echo ""

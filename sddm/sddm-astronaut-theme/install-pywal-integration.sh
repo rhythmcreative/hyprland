@@ -5,7 +5,8 @@
 
 set -e
 
-THEME_DIR="/home/rhythmcreative/sddm-astronaut-theme/sddm-astronaut-theme"
+# Detectar dinámicamente el directorio del tema
+THEME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDDM_THEMES_DIR="/usr/share/sddm/themes"
 THEME_NAME="sddm-astronaut-theme"
 

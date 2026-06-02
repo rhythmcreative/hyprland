@@ -31,7 +31,6 @@ setup_language() {
             MSG_DRIVER_HEADER="DRIVERS GRAFICOS (Selecciona tu hardware)"
             MSG_DEPLOY_DRIVERS="Instalando drivers de hardware..."
             MSG_FLATPAK_CONFIRM="¿Instalar Flatpaks de tu lista flatpaks.txt?"
-            MSG_DOTFILES_CONFIRM="¿Copiar archivos de configuracion al sistema?"
             MSG_WALL_CONFIRM="¿Descargar fondos de pantalla personalizados?"
             MSG_ZSH_CONFIRM="¿Establecer Zsh como shell por defecto?"
             MSG_SERVICES_CONFIRM="¿Habilitar servicios principales (Red/BT/Login)?"
@@ -47,7 +46,6 @@ setup_language() {
             MSG_DRIVER_HEADER="PILOTES GRAPHIQUES (Selectionnez votre materiel)"
             MSG_DEPLOY_DRIVERS="Deploiement des pilotes materiels..."
             MSG_FLATPAK_CONFIRM="Installer les Flatpaks de votre liste flatpaks.txt ?"
-            MSG_DOTFILES_CONFIRM="Copier les fichiers de configuration sur le systeme ?"
             MSG_WALL_CONFIRM="Telecharger les fonds d'ecran personnalises ?"
             MSG_ZSH_CONFIRM="Definir Zsh comme shell par defaut ?"
             MSG_SERVICES_CONFIRM="Activer les services de base (Reseau/BT/Login) ?"
@@ -63,7 +61,6 @@ setup_language() {
             MSG_DRIVER_HEADER="GRAFIKTREIBER (Wahlen Sie Ihre Hardware aus)"
             MSG_DEPLOY_DRIVERS="Hardwaretreiber werden bereitgestellt..."
             MSG_FLATPAK_CONFIRM="Flatpaks aus Ihrer flatpaks.txt-Liste installieren?"
-            MSG_DOTFILES_CONFIRM="Konfigurationsdateien auf das System kopieren?"
             MSG_WALL_CONFIRM="Benutzerdefinierte Hintergrundbilder herunterladen?"
             MSG_ZSH_CONFIRM="Zsh als Standardshell festlegen?"
             MSG_SERVICES_CONFIRM="Kerndienste aktivieren (Netzwerk/BT/Login)?"
@@ -79,7 +76,6 @@ setup_language() {
             MSG_DRIVER_HEADER="DRIVER GRAFICI (Seleziona il tuo hardware)"
             MSG_DEPLOY_DRIVERS="Distribuzione dei driver hardware..."
             MSG_FLATPAK_CONFIRM="Installare i Flatpak dalla lista flatpaks.txt?"
-            MSG_DOTFILES_CONFIRM="Copiare i file di configurazione nel sistema?"
             MSG_WALL_CONFIRM="Scaricare sfondi personalizzati?"
             MSG_ZSH_CONFIRM="Impostare Zsh como shell predefinita?"
             MSG_SERVICES_CONFIRM="Abilitare i servicios principali (Rete/BT/Login)?"
@@ -95,7 +91,6 @@ setup_language() {
             MSG_DRIVER_HEADER="DRIVERS GRAFICOS (Selecione seu hardware)"
             MSG_DEPLOY_DRIVERS="Implantando drivers de hardware..."
             MSG_FLATPAK_CONFIRM="Instalar Flatpaks da sua lista flatpaks.txt?"
-            MSG_DOTFILES_CONFIRM="Copiar arquivos de configuracao para o sistema?"
             MSG_WALL_CONFIRM="Baixar papeis de parede personalizados?"
             MSG_ZSH_CONFIRM="Definir Zsh como shell padrao?"
             MSG_SERVICES_CONFIRM="Ativar servicos principais (Rede/BT/Login)?"
@@ -111,7 +106,6 @@ setup_language() {
             MSG_DRIVER_HEADER="ГРАФИЧЕСКИЕ ДРАЙВЕРЫ (Выберите ваше оборудование)"
             MSG_DEPLOY_DRIVERS="Развертывание драйверов оборудования..."
             MSG_FLATPAK_CONFIRM="Установить Flatpaks из списка flatpaks.txt?"
-            MSG_DOTFILES_CONFIRM="Скопировать файлы конфигурации в систему?"
             MSG_WALL_CONFIRM="Загрузить пользовательские обои?"
             MSG_ZSH_CONFIRM="Установить Zsh в качестве оболочки по умолчанию?"
             MSG_SERVICES_CONFIRM="Включить основные службы (Сеть/BT/Вход)?"
@@ -127,7 +121,6 @@ setup_language() {
             MSG_DRIVER_HEADER="图形驱动程序 (选择您的硬件)"
             MSG_DEPLOY_DRIVERS="部署硬件驱动程序..."
             MSG_FLATPAK_CONFIRM="是否从 flatpaks.txt 列表安装 Flatpaks？"
-            MSG_DOTFILES_CONFIRM="是否将配置文件复制到系统？"
             MSG_WALL_CONFIRM="是否下载自定义壁纸资源？"
             MSG_ZSH_CONFIRM="是否将 Zsh 设置为默认 Shell？"
             MSG_SERVICES_CONFIRM="是否启用核心服务 (网络/蓝牙/登录)？"
@@ -143,7 +136,6 @@ setup_language() {
             MSG_DRIVER_HEADER="グラフィックドライバー (ハードウェアを選択してください)"
             MSG_DEPLOY_DRIVERS="ハードウェアドライバーを展開しています..."
             MSG_FLATPAK_CONFIRM="flatpaks.txtリストからFlatpaksをインストールしますか？"
-            MSG_DOTFILES_CONFIRM="設定ファイルをシステムにコピーしますか？"
             MSG_WALL_CONFIRM="カスタム壁紙をダウンロードしますか？"
             MSG_ZSH_CONFIRM="Zshをデフォルトのシェルに設定しますか？"
             MSG_SERVICES_CONFIRM="コアサービス (ネットワーク/BT/ログイン) を有効にしますか？"
@@ -159,7 +151,6 @@ setup_language() {
             MSG_DRIVER_HEADER="그래픽 드라이버 (하드웨어 선택)"
             MSG_DEPLOY_DRIVERS="하드웨어 드라이버 배포 중..."
             MSG_FLATPAK_CONFIRM="flatpaks.txt 목록에서 Flatpaks를 설치하시겠습니까?"
-            MSG_DOTFILES_CONFIRM="설정 파일을 시스템으로 복사하시겠습니까?"
             MSG_WALL_CONFIRM="사용자 정의 배경화면을 다운로드하시겠습니까?"
             MSG_ZSH_CONFIRM="Zsh를 기본 셸로 설정하시겠습니까?"
             MSG_SERVICES_CONFIRM="핵심 서비스 (네트워크/BT/로그인)를 활성화하시겠습니까?"
@@ -176,7 +167,6 @@ setup_language() {
             MSG_DRIVER_HEADER="GRAPHICS DRIVERS (Select your hardware)"
             MSG_DEPLOY_DRIVERS="Deploying hardware drivers..."
             MSG_FLATPAK_CONFIRM="Install Flatpaks from your flatpaks.txt list?"
-            MSG_DOTFILES_CONFIRM="Copy configuration files to system (Physical Copy)?"
             MSG_WALL_CONFIRM="Download custom wallpaper assets?"
             MSG_ZSH_CONFIRM="Set Zsh as your default shell?"
             MSG_SERVICES_CONFIRM="Enable core services (Net/BT/Login)?"
@@ -324,71 +314,69 @@ step_software() {
 
 step_dotfiles() {
     section "DOTFILES SYNC"
-    if gum confirm "$MSG_DOTFILES_CONFIRM"; then
-        # Ensure base directories exist
-        mkdir -p ~/.config ~/.local/bin
-        
-        cd "$DOTFILES_DIR"
+    # Ensure base directories exist
+    mkdir -p ~/.config ~/.local/bin
+    
+    cd "$DOTFILES_DIR"
 
-        info "Copying configurations..."
+    info "Copying configurations..."
+    
+    # 1. Handle .config (Copy each item individually to ~/.config/)
+    for item in .config/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        target="$HOME/.config/$name"
         
-        # 1. Handle .config (Copy each item individually to ~/.config/)
-        for item in .config/*; do
-            [ -e "$item" ] || continue
-            name=$(basename "$item")
-            target="$HOME/.config/$name"
-            
-            if [ -e "$target" ]; then
-                info "Backing up existing .config/$name"
-                mv "$target" "$target.bak"
-            fi
-            
-            cp -r "$DOTFILES_DIR/.config/$name" "$target"
-            echo "  COPY: $name => ~/.config/$name"
-        done
+        if [ -e "$target" ]; then
+            info "Backing up existing .config/$name"
+            mv "$target" "$target.bak"
+        fi
+        
+        cp -r "$DOTFILES_DIR/.config/$name" "$target"
+        echo "  COPY: $name => ~/.config/$name"
+    done
 
-        # 2. Handle .local/bin (Copy each file individually to ~/.local/bin/)
-        for file in .local/bin/*; do
-            [ -e "$file" ] || continue
-            name=$(basename "$file")
-            target="$HOME/.local/bin/$name"
-            
-            if [ -e "$target" ]; then
-                mv "$target" "$target.bak"
-            fi
-            
-            cp "$DOTFILES_DIR/$file" "$target"
-            chmod +x "$target"
-        done
-        echo "  COPY: bin contents => ~/.local/bin/"
+    # 2. Handle .local/bin (Copy each file individually to ~/.local/bin/)
+    for file in .local/bin/*; do
+        [ -e "$file" ] || continue
+        name=$(basename "$file")
+        target="$HOME/.local/bin/$name"
+        
+        if [ -e "$target" ]; then
+            mv "$target" "$target.bak"
+        fi
+        
+        cp "$DOTFILES_DIR/$file" "$target"
+        chmod +x "$target"
+    done
+    echo "  COPY: bin contents => ~/.local/bin/"
 
-        # 3. Handle other packages (zsh, bash, gtk) that go into $HOME
-        for pkg in zsh bash gtk; do
-            if [ -d "$pkg" ]; then
-                find "$pkg" -mindepth 1 -maxdepth 1 -name ".*" | while read -r file; do
-                    name=$(basename "$file")
-                    target="$HOME/$name"
-                    
-                    if [ -e "$target" ]; then
-                        info "Backing up existing $name"
-                        mv "$target" "$target.bak"
-                    fi
-                    
-                    cp -r "$DOTFILES_DIR/$file" "$target"
-                    echo "  COPY: $name => ~/$name"
-                done
-            fi
-        done
-        
-        success "Local configs copied (Physical installation complete)."
-        
-        info "Fixing hardcoded paths for current user..."
-        # Replace hardcoded home path in copied text files
-        grep -rIl "/home/rhythmcreative" "$HOME/.config" "$HOME/.local/bin" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.gtkrc-2.0" 2>/dev/null | while read -r file; do
-            sed -i "s|/home/rhythmcreative|$HOME|g" "$file"
-            echo "  FIXED: $file"
-        done
-    fi
+    # 3. Handle other packages (zsh, bash, gtk) that go into $HOME
+    for pkg in zsh bash gtk; do
+        if [ -d "$pkg" ]; then
+            find "$pkg" -mindepth 1 -maxdepth 1 -name ".*" | while read -r file; do
+                name=$(basename "$file")
+                target="$HOME/$name"
+                
+                if [ -e "$target" ]; then
+                    info "Backing up existing $name"
+                    mv "$target" "$target.bak"
+                fi
+                
+                cp -r "$DOTFILES_DIR/$file" "$target"
+                echo "  COPY: $name => ~/$name"
+            done
+        fi
+    done
+    
+    success "Local configs copied (Physical installation complete)."
+    
+    info "Fixing hardcoded paths for current user..."
+    # Replace hardcoded home path in copied text files
+    grep -rIl "/home/rhythmcreative" "$HOME/.config" "$HOME/.local/bin" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.gtkrc-2.0" 2>/dev/null | while read -r file; do
+        sed -i "s|/home/rhythmcreative|$HOME|g" "$file"
+        echo "  FIXED: $file"
+    done
 }
 
 step_wallpapers() {

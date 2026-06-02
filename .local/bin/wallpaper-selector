@@ -59,8 +59,8 @@ selected_path="$WALLPAPER_DIR/$selected"
 
 # 4. APLICACIÓN INSTANTÁNEA (En paralelo para máxima velocidad)
 
-# A. Wallpaper (awww es casi instantáneo)
-awww img "$selected_path" &
+# A. Wallpaper (awww with premium transition)
+awww img "$selected_path" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 &
 
 # B. Sincronización de Colores (Pywal y GTK)
 (

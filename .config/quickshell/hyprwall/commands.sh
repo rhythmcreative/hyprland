@@ -12,11 +12,9 @@ SELECTED=$(basename "$WALLPAPER_PATH")
 # 1. Notificar inicio
 notify-send "🎨 Aplicando Wallpaper" "$SELECTED" -t 2000
 
-# 2. Aplicar Wallpaper (swww/awww)
+# 2. Aplicar Wallpaper (awww)
 if command -v awww &> /dev/null; then
     awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
-elif command -v swww &> /dev/null; then
-    swww img "$WALLPAPER_PATH" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5
 fi
 
 # 3. Sincronizar colores con Pywal

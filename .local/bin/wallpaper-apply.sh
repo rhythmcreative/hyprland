@@ -61,7 +61,7 @@ if [[ ! -f "$BLACK_PNG" ]]; then
 fi
 
 if [[ -f "$BLACK_PNG" ]]; then
-    swww img --outputs "$OUTPUTS" \
+    awww img --outputs "$OUTPUTS" \
         --transition-type fade \
         --transition-duration 0.8 \
         --transition-fps 60 \
@@ -128,4 +128,4 @@ for i in "${!MONITORS[@]}"; do
 done
 
 sleep 1.5
-swww clear 2>/dev/null || true
+awww clear 2>/dev/null || true

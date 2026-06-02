@@ -4,16 +4,20 @@
 # Detecta automáticamente el wallpaper actual y sincroniza todos los temas
 
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-CURRENT_WALLPAPER_FILE="$HOME/.cache/current_wallpaper"
+CURRENT_WALLPAPER_FILE="$HOME/.cache/current-wallpaper"
 
 # Función para obtener el wallpaper actual
-get_current_wallpaper() {
+get_current-wallpaper() {
     # Verificar si hay un archivo que guarde el wallpaper actual
     if [ -f "$CURRENT_WALLPAPER_FILE" ]; then
         cat "$CURRENT_WALLPAPER_FILE"
     else
-        # Intentar detectar el wallpaper desde swww
-        swww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
+        # Intentar detectar el wallpaper desde awww o awww
+        if command -v awww &>/dev/null; then
+             awww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
+        else
+             awww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
+        fi
     fi
 }
 
@@ -59,11 +63,11 @@ reload_components() {
 main() {
     echo "🎨 Iniciando sincronización de pywal..."
     
-    # Prioridad: 1. Argumento, 2. Cache, 3. Detección swww, 4. Ultimo wal
+    # Prioridad: 1. Argumento, 2. Cache, 3. Detección awww, 4. Ultimo wal
     if [ -n "${1:-}" ] && [ -f "$1" ]; then
         CURRENT_WALLPAPER="$1"
     else
-        CURRENT_WALLPAPER=$(get_current_wallpaper)
+        CURRENT_WALLPAPER=$(get_current-wallpaper)
     fi
     
     if [ -z "$CURRENT_WALLPAPER" ] || [ ! -f "$CURRENT_WALLPAPER" ]; then

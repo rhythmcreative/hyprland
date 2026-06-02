@@ -11,9 +11,9 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# Verificación de daemon (soporta swww y awww)
+# Verificación de daemon (soporta awww y awww)
 DAEMON_RUNNING=false
-if pgrep -x "awww-daemon" > /dev/null || pgrep -x "swww-daemon" > /dev/null; then
+if pgrep -x "awww-daemon" > /dev/null || pgrep -x "awww-daemon" > /dev/null; then
     DAEMON_RUNNING=true
 fi
 
@@ -24,7 +24,7 @@ if [ "$DAEMON_RUNNING" = false ]; then
     
     # Esperar a que el daemon esté listo
     for i in {1..50}; do
-        if swww query > /dev/null 2>&1; then
+        if awww query > /dev/null 2>&1; then
             log "✅ Daemon listo tras $((i*100))ms"
             DAEMON_RUNNING=true
             break
@@ -45,14 +45,14 @@ if [[ -f "$CACHE_FILE" ]]; then
     
     if [[ -f "$WALLPAPER_PATH" ]]; then
         log "⚡ Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
-        swww img "$WALLPAPER_PATH" --transition-type none > /dev/null 2>&1 || true
+        awww img "$WALLPAPER_PATH"  > /dev/null 2>&1 || true
     else
         log "⚠️ Wallpaper en cache no existe: $WALLPAPER_PATH"
     fi
 elif [[ -f "$HOME/.cache/wal/wal" ]]; then
     FALLBACK=$(cat "$HOME/.cache/wal/wal")
     log "⚡ Usando fallback de pywal: $(basename "$FALLBACK")"
-    swww img "$FALLBACK" --transition-type none > /dev/null 2>&1 || true
+    awww img "$FALLBACK"  > /dev/null 2>&1 || true
 fi
 
 log "✅ Proceso de carga completado"

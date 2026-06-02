@@ -9,12 +9,12 @@ log() {
 
 log "Iniciando carga del último wallpaper"
 
-# Verificar que swww-daemon está corriendo
-if ! pgrep -x "swww-daemon" > /dev/null; then
-    log "swww-daemon no está corriendo, esperando..."
+# Verificar que awww-daemon está corriendo
+if ! pgrep -x "awww-daemon" > /dev/null; then
+    log "awww-daemon no está corriendo, esperando..."
     sleep 3
-    if ! pgrep -x "swww-daemon" > /dev/null; then
-        log "ERROR: swww-daemon sigue sin correr"
+    if ! pgrep -x "awww-daemon" > /dev/null; then
+        log "ERROR: awww-daemon sigue sin correr"
         exit 1
     fi
 fi
@@ -35,15 +35,15 @@ if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
                 STATIC_WALLPAPER=$(find "$FALLBACK_STATIC" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.png" \) | head -n 1)
                 if [[ -n "$STATIC_WALLPAPER" ]]; then
                     log "Usando wallpaper estático de fallback: $(basename "$STATIC_WALLPAPER")"
-                    swww img "$STATIC_WALLPAPER" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.0 2>/dev/null
+                    awww img "$STATIC_WALLPAPER" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.0 2>/dev/null
                 else
                     log "No se encontraron wallpapers estáticos, usando color sólido"
-                    swww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null
+                    awww img <(convert -size 1920x1080 xc:"#2e3440" png:-) --transition-type none 2>/dev/null
                 fi
             fi
         else
             log "Aplicando imagen estática como wallpaper"
-            swww img "$WALLPAPER_PATH" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5 2>/dev/null
+            awww img "$WALLPAPER_PATH"  2>/dev/null
         fi
         
         if [ $? -eq 0 ]; then
@@ -54,7 +54,7 @@ if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
             if [[ -f "$HOME/.cache/wal/wal" ]]; then
                 FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
                 log "Aplicando wallpaper de pywal como fallback: $FALLBACK_WALLPAPER"
-                swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+                awww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
             fi
         fi
     else
@@ -63,7 +63,7 @@ if [[ -f "$HOME/.cache/current-wallpaper" ]]; then
         if [[ -f "$HOME/.cache/wal/wal" ]]; then
             FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
             log "Aplicando wallpaper de pywal como fallback: $FALLBACK_WALLPAPER"
-            swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+            awww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
         fi
     fi
 else
@@ -72,7 +72,7 @@ else
     if [[ -f "$HOME/.cache/wal/wal" ]]; then
         FALLBACK_WALLPAPER=$(cat "$HOME/.cache/wal/wal")
         log "Aplicando wallpaper de pywal: $FALLBACK_WALLPAPER"
-        swww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
+        awww img "$FALLBACK_WALLPAPER" 2>/dev/null || true
     else
         log "No se encontró wallpaper de pywal tampoco"
     fi

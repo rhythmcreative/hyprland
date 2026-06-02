@@ -86,7 +86,7 @@ step_software() {
     header "Selección de Software"
     
     # Core packages are always installed
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip"
     
     info "Instalando núcleo del sistema (Hyprland + Estética)..."
     yay -S --needed --noconfirm $CORE_PKGS
@@ -154,8 +154,8 @@ step_dotfiles() {
     header "Configuraciones (Dotfiles)"
     if gum confirm "¿Quieres aplicar las configuraciones (stow) ahora?"; then
         mkdir -p ~/.config ~/.local/bin
-        stow -v -R -t ~ .config
-        stow -v -R -t ~ .local
+        stow -v -R -t ~/.config .config
+        stow -v -R -t ~/.local .local
         stow -v -R -t ~ zsh
         stow -v -R -t ~ bash
         stow -v -R -t ~ gtk
@@ -219,10 +219,23 @@ step_system() {
             info "Instalando Oh-My-Zsh..."
             sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1
         fi
+        
+        # Install Zsh Plugins
+        ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+        mkdir -p "$ZSH_CUSTOM/plugins"
+        if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
+            info "Instalando zsh-autosuggestions..."
+            git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions" > /dev/null 2>&1
+        fi
+        if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
+            info "Instalando zsh-syntax-highlighting..."
+            git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" > /dev/null 2>&1
+        fi
     fi
 
-    if gum confirm "¿Habilitar servicios básicos (Red, BT, SDDM)?"; then
+    if gum confirm "¿Habilitar servicios básicos (Red, BT, SDDM, Audio)?"; then
         sudo systemctl enable NetworkManager bluetooth sddm
+        systemctl --user enable --now pipewire pipewire-pulse wireplumber
         
         # SDDM Theme
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
@@ -250,7 +263,17 @@ step_wallpapers
 step_system
 
 # Final Sync
-if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
+header "Sincronización Final"
+if [ -f "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
+    # Create wallpaper directory if not exists
+    mkdir -p "$HOME/Pictures/Wallpapers"
+    # Copy windmill as default if it exists in dotfiles
+    if [ -f "$DOTFILES_DIR/.config/hypr/wallpapers/default.jpg" ]; then
+        cp "$DOTFILES_DIR/.config/hypr/wallpapers/default.jpg" "$HOME/Pictures/Wallpapers/default_wallpaper.jpg"
+        # Run sync with this wallpaper
+        bash "$HOME/.local/bin/pywal-wallpaper-sync" "$HOME/Pictures/Wallpapers/default_wallpaper.jpg" > /dev/null 2>&1
+    fi
+elif [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
     bash "$HOME/.local/bin/modern-pywal-sync" > /dev/null 2>&1
 fi
 

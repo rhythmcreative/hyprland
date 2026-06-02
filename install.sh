@@ -17,8 +17,7 @@ DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # --- LOCALIZATION ---
 setup_language() {
-    LANG_CHOICE=$(gum choose --header "Select Language / Selecciona Idioma / Choisir la langue" \
-        "English" "Español" "Français" "Deutsch" "Italiano" "Português" "Русский" "中文" "日本語" "한국어")
+    LANG_CHOICE=$(gum choose --header "Select Language / Selecciona Idioma" "English" "Español")
     
     case "$LANG_CHOICE" in
         "Español")
@@ -35,126 +34,6 @@ setup_language() {
             MSG_ZSH_CONFIRM="¿Establecer Zsh como shell por defecto?"
             MSG_SERVICES_CONFIRM="¿Habilitar servicios principales (Red/BT/Login)?"
             MSG_DONE="Despliegue completado con exito."
-            ;;
-        "Français")
-            MSG_ERROR_ROOT=" [ERREUR] Ne pas executer ce script en tant que root."
-            MSG_SECTION=" SECTION : "
-            MSG_CORE_INSTALL="Installation du noyau du systeme..."
-            MSG_SEARCH_PROMPT="Rechercher des applications : "
-            MSG_SEARCH_HEADER="[TAB] Selectionner | [ENTER] Installer | [ESC] Passer"
-            MSG_SEARCH_LAUNCH="Lancement de l'outil de recherche (Officiel + AUR)..."
-            MSG_DRIVER_HEADER="PILOTES GRAPHIQUES (Selectionnez votre materiel)"
-            MSG_DEPLOY_DRIVERS="Deploiement des pilotes materiels..."
-            MSG_FLATPAK_CONFIRM="Installer les Flatpaks de votre liste flatpaks.txt ?"
-            MSG_WALL_CONFIRM="Telecharger les fonds d'ecran personnalises ?"
-            MSG_ZSH_CONFIRM="Definir Zsh comme shell par defaut ?"
-            MSG_SERVICES_CONFIRM="Activer les services de base (Reseau/BT/Login) ?"
-            MSG_DONE="Systeme reconfigure avec succes. Deploiement termine."
-            ;;
-        "Deutsch")
-            MSG_ERROR_ROOT=" [FEHLER] Fuhren Sie dieses Skript nicht als Root aus."
-            MSG_SECTION=" ABSCHNITT: "
-            MSG_CORE_INSTALL="Systemkern wird installiert..."
-            MSG_SEARCH_PROMPT="Apps suchen: "
-            MSG_SEARCH_HEADER="[TAB] Mehrfachauswahl | [ENTER] Installieren | [ESC] Uberspringen"
-            MSG_SEARCH_LAUNCH="Interaktives Suchwerkzeug wird gestartet (Offiziell + AUR)..."
-            MSG_DRIVER_HEADER="GRAFIKTREIBER (Wahlen Sie Ihre Hardware aus)"
-            MSG_DEPLOY_DRIVERS="Hardwaretreiber werden bereitgestellt..."
-            MSG_FLATPAK_CONFIRM="Flatpaks aus Ihrer flatpaks.txt-Liste installieren?"
-            MSG_WALL_CONFIRM="Benutzerdefinierte Hintergrundbilder herunterladen?"
-            MSG_ZSH_CONFIRM="Zsh als Standardshell festlegen?"
-            MSG_SERVICES_CONFIRM="Kerndienste aktivieren (Netzwerk/BT/Login)?"
-            MSG_DONE="System erfolgreich rekonfiguriert. Bereitstellung abgeschlossen."
-            ;;
-        "Italiano")
-            MSG_ERROR_ROOT=" [ERRORE] Non eseguire questo script como root."
-            MSG_SECTION=" SEZIONE: "
-            MSG_CORE_INSTALL="Installazione del core del sistema..."
-            MSG_SEARCH_PROMPT="Cerca app: "
-            MSG_SEARCH_HEADER="[TAB] Selezione multipla | [ENTER] Installa | [ESC] Salta"
-            MSG_SEARCH_LAUNCH="Avvio dello strumento di ricerca (Ufficiale + AUR)..."
-            MSG_DRIVER_HEADER="DRIVER GRAFICI (Seleziona il tuo hardware)"
-            MSG_DEPLOY_DRIVERS="Distribuzione dei driver hardware..."
-            MSG_FLATPAK_CONFIRM="Installare i Flatpak dalla lista flatpaks.txt?"
-            MSG_WALL_CONFIRM="Scaricare sfondi personalizzati?"
-            MSG_ZSH_CONFIRM="Impostare Zsh como shell predefinita?"
-            MSG_SERVICES_CONFIRM="Abilitare i servicios principali (Rete/BT/Login)?"
-            MSG_DONE="Sistema riconfigurato con successo. Distribuzione completata."
-            ;;
-        "Português")
-            MSG_ERROR_ROOT=" [ERRO] Nao execute este script como root."
-            MSG_SECTION=" SEÇÃO: "
-            MSG_CORE_INSTALL="Instalando o nucleo do sistema..."
-            MSG_SEARCH_PROMPT="Buscar Apps: "
-            MSG_SEARCH_HEADER="[TAB] Selecionar | [ENTER] Instalar | [ESC] Pular"
-            MSG_SEARCH_LAUNCH="Iniciando ferramenta de busca (Oficial + AUR)..."
-            MSG_DRIVER_HEADER="DRIVERS GRAFICOS (Selecione seu hardware)"
-            MSG_DEPLOY_DRIVERS="Implantando drivers de hardware..."
-            MSG_FLATPAK_CONFIRM="Instalar Flatpaks da sua lista flatpaks.txt?"
-            MSG_WALL_CONFIRM="Baixar papeis de parede personalizados?"
-            MSG_ZSH_CONFIRM="Definir Zsh como shell padrao?"
-            MSG_SERVICES_CONFIRM="Ativar servicos principais (Rede/BT/Login)?"
-            MSG_DONE="Sistema reconfigurado com sucesso. Implantacao concluida."
-            ;;
-        "Русский")
-            MSG_ERROR_ROOT=" [ОШИБКА] Не запускайте этот скрипт от имени root."
-            MSG_SECTION=" РАЗДЕЛ: "
-            MSG_CORE_INSTALL="Установка ядра системы..."
-            MSG_SEARCH_PROMPT="Поиск приложений: "
-            MSG_SEARCH_HEADER="[TAB] Выбрать несколько | [ENTER] Установить | [ESC] Пропустить"
-            MSG_SEARCH_LAUNCH="Запуск интерактивного поиска (Официальный + AUR)..."
-            MSG_DRIVER_HEADER="ГРАФИЧЕСКИЕ ДРАЙВЕРЫ (Выберите ваше оборудование)"
-            MSG_DEPLOY_DRIVERS="Развертывание драйверов оборудования..."
-            MSG_FLATPAK_CONFIRM="Установить Flatpaks из списка flatpaks.txt?"
-            MSG_WALL_CONFIRM="Загрузить пользовательские обои?"
-            MSG_ZSH_CONFIRM="Установить Zsh в качестве оболочки по умолчанию?"
-            MSG_SERVICES_CONFIRM="Включить основные службы (Сеть/BT/Вход)?"
-            MSG_DONE="Система успешно перенастроена. Развертывание завершено."
-            ;;
-        "中文")
-            MSG_ERROR_ROOT=" [错误] 请勿以 root 身份运行此脚本。"
-            MSG_SECTION=" 章节: "
-            MSG_CORE_INSTALL="正在安装系统核心..."
-            MSG_SEARCH_PROMPT="搜索应用: "
-            MSG_SEARCH_HEADER="[TAB] 多选 | [ENTER] 安装 | [ESC] 跳过"
-            MSG_SEARCH_LAUNCH="启动交互式搜索工具 (官方 + AUR)..."
-            MSG_DRIVER_HEADER="图形驱动程序 (选择您的硬件)"
-            MSG_DEPLOY_DRIVERS="部署硬件驱动程序..."
-            MSG_FLATPAK_CONFIRM="是否从 flatpaks.txt 列表安装 Flatpaks？"
-            MSG_WALL_CONFIRM="是否下载自定义壁纸资源？"
-            MSG_ZSH_CONFIRM="是否将 Zsh 设置为默认 Shell？"
-            MSG_SERVICES_CONFIRM="是否启用核心服务 (网络/蓝牙/登录)？"
-            MSG_DONE="系统重配置成功。部署完成。"
-            ;;
-        "日本語")
-            MSG_ERROR_ROOT=" [エラー] このスクリプトをrootとして実行しないでください。"
-            MSG_SECTION=" セクション: "
-            MSG_CORE_INSTALL="システムコアをインストールしています..."
-            MSG_SEARCH_PROMPT="アプリを検索: "
-            MSG_SEARCH_HEADER="[TAB] 複数選択 | [ENTER] インストール | [ESC] スキップ"
-            MSG_SEARCH_LAUNCH="インタラクティブ検索ツールを起動しています (公式 + AUR)..."
-            MSG_DRIVER_HEADER="グラフィックドライバー (ハードウェアを選択してください)"
-            MSG_DEPLOY_DRIVERS="ハードウェアドライバーを展開しています..."
-            MSG_FLATPAK_CONFIRM="flatpaks.txtリストからFlatpaksをインストールしますか？"
-            MSG_WALL_CONFIRM="カスタム壁紙をダウンロードしますか？"
-            MSG_ZSH_CONFIRM="Zshをデフォルトのシェルに設定しますか？"
-            MSG_SERVICES_CONFIRM="コアサービス (ネットワーク/BT/ログイン) を有効にしますか？"
-            MSG_DONE="システムの再設定が成功しました。展開が完了しました。"
-            ;;
-        "한국어")
-            MSG_ERROR_ROOT=" [오류] 이 스크립트를 root로 실행하지 마십시오."
-            MSG_SECTION=" 섹션: "
-            MSG_CORE_INSTALL="시스템 코어 설치 중..."
-            MSG_SEARCH_PROMPT="앱 검색: "
-            MSG_SEARCH_HEADER="[TAB] 다중 선택 | [ENTER] 설치 | [ESC] 건너뛰기"
-            MSG_SEARCH_LAUNCH="대화형 검색 도구 실행 중 (공식 + AUR)..."
-            MSG_DRIVER_HEADER="그래픽 드라이버 (하드웨어 선택)"
-            MSG_DEPLOY_DRIVERS="하드웨어 드라이버 배포 중..."
-            MSG_FLATPAK_CONFIRM="flatpaks.txt 목록에서 Flatpaks를 설치하시겠습니까?"
-            MSG_WALL_CONFIRM="사용자 정의 배경화면을 다운로드하시겠습니까?"
-            MSG_ZSH_CONFIRM="Zsh를 기본 셸로 설정하시겠습니까?"
-            MSG_SERVICES_CONFIRM="핵심 서비스 (네트워크/BT/로그인)를 활성화하시겠습니까?"
-            MSG_DONE="시스템 재구성이 성공적으로 완료되었습니다. 배포 완료."
             ;;
         *)
             # Default to English

@@ -115,7 +115,7 @@ get_pywal_colors() {
 
 # Función para generar la configuración del tema
 generate_theme_config() {
-    local config_file="$THEME_DIR/theme.conf"
+    local config_file="$THEME_DIR/Themes/theme1.conf"
     
     cat > "$config_file" << EOF
 [General]

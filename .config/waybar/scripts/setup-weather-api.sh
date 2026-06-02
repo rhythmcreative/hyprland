@@ -72,7 +72,7 @@ if echo "$test_result" | grep -q '"cod":200'; then
     echo "🎉 ¡Perfecto! La API key funciona correctamente."
     echo
     echo "Probando el widget de clima..."
-    /home/rhythmcreative/.config/waybar/scripts/weather.sh
+    "$HOME"/.config/waybar/scripts/weather.sh
 else
     error_msg=$(echo "$test_result" | jq -r '.message // "Error desconocido"' 2>/dev/null || echo "Error desconocido")
     echo "❌ Error al probar la API key: $error_msg"

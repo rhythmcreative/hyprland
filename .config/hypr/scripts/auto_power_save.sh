@@ -22,12 +22,12 @@ while true; do
 
     if [[ $IS_CHARGING -eq 0 && $AVG_CAP -le $LOW_BATTERY_THRESHOLD ]]; then
         if [[ ! -f "$STATE_FILE" ]]; then
-            /home/rhythmcreative/.config/hypr/scripts/power_save.sh on
+            "$HOME"/.config/hypr/scripts/power_save.sh on
             touch "$STATE_FILE"
         fi
     elif [[ $IS_CHARGING -eq 1 || $AVG_CAP -gt $LOW_BATTERY_THRESHOLD ]]; then
         if [[ -f "$STATE_FILE" ]]; then
-            /home/rhythmcreative/.config/hypr/scripts/power_save.sh off
+            "$HOME"/.config/hypr/scripts/power_save.sh off
             rm -f "$STATE_FILE"
         fi
     fi

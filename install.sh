@@ -233,7 +233,7 @@ step_dotfiles() {
                 mv "$target" "$target.bak"
             fi
             
-            cp "$DOTFILES_DIR/.local/bin/$file" "$target"
+            cp "$DOTFILES_DIR/$file" "$target"
             chmod +x "$target"
         done
         echo "  COPY: bin contents => ~/.local/bin/"
@@ -241,7 +241,7 @@ step_dotfiles() {
         # 3. Handle other packages (zsh, bash, gtk) that go into $HOME
         for pkg in zsh bash gtk; do
             if [ -d "$pkg" ]; then
-                find "$pkg" -maxdepth 1 -name ".*" | while read -r file; do
+                find "$pkg" -mindepth 1 -maxdepth 1 -name ".*" | while read -r file; do
                     name=$(basename "$file")
                     target="$HOME/$name"
                     
@@ -257,6 +257,13 @@ step_dotfiles() {
         done
         
         success "Local configs copied (Physical installation complete)."
+        
+        info "Fixing hardcoded paths for current user..."
+        # Replace hardcoded home path in copied text files
+        grep -rIl "/home/rhythmcreative" "$HOME/.config" "$HOME/.local/bin" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.gtkrc-2.0" 2>/dev/null | while read -r file; do
+            sed -i "s|/home/rhythmcreative|$HOME|g" "$file"
+            echo "  FIXED: $file"
+        done
     fi
 }
 

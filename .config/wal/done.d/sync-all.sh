@@ -6,7 +6,7 @@
 sleep 1
 
 # Ejecutar sincronización completa
-/home/rhythmcreative/.local/bin/sync-pywal-all
+"$HOME"/.local/bin/sync-pywal-all
 
 # Log del cambio
 echo "$(date): Pywal sync ejecutado automáticamente" >> ~/.cache/wal/sync.log

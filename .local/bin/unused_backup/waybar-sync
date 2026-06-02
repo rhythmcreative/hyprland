@@ -1,6 +1,0 @@
-#!/bin/bash
-
-# Comando rápido para sincronizar Waybar con pywal
-# Uso: waybar-sync
-
-exec "$HOME/.config/waybar/scripts/sync-pywal.sh" "$@"

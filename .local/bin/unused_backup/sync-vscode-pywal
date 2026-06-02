@@ -1,4 +1,0 @@
-#!/bin/bash
-
-# Quick sync command for VS Code + pywal
-"$HOME/.config/wal/scripts/sync-vscode.sh"

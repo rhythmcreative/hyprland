@@ -72,7 +72,7 @@ success() {
 install_yay() {
     if ! command -v yay > /dev/null; then
         section "DEPENDENCY: AUR HELPER"
-        gum spin --spinner dots --title "Deploying yay..." -- sleep 2
+        gum spin --spinner dot --title "Deploying yay..." -- sleep 2
         git clone https://aur.archlinux.org/yay.git /tmp/yay > /dev/null 2>&1
         cd /tmp/yay && makepkg -si --noconfirm > /dev/null 2>&1
         cd "$DOTFILES_DIR"
@@ -83,53 +83,109 @@ install_yay() {
 step_software() {
     section "CORE SYSTEM DEPLOYMENT"
     
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal swww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip zsh-autosuggestions zsh-syntax-highlighting"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell-git imagemagick htop fastfetch bluez-obex gwenview"
     
-    info "Installing system core and shell plugins..."
+    info "Installing system core..."
     yay -S --needed --noconfirm $CORE_PKGS
 
-    section "MODULE SELECTION"
-    SELECTED_SW=$(gum choose --no-limit --header "Select sub-modules to install (SPACE to mark)" \
-        "NVIDIA Drivers" \
-        "ASUS ROG/TUF Tools" \
+    section "CUSTOM MODULE DEPLOYMENT"
+    
+    # 1. GRAPHICS & DRIVERS
+    SELECTED_DRIVERS=$(gum choose --no-limit --header "󰒲 GRAPHICS DRIVERS (Select your hardware)" \
+        "NVIDIA Proprietary" \
+        "NVIDIA Open-Source (DKMS)" \
+        "AMD Open-Source (Mesa)" \
+        "Intel Graphics" \
+        "ASUS Laptop Tools" \
+        "Surface Laptop Tools")
+
+    # 2. INTERNET & BROWSERS
+    SELECTED_BROWSERS=$(gum choose --no-limit --header "󰖟 WEB BROWSERS" \
         "Brave Browser" \
-        "Vesktop (Discord)" \
-        "Telegram Desktop" \
-        "Visual Studio Code" \
+        "Firefox (Developer Edition)" \
+        "Google Chrome" \
+        "Microsoft Edge" \
+        "Zen Browser")
+
+    # 3. PRODUCTIVITY & DEV
+    SELECTED_PROD=$(gum choose --no-limit --header "󰈙 PRODUCTIVITY & DEVELOPMENT" \
+        "VS Code" \
         "Obsidian" \
-        "OBS Studio" \
+        "Telegram" \
+        "Discord (Vesktop)" \
+        "Slack" \
+        "Docker & Compose" \
+        "Node.js & NPM" \
+        "Python Suite")
+
+    # 4. MEDIA & GAMING
+    SELECTED_MEDIA=$(gum choose --no-limit --header "󰝚 MEDIA & GAMING" \
         "Steam" \
-        "Thunar" \
-        "Dolphin" \
-        "Flatpaks")
+        "Lutris" \
+        "OBS Studio" \
+        "VLC Media Player" \
+        "Spotify" \
+        "GIMP" \
+        "Inkscape")
+
+    # 5. FILE MANAGERS & UTILS
+    SELECTED_UTILS=$(gum choose --no-limit --header "󰀶 SYSTEM UTILITIES" \
+        "Thunar (XFCE)" \
+        "Dolphin (KDE)" \
+        "Ranger (CLI)" \
+        "Btop" \
+        "Timeshift" \
+        "Flatpaks (Pack List)")
 
     EXTRA_PKGS=""
-    [[ $SELECTED_SW == *"NVIDIA Drivers"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia-open-dkms nvidia-settings nvidia-utils"
-    [[ $SELECTED_SW == *"ASUS ROG/TUF Tools"* ]] && EXTRA_PKGS="$EXTRA_PKGS asusctl supergfxctl rog-control-center"
-    [[ $SELECTED_SW == *"Brave Browser"* ]] && EXTRA_PKGS="$EXTRA_PKGS brave-origin-nightly-bin"
-    [[ $SELECTED_SW == *"Vesktop"* ]] && EXTRA_PKGS="$EXTRA_PKGS vesktop"
-    [[ $SELECTED_SW == *"Telegram Desktop"* ]] && EXTRA_PKGS="$EXTRA_PKGS telegram-desktop"
-    [[ $SELECTED_SW == *"Visual Studio Code"* ]] && EXTRA_PKGS="$EXTRA_PKGS code"
-    [[ $SELECTED_SW == *"Obsidian"* ]] && EXTRA_PKGS="$EXTRA_PKGS obsidian"
-    [[ $SELECTED_SW == *"OBS Studio"* ]] && EXTRA_PKGS="$EXTRA_PKGS obs-studio"
-    [[ $SELECTED_SW == *"Thunar"* ]] && EXTRA_PKGS="$EXTRA_PKGS thunar"
-    [[ $SELECTED_SW == *"Dolphin"* ]] && EXTRA_PKGS="$EXTRA_PKGS dolphin"
+    
+    # Process Drivers
+    [[ $SELECTED_DRIVERS == *"NVIDIA Proprietary"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia nvidia-settings nvidia-utils"
+    [[ $SELECTED_DRIVERS == *"NVIDIA Open-Source (DKMS)"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia-open-dkms nvidia-settings nvidia-utils"
+    [[ $SELECTED_DRIVERS == *"AMD Open-Source (Mesa)"* ]] && EXTRA_PKGS="$EXTRA_PKGS lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils"
+    [[ $SELECTED_DRIVERS == *"Intel Graphics"* ]] && EXTRA_PKGS="$EXTRA_PKGS intel-media-driver libva-intel-driver vulkan-intel"
+    [[ $SELECTED_DRIVERS == *"ASUS Laptop Tools"* ]] && EXTRA_PKGS="$EXTRA_PKGS asusctl supergfxctl rog-control-center"
+    [[ $SELECTED_DRIVERS == *"Surface Laptop Tools"* ]] && EXTRA_PKGS="$EXTRA_PKGS linux-surface linux-surface-headers surface-control"
 
-    if [[ $SELECTED_SW == *"Steam"* ]]; then
-        if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-            info "Enabling multilib..."
-            sudo sed -i '/^#\[multilib\]/,+1 s/^#//' /etc/pacman.conf
-            sudo pacman -Sy > /dev/null 2>&1
-        fi
-        EXTRA_PKGS="$EXTRA_PKGS steam"
-    fi
+    # Process Browsers
+    [[ $SELECTED_BROWSERS == *"Brave Browser"* ]] && EXTRA_PKGS="$EXTRA_PKGS brave-bin"
+    [[ $SELECTED_BROWSERS == *"Firefox (Developer Edition)"* ]] && EXTRA_PKGS="$EXTRA_PKGS firefox-developer-edition"
+    [[ $SELECTED_BROWSERS == *"Google Chrome"* ]] && EXTRA_PKGS="$EXTRA_PKGS google-chrome"
+    [[ $SELECTED_BROWSERS == *"Microsoft Edge"* ]] && EXTRA_PKGS="$EXTRA_PKGS microsoft-edge-stable-bin"
+    [[ $SELECTED_BROWSERS == *"Zen Browser"* ]] && EXTRA_PKGS="$EXTRA_PKGS zen-browser-bin"
+
+    # Process Productivity
+    [[ $SELECTED_PROD == *"VS Code"* ]] && EXTRA_PKGS="$EXTRA_PKGS code"
+    [[ $SELECTED_PROD == *"Obsidian"* ]] && EXTRA_PKGS="$EXTRA_PKGS obsidian"
+    [[ $SELECTED_PROD == *"Telegram"* ]] && EXTRA_PKGS="$EXTRA_PKGS telegram-desktop"
+    [[ $SELECTED_PROD == *"Discord (Vesktop)"* ]] && EXTRA_PKGS="$EXTRA_PKGS vesktop"
+    [[ $SELECTED_PROD == *"Slack"* ]] && EXTRA_PKGS="$EXTRA_PKGS slack-desktop"
+    [[ $SELECTED_PROD == *"Docker & Compose"* ]] && EXTRA_PKGS="$EXTRA_PKGS docker docker-compose"
+    [[ $SELECTED_PROD == *"Node.js & NPM"* ]] && EXTRA_PKGS="$EXTRA_PKGS nodejs npm"
+    [[ $SELECTED_PROD == *"Python Suite"* ]] && EXTRA_PKGS="$EXTRA_PKGS python-pip python-black ruff"
+
+    # Process Media
+    [[ $SELECTED_MEDIA == *"Steam"* ]] && EXTRA_PKGS="$EXTRA_PKGS steam"
+    [[ $SELECTED_MEDIA == *"Lutris"* ]] && EXTRA_PKGS="$EXTRA_PKGS lutris"
+    [[ $SELECTED_MEDIA == *"OBS Studio"* ]] && EXTRA_PKGS="$EXTRA_PKGS obs-studio"
+    [[ $SELECTED_MEDIA == *"VLC Media Player"* ]] && EXTRA_PKGS="$EXTRA_PKGS vlc"
+    [[ $SELECTED_MEDIA == *"Spotify"* ]] && EXTRA_PKGS="$EXTRA_PKGS spotify"
+    [[ $SELECTED_MEDIA == *"GIMP"* ]] && EXTRA_PKGS="$EXTRA_PKGS gimp"
+    [[ $SELECTED_MEDIA == *"Inkscape"* ]] && EXTRA_PKGS="$EXTRA_PKGS inkscape"
+
+    # Process Utils
+    [[ $SELECTED_UTILS == *"Thunar (XFCE)"* ]] && EXTRA_PKGS="$EXTRA_PKGS thunar thunar-archive-plugin thunar-volman"
+    [[ $SELECTED_UTILS == *"Dolphin (KDE)"* ]] && EXTRA_PKGS="$EXTRA_PKGS dolphin ark kio-gdrive"
+    [[ $SELECTED_UTILS == *"Ranger (CLI)"* ]] && EXTRA_PKGS="$EXTRA_PKGS ranger libcaca highlight atool"
+    [[ $SELECTED_UTILS == *"Btop"* ]] && EXTRA_PKGS="$EXTRA_PKGS btop"
+    [[ $SELECTED_UTILS == *"Timeshift"* ]] && EXTRA_PKGS="$EXTRA_PKGS timeshift"
 
     if [ ! -z "$EXTRA_PKGS" ]; then
         info "Deploying selected modules..."
         yay -S --needed --noconfirm $EXTRA_PKGS
     fi
 
-    if [[ $SELECTED_SW == *"Flatpaks"* ]]; then
+    if [[ $SELECTED_UTILS == *"Flatpaks (Pack List)"* ]]; then
         if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
             section "FLATPAK DEPLOYMENT"
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -144,10 +200,63 @@ step_software() {
 
 step_dotfiles() {
     section "DOTFILES SYNC"
-    if gum confirm "Synchronize local configuration files?"; then
+    if gum confirm "Copy configuration files to system (Physical Copy)?"; then
+        # Ensure base directories exist
         mkdir -p ~/.config ~/.local/bin
-        stow -v -R -t ~ .config .local zsh bash gtk
-        success "Local configs linked."
+        
+        cd "$DOTFILES_DIR"
+
+        info "Copying configurations..."
+        
+        # 1. Handle .config (Copy each item individually to ~/.config/)
+        for item in .config/*; do
+            [ -e "$item" ] || continue
+            name=$(basename "$item")
+            target="$HOME/.config/$name"
+            
+            if [ -e "$target" ]; then
+                info "Backing up existing .config/$name"
+                mv "$target" "$target.bak"
+            fi
+            
+            cp -r "$DOTFILES_DIR/.config/$name" "$target"
+            echo "  COPY: $name => ~/.config/$name"
+        done
+
+        # 2. Handle .local/bin (Copy each file individually to ~/.local/bin/)
+        for file in .local/bin/*; do
+            [ -e "$file" ] || continue
+            name=$(basename "$file")
+            target="$HOME/.local/bin/$name"
+            
+            if [ -e "$target" ]; then
+                mv "$target" "$target.bak"
+            fi
+            
+            cp "$DOTFILES_DIR/.local/bin/$file" "$target"
+            chmod +x "$target"
+        done
+        echo "  COPY: bin contents => ~/.local/bin/"
+
+        # 3. Handle other packages (zsh, bash, gtk) that go into $HOME
+        for pkg in zsh bash gtk; do
+            if [ -d "$pkg" ]; then
+                find "$pkg" -maxdepth 1 -name ".*" | while read -r file; do
+                    name=$(basename "$file")
+                    target="$HOME/$name"
+                    
+                    if [ -e "$target" ]; then
+                        info "Backing up existing $name"
+                        mv "$target" "$target.bak"
+                    fi
+                    
+                    cp -r "$DOTFILES_DIR/$file" "$target"
+                    echo "  COPY: $name => ~/$name"
+                done
+            fi
+        done
+        
+        success "Local configs copied (Physical installation complete)."
     fi
 }
 
@@ -239,10 +348,7 @@ if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
 fi
 
 section "DEPLOYMENT COMPLETE"
-gum style --foreground "$CLR_NEON_GREEN" --bold "System successfully reconfigured. Pulse check passed."
+gum style --foreground "$CLR_NEON_GREEN" --bold "System successfully reconfigured. Pulse check passed. Launching UI..."
 
-if gum confirm "Execute graphical environment now (Start SDDM)?"; then
-    sudo systemctl start sddm
-else
-    echo "Manual reboot required."
-fi
+# Start graphical environment automatically
+sudo systemctl start sddm

@@ -49,10 +49,10 @@ Example config.json
 }
 ```
 
-Also add your wallpaper changing commands to the `commands.sh` file. Selecting a wallpaper runs the command with the path to the wallpaper passed as a parameter. An example on how to use it with swww is given.
+Also add your wallpaper changing commands to the `commands.sh` file. Selecting a wallpaper runs the command with the path to the wallpaper passed as a parameter. An example on how to use it with awww is given.
 
 ```{bash}
-swww img $1 -t grow --transition-duration 1
+awww img $1 -t grow --transition-duration 1
 ```
 
 You can change the number of pictures cached async at the same time by changing `cache_batch_size`. Making it zero or less will try to cache all the images at the same time

@@ -11,9 +11,9 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# Verificación de daemon (soporta awww y awww)
+# Verificación de daemon (soporta awww)
 DAEMON_RUNNING=false
-if pgrep -x "awww-daemon" > /dev/null || pgrep -x "awww-daemon" > /dev/null; then
+if pgrep -x "awww-daemon" > /dev/null; then
     DAEMON_RUNNING=true
 fi
 
@@ -21,7 +21,7 @@ if [ "$DAEMON_RUNNING" = false ]; then
     log "🔧 Daemon no detectado, intentando iniciar awww-daemon..."
     # Usar setsid para que el daemon no muera con el script
     setsid awww-daemon --format xrgb > /dev/null 2>&1 &
-    
+
     # Esperar a que el daemon esté listo
     for i in {1..50}; do
         if awww query > /dev/null 2>&1; then
@@ -42,7 +42,7 @@ fi
 CACHE_FILE="$HOME/.cache/current-wallpaper"
 if [[ -f "$CACHE_FILE" ]]; then
     WALLPAPER_PATH=$(cat "$CACHE_FILE")
-    
+
     if [[ -f "$WALLPAPER_PATH" ]]; then
         log "⚡ Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
         awww img "$WALLPAPER_PATH"  > /dev/null 2>&1 || true

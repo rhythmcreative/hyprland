@@ -1,21 +1,10 @@
 # --- Rhythm Arch Zsh Configuration ---
 
-# Path to your oh-my-zsh installation.
-export ZSH="$HOME/.oh-my-zsh"
-
 # Set name of the theme to load
 # We use Starship so this is secondary
 ZSH_THEME="robbyrussell"
 
-# Plugins
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
-
-# Source oh-my-zsh if it exists
-if [ -f $ZSH/oh-my-zsh.sh ]; then
-    source $ZSH/oh-my-zsh.sh
-fi
-
-# Source plugins from pacman if OMZ is not used or plugins not in OMZ
+# Source plugins from pacman/AUR (Clean installation without Oh-My-Zsh)
 [ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 [ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 

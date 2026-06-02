@@ -195,7 +195,6 @@
 }
 
 /* --- Right Modules (Single, Seamless Bar with varied colors) --- */
-#network,
 #bluetooth,
 #tray,
 #pulseaudio,
@@ -215,7 +214,6 @@
   transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
-#network:hover,
 #bluetooth:hover,
 #tray:hover,
 #pulseaudio:hover,
@@ -227,8 +225,8 @@
   background-color: @color8;
 }
 
-/* First element - rounded left */
-#network {
+/* First element - rounded left - Bluetooth is actually the first element */
+#bluetooth {
   margin-left: 5px;
   border-top-left-radius: 6px;
   border-bottom-left-radius: 6px;

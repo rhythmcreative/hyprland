@@ -36,7 +36,8 @@
     "format-charging": "󰂄 {capacity}%",
     "format-plugged": "󰂄 {capacity}%",
     "format-alt": "{icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "on-click": "true"
   },
   "battery#bat1": {
     "bat": "BAT1",
@@ -48,7 +49,8 @@
     "format-charging": "| 󰂄 {capacity}%",
     "format-plugged": "| 󰂄 {capacity}%",
     "format-alt": "| {icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "on-click": "true"
   },
   "battery": {
     "states": {
@@ -59,11 +61,13 @@
     "format-charging": "󰂄 {capacity}%",
     "format-plugged": "󰂄 {capacity}%",
     "format-alt": "{icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "on-click": "true"
   },
   "custom/battery-mode": {
     "format": "󰂄",
-    "tooltip-format": "Modo de batería"
+    "tooltip-format": "Modo de batería",
+    "on-click": "true"
   },
   "hyprland/workspaces": {
     "format": "{name} {icon}",
@@ -231,7 +235,8 @@
     "return-type": "json",
     "format": "{}",
     "interval": 5,
-    "tooltip": true
+    "tooltip": true,
+    "on-click": "true"
   },
   "custom/lock": {
     "tooltip": false,

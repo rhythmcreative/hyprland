@@ -1,68 +1,122 @@
 #!/bin/bash
 
-# sync-nm-applet-colors: Version ULTRA-FINAL
-# Deja de usar imports y escribe directamente en los archivos de tema para asegurar prioridad
+# Script simple para sincronizar nm-applet con colores de waybar
+# Versión optimizada que no se cuelga
 
-echo "🎨 Sincronizando nm-applet (Fuerza Bruta)..."
+echo "🎨 Sincronizando nm-applet con waybar..."
 
-WAL_COLORS="$HOME/.cache/wal/colors"
-[ -f "$WAL_COLORS" ] || { echo "❌ No hay colores"; exit 1; }
-
-# Leer colores
-BG=$(sed -n '1p' "$WAL_COLORS")
-FG=$(sed -n '8p' "$WAL_COLORS")
-ACCENT=$(sed -n '5p' "$WAL_COLORS")
-HOVER=$(sed -n '9p' "$WAL_COLORS")
-
-# Definir bloque de estilos (usando selectores de maxima prioridad)
-STYLE_BLOCK="
-/* --- NM-APPLET DYNAMIC SYNC --- */
-menu, .menu, menuitem, .menuitem, #nm-applet-menu, .nm-applet-menu {
-    background-color: $BG !important;
-    color: $FG !important;
-}
-menuitem:hover, .menuitem:hover, menuitem:selected, .menuitem:selected {
-    background-color: $ACCENT !important;
-    color: $BG !important;
-}
-#nm-applet-menu menuitem:hover {
-    background-color: $ACCENT !important;
-    color: $BG !important;
-}
-window.popup, .background.popup, popover.background {
-    background-color: $BG !important;
-}
-/* --- END NM-APPLET DYNAMIC SYNC --- */
-"
-
-# 1. Limpiar y Aplicar a .config (GTK 3 y 4)
-for CSS in "$HOME/.config/gtk-3.0/gtk.css" "$HOME/.config/gtk-4.0/gtk.css"; do
-    [ -f "$CSS" ] || touch "$CSS"
-    sed -i '/NM-APPLET DYNAMIC SYNC/,/END NM-APPLET DYNAMIC SYNC/d' "$CSS"
-    echo "$STYLE_BLOCK" >> "$CSS"
-done
-
-# 2. Limpiar y Aplicar directamente al TEMA (GTK 3 y 4)
-THEME_BASE="$HOME/.themes/PywalSync-Mono"
-if [ -d "$THEME_BASE" ]; then
-    for CSS in "$THEME_BASE/gtk-3.0/gtk.css" "$THEME_BASE/gtk-4.0/gtk.css"; do
-        if [ -f "$CSS" ]; then
-            sed -i '/NM-APPLET DYNAMIC SYNC/,/END NM-APPLET DYNAMIC SYNC/d' "$CSS"
-            echo "$STYLE_BLOCK" >> "$CSS"
-        fi
-    done
+# Verificar que pywal tiene colores
+if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
+    echo "❌ Error: No hay colores de pywal disponibles"
+    exit 1
 fi
 
-# 3. Reiniciar nm-applet
-pkill -x nm-applet || true
+# Cargar colores de forma segura
+source "$HOME/.cache/wal/colors.sh"
+
+# Crear directorio GTK si no existe  
+mkdir -p "$HOME/.config/gtk-3.0"
+mkdir -p "$HOME/.config/gtk-4.0"
+
+echo "🎨 Generando CSS con colores: BG=$background, FG=$foreground, Accent=$color4"
+
+# Crear CSS para nm-applet con colores exactos de waybar
+cat > "$HOME/.config/gtk-3.0/nm-applet-waybar.css" <<EOF
+/* nm-applet sincronizado con waybar - $(date) */
+
+/* Aplicar a todos los elementos de nm-applet */
+.nm-applet *,
+window.background *,
+popover *,
+menu *,
+menuitem * {
+    background-color: $background !important;
+    color: $foreground !important;
+}
+
+/* Elementos hover */
+menuitem:hover,
+.nm-applet menuitem:hover {
+    background-color: $color8 !important;
+    color: $foreground !important;
+}
+
+/* Elementos seleccionados/activos */
+menuitem:selected,
+.nm-applet menuitem:selected,
+.connection-active {
+    background-color: $color4 !important;
+    color: $background !important;
+    font-weight: bold;
+}
+
+/* Botones */
+button {
+    background-color: $color4 !important;
+    color: $background !important;
+    border: none !important;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background-color: $color8 !important;
+    color: $foreground !important;
+}
+
+/* Campos de entrada */
+entry {
+    background-color: $background !important;
+    color: $foreground !important;
+    border: 1px solid $color8 !important;
+    border-radius: 4px;
+}
+
+/* Separadores */
+separator {
+    background-color: $color8 !important;
+    opacity: 0.5;
+}
+EOF
+
+# Copiar a GTK4
+cp "$HOME/.config/gtk-3.0/nm-applet-waybar.css" "$HOME/.config/gtk-4.0/nm-applet-waybar.css"
+
+# Actualizar gtk.css principal si existe o crearlo
+if [[ -f "$HOME/.config/gtk-3.0/gtk.css" ]]; then
+    if ! grep -q "nm-applet-waybar.css" "$HOME/.config/gtk-3.0/gtk.css"; then
+        sed -i '1i@import "nm-applet-waybar.css";' "$HOME/.config/gtk-3.0/gtk.css"
+    fi
+else
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-3.0/gtk.css"
+fi
+
+# Lo mismo para GTK4
+if [[ -f "$HOME/.config/gtk-4.0/gtk.css" ]]; then
+    if ! grep -q "nm-applet-waybar.css" "$HOME/.config/gtk-4.0/gtk.css"; then
+        sed -i '1i@import "nm-applet-waybar.css";' "$HOME/.config/gtk-4.0/gtk.css"
+    fi
+else
+    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-4.0/gtk.css"
+fi
+
+echo "📄 CSS generado y configurado"
+
+# Reiniciar nm-applet de forma simple
+echo "🔄 Reiniciando nm-applet..."
+pkill nm-applet 2>/dev/null || true
 sleep 1
 
-# Entorno de sesion
-export WAYLAND_DISPLAY=wayland-1
-export DISPLAY=:1
-export XDG_RUNTIME_DIR=/run/user/1000
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+# Reiniciar en background
+nohup nm-applet >/dev/null 2>&1 &
+sleep 2
 
-nohup nm-applet --indicator >/dev/null 2>&1 &
+# Verificar que está corriendo
+if pgrep -x nm-applet >/dev/null; then
+    echo "✅ nm-applet sincronizado con waybar exitosamente"
+    notify-send "🎨 Sincronizado" "nm-applet ahora usa colores de waybar" -t 2000 2>/dev/null || true
+else
+    echo "⚠️ nm-applet puede no haberse reiniciado correctamente"
+fi
 
-echo "✅ Sincronización de fuerza bruta completada (BG=$BG, ACCENT=$ACCENT)"
+echo "🎉 Sincronización completada"

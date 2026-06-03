@@ -62,7 +62,7 @@ fi
 chmod 644 "$TARGET_WP"
 
 # 3. Sincronizar colores de Pywal
-PYWAL_SH="$REAL_HOME/.cache/wal/colors.sh"
+PYWAL_SH="$HOME/.cache/wal/colors.sh"
 if [ -f "$PYWAL_SH" ]; then
     # Leer colores sin importar el entorno
     background=$(grep '^background=' "$PYWAL_SH" | cut -d"'" -f2)

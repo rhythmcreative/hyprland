@@ -344,15 +344,13 @@ step_system() {
         [ "$SHELL" != "$(which zsh)" ] && sudo chsh -s "$(which zsh)" "$USER"
     fi
 
-    # --- AUTOMATIC SERVICE ACTIVATION ---
-    section "SERVICE CALIBRATION"
-    info "Habilitando servicios de sistema esenciales..."
-    sudo systemctl enable --now NetworkManager bluetooth sddm
-    
-    info "Iniciando arquitectura de audio (Pipewire)..."
-    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
-
     if gum confirm "$MSG_SERVICES_CONFIRM"; then
+        info "Habilitando servicios de sistema..."
+        sudo systemctl enable NetworkManager bluetooth sddm
+        
+        info "Habilitando servicios de audio (Pipewire)..."
+        systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
+        
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
             info "Instalando tema SDDM Astronaut y configurando sincronización..."
             sudo mkdir -p /usr/share/sddm/themes
@@ -370,7 +368,7 @@ step_system() {
             sudo chmod 440 /etc/sudoers.d/sddm-sync
 
             # 2. Asegurar que los scripts de sincronización tengan permisos de ejecución
-            chmod +x "$HOME/.local/bin/sddm-auto-sync-local" "$HOME/.local/bin/sddm-sync-wrapper"
+            chmod +x "$HOME/.local/bin/sddm-auto-sync-local" "$HOME/.local/bin/sddm-sync-wrapper" "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
 
             # 3. Crear hook de pywal para sincronización automática si no existe
             info "Configurando hooks de Pywal para SDDM..."
@@ -378,8 +376,8 @@ step_system() {
             cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
 #!/bin/bash
 # Hook para sincronizar SDDM cuando cambia el wallpaper
-if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
-    "$HOME/.local/bin/sddm-sync-wrapper"
+if [ -f "$HOME/.local/bin/sync-sddm-wallpaper-sudo" ]; then
+    "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
 fi
 EOF
             chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"

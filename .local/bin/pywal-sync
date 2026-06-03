@@ -91,7 +91,7 @@ log "🎭 PASO 3: Aplicando temas GTK..."
 if command -v gsettings &> /dev/null; then
     # Aplicar tema oscuro
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
     log "✅ Configuración GTK aplicada"

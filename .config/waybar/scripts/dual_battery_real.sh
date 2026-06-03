@@ -1,18 +1,25 @@
 #!/bin/bash
 
-# Dual Battery Script (Dynamic Detection) - Modified to hide when no bats
-# Soporta sistemas con 1 o 2 baterías (Thinkpad, ASUS, etc.)
+# 🔋 Script de Batería Dinámico Inteligente
+# Detecta automáticamente 0, 1, 2 o más baterías y ajusta el formato.
 
-# Detectar baterías disponibles
+# 1. Detectar todas las baterías disponibles
 BATS=(/sys/class/power_supply/BAT*)
-NUM_BATS=0
+ACTUAL_BATS=()
 
-# Count only directories that actually exist
 for bat in "${BATS[@]}"; do
     if [ -d "$bat" ]; then
-        ((NUM_BATS++))
+        ACTUAL_BATS+=("$bat")
     fi
 done
+
+NUM_BATS=${#ACTUAL_BATS[@]}
+
+# 2. Si no hay baterías, ocultar módulo (Waybar oculta si el output es vacío)
+if [ "$NUM_BATS" -eq 0 ]; then
+    echo ""
+    exit 0
+fi
 
 get_battery_icon() {
     local capacity=$1
@@ -26,40 +33,38 @@ get_battery_icon() {
     else echo "󰁺"; fi
 }
 
-if [ "$NUM_BATS" -eq 0 ]; then
-    # Output empty JSON to "hide" the module (Waybar hides empty modules)
-    echo ""
-    exit 0
-fi
+TOTAL_CAP=0
+TEXT=""
+TOOLTIP="Estado de Batería:\\n"
+IS_CHARGING=false
 
-# Procesar Batería 1
-BAT0_NAME=$(basename "${BATS[0]}")
-BAT0_CAP=$(cat "${BATS[0]}/capacity" 2>/dev/null || echo "0")
-BAT0_STAT=$(cat "${BATS[0]}/status" 2>/dev/null || echo "Unknown")
-BAT0_ICON=$(get_battery_icon "$BAT0_CAP" "$BAT0_STAT")
-
-if [ "$NUM_BATS" -ge 2 ]; then
-    # Sistema de Doble Batería
-    BAT1_NAME=$(basename "${BATS[1]}")
-    BAT1_CAP=$(cat "${BATS[1]}/capacity" 2>/dev/null || echo "0")
-    BAT1_STAT=$(cat "${BATS[1]}/status" 2>/dev/null || echo "Unknown")
-    BAT1_ICON=$(get_battery_icon "$BAT1_CAP" "$BAT1_STAT")
+# 3. Procesar cada batería encontrada
+for i in "${!ACTUAL_BATS[@]}"; do
+    BAT_PATH="${ACTUAL_BATS[$i]}"
+    BAT_NAME=$(basename "$BAT_PATH")
+    CAP=$(cat "$BAT_PATH/capacity" 2>/dev/null || echo "0")
+    STAT=$(cat "$BAT_PATH/status" 2>/dev/null || echo "Unknown")
+    ICON=$(get_battery_icon "$CAP" "$STAT")
     
-    # Calcular promedio o total real
-    TOTAL_CAP=$(( (BAT0_CAP + BAT1_CAP) / 2 ))
+    TOTAL_CAP=$((TOTAL_CAP + CAP))
+    [ "$STAT" == "Charging" ] && IS_CHARGING=true
     
-    TEXT="$BAT0_ICON ${BAT0_CAP}% | $BAT1_ICON ${BAT1_CAP}%"
-    TOOLTIP="Estado Dual:\\n$BAT0_NAME: ${BAT0_CAP}% ($BAT0_STAT)\\n$BAT1_NAME: ${BAT1_CAP}% ($BAT1_STAT)"
-else
-    # Sistema de Batería Única
-    TOTAL_CAP=$BAT0_CAP
-    TEXT="$BAT0_ICON ${BAT0_CAP}%"
-    TOOLTIP="$BAT0_NAME: ${BAT0_CAP}% ($BAT0_STAT)"
-fi
+    # Formatear texto de la barra
+    if [ $i -gt 0 ]; then TEXT="$TEXT | "; fi
+    TEXT="$TEXT$ICON $CAP%"
+    
+    # Formatear tooltip
+    TOOLTIP="$TOOLTIP$BAT_NAME: $CAP% ($STAT)\\n"
+done
 
-# Clase CSS
-if [ "$TOTAL_CAP" -le 15 ]; then CLASS="critical";
-elif [ "$TOTAL_CAP" -le 30 ]; then CLASS="warning";
+# 4. Calcular promedio total para la clase CSS
+AVG_CAP=$((TOTAL_CAP / NUM_BATS))
+
+# 5. Definir clase CSS
+if [ "$IS_CHARGING" = true ]; then CLASS="charging";
+elif [ "$AVG_CAP" -le 15 ]; then CLASS="critical";
+elif [ "$AVG_CAP" -le 30 ]; then CLASS="warning";
 else CLASS="normal"; fi
 
+# 6. Salida en formato JSON para Waybar
 echo "{\"text\":\"$TEXT\",\"tooltip\":\"$TOOLTIP\",\"class\":\"$CLASS\"}"

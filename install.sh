@@ -60,12 +60,58 @@ if [ "$EUID" -eq 0 ]; then
     exit 1
 fi
 
+# Check if running on Arch Linux
+if [ ! -f /etc/arch-release ]; then
+    echo "ERROR: This script is only compatible with Arch Linux."
+    exit 1
+fi
+
 # Ensure core dependencies are installed
 if ! command -v gum > /dev/null || ! command -v fzf > /dev/null; then
     sudo pacman -S --needed --noconfirm gum fzf git base-devel stow zsh curl > /dev/null 2>&1
 fi
 
 setup_language
+
+# --- HARDWARE DETECTION ---
+auto_detect_drivers() {
+    section "AUTOMATIC HARDWARE DETECTION"
+    EXTRA_PKGS=""
+    
+    # GPU Detection
+    GPU_INFO=$(lspci | grep -i vga)
+    if [[ $GPU_INFO == *"NVIDIA"* ]]; then
+        info "Detected NVIDIA GPU. Adding proprietary drivers..."
+        EXTRA_PKGS="$EXTRA_PKGS nvidia nvidia-settings nvidia-utils"
+    elif [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
+        info "Detected AMD GPU. Adding Mesa drivers..."
+        EXTRA_PKGS="$EXTRA_PKGS lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils"
+    elif [[ $GPU_INFO == *"Intel"* ]]; then
+        info "Detected Intel Graphics. Adding media drivers..."
+        EXTRA_PKGS="$EXTRA_PKGS intel-media-driver libva-intel-driver vulkan-intel"
+    fi
+
+    # Laptop/Hardware Specific Detection
+    SYS_VENDOR=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)
+    PROD_NAME=$(cat /sys/class/dmi/id/product_name 2>/dev/null)
+
+    if [[ $SYS_VENDOR == *"ASUSTeK"* ]]; then
+        info "Detected ASUS hardware. Adding ASUS laptop tools..."
+        EXTRA_PKGS="$EXTRA_PKGS asusctl supergfxctl rog-control-center"
+    fi
+
+    if [[ $PROD_NAME == *"Surface"* ]]; then
+        info "Detected Surface hardware. Adding Surface kernel tools..."
+        EXTRA_PKGS="$EXTRA_PKGS linux-surface linux-surface-headers surface-control"
+    fi
+
+    if [ ! -z "$EXTRA_PKGS" ]; then
+        info "Deploying detected hardware drivers: $EXTRA_PKGS"
+        yay -S --needed --noconfirm $EXTRA_PKGS
+    else
+        info "No specific hardware drivers required or detected."
+    fi
+}
 
 # --- UI COMPONENTS ---
 
@@ -151,29 +197,8 @@ step_software() {
 
     section "CUSTOM MODULE DEPLOYMENT"
     
-    # 1. GRAPHICS & DRIVERS
-    SELECTED_DRIVERS=$(gum choose --no-limit --header "$MSG_DRIVER_HEADER" \
-        "NVIDIA Proprietary" \
-        "NVIDIA Open-Source (DKMS)" \
-        "AMD Open-Source (Mesa)" \
-        "Intel Graphics" \
-        "ASUS Laptop Tools" \
-        "Surface Laptop Tools")
-
-    EXTRA_PKGS=""
-    
-    # Process Drivers
-    [[ $SELECTED_DRIVERS == *"NVIDIA Proprietary"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia nvidia-settings nvidia-utils"
-    [[ $SELECTED_DRIVERS == *"NVIDIA Open-Source (DKMS)"* ]] && EXTRA_PKGS="$EXTRA_PKGS nvidia-open-dkms nvidia-settings nvidia-utils"
-    [[ $SELECTED_DRIVERS == *"AMD Open-Source (Mesa)"* ]] && EXTRA_PKGS="$EXTRA_PKGS lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils"
-    [[ $SELECTED_DRIVERS == *"Intel Graphics"* ]] && EXTRA_PKGS="$EXTRA_PKGS intel-media-driver libva-intel-driver vulkan-intel"
-    [[ $SELECTED_DRIVERS == *"ASUS Laptop Tools"* ]] && EXTRA_PKGS="$EXTRA_PKGS asusctl supergfxctl rog-control-center"
-    [[ $SELECTED_DRIVERS == *"Surface Laptop Tools"* ]] && EXTRA_PKGS="$EXTRA_PKGS linux-surface linux-surface-headers surface-control"
-
-    if [ ! -z "$EXTRA_PKGS" ]; then
-        info "$MSG_DEPLOY_DRIVERS"
-        yay -S --needed --noconfirm $EXTRA_PKGS
-    fi
+    # Automatic Driver Detection
+    auto_detect_drivers
 
     # Interactive Application Discovery
     unified_app_search

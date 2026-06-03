@@ -94,7 +94,7 @@
       "on": "󰂯",
       "connected": "󰂱"
     },
-    "on-click": "true",
+    "on-click": "blueman-manager",
     "tooltip-format": "{status}",
     "tooltip-format-connected": "{device_enumerate}",
     "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
@@ -105,7 +105,7 @@
     "interval": 5,
     "tooltip": false,
     "exec": "playerctl metadata --format='{{ artist }} - {{ title }}'",
-    "on-click": "true",
+    "on-click": "blueman-manager",
     "max-length": 50
   },
   "clock": {
@@ -120,7 +120,7 @@
     "format": "{}",
     "interval": 300,
     "tooltip": true,
-    "on-click": "true",
+    "on-click": "blueman-manager",
     "signal": 8,
     "restart-interval": 30
   },
@@ -134,8 +134,8 @@
     "tooltip-format-wifi": "WiFi: {essid} ({signalStrength}%)\nIP: {ipaddr}\nFrequency: {frequency}MHz",
     "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}\nSpeed: {bandwidthUpBits}/{bandwidthDownBits}",
     "tooltip-format-disconnected": "Network Disconnected",
-    "on-click": "true",
-    "on-click-right": "true"
+    "on-click": "blueman-manager",
+    "on-click-right": "nm-applet"
   },
   "cpu": {
     "interval": 2,
@@ -150,7 +150,7 @@
       "▇",
       "█"
     ],
-    "on-click": "true"
+    "on-click": "blueman-manager"
   },
   "memory": {
     "interval": 5,
@@ -219,7 +219,7 @@
         "󰕾"
       ]
     },
-    "on-click": "true",
+    "on-click": "blueman-manager",
     "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%",
     "tooltip-format": "Volume: {volume}%",
@@ -242,8 +242,8 @@
     "format": "{}",
     "return-type": "json",
     "exec": "waybar-module-pomodoro --no-work-icons",
-    "on-click": "true",
-    "on-click-right": "true"
+    "on-click": "blueman-manager",
+    "on-click-right": "nm-applet"
   },
   "temperature#cpu": {
     "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",

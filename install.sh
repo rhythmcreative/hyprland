@@ -344,13 +344,15 @@ step_system() {
         [ "$SHELL" != "$(which zsh)" ] && sudo chsh -s "$(which zsh)" "$USER"
     fi
 
+    # --- AUTOMATIC SERVICE ACTIVATION ---
+    section "SERVICE CALIBRATION"
+    info "Habilitando servicios de sistema esenciales..."
+    sudo systemctl enable --now NetworkManager bluetooth sddm
+    
+    info "Iniciando arquitectura de audio (Pipewire)..."
+    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
+
     if gum confirm "$MSG_SERVICES_CONFIRM"; then
-        info "Habilitando servicios de sistema..."
-        sudo systemctl enable NetworkManager bluetooth sddm
-        
-        info "Habilitando servicios de audio (Pipewire)..."
-        systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
-        
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
             info "Instalando tema SDDM Astronaut y configurando sincronización..."
             sudo mkdir -p /usr/share/sddm/themes

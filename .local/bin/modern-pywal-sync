@@ -18,44 +18,40 @@ echo "🎨 Iniciando Sincronización Maestra..."
 echo "  • GTK 3/4..."
 mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
 
-# Sincronizar nm-applet (Generar CSS dinámico ultra-agresivo)
-echo "  • nm-applet (System Tray)..."
-cat > "$HOME/.config/gtk-3.0/nm-applet-waybar.css" <<EOF
-/* nm-applet styling DEFINITIVO con Pywal */
-window, .background, .nm-applet-window, #nm-applet, #nm-applet-menu, .menu {
-    background-color: $background;
-    color: $foreground;
-}
-menu, .menu, menuitem, .menuitem {
-    background-color: $background;
-    color: $foreground;
-}
-menuitem:hover, .menuitem:hover, menuitem *:hover {
-    background-color: $color6;
-    color: $background;
-}
-/* Específico para el texto del menú */
-label {
-    color: inherit;
-}
-button {
-    background-color: $color6;
-    color: $background;
-}
-EOF
-# Copiar a GTK 4
-cp "$HOME/.config/gtk-3.0/nm-applet-waybar.css" "$HOME/.config/gtk-4.0/nm-applet-waybar.css"
-
 # GTK 3
 if [ -f "$HOME/.cache/wal/gtk3.css" ]; then
-    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-3.0/gtk.css"
+    echo '@import url("nm-applet-pywal.css");' > "$HOME/.config/gtk-3.0/gtk.css"
+    echo "" >> "$HOME/.config/gtk-3.0/gtk.css"
     cat "$HOME/.cache/wal/gtk3.css" >> "$HOME/.config/gtk-3.0/gtk.css"
 fi
 
 # GTK 4
 if [ -f "$HOME/.cache/wal/gtk4.css" ]; then
-    echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-4.0/gtk.css"
+    echo '@import url("nm-applet-pywal.css");' > "$HOME/.config/gtk-4.0/gtk.css"
+    echo "" >> "$HOME/.config/gtk-4.0/gtk.css"
     cat "$HOME/.cache/wal/gtk4.css" >> "$HOME/.config/gtk-4.0/gtk.css"
+fi
+
+# 2.1 Sincronizar carpeta de tema PywalSync-Mono (CRÍTICO para nm-applet)
+echo "  • Sincronizando carpeta de tema (~/.themes/PywalSync-Mono)..."
+THEME_DIR="$HOME/.themes/PywalSync-Mono"
+if [ -d "$THEME_DIR" ]; then
+    # GTK 3
+    if [ -f "$THEME_DIR/gtk-3.0/gtk.css" ] && [ -f "$HOME/.cache/wal/gtk3.css" ]; then
+        sed -i '/@define-color/d' "$THEME_DIR/gtk-3.0/gtk.css"
+        grep "@define-color" "$HOME/.cache/wal/gtk3.css" | cat - "$THEME_DIR/gtk-3.0/gtk.css" > /tmp/gtk3_t.css && mv /tmp/gtk3_t.css "$THEME_DIR/gtk-3.0/gtk.css"
+    fi
+    # GTK 4
+    if [ -f "$THEME_DIR/gtk-4.0/gtk.css" ] && [ -f "$HOME/.cache/wal/gtk4.css" ]; then
+        sed -i '/@define-color/d' "$THEME_DIR/gtk-4.0/gtk.css"
+        grep "@define-color" "$HOME/.cache/wal/gtk4.css" | cat - "$THEME_DIR/gtk-4.0/gtk.css" > /tmp/gtk4_t.css && mv /tmp/gtk4_t.css "$THEME_DIR/gtk-4.0/gtk.css"
+    fi
+fi
+
+# Sincronizar nm-applet (Después de actualizar el tema para que lo pille bien)
+echo "  • nm-applet (System Tray)..."
+if [ -x "$HOME/.local/bin/nm-applet-auto-sync" ]; then
+    "$HOME/.local/bin/nm-applet-auto-sync" >/dev/null 2>&1
 fi
 
 # 3. Sincronizar Iconos (Tela Circle)
@@ -64,17 +60,10 @@ if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
     "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1 &
 fi
 
-# Reiniciar nm-applet para aplicar cambios
-if pgrep -x nm-applet > /dev/null; then
-    pkill -9 nm-applet
-    sleep 0.2
-    nm-applet --indicator > /dev/null 2>&1 &
-fi
-
 # 4. Forzar Recarga de GTK (Reset de tema)
 if command -v gsettings &>/dev/null; then
-    # Forzamos a Adwaita que es el que mejor acepta overrides de CSS
-    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"
+    # Usamos PywalSync-Mono como base para mantener la consistencia
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono"
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle"
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 fi

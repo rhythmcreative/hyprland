@@ -144,7 +144,7 @@ unified_app_search() {
 step_software() {
     section "CORE SYSTEM DEPLOYMENT"
     
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell-git imagemagick htop fastfetch bluez-obex gwenview"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell-git imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub"
     
     info "$MSG_CORE_INSTALL"
     yay -S --needed --noconfirm $CORE_PKGS

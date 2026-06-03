@@ -78,6 +78,7 @@ python-pywal
 qt5-graphicaleffects
 qt5-quickcontrols2
 qt5ct
+qt6-svg
 qt6-virtualkeyboard
 qt6ct
 quickshell-git

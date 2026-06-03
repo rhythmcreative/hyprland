@@ -19,7 +19,7 @@
     "tray",
     "pulseaudio",
     "backlight",
-    "battery"
+    "custom/dual-battery"
   ],
   "battery": {
     "states": {

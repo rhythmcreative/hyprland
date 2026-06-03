@@ -347,7 +347,13 @@ step_system
 
 # Final master sync
 if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
-    gum spin --spinner moon --title "CALIBRATING COLORS..." -- bash "$HOME/.local/bin/modern-pywal-sync"
+    # Ensure pywal has initial colors to work with if it's a first install
+    if [ ! -f "$HOME/.cache/wal/colors.sh" ] && [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ]; then
+        info "Generating initial color palette..."
+        wal -i "$HOME/.config/hypr/wallpapers/default.jpg" -n -q
+    fi
+    
+    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- bash "$HOME/.local/bin/modern-pywal-sync"
 fi
 
 section "DEPLOYMENT COMPLETE"

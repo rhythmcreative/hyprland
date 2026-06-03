@@ -40,6 +40,8 @@ fi
 
 # Carga del wallpaper desde el registro de cache
 CACHE_FILE="$HOME/.cache/current-wallpaper"
+SDDM_WP="/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
+
 if [[ -f "$CACHE_FILE" ]]; then
     WALLPAPER_PATH=$(cat "$CACHE_FILE")
 
@@ -53,6 +55,11 @@ elif [[ -f "$HOME/.cache/wal/wal" ]]; then
     FALLBACK=$(cat "$HOME/.cache/wal/wal")
     log "⚡ Usando fallback de pywal: $(basename "$FALLBACK")"
     awww img "$FALLBACK"  > /dev/null 2>&1 || true
+elif [[ -f "$SDDM_WP" ]]; then
+    log "⚡ Sincronizando con wallpaper de SDDM..."
+    awww img "$SDDM_WP"  > /dev/null 2>&1 || true
+    # Opcional: registrarlo como actual para pywal
+    echo "$SDDM_WP" > "$CACHE_FILE"
 fi
 
 log "✅ Proceso de carga completado"

@@ -15,7 +15,7 @@ notify-send "🎨 Aplicando Wallpaper" "$SELECTED"
 
 # Aplicar con awww
 if command -v awww &> /dev/null; then
-    awww img "$WALLPAPER_PATH" --transition-type grow
+    awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
 fi
 
 # Sincronizar colores

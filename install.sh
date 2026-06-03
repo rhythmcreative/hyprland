@@ -322,11 +322,26 @@ step_system() {
     if gum confirm "$MSG_SERVICES_CONFIRM"; then
         sudo systemctl enable NetworkManager bluetooth sddm
         
+        # Audio services enablement (PipeWire/Pulse)
+        systemctl --user enable --now pipewire.service pipewire-pulse.service wireplumber.service
+        
+        # Set default GTK theme (Widget style)
+        info "Setting PywalSync-Mono as default GTK theme..."
+        gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
+        
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
             sudo mkdir -p /usr/share/sddm/themes
             sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
             sudo mkdir -p /etc/sddm.conf.d
             echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+            
+            # Configure SDDM Root Helper (Sudoers rule for passwordless sync)
+            info "Configuring SDDM Root Helper..."
+            cat << EOF | sudo tee /etc/sudoers.d/sddm-sync-wallpaper > /dev/null
+# Permite sincronizar el wallpaper y colores de SDDM sin contraseña
+$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sync-sddm-wallpaper, /usr/share/sddm/themes/sddm-astronaut-theme/pywal-sync.sh
+EOF
+            sudo chmod 440 /etc/sudoers.d/sddm-sync-wallpaper
         fi
         success "Services operational."
     fi

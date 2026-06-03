@@ -20,7 +20,7 @@ fi
 if [ "$DAEMON_RUNNING" = false ]; then
     log "🔧 Daemon no detectado, intentando iniciar awww-daemon..."
     # Usar setsid para que el daemon no muera con el script
-    setsid awww-daemon --format xrgb > /dev/null 2>&1 &
+    setsid awww-daemon --format xrgb --no-cache > /dev/null 2>&1 &
 
     # Esperar a que el daemon esté listo
     for i in {1..50}; do
@@ -47,17 +47,17 @@ if [[ -f "$CACHE_FILE" ]]; then
 
     if [[ -f "$WALLPAPER_PATH" ]]; then
         log "⚡ Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
-        awww img "$WALLPAPER_PATH"  > /dev/null 2>&1 || true
+        awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
     else
         log "⚠️ Wallpaper en cache no existe: $WALLPAPER_PATH"
     fi
 elif [[ -f "$HOME/.cache/wal/wal" ]]; then
     FALLBACK=$(cat "$HOME/.cache/wal/wal")
     log "⚡ Usando fallback de pywal: $(basename "$FALLBACK")"
-    awww img "$FALLBACK"  > /dev/null 2>&1 || true
+    awww img "$FALLBACK" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
 elif [[ -f "$SDDM_WP" ]]; then
     log "⚡ Sincronizando con wallpaper de SDDM..."
-    awww img "$SDDM_WP"  > /dev/null 2>&1 || true
+    awww img "$SDDM_WP" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
     # Opcional: registrarlo como actual para pywal
     echo "$SDDM_WP" > "$CACHE_FILE"
 fi

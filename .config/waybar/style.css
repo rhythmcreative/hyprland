@@ -313,34 +313,39 @@
 }
 
 /* Battery with color4 */
-#battery {
+#battery,
+#battery.bat0,
+#battery.bat1,
+#custom-desktop-power {
   color: @color4;
 }
 
-#battery.charging {
+#battery.charging,
+#battery.bat0.charging,
+#battery.bat1.charging {
   color: @color5;
 }
 
-#battery.warning:not(.charging) {
+#battery.warning:not(.charging),
+#battery.bat0.warning:not(.charging),
+#battery.bat1.warning:not(.charging) {
   color: @color1;
 }
 
-/* Dual battery styles */
-#custom-dual-battery {
-  color: @color4;
+/* Dual battery joined styles */
+#battery.bat0 {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  margin-right: 0;
+  padding-right: 2px;
 }
 
-#custom-dual-battery.normal {
-  color: @color4;
-}
-
-#custom-dual-battery.warning {
-  color: @color3;
-}
-
-#custom-dual-battery.critical {
-  color: @color1;
-  animation: pulse 2s infinite;
+#battery.bat1 {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 0;
+  padding-left: 2px;
 }
 
 /* Tray gets foreground color */

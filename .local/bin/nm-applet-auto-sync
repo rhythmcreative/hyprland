@@ -194,13 +194,13 @@ apply_gtk_settings() {
     log "🔧 Aplicando configuraciones GTK..."
     
     # Variables de entorno
-    export GTK_THEME="PywalSync-Mono"
+    export GTK_THEME="PywalGTK-Auto"
     export GDK_BACKEND="wayland,x11"
     export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
     
     # gsettings
     if command -v gsettings &> /dev/null; then
-        gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
         gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
         log "✅ gsettings aplicado"
     fi
@@ -208,7 +208,7 @@ apply_gtk_settings() {
     # Señales D-Bus para recargar temas
     if command -v dbus-send &> /dev/null; then
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
-            string:"gtk-theme-name" string:"PywalSync-Mono" 2>/dev/null || true
+            string:"gtk-theme-name" string:"PywalGTK-Auto" 2>/dev/null || true
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
         log "✅ Señales D-Bus enviadas"
     fi

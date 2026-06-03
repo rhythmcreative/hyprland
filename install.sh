@@ -327,12 +327,37 @@ step_system() {
         systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
         
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
+            info "Instalando tema SDDM Astronaut y configurando sincronización..."
             sudo mkdir -p /usr/share/sddm/themes
             sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+            
+            # Configurar SDDM para usar el tema
             sudo mkdir -p /etc/sddm.conf.d
             echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+
+            # --- INTEGRACIÓN SDDM-ROOT-HELPER (Sincronización Pywal) ---
+            # 1. Configurar permisos sudo para que el script de sincronización se ejecute sin contraseña
+            info "Configurando permisos NOPASSWD para sincronización de SDDM..."
+            sudo mkdir -p /etc/sudoers.d
+            echo "$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
+            sudo chmod 440 /etc/sudoers.d/sddm-sync
+
+            # 2. Asegurar que los scripts de sincronización tengan permisos de ejecución
+            chmod +x "$HOME/.local/bin/sddm-auto-sync-local" "$HOME/.local/bin/sddm-sync-wrapper" "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+
+            # 3. Crear hook de pywal para sincronización automática si no existe
+            info "Configurando hooks de Pywal para SDDM..."
+            mkdir -p "$HOME/.config/wal/hooks"
+            cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
+#!/bin/bash
+# Hook para sincronizar SDDM cuando cambia el wallpaper
+if [ -f "$HOME/.local/bin/sync-sddm-wallpaper-sudo" ]; then
+    "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+fi
+EOF
+            chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
         fi
-        success "Services operational."
+        success "Services operational and SDDM synchronization configured."
     fi
 
     sudo usermod -aG video,input,render,wheel $USER

@@ -1,11 +1,18 @@
 #!/bin/bash
 
-# Dual Battery Script (Dynamic Detection)
+# Dual Battery Script (Dynamic Detection) - Modified to hide when no bats
 # Soporta sistemas con 1 o 2 baterías (Thinkpad, ASUS, etc.)
 
 # Detectar baterías disponibles
 BATS=(/sys/class/power_supply/BAT*)
-NUM_BATS=${#BATS[@]}
+NUM_BATS=0
+
+# Count only directories that actually exist
+for bat in "${BATS[@]}"; do
+    if [ -d "$bat" ]; then
+        ((NUM_BATS++))
+    fi
+done
 
 get_battery_icon() {
     local capacity=$1
@@ -20,7 +27,8 @@ get_battery_icon() {
 }
 
 if [ "$NUM_BATS" -eq 0 ]; then
-    echo "{\"text\":\"No Bat\",\"tooltip\":\"No se detectaron baterías\",\"class\":\"critical\"}"
+    # Output empty JSON to "hide" the module (Waybar hides empty modules)
+    echo ""
     exit 0
 fi
 
@@ -38,7 +46,6 @@ if [ "$NUM_BATS" -ge 2 ]; then
     BAT1_ICON=$(get_battery_icon "$BAT1_CAP" "$BAT1_STAT")
     
     # Calcular promedio o total real
-    # Para simplicidad en el icono central usamos el promedio
     TOTAL_CAP=$(( (BAT0_CAP + BAT1_CAP) / 2 ))
     
     TEXT="$BAT0_ICON ${BAT0_CAP}% | $BAT1_ICON ${BAT1_CAP}%"

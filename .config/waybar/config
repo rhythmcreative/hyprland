@@ -63,8 +63,7 @@
   },
   "custom/battery-mode": {
     "format": "󰂄",
-    "on-click": "$HOME/.config/waybar/scripts/switch_battery.sh",
-    "tooltip-format": "Cambiar modo de batería (Single/Dual/PC)"
+    "tooltip-format": "Modo de batería"
   },
   "hyprland/workspaces": {
     "format": "{name} {icon}",
@@ -95,7 +94,7 @@
       "on": "󰂯",
       "connected": "󰂱"
     },
-    "on-click": "blueman-manager",
+    "on-click": "true",
     "tooltip-format": "{status}",
     "tooltip-format-connected": "{device_enumerate}",
     "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
@@ -106,7 +105,7 @@
     "interval": 5,
     "tooltip": false,
     "exec": "playerctl metadata --format='{{ artist }} - {{ title }}'",
-    "on-click": "playerctl play-pause",
+    "on-click": "true",
     "max-length": 50
   },
   "clock": {
@@ -121,7 +120,7 @@
     "format": "{}",
     "interval": 300,
     "tooltip": true,
-    "on-click": "rm -f /tmp/weather_cache.json && $HOME/.config/waybar/scripts/weather.sh",
+    "on-click": "true",
     "signal": 8,
     "restart-interval": 30
   },
@@ -135,8 +134,8 @@
     "tooltip-format-wifi": "WiFi: {essid} ({signalStrength}%)\nIP: {ipaddr}\nFrequency: {frequency}MHz",
     "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}\nSpeed: {bandwidthUpBits}/{bandwidthDownBits}",
     "tooltip-format-disconnected": "Network Disconnected",
-    "on-click": "nm-connection-editor",
-    "on-click-right": "nm-applet"
+    "on-click": "true",
+    "on-click-right": "true"
   },
   "cpu": {
     "interval": 2,
@@ -151,7 +150,7 @@
       "▇",
       "█"
     ],
-    "on-click": "ghostty -e htop"
+    "on-click": "true"
   },
   "memory": {
     "interval": 5,
@@ -220,7 +219,7 @@
         "󰕾"
       ]
     },
-    "on-click": "pavucontrol",
+    "on-click": "true",
     "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%",
     "tooltip-format": "Volume: {volume}%",
@@ -243,8 +242,8 @@
     "format": "{}",
     "return-type": "json",
     "exec": "waybar-module-pomodoro --no-work-icons",
-    "on-click": "waybar-module-pomodoro toggle",
-    "on-click-right": "waybar-module-pomodoro reset"
+    "on-click": "true",
+    "on-click-right": "true"
   },
   "temperature#cpu": {
     "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",

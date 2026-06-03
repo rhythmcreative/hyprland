@@ -93,7 +93,7 @@ apply_wallpaper_with_waybar_sync() {
     log "🖼️ Aplicando wallpaper: $wallpaper_file"
     
     # Aplicar wallpaper con awww
-    if awww img "$wallpaper_file" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.5; then
+    if awww img "$wallpaper_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
         log "✅ Wallpaper aplicado con awww"
     else
         log "❌ Error al aplicar wallpaper con awww"
@@ -132,10 +132,10 @@ if ! command -v awww &>/dev/null; then
 fi
 
 # Verificar e iniciar awww-daemon si es necesario
-if ! pgrep -x "awww-daemon" >/dev/null; then
+if ! pgrep -x "awww-daemon" > /dev/null; then
     log "🚀 Iniciando awww-daemon..."
     notify-send "🔄 Iniciando awww..." "Preparando sistema de wallpapers"
-    awww-daemon --format xrgb &
+    awww-daemon --format xrgb --no-cache &
     sleep 3
 fi
 

@@ -2,14 +2,13 @@
 # Hook de pywal para sincronizar con SDDM
 # Este script se ejecuta automáticamente cuando pywal genera nuevos colores
 
-SYNC_SCRIPT="$HOME/.local/bin/sync-sddm-wallpaper"
+THEME_SCRIPT="/usr/share/sddm/themes/sddm-astronaut-theme/pywal-sync.sh"
 
-if [[ -f "$SYNC_SCRIPT" ]]; then
+if [[ -f "$THEME_SCRIPT" ]]; then
     echo "Sincronizando tema SDDM con colores de pywal..."
-    # Intentar ejecutar con sudo sin contraseña
-    sudo "$SYNC_SCRIPT" 2>/dev/null || {
-        echo "Error: No se pudo actualizar el tema SDDM. Asegúrate de configurar los permisos sudo NOPASSWD."
+    sudo "$THEME_SCRIPT" 2>/dev/null || {
+        echo "Error: No se pudo actualizar el tema SDDM. Puede ser necesario ejecutar con sudo."
     }
 else
-    echo "Error: Script de sincronización no encontrado en $SYNC_SCRIPT"
+    echo "Error: Script de sincronización no encontrado."
 fi

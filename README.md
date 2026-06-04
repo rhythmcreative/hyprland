@@ -15,6 +15,10 @@ Personal Arch config, for personal use.
 </p>
 
 <p align="center">
+<img width="2526" height="1402" alt="image" src="https://github.com/user-attachments/assets/b1c065d4-1529-479b-ae72-0c4337d930ef" />
+</p>
+
+<p align="center">
 <img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
 

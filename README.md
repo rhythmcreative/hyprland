@@ -2,7 +2,7 @@
 <h1 align="center">Dotfiles rhythmcreative</h1>
 
 <div align="center">
-Personal Arch config, for personal use.
+*Personal Arch config, for personal use.*
 </div>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)
@@ -56,7 +56,23 @@ cd ~/hyprland
 ./install.sh
 ```
 > [!IMPORTANT]
-> Do not run `install.sh` as sudo so that the installation is done correctly
+> Do <b>NOT</b> run `install.sh` as sudo so that the installation is done correctly
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS)](https://git.io/typing-svg)
+
+You can have more than 3000 wallpapers, all of them can be downloaded through the following commands:
+
+```bash
+curl -L "https://raw.githubusercontent.com/rhythmcreative/wallpapers/main/pack_[NUMBER].zip" -o
+"/tmp/pack_[NUMBER].zip"
+unzip -q -o "/tmp/pack_[NUMBER].zip" -d "/tmp/wallpaper_install"
+cp -r "/tmp/wallpaper_install/pack_1"/* ~/Pictures/Wallpapers/
+rm -rf "/tmp/wallpaper_install" "/tmp/pack_1.zip"
+```
+or use `install.sh` and from there you can download the packages you want
+
+> [!NOTE]
+> All wallpapers are taken from this page [Link](https://bjarneo.github.io/wallpapers/)
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=COMPONENTS)](https://git.io/typing-svg)
 
@@ -85,7 +101,16 @@ cd ~/hyprland
 | `Super + W` | Toggle floating |
 | `Super + L` | Lock screen |
 | `Super + P` | Screenshot (area) |
+| `Super + M` | Exit Hyprland |
+| `Super + Z` | Enable power sade mode (for laptop's) |
+| `Super + K` | Toogle keyboard layout |
+| `Alt + Return` | Fullscreen |
 | `Super + BackSpace` | Power menu |
+| `Super + Shift + W` | Wallpaper Selector |
+| `Super + Shift + P` | Selector of colors |
+| `F10` | Enable / Disable Bluetooth |
+| `F11 & F12` | Volumen Up / Down |
+| `Super + 1 to 0` | Switch workspaces |
 
 
 Configurations are adapted and customized for personal use. :)

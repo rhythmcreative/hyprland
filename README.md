@@ -7,9 +7,8 @@
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Hyprland-Rice-6b7280?style=flat-square" />
-  <img src="https://img.shields.io/badge/Arch-Linux-1793d1?style=flat-square&logo=arch-linux&logoColor=white" />
-  <img src="https://img.shields.io/badge/Shell-Zsh-f97316?style=flat-square" />
+	![Arch](https://img.shields.io/badge/Arch%20Linux-1793D1?logo=arch-linux&logoColor=fff&style=for-the-badge)
+  
 </p>
 
 ## Preview

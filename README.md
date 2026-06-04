@@ -31,12 +31,12 @@
     <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/b4ff5795-e24a-4189-82f2-1d4529afa6d0" />
 </td>
   </tr>
-</table
+</table>
 
 > [!NOTE]
-> Everything syncs with Pywal to have a theme that fits the wallpaper included with SDDM
+> Everything syncs with Pywal to have a theme that fits the wallpaper included with SDDM.
 
-Clone the repository and run the main installer:
+
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=INSTALLATION)](https://git.io/typing-svg)
 

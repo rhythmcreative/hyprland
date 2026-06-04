@@ -1,5 +1,5 @@
-<div align="center">
-# Dotfiles rhythmcreative
+
+<h1 align="center">Dotfiles rhythmcreative</h1>
 
 <div align="center">
 *Personal Arch config, for personal use.*

@@ -19,22 +19,23 @@
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)
 <p align="center">
-  <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" /
+<img width="2555" height="1435" alt="image" src="https://github.com/user-attachments/assets/32849cc1-4239-4515-b6c3-f3c5b522b67c" />
 </p>
 
 <p align="center">
-  <img width="2556" height="1438" alt="image" src="https://github.com/user-attachments/assets/2b599399-f833-4fdd-ae62-f85fab68a1ff" />
+ <img width="2550" height="1418" alt="image" src="https://github.com/user-attachments/assets/109227de-e886-4b8e-8e9d-e2fc5b3ea54c" />
 </p>
 
 <p align="center">
-<img width="2526" height="1402" alt="image" src="https://github.com/user-attachments/assets/b1c065d4-1529-479b-ae72-0c4337d930ef" />
+<img width="2537" height="1413" alt="image" src="https://github.com/user-attachments/assets/faab3b29-7a7e-4b22-b00e-118915efc53a" />
 </p>
 
 <p align="center">
-<img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
+<img width="2527" height="1425" alt="image" src="https://github.com/user-attachments/assets/85c9f5d4-6bfa-43fb-9ffb-630e58eba559" />
 </p>
+
 <p align="center">
-<img width="1920" height="1080" alt="Hola" src="https://github.com/user-attachments/assets/711a23c0-3f8e-4e02-ad1c-d2dcfd3d0d2c" />
+<img width="1920" height="1080" alt="Hola" src="https://github.com/user-attachments/assets/fa1f3449-ab38-48e7-af89-879c38161e86" />
 </p>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW+PYWAL)](https://git.io/typing-svg)

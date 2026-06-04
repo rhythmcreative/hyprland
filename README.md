@@ -17,7 +17,7 @@
 <img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Preview+Pywal)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW+PYWAL)](https://git.io/typing-svg)
 <table>
   <tr>
     <td width="50%"><img width="2560" height="1437" alt="image" src="https://github.com/user-attachments/assets/73f129b8-e4ac-4999-9c2e-2964240b5425" />
@@ -33,7 +33,7 @@
   </tr>
 </table
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Installation)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=INSTALLATION)](https://git.io/typing-svg)
 
 For installation it is done through the commands below
 
@@ -45,7 +45,7 @@ cd ~/hyprland
 > [!IMPORTANT]
 > Do not run `install.sh` as sudo so that the installation is done correctly
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&vCenter=true&multiline=true&width=435&height=35&lines=Components)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=COMPONENTS)](https://git.io/typing-svg)
 
 | Component | Tool |
 |---|---|
@@ -61,7 +61,7 @@ cd ~/hyprland
 | AUR Helper | yay |
 | Login Manager | SDDM |
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&vCenter=true&multiline=true&width=435&height=35&lines=Keybindings)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=KEYBINDINGS)](https://git.io/typing-svg)
 
 | Binding | Action |
 | --- | --- |

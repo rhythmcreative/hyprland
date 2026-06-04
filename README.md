@@ -1,9 +1,8 @@
 
-<h1 align="center"> Dotfiles // Setup </h1>
+# Dotfiles rhythmcreative
 
 *Personal Arch config, for personal use.*
 
-</div>
 <p align="center">
 
 <img width="127" height="28" alt="68747470733a2f2f696d672e736869656c64732e696f2f62616467652f417263682532304c696e75782d3137393344313f6c6f676f3d617263682d6c696e7578266c6f676f436f6c6f723d666666267374796c653d666f722d7468652d6261646765" src="https://github.com/user-attachments/assets/23c51a8d-39d2-4da3-ae82-e658ba3f28b5" /><div align="center">

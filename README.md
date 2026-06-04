@@ -2,7 +2,7 @@
 <h1 align="center">Dotfiles rhythmcreative</h1>
 
 <div align="center">
-*Personal Arch config, for personal use.*
+Personal Arch config, for personal use.
 </div>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)

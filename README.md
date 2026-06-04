@@ -6,7 +6,6 @@
 
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Preview)](https://git.io/typing-svg)
-
 <p align="center">
   <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" /
 </p>
@@ -20,7 +19,6 @@
 </p>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Preview+Pywal)](https://git.io/typing-svg)
-
 <table>
   <tr>
     <td width="50%"><img width="2560" height="1437" alt="image" src="https://github.com/user-attachments/assets/73f129b8-e4ac-4999-9c2e-2964240b5425" />
@@ -37,7 +35,6 @@
 </table
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Installation)](https://git.io/typing-svg)
-
 For installation it is done through the commands below
 
 ```bash

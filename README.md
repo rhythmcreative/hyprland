@@ -5,6 +5,18 @@
  <p><i>Personal Arch config, for everyone to use :)</i></p>
 </div>
 
+<div align="center">
+
+[![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793d1?style=for-the-badge&logo=archlinux&logoColor=white "Arch Linux - A simple, lightweight distribution")](https://archlinux.org/)
+[![Hyprland](https://img.shields.io/badge/Hyprland-abd6fd?style=for-the-badge "Hyprland - A dynamic tiling Wayland compositor based on wlroots that doesn't sacrifice on its looks")](https://hyprland.org/)
+[![Waybar](https://img.shields.io/badge/Waybar-cdd6f4?style=for-the-badge "Waybar - Highly customizable Wayland bar for Sway and Wlroots based compositors")](https://github.com/Alexays/Waybar)
+[![Hyprlock](https://img.shields.io/badge/Hyprlock-89dceb?style=for-the-badge "Hyprlock - Hyprland's GPU-accelerated screen locking utility")](https://github.com/hyprwm/hyprlock)
+[![Rofi](https://img.shields.io/badge/Rofi-fab387?style=for-the-badge "Rofi- A window switcher, application launcher and dmenu replacement")](https://github.com/lbonn/rofi)
+[![Sddm](https://img.shields.io/badge/Sddm-a6e3a1?style=for-the-badge "Simple Desktop Display Manager")](https://github.com/sddm/sddm)
+[![Pywal](https://img.shields.io/badge/Pywal-cba6f7?style=for-the-badge "Pywal - A tool that generates a color palette from the dominant colors in an image")](https://github.com/dylanaraps/pywal)
+
+</div>
+
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)
 <p align="center">
   <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" /

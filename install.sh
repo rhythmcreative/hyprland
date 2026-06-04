@@ -346,11 +346,6 @@ step_system() {
 
     # --- AUTOMATIC SERVICE ACTIVATION ---
     section "SERVICE CALIBRATION"
-    info "Habilitando servicios de sistema esenciales..."
-    sudo systemctl enable --now NetworkManager bluetooth sddm
-    
-    info "Iniciando arquitectura de audio (Pipewire)..."
-    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
 
     if gum confirm "$MSG_SERVICES_CONFIRM"; then
         if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
@@ -378,16 +373,38 @@ step_system() {
             cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
 #!/bin/bash
 # Hook para sincronizar SDDM cuando cambia el wallpaper
-if [ -f "$HOME/.local/bin/sync-sddm-wallpaper-sudo" ]; then
-    "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
+    "$HOME/.local/bin/sddm-sync-wrapper"
 fi
 EOF
             chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
+
+            # 4. Generar colores iniciales ANTES de iniciar SDDM para que el tema no se vea roto
+            SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
+            if [ -f "$SDDM_WALLPAPER" ]; then
+                info "Generando paleta de colores inicial desde el fondo de SDDM..."
+                wal -i "$SDDM_WALLPAPER" -n -q
+                
+                # Pre-configurar el cache para que Hyprland lo use al iniciar
+                mkdir -p "$HOME/.cache"
+                echo "$SDDM_WALLPAPER" > "$HOME/.cache/current-wallpaper"
+
+                # Ejecutar sincronización manual inicial
+                if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
+                    bash "$HOME/.local/bin/sddm-sync-wrapper"
+                fi
+            fi
         fi
         success "Services operational and SDDM synchronization configured."
     fi
 
-    sudo usermod -aG video,input,render,wheel $USER
+    info "Habilitando servicios de sistema esenciales..."
+    sudo systemctl enable --now NetworkManager bluetooth sddm
+    
+    info "Iniciando arquitectura de audio (Pipewire)..."
+    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
+
+    sudo usermod -aG video,input,render,wheel,audio $USER
 }
 
 # --- EXECUTION ---
@@ -404,9 +421,17 @@ step_system
 # Final master sync
 if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
     # Ensure pywal has initial colors to work with if it's a first install
-    if [ ! -f "$HOME/.cache/wal/colors.sh" ] && [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ]; then
-        info "Generating initial color palette..."
-        wal -i "$HOME/.config/hypr/wallpapers/default.jpg" -n -q
+    if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
+        SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
+        DEFAULT_WALLPAPER="$HOME/.config/hypr/wallpapers/default.jpg"
+        
+        if [ -f "$SDDM_WALLPAPER" ]; then
+            info "Generating initial color palette from Astronaut wallpaper..."
+            wal -i "$SDDM_WALLPAPER" -n -q
+        elif [ -f "$DEFAULT_WALLPAPER" ]; then
+            info "Generating initial color palette from default wallpaper..."
+            wal -i "$DEFAULT_WALLPAPER" -n -q
+        fi
     fi
     
     gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- bash "$HOME/.local/bin/modern-pywal-sync"

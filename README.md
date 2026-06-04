@@ -45,55 +45,23 @@ cd ~/hyprland
 > [!IMPORTANT]
 > Do not run `install.sh` as sudo so that the installation is done correctly
 
-## Components
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&vCenter=true&multiline=true&width=435&height=35&lines=Components)](https://git.io/typing-svg)
 
-### Window manager
-* Hyprland
+| Component | Tool |
+|---|---|---|
+| Window Manager | Hyprland |
+| Status Bar | Waybar |
+| Terminal | Kitty |
+| Launcher | Rofi |
+| Lockscreen | Hyprlock + Hypridle |
+| File Manager | Thunar |
+| Theming | Pywal (Sync's with the wallpaper) |
+| Wallpaper | awww |
+| Clipboard | Swappy |
+| AUR Helper | yay |
+| Login Manager | SDDM |
 
-### Terminal
-* Kitty
-
-### Shell
-* Zsh
-* Starship
-* Oh-my-zsh
-
-### Bar & ui
-* Waybar
-* Rofi
-* Quickshell
-
-### Utilities
-* Pywal
-* Fastfetch
-* Hyprlock & hypridle
-* Thunar & dolphin
-
-## Features
-* Automated color schemes based on wallpaper via pywal
-* Hardware detection for asus laptops and nvidia gpus
-* Extensive script collection for system management
-* Optimized for high performance and fast startup
-* Comprehensive flatpak application support
-* Supports both image and GIF's
-
-## Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/rhythmcreative/Hyprland.git
-```
-
-Run the installation script:
-
-```bash
-cd ~/Hyprland
-chmod +x install.sh
-./install.sh
-```
-
-## Keybindings
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&vCenter=true&multiline=true&width=435&height=35&lines=Keybindings)](https://git.io/typing-svg)
 
 | Binding | Action |
 | --- | --- |
@@ -106,21 +74,5 @@ chmod +x install.sh
 | `Super + P` | Screenshot (area) |
 | `Super + BackSpace` | Power menu |
 
-## Included configurations
-
-```text
-.config/
-├── hypr
-├── kitty
-├── waybar
-├── rofi
-├── mako
-├── wal
-├── quickshell
-└── kvantum
-
-.local/bin/
-└── Scripts (60)
-```
 
 Configurations are adapted and customized for personal use. :)

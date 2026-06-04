@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# 🔋 Script de Batería Dinámico Inteligente
-# Detecta automáticamente 0, 1, 2 o más baterías y ajusta el formato.
+# 🔋 Script de Batería Dinámico Inteligente (v3 - Desktop aware)
+# Detecta automáticamente 0, 1, 2 o más baterías.
+# Si no hay batería, muestra el icono de corriente/sobremesa sin texto.
 
 # 1. Detectar todas las baterías disponibles
 BATS=(/sys/class/power_supply/BAT*)
@@ -15,12 +16,6 @@ done
 
 NUM_BATS=${#ACTUAL_BATS[@]}
 
-# 2. Si no hay baterías, ocultar módulo (Waybar oculta si el output es vacío)
-if [ "$NUM_BATS" -eq 0 ]; then
-    echo ""
-    exit 0
-fi
-
 get_battery_icon() {
     local capacity=$1
     local status=$2
@@ -32,6 +27,13 @@ get_battery_icon() {
     elif [[ $capacity -ge 20 ]]; then echo "󰁿";
     else echo "󰁺"; fi
 }
+
+# 2. Caso: No hay baterías (PC de Escritorio)
+if [ "$NUM_BATS" -eq 0 ]; then
+    # Mostrar solo el icono de CA (sin porcentaje)
+    echo "{\"text\":\"󰚥\",\"tooltip\":\"Conectado a CA (Modo Sobremesa)\",\"class\":\"normal\",\"on-click\":\"true\"}"
+    exit 0
+fi
 
 TOTAL_CAP=0
 TEXT=""
@@ -49,7 +51,7 @@ for i in "${!ACTUAL_BATS[@]}"; do
     TOTAL_CAP=$((TOTAL_CAP + CAP))
     [ "$STAT" == "Charging" ] && IS_CHARGING=true
     
-    # Formatear texto de la barra
+    # Formatear texto de la barra (Icono + Porcentaje)
     if [ $i -gt 0 ]; then TEXT="$TEXT | "; fi
     TEXT="$TEXT$ICON $CAP%"
     
@@ -67,4 +69,4 @@ elif [ "$AVG_CAP" -le 30 ]; then CLASS="warning";
 else CLASS="normal"; fi
 
 # 6. Salida en formato JSON para Waybar
-echo "{\"text\":\"$TEXT\",\"tooltip\":\"$TOOLTIP\",\"class\":\"$CLASS\"}"
+echo "{\"text\":\"$TEXT\",\"tooltip\":\"$TOOLTIP\",\"class\":\"$CLASS\",\"on-click\":\"true\"}"

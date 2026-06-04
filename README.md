@@ -5,7 +5,7 @@
 
 
 
-## Preview
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Preview)](https://git.io/typing-svg)
 
 <p align="center">
   <img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/8f795fa4-794d-4bd2-820f-7bc677c7bd47" /
@@ -19,7 +19,7 @@
 <img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
 
-## Preview Pywal
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Preview+Pywal)](https://git.io/typing-svg)
 
 <table>
   <tr>
@@ -34,7 +34,19 @@
     <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/b4ff5795-e24a-4189-82f2-1d4529afa6d0" />
 </td>
   </tr>
-</table>
+</table
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&multiline=true&width=435&lines=Installation)](https://git.io/typing-svg)
+
+For installation it is done through the commands below
+
+```bash
+git clone https://github.com/rhythmcreative/hyprland.git
+cd ~/hyprland
+./install.sh
+```
+> [!IMPORTANT]
+> Do not run `install.sh` as sudo so that the installation is done correctly
 
 ## Components
 

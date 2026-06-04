@@ -21,6 +21,9 @@ Personal Arch config, for personal use.
 <p align="center">
 <img width="2557" height="1440" alt="image" src="https://github.com/user-attachments/assets/680a6f98-e58e-42ac-86a1-7063513f0d39" />
 </p>
+<p align="center">
+<img width="1920" height="1080" alt="Hola" src="https://github.com/user-attachments/assets/711a23c0-3f8e-4e02-ad1c-d2dcfd3d0d2c" />
+</p>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW+PYWAL)](https://git.io/typing-svg)
 <table>

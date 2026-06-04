@@ -48,7 +48,7 @@ cd ~/hyprland
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7E56C&vCenter=true&multiline=true&width=435&height=35&lines=Components)](https://git.io/typing-svg)
 
 | Component | Tool |
-|---|---|---|
+|---|---|
 | Window Manager | Hyprland |
 | Status Bar | Waybar |
 | Terminal | Kitty |

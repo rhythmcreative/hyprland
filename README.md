@@ -1,11 +1,8 @@
-###### _<div align="right"><sub>// by rhythmcreative </sub></div>_
-<h1 align="center"> Dotfiles // Setup </h1>
-<div align="center">
 
+<h1 align="center"> Dotfiles // Setup </h1>
 
 *Personal Arch config, for personal use.*
 
-</div>
 </div>
 <p align="center">
 

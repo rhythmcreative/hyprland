@@ -40,16 +40,20 @@
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW+PYWAL)](https://git.io/typing-svg)
 <table>
-  <tr>
-    <td width="50%"><img width="2560" height="1437" alt="image" src="https://github.com/user-attachments/assets/73f129b8-e4ac-4999-9c2e-2964240b5425" />
+ <tr>
+  <td width="50%"> <img width="2552" height="1437" alt="image" src="https://github.com/user-attachments/assets/4ad9216b-ce6f-4641-b017-4366fdf06e44" />
+
 </td>
-    <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/5f5d5810-f6eb-4062-9dbf-bd8f82faa93e" />
+    <td width="50%"> <img width="2545" height="1436" alt="image" src="https://github.com/user-attachments/assets/bb3d5667-082d-4827-818f-b6e59398f5b4" />
+
 </td>
   </tr>
   <tr>
-    <td width="50%"><img width="2560" height="1435" alt="image" src="https://github.com/user-attachments/assets/64a58511-9b9c-4936-a30f-2e80ee652d7e" />
+    <td width="50%"><img width="2555" height="1434" alt="image" src="https://github.com/user-attachments/assets/c7dc9236-9542-45ed-a161-e9ed8f1e95b1" />
+
 </td>
-    <td width="50%"><img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/b4ff5795-e24a-4189-82f2-1d4529afa6d0" />
+    <td width="50%"><img width="2555" height="1436" alt="image" src="https://github.com/user-attachments/assets/fdfe3243-b250-4d93-9f31-002cdbd6ac5a" />
+
 </td>
   </tr>
 </table>

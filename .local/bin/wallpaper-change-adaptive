@@ -20,14 +20,14 @@ log() {
 
 # Función de notificación
 notify() {
-    notify-send "🎨 Wallpaper Change" "$1" -t 3000 2>/dev/null || true
+    notify-send "Wallpaper Change" "$1" -t 3000 2>/dev/null || true
 }
 
 # Verificar si ya está ejecutándose
 if [[ -f "$LOCK_FILE" ]]; then
     lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
     if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
-        log "⏳ Cambio de wallpaper ya en progreso (PID: $lock_pid)"
+        log "Cambio de wallpaper ya en progreso (PID: $lock_pid)"
         exit 0
     fi
 fi
@@ -80,16 +80,16 @@ get_active_monitor() {
 
 # NUEVA FUNCIÓN: Sincronización optimizada de rofi con pywal
 sync_rofi_with_pywal() {
-    log "🎨 Iniciando sincronización optimizada de rofi con pywal..."
+    log "Iniciando sincronización optimizada de rofi con pywal..."
     
     # Verificar que pywal generó el archivo colors-rofi.rasi
     if [[ -f "$HOME/.cache/wal/colors-rofi.rasi" ]]; then
-        log "✅ Archivo colors-rofi.rasi generado por pywal"
+        log "Archivo colors-rofi.rasi generado por pywal"
         
         # Copiar archivo de colores al directorio de configuración de rofi
         mkdir -p "$HOME/.config/rofi"
         cp "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
-        log "📋 Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
+        log "Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
         
         # Generar versiones optimizadas con colores pywal para temas existentes
         for theme_file in "$HOME/Downloads/style-3.rasi" "$HOME/Downloads/wallpaper-select.rasi"; do
@@ -97,17 +97,17 @@ sync_rofi_with_pywal() {
                 local theme_name=$(basename "$theme_file" .rasi)
                 local pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
                 
-                log "📋 Creando versión pywal optimizada de tema: $theme_name"
+                log "Creando versión pywal optimizada de tema: $theme_name"
                 
                 # Crear versión optimizada que use los colores de pywal
                 create_optimized_pywal_theme "$theme_file" "$pywal_theme"
             fi
         done
         
-        log "✅ Todos los temas de rofi sincronizados con pywal"
+        log "Todos los temas de rofi sincronizados con pywal"
         return 0
     else
-        log "⚠️ colors-rofi.rasi no generado por pywal"
+        log "colors-rofi.rasi no generado por pywal"
         return 1
     fi
 }
@@ -118,11 +118,11 @@ create_optimized_pywal_theme() {
     local pywal_theme="$2"
     local temp_file="$(mktemp)"
     
-    log "🔧 Creando tema optimizado: $(basename "$pywal_theme")"
+    log "Creando tema optimizado: $(basename "$pywal_theme")"
     
     # Validar que el tema original existe
     if [[ ! -f "$original_theme" ]]; then
-        log "❌ ERROR: Tema original no encontrado: $original_theme"
+        log "ERROR: Tema original no encontrado: $original_theme"
         return 1
     fi
     
@@ -176,10 +176,10 @@ create_optimized_pywal_theme() {
     if [[ -s "$temp_file" ]]; then
         # Mover archivo temporal al destino final
         mv "$temp_file" "$pywal_theme"
-        log "✅ Tema optimizado creado: $(basename "$pywal_theme")"
+        log "Tema optimizado creado: $(basename "$pywal_theme")"
         return 0
     else
-        log "❌ ERROR: No se pudo generar el tema optimizado"
+        log "ERROR: No se pudo generar el tema optimizado"
         rm -f "$temp_file"
         return 1
     fi
@@ -187,13 +187,13 @@ create_optimized_pywal_theme() {
 
 # Función para validar la sincronización de pywal y reparar si es necesario
 validate_and_repair_pywal_sync() {
-    log "🔍 Validando sincronización de pywal con rofi..."
+    log "Validando sincronización de pywal con rofi..."
     local repair_needed=false
     local validated=true
     
     # Verificar que pywal está disponible
     if ! command -v wal > /dev/null 2>&1; then
-        log "⚠️ Pywal no está disponible - usando fallback"
+        log "Pywal no está disponible - usando fallback"
         return 1
     fi
     
@@ -206,7 +206,7 @@ validate_and_repair_pywal_sync() {
     
     for file in "${required_files[@]}"; do
         if [[ ! -f "$file" ]]; then
-            log "⚠️ Archivo faltante: $file"
+            log "Archivo faltante: $file"
             repair_needed=true
             validated=false
         fi
@@ -221,53 +221,53 @@ validate_and_repair_pywal_sync() {
     for theme in "${theme_files[@]}"; do
         local theme_path="$HOME/.config/rofi/$theme"
         if [[ ! -f "$theme_path" ]]; then
-            log "⚠️ Tema pywal faltante: $theme"
+            log "Tema pywal faltante: $theme"
             repair_needed=true
         elif ! grep -q '@import "colors-pywal.rasi"' "$theme_path"; then
-            log "⚠️ Tema pywal sin importación correcta: $theme"
+            log "Tema pywal sin importación correcta: $theme"
             repair_needed=true
         fi
     done
     
     # Reparar sincronización si es necesario
     if [[ "$repair_needed" == "true" ]]; then
-        log "🔧 Reparando sincronización de rofi con pywal..."
+        log "Reparando sincronización de rofi con pywal..."
         if sync_rofi_with_pywal; then
-            log "✅ Sincronización reparada exitosamente"
+            log "Sincronización reparada exitosamente"
             validated=true
         else
-            log "❌ No se pudo reparar la sincronización"
+            log "No se pudo reparar la sincronización"
             validated=false
         fi
     fi
     
     if [[ "$validated" == "true" ]]; then
-        log "✅ Sincronización de pywal con rofi validada"
+        log "Sincronización de pywal con rofi validada"
         return 0
     else
-        log "❌ Validación de sincronización falló"
+        log "Validación de sincronización falló"
         return 1
     fi
 }
 
 # Función de fallback robusto para rofi
 fallback_rofi_setup() {
-    log "🔄 Configurando fallback robusto para rofi..."
+    log "Configurando fallback robusto para rofi..."
     
     # Intentar usar tema pywal si existe
     if validate_and_repair_pywal_sync; then
-        log "✅ Usando configuración pywal reparada"
+        log "Usando configuración pywal reparada"
         return 0
     fi
     
     # Fallback 1: Usar tema original
     if [[ -f "$HOME/Downloads/wallpaper-select.rasi" ]]; then
-        log "⚠️ Usando tema original como fallback"
+        log "Usando tema original como fallback"
         return 0
     fi
     
     # Fallback 2: Crear tema básico de emergencia
-    log "🆘 Creando tema básico de emergencia..."
+    log "Creando tema básico de emergencia..."
     mkdir -p "$HOME/.config/rofi"
     
     cat > "$HOME/.config/rofi/emergency-theme.rasi" << 'EOF'
@@ -349,10 +349,10 @@ element-text {
 EOF
     
     if [[ -f "$HOME/.config/rofi/emergency-theme.rasi" ]]; then
-        log "✅ Tema de emergencia creado exitosamente"
+        log "Tema de emergencia creado exitosamente"
         return 0
     else
-        log "❌ No se pudo crear tema de emergencia"
+        log "No se pudo crear tema de emergencia"
         return 1
     fi
 }
@@ -362,26 +362,26 @@ sync_with_current_wallpaper() {
     local current_wallpaper_file="$HOME/.cache/current-wallpaper"
     local force_sync="${1:-false}"
     
-    log "🔄 === INICIANDO SINCRONIZACIÓN AUTOMÁTICA CON WALLPAPER ACTUAL ==="
+    log "=== INICIANDO SINCRONIZACIÓN AUTOMÁTICA CON WALLPAPER ACTUAL ==="
     
     # Verificar si existe el archivo de wallpaper actual
     if [[ ! -f "$current_wallpaper_file" ]]; then
-        log "⚠️ No se encontró archivo de wallpaper actual: $current_wallpaper_file"
+        log "No se encontró archivo de wallpaper actual: $current_wallpaper_file"
         return 1
     fi
     
     # Leer el wallpaper actual
     local current_wallpaper=$(cat "$current_wallpaper_file" 2>/dev/null)
     if [[ -z "$current_wallpaper" ]] || [[ ! -f "$current_wallpaper" ]]; then
-        log "⚠️ Wallpaper actual no válido o no existe: $current_wallpaper"
+        log "Wallpaper actual no válido o no existe: $current_wallpaper"
         return 1
     fi
     
-    log "📸 Wallpaper actual detectado: $current_wallpaper"
+    log "Wallpaper actual detectado: $current_wallpaper"
     
     # Verificar si pywal está disponible
     if ! command -v wal > /dev/null 2>&1; then
-        log "⚠️ pywal no está disponible para sincronización"
+        log "pywal no está disponible para sincronización"
         return 1
     fi
     
@@ -389,39 +389,39 @@ sync_with_current_wallpaper() {
     if [[ "$force_sync" != "true" ]] && [[ -f "$HOME/.cache/wal/colors-hyprland.conf" ]]; then
         local wal_wallpaper=$(grep '^\$wallpaper' "$HOME/.cache/wal/colors-hyprland.conf" | cut -d'=' -f2 | tr -d ' ')
         if [[ "$wal_wallpaper" == "$current_wallpaper" ]]; then
-            log "✅ Los colores ya están sincronizados con el wallpaper actual"
+            log "Los colores ya están sincronizados con el wallpaper actual"
             # Aún así, recargar Hyprland para asegurar sincronización
-            log "🔄 Recargando configuración de Hyprland para asegurar sincronización..."
+            log "Recargando configuración de Hyprland para asegurar sincronización..."
             if timeout 10s hyprctl reload > /dev/null 2>&1; then
-                log "✅ Configuración de Hyprland recargada exitosamente"
+                log "Configuración de Hyprland recargada exitosamente"
             else
-                log "❌ WARNING: No se pudo recargar Hyprland o timeout alcanzado"
+                log "WARNING: No se pudo recargar Hyprland o timeout alcanzado"
             fi
             return 0
         fi
     fi
     
-    log "🎨 Aplicando colores de pywal desde wallpaper actual..."
+    log "Aplicando colores de pywal desde wallpaper actual..."
     
     # Aplicar pywal al wallpaper actual
     if wal -i "$current_wallpaper" -n -q; then
-        log "✅ Pywal aplicado exitosamente al wallpaper actual"
+        log "Pywal aplicado exitosamente al wallpaper actual"
         
         # Esperar a que pywal genere todos los archivos
         sleep 0.5
         
         # Actualizar archivo de colores para Waybar
-        log "🎨 Actualizando colores de Waybar..."
+        log "Actualizando colores de Waybar..."
         if [[ -f "$HOME/.cache/wal/colors-waybar.css" ]]; then
             cp "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
-            log "✅ Archivo colors-waybar.css copiado"
+            log "Archivo colors-waybar.css copiado"
         elif [[ -f "$HOME/.cache/wal/colors.css" ]]; then
             # Si no hay colors-waybar.css, generar desde colors.css
             cat > "$HOME/.config/waybar/colors-pywal.css" <<EOF
 /* Colores generados automáticamente por pywal */
 $(grep -E '^--color[0-9]+|^--background|^--foreground|^--cursor' "$HOME/.cache/wal/colors.css" | sed 's/--/@define-color /' | sed 's/: / /g' | sed 's/;//g')
 EOF
-            log "✅ Archivo colors-pywal.css generado desde colors.css"
+            log "Archivo colors-pywal.css generado desde colors.css"
         else
             # Generar desde colors.sh si no hay CSS
             source "$HOME/.cache/wal/colors.sh"
@@ -447,37 +447,37 @@ EOF
 @define-color color14 $color14;
 @define-color color15 $color15;
 EOF
-            log "✅ Archivo colors-pywal.css generado desde colors.sh"
+            log "Archivo colors-pywal.css generado desde colors.sh"
         fi
         
         # Recargar Hyprland config (para obtener nuevos colores)
-        log "🔄 Recargando configuración de Hyprland..."
+        log "Recargando configuración de Hyprland..."
         if timeout 10s hyprctl reload > /dev/null 2>&1; then
-            log "✅ Configuración de Hyprland recargada exitosamente"
+            log "Configuración de Hyprland recargada exitosamente"
         else
-            log "❌ WARNING: No se pudo recargar Hyprland o timeout alcanzado"
+            log "WARNING: No se pudo recargar Hyprland o timeout alcanzado"
         fi
         
         # Sincronizar Mako con pywal
-        log "🔔 Sincronizando Mako con colores de pywal..."
+        log "Sincronizando Mako con colores de pywal..."
         if [[ -x "$HOME/.local/bin/sync-mako-pywal" ]]; then
             "$HOME/.local/bin/sync-mako-pywal"
-            log "✅ Mako sincronizado con colores de pywal"
+            log "Mako sincronizado con colores de pywal"
         else
-            log "⚠️ Script sync-mako-pywal no encontrado o no ejecutable"
+            log "Script sync-mako-pywal no encontrado o no ejecutable"
         fi
         
         # Sincronizar temas de rofi con pywal
-        log "🎨 Sincronizando temas de rofi con pywal..."
+        log "Sincronizando temas de rofi con pywal..."
         
         # Verificar que pywal generó el archivo colors-rofi.rasi
         if [[ -f "$HOME/.cache/wal/colors-rofi.rasi" ]]; then
-            log "✅ Archivo colors-rofi.rasi generado por pywal"
+            log "Archivo colors-rofi.rasi generado por pywal"
             
             # Copiar archivo de colores al directorio de configuración de rofi
             mkdir -p "$HOME/.config/rofi"
             cp "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
-            log "📋 Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
+            log "Colores de rofi copiados a ~/.config/rofi/colors-pywal.rasi"
             
             # Generar versiones con colores pywal para temas existentes
             for theme_file in "$HOME/Downloads/style-3.rasi" "$HOME/Downloads/wallpaper-select.rasi"; do
@@ -485,7 +485,7 @@ EOF
                     local theme_name=$(basename "$theme_file" .rasi)
                     local pywal_theme="$HOME/.config/rofi/${theme_name}-pywal.rasi"
                     
-                    log "📋 Creando versión pywal de tema: $theme_name"
+                    log "Creando versión pywal de tema: $theme_name"
                     
                     # Crear copia del tema original
                     cp "$theme_file" "$pywal_theme"
@@ -499,20 +499,20 @@ EOF
                         cat "$pywal_theme" >> "$temp_file"
                         mv "$temp_file" "$pywal_theme"
                         
-                        log "✅ Importación de colores pywal añadida a $theme_name"
+                        log "Importación de colores pywal añadida a $theme_name"
                     fi
                 fi
             done
             
-            log "✅ Todos los temas de rofi sincronizados con pywal"
+            log "Todos los temas de rofi sincronizados con pywal"
         else
-            log "⚠️ colors-rofi.rasi no generado por pywal"
+            log "colors-rofi.rasi no generado por pywal"
         fi
         
-        log "🎉 Sincronización automática completada exitosamente"
+        log "Sincronización automática completada exitosamente"
         return 0
     else
-        log "❌ Error: Pywal falló durante la sincronización automática"
+        log "Error: Pywal falló durante la sincronización automática"
         return 1
     fi
 }
@@ -528,30 +528,30 @@ cleanup() {
     # Restaurar Waybar si estaba corriendo
     if [[ "${ORIGINAL_WAYBAR_STATE:-}" == "running" ]]; then
         if ! pgrep -x waybar > /dev/null 2>&1; then
-            log "📱 Cleanup: Restaurando Waybar..."
+            log "Cleanup: Restaurando Waybar..."
             ensure_waybar_running
         fi
     fi
     
-    log "🧹 Cleanup completado (exit code: $exit_code)"
+    log "Cleanup completado (exit code: $exit_code)"
 }
 trap cleanup EXIT INT TERM
 
 # NUEVO: Verificar si se llama con parámetro "sync-only" para sincronización automática
 if [[ "${1:-}" == "sync-only" ]]; then
-    log "🔄 === MODO SINCRONIZACIÓN AUTOMÁTICA ACTIVADO ==="
+    log "=== MODO SINCRONIZACIÓN AUTOMÁTICA ACTIVADO ==="
     
     # No crear lock file para sincronización rápida
     rm -f "$LOCK_FILE" 2>/dev/null || true
     
     # Ejecutar sincronización automática
     if sync_with_current_wallpaper "${2:-false}"; then
-        notify "🎨 Colores sincronizados automáticamente con el wallpaper actual"
-        log "✅ Sincronización automática completada exitosamente"
+        notify "Colores sincronizados automáticamente con el wallpaper actual"
+        log "Sincronización automática completada exitosamente"
         exit 0
     else
-        notify "⚠️ Error en la sincronización automática"
-        log "❌ Error en la sincronización automática"
+        notify "Error en la sincronización automática"
+        log "Error en la sincronización automática"
         exit 1
     fi
 fi
@@ -572,13 +572,13 @@ configure_rofi_theme() {
     # Prioridad 1: Usar tema sincronizado con pywal si existe y pywal está activo
     if [[ -f "$pywal_theme" ]] && [[ -f "$HOME/.cache/wal/colors-rofi.rasi" ]] && command -v wal > /dev/null 2>&1; then
         rofi_theme="$pywal_theme"
-        log "🎨 Usando tema sincronizado con pywal: $theme_name-pywal.rasi"
+        log "Usando tema sincronizado con pywal: $theme_name-pywal.rasi"
     # Prioridad 2: Usar tema original como fallback
     elif [[ -f "$fallback_theme" ]]; then
         rofi_theme="$fallback_theme"
-        log "⚠️ Usando tema original (pywal no disponible): $theme_name.rasi"
+        log "Usando tema original (pywal no disponible): $theme_name.rasi"
     else
-        log "❌ ERROR: No se encontró ningún tema de rofi disponible"
+        log "ERROR: No se encontró ningún tema de rofi disponible"
         rofi_theme=""
     fi
     
@@ -587,28 +587,28 @@ configure_rofi_theme() {
         "DP-6")
             if [[ -n "$rofi_theme" ]]; then
                 rofi_config="-theme '$rofi_theme' -font 'Inter 12' -width 900 -lines 15"
-                log "📺 Configuración optimizada para DP-6 (2560x1440) con tema: $(basename "$rofi_theme")"
+                log "Configuración optimizada para DP-6 (2560x1440) con tema: $(basename "$rofi_theme")"
             else
                 rofi_config="-font 'Inter 12' -width 900 -lines 15"
-                log "📺 Configuración básica para DP-6 (sin tema específico)"
+                log "Configuración básica para DP-6 (sin tema específico)"
             fi
             ;;
         "eDP-1")
             if [[ -n "$rofi_theme" ]]; then
                 rofi_config="-theme '$rofi_theme' -font 'Inter 10' -width 700 -lines 12"
-                log "💻 Configuración optimizada para eDP-1 (1920x1080) con tema: $(basename "$rofi_theme")"
+                log "Configuración optimizada para eDP-1 (1920x1080) con tema: $(basename "$rofi_theme")"
             else
                 rofi_config="-font 'Inter 10' -width 700 -lines 12"
-                log "💻 Configuración básica para eDP-1 (sin tema específico)"
+                log "Configuración básica para eDP-1 (sin tema específico)"
             fi
             ;;
         *)
             if [[ -n "$rofi_theme" ]]; then
                 rofi_config="-theme '$rofi_theme' -font 'Inter 11' -width 800 -lines 13"
-                log "🖥️ Configuración por defecto para monitor: $monitor con tema: $(basename "$rofi_theme")"
+                log "Configuración por defecto para monitor: $monitor con tema: $(basename "$rofi_theme")"
             else
                 rofi_config="-font 'Inter 11' -width 800 -lines 13"
-                log "🖥️ Configuración básica para monitor: $monitor (sin tema específico)"
+                log "Configuración básica para monitor: $monitor (sin tema específico)"
             fi
             ;;
     esac
@@ -618,41 +618,41 @@ configure_rofi_theme() {
 
 # Función para ocultar Waybar
 hide_waybar() {
-    log "📱 Ocultando Waybar..."
+    log "Ocultando Waybar..."
     if pgrep -x waybar > /dev/null; then
         pkill -KILL waybar 2>/dev/null
         sleep 0.1
-        log "✅ Waybar detenido"
+        log "Waybar detenido"
     fi
 }
 
 # Función para mostrar Waybar
 show_waybar() {
-    log "📱 Mostrando Waybar..."
+    log "Mostrando Waybar..."
     if ! pgrep -x waybar > /dev/null; then
         nohup waybar > /dev/null 2>&1 &
         sleep 0.3
         if pgrep -x waybar > /dev/null; then
-            log "✅ Waybar iniciado"
+            log "Waybar iniciado"
         fi
     fi
 }
 
 # Función robusta para asegurar que waybar esté corriendo
 ensure_waybar_running() {
-    log "🔧 Asegurando que waybar esté corriendo..."
+    log "Asegurando que waybar esté corriendo..."
     if ! pgrep -x waybar > /dev/null 2>&1; then
         nohup waybar > /dev/null 2>&1 &
         sleep 0.5
         if pgrep -x waybar > /dev/null 2>&1; then
-            log "✅ Waybar iniciado exitosamente"
+            log "Waybar iniciado exitosamente"
             return 0
         else
-            log "❌ No se pudo iniciar waybar"
+            log "No se pudo iniciar waybar"
             return 1
         fi
     else
-        log "✅ Waybar ya está corriendo"
+        log "Waybar ya está corriendo"
         return 0
     fi
 }
@@ -660,33 +660,33 @@ ensure_waybar_running() {
 # Determinar estado original de waybar
 if pgrep -x waybar > /dev/null; then
     ORIGINAL_WAYBAR_STATE="running"
-    log "📝 Estado inicial: Waybar está ejecutándose"
+    log "Estado inicial: Waybar está ejecutándose"
 else
     ORIGINAL_WAYBAR_STATE="stopped"
-    log "📝 Estado inicial: Waybar no está ejecutándose"
+    log "Estado inicial: Waybar no está ejecutándose"
 fi
 
-log "🚀 === INICIANDO CAMBIO DE WALLPAPER ADAPTATIVO ==="
-log "🖥️ Monitor activo: $ACTIVE_MONITOR"
+log "=== INICIANDO CAMBIO DE WALLPAPER ADAPTATIVO ==="
+log "Monitor activo: $ACTIVE_MONITOR"
 notify "Iniciando selector de wallpapers adaptativo..."
 
 # Verificar directorio de wallpapers
 if [[ ! -d "$WALLPAPER_DIR" ]]; then
     log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
-    notify "❌ Error: Directorio de wallpapers no encontrado"
+    notify "Error: Directorio de wallpapers no encontrado"
     exit 1
 fi
 
 # Verificar awww
 if ! command -v awww &> /dev/null; then
     log "ERROR: awww no está instalado"
-    notify "❌ Error: awww no está instalado"
+    notify "Error: awww no está instalado"
     exit 1
 fi
 
 # Verificar e iniciar awww-daemon si es necesario
 if ! pgrep -x "awww-daemon" > /dev/null; then
-    log "🚀 Iniciando awww-daemon..."
+    log "Iniciando awww-daemon..."
     awww-daemon --format xrgb --no-cache &
 fi
 
@@ -694,18 +694,18 @@ fi
 mkdir -p "$CACHE_DIR"
 
 # Buscar imágenes
-log "🔍 Buscando imágenes en $WALLPAPER_DIR"
+log "Buscando imágenes en $WALLPAPER_DIR"
 cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
 
 mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
 
 if [[ ${#images[@]} -eq 0 ]]; then
     log "ERROR: No se encontraron imágenes"
-    notify "❌ Error: No se encontraron imágenes"
+    notify "Error: No se encontraron imágenes"
     exit 1
 fi
 
-log "📁 Encontradas ${#images[@]} imágenes"
+log "Encontradas ${#images[@]} imágenes"
 
 # Crear archivo temporal para rofi
 > "$TEMP_FILE"
@@ -739,7 +739,7 @@ generate_preview() {
     local safe_name="$(echo "$clean_name" | sed 's/[^a-zA-Z0-9._-]/_/g')"
     local preview_file="$CACHE_DIR/preview_${safe_name}_${monitor}.png"
     
-    log "🖼️ Generando preview $preview_size para monitor $monitor: $img"
+    log "Generando preview $preview_size para monitor $monitor: $img"
     
     # Cache específico por monitor: verificar si existe para este monitor y tamaño
     if [[ -f "$preview_file" ]]; then
@@ -773,7 +773,7 @@ generate_preview() {
 }
 
 # Procesar imágenes para rofi
-log "🚀 Generando previews adaptativas para monitor $ACTIVE_MONITOR..."
+log "Generando previews adaptativas para monitor $ACTIVE_MONITOR..."
 for img in "${images[@]}"; do
     clean_name="${img%.*}"
     safe_name="$(echo "$clean_name" | sed 's/[^a-zA-Z0-9._-]/_/g')"
@@ -792,15 +792,15 @@ done
 # Verificar que tenemos entradas
 if [[ ! -s "$TEMP_FILE" ]]; then
     log "ERROR: No se pudieron procesar las imágenes"
-    notify "❌ Error: No se pudieron procesar las imágenes"
+    notify "Error: No se pudieron procesar las imágenes"
     exit 1
 fi
 
-log "🎭 Mostrando selector de wallpapers adaptativo..."
+log "Mostrando selector de wallpapers adaptativo..."
 
 # Configurar rofi según el monitor
 ROFI_CONFIG=$(configure_rofi_theme "$ACTIVE_MONITOR")
-log "🎨 Configuración de Rofi: $ROFI_CONFIG"
+log "Configuración de Rofi: $ROFI_CONFIG"
 
 # Función para ejecutar rofi con manejo correcto de waybar y monitor específico
 execute_adaptive_rofi() {
@@ -813,30 +813,30 @@ execute_adaptive_rofi() {
     # Verificar si waybar está ejecutándose antes de iniciarlo
     if pgrep -x waybar > /dev/null; then
         waybar_was_running=true
-        log "📝 Waybar estaba ejecutándose antes de rofi"
+        log "Waybar estaba ejecutándose antes de rofi"
     fi
     
-    log "📱 Ocultando waybar antes de rofi..."
+    log "Ocultando waybar antes de rofi..."
     hide_waybar
     
     # Crear archivo limpio para rofi
     local rofi_temp_file="${temp_file}_rofi_$$"
     cat "$temp_file" > "$rofi_temp_file" 2>/dev/null
     
-    log "🚀 Ejecutando rofi adaptativo en monitor: $monitor"
+    log "Ejecutando rofi adaptativo en monitor: $monitor"
     
     # Ejecutar rofi con configuración específica del monitor
-    result=$(eval "rofi -dmenu -i -p \"🖼️ Seleccionar Wallpaper\" -show-icons $config -monitor '$monitor'" < "$rofi_temp_file" 2>/dev/null || true)
+    result=$(eval "rofi -dmenu -i -p \"Seleccionar Wallpaper\" -show-icons $config -monitor '$monitor'" < "$rofi_temp_file" 2>/dev/null || true)
     
     # Limpiar archivo temporal
     rm -f "$rofi_temp_file"
     
     # Solo restaurar Waybar si NO vamos a reiniciarlo después con pywal
     if [[ "$waybar_was_running" == "true" ]] && ! command -v wal > /dev/null 2>&1; then
-        log "📱 Restaurando waybar después de rofi (sin pywal)..."
+        log "Restaurando waybar después de rofi (sin pywal)..."
         show_waybar
     elif [[ "$waybar_was_running" == "true" ]]; then
-        log "📱 No se restaura waybar ahora - se reiniciará después con pywal"
+        log "No se restaura waybar ahora - se reiniciará después con pywal"
     fi
     
     echo "$result"
@@ -847,22 +847,22 @@ selected=$(execute_adaptive_rofi "$TEMP_FILE" "$ACTIVE_MONITOR" "$ROFI_CONFIG")
 
 # Si no se seleccionó nada, salir
 if [[ -z "$selected" ]]; then
-    log "ℹ️ No se seleccionó ningún wallpaper"
+    log "No se seleccionó ningún wallpaper"
     exit 0
 fi
 
-log "✅ Seleccionado: $selected"
+log "Seleccionado: $selected"
 
 # Buscar el archivo correspondiente
 selected_file=""
 if [[ -f "$WALLPAPER_DIR/$selected" ]]; then
     selected_file="$WALLPAPER_DIR/$selected"
-    log "🎯 Archivo encontrado: $selected_file"
+    log "Archivo encontrado: $selected_file"
 else
     for img in "${images[@]}"; do
         if [[ "${img%.*}" == "$selected" ]]; then
             selected_file="$WALLPAPER_DIR/$img"
-            log "🎯 Archivo encontrado por fallback: $selected_file"
+            log "Archivo encontrado por fallback: $selected_file"
             break
         fi
     done
@@ -870,19 +870,19 @@ fi
 
 # Verificar archivo seleccionado
 if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
-    log "❌ ERROR: Archivo no encontrado: $selected"
-    notify "❌ Error: Archivo no encontrado"
+    log "ERROR: Archivo no encontrado: $selected"
+    notify "Error: Archivo no encontrado"
     exit 1
 fi
 
-log "🖼️ PASO 1: Aplicando wallpaper: $selected_file"
+log "PASO 1: Aplicando wallpaper: $selected_file"
 
 # Aplicar wallpaper con awww
 if awww img "$selected_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
-    log "✅ Wallpaper aplicado con awww"
-    notify "🖼️ Wallpaper aplicado: $(basename "$selected_file")"
+    log "Wallpaper aplicado con awww"
+    notify "Wallpaper aplicado: $(basename "$selected_file")"
 else
-    log "❌ Error al aplicar wallpaper con awww"
+    log "Error al aplicar wallpaper con awww"
     exit 1
 fi
 
@@ -891,7 +891,7 @@ echo "$selected_file" > "$HOME/.cache/current-wallpaper"
 
 # Aplicar pywal SOLO si está disponible
 if command -v wal > /dev/null 2>&1; then
-    log "🎨 PASO 2: Aplicando colores y sincronización centralizada..."
+    log "PASO 2: Aplicando colores y sincronización centralizada..."
     
     if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
         "$HOME/.local/bin/pywal-wallpaper-sync" "$selected_file"
@@ -901,34 +901,34 @@ if command -v wal > /dev/null 2>&1; then
         hyprctl reload
     fi
     
-    log "🎉 Sincronización automática completada exitosamente"
+    log "Sincronización automática completada exitosamente"
 else
-    log "ℹ️ Pywal no disponible, solo se aplicó el wallpaper"
-    notify "ℹ️ Wallpaper aplicado"
+    log "Pywal no disponible, solo se aplicó el wallpaper"
+    notify "Wallpaper aplicado"
 fi
 
 # Verificación final de Waybar
 if ! pgrep -x waybar > /dev/null; then
-    log "❌ CRÍTICO: Waybar no está ejecutándose al finalizar. Iniciando respaldo..."
-    notify "🔧 Iniciando waybar de respaldo..."
+    log "CRÍTICO: Waybar no está ejecutándose al finalizar. Iniciando respaldo..."
+    notify "Iniciando waybar de respaldo..."
     
     nohup waybar > /dev/null 2>&1 &
     sleep 0.5
     
     if pgrep -x waybar > /dev/null; then
-        log "✅ RESPALDO EXITOSO: Waybar iniciado correctamente"
-        notify "✅ Waybar restaurado exitosamente"
+        log "RESPALDO EXITOSO: Waybar iniciado correctamente"
+        notify "Waybar restaurado exitosamente"
     else
-        log "❌ FALLO CRÍTICO: No se pudo iniciar waybar"
-        notify "❌ Error crítico: No se pudo iniciar waybar"
+        log "FALLO CRÍTICO: No se pudo iniciar waybar"
+        notify "Error crítico: No se pudo iniciar waybar"
     fi
 else
-    log "✅ VERIFICACIÓN EXITOSA: Waybar está ejecutándose correctamente"
+    log "VERIFICACIÓN EXITOSA: Waybar está ejecutándose correctamente"
 fi
 
-log "🎉 === CAMBIO DE WALLPAPER ADAPTATIVO COMPLETADO ==="
-log "📸 Wallpaper: $(basename "$selected_file")"
-log "🖥️ Monitor: $ACTIVE_MONITOR"
-log "🎨 Sistema sincronizado exitosamente"
+log "=== CAMBIO DE WALLPAPER ADAPTATIVO COMPLETADO ==="
+log "Wallpaper: $(basename "$selected_file")"
+log "Monitor: $ACTIVE_MONITOR"
+log "Sistema sincronizado exitosamente"
 
 exit 0

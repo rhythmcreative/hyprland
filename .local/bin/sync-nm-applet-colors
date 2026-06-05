@@ -3,11 +3,11 @@
 # Script simple para sincronizar nm-applet con colores de waybar
 # Versión optimizada que no se cuelga
 
-echo "🎨 Sincronizando nm-applet con waybar..."
+echo "Sincronizando nm-applet con waybar..."
 
 # Verificar que pywal tiene colores
 if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
-    echo "❌ Error: No hay colores de pywal disponibles"
+    echo "Error: No hay colores de pywal disponibles"
     exit 1
 fi
 
@@ -18,7 +18,7 @@ source "$HOME/.cache/wal/colors.sh"
 mkdir -p "$HOME/.config/gtk-3.0"
 mkdir -p "$HOME/.config/gtk-4.0"
 
-echo "🎨 Generando CSS con colores: BG=$background, FG=$foreground, Accent=$color4"
+echo "Generando CSS con colores: BG=$background, FG=$foreground, Accent=$color4"
 
 # Crear CSS para nm-applet con colores exactos de waybar
 cat > "$HOME/.config/gtk-3.0/nm-applet-waybar.css" <<EOF
@@ -100,10 +100,10 @@ else
     echo '@import "nm-applet-waybar.css";' > "$HOME/.config/gtk-4.0/gtk.css"
 fi
 
-echo "📄 CSS generado y configurado"
+echo "CSS generado y configurado"
 
 # Reiniciar nm-applet de forma simple
-echo "🔄 Reiniciando nm-applet..."
+echo "Reiniciando nm-applet..."
 pkill nm-applet 2>/dev/null || true
 sleep 1
 
@@ -113,10 +113,10 @@ sleep 2
 
 # Verificar que está corriendo
 if pgrep -x nm-applet >/dev/null; then
-    echo "✅ nm-applet sincronizado con waybar exitosamente"
-    notify-send "🎨 Sincronizado" "nm-applet ahora usa colores de waybar" -t 2000 2>/dev/null || true
+    echo "nm-applet sincronizado con waybar exitosamente"
+    notify-send "Sincronizado" "nm-applet ahora usa colores de waybar" -t 2000 2>/dev/null || true
 else
-    echo "⚠️ nm-applet puede no haberse reiniciado correctamente"
+    echo "nm-applet puede no haberse reiniciado correctamente"
 fi
 
-echo "🎉 Sincronización completada"
+echo "Sincronización completada"

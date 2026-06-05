@@ -32,7 +32,6 @@ setup_language() {
             MSG_FLATPAK_CONFIRM="¿Instalar Flatpaks de tu lista flatpaks.txt?"
             MSG_WALL_CONFIRM="¿Descargar fondos de pantalla personalizados?"
             MSG_ZSH_CONFIRM="¿Establecer Zsh como shell por defecto?"
-            MSG_SERVICES_CONFIRM="¿Habilitar servicios principales (Red/BT/Login)?"
             MSG_DONE="Despliegue completado con exito."
             ;;
         *)
@@ -48,7 +47,6 @@ setup_language() {
             MSG_FLATPAK_CONFIRM="Install Flatpaks from your flatpaks.txt list?"
             MSG_WALL_CONFIRM="Download custom wallpaper assets?"
             MSG_ZSH_CONFIRM="Set Zsh as your default shell?"
-            MSG_SERVICES_CONFIRM="Enable core services (Net/BT/Login)?"
             MSG_DONE="System successfully reconfigured. Deployment complete."
             ;;
     esac
@@ -347,56 +345,54 @@ step_system() {
     # --- AUTOMATIC SERVICE ACTIVATION ---
     section "SERVICE CALIBRATION"
 
-    if gum confirm "$MSG_SERVICES_CONFIRM"; then
-        if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
-            info "Instalando tema SDDM Astronaut y configurando sincronización..."
-            sudo mkdir -p /usr/share/sddm/themes
-            sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
-            
-            # Configurar SDDM para usar el tema
-            sudo mkdir -p /etc/sddm.conf.d
-            echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+    if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
+        info "Instalando tema SDDM Astronaut y configurando sincronización..."
+        sudo mkdir -p /usr/share/sddm/themes
+        sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+        
+        # Configurar SDDM para usar el tema
+        sudo mkdir -p /etc/sddm.conf.d
+        echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
 
-            # --- INTEGRACIÓN SDDM-ROOT-HELPER (Sincronización Pywal) ---
-            # 1. Configurar permisos sudo para que el script de sincronización se ejecute sin contraseña
-            info "Configurando permisos NOPASSWD para sincronización de SDDM..."
-            sudo mkdir -p /etc/sudoers.d
-            echo "$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
-            sudo chmod 440 /etc/sudoers.d/sddm-sync
+        # --- INTEGRACIÓN SDDM-ROOT-HELPER (Sincronización Pywal) ---
+        # 1. Configurar permisos sudo para que el script de sincronización se ejecute sin contraseña
+        info "Configurando permisos NOPASSWD para sincronización de SDDM..."
+        sudo mkdir -p /etc/sudoers.d
+        echo "$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
+        sudo chmod 440 /etc/sudoers.d/sddm-sync
 
-            # 2. Asegurar que los scripts de sincronización tengan permisos de ejecución
-            chmod +x "$HOME/.local/bin/sddm-auto-sync-local" "$HOME/.local/bin/sddm-sync-wrapper" "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+        # 2. Asegurar que los scripts de sincronización tengan permisos de ejecución
+        chmod +x "$HOME/.local/bin/sddm-auto-sync-local" "$HOME/.local/bin/sddm-sync-wrapper" "$HOME/.local/bin/sync-sddm-wallpaper-sudo"
 
-            # 3. Crear hook de pywal para sincronización automática si no existe
-            info "Configurando hooks de Pywal para SDDM..."
-            mkdir -p "$HOME/.config/wal/hooks"
-            cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
+        # 3. Crear hook de pywal para sincronización automática si no existe
+        info "Configurando hooks de Pywal para SDDM..."
+        mkdir -p "$HOME/.config/wal/hooks"
+        cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
 #!/bin/bash
 # Hook para sincronizar SDDM cuando cambia el wallpaper
 if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
     "$HOME/.local/bin/sddm-sync-wrapper"
 fi
 EOF
-            chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
+        chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
 
-            # 4. Generar colores iniciales ANTES de iniciar SDDM para que el tema no se vea roto
-            SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
-            if [ -f "$SDDM_WALLPAPER" ]; then
-                info "Generando paleta de colores inicial desde el fondo de SDDM..."
-                wal -i "$SDDM_WALLPAPER" -n -q
-                
-                # Pre-configurar el cache para que Hyprland lo use al iniciar
-                mkdir -p "$HOME/.cache"
-                echo "$SDDM_WALLPAPER" > "$HOME/.cache/current-wallpaper"
+        # 4. Generar colores iniciales ANTES de iniciar SDDM para que el tema no se vea roto
+        SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
+        if [ -f "$SDDM_WALLPAPER" ]; then
+            info "Generando paleta de colores inicial desde el fondo de SDDM..."
+            wal -i "$SDDM_WALLPAPER" -n -q
+            
+            # Pre-configurar el cache para que Hyprland lo use al iniciar
+            mkdir -p "$HOME/.cache"
+            echo "$SDDM_WALLPAPER" > "$HOME/.cache/current-wallpaper"
 
-                # Ejecutar sincronización manual inicial
-                if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
-                    bash "$HOME/.local/bin/sddm-sync-wrapper" || info "Warning: Initial SDDM sync failed, will retry later."
-                fi
+            # Ejecutar sincronización manual inicial
+            if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
+                bash "$HOME/.local/bin/sddm-sync-wrapper" || info "Warning: Initial SDDM sync failed, will retry later."
             fi
         fi
-        success "Services operational and SDDM synchronization configured."
     fi
+    success "Services operational and SDDM synchronization configured."
 
     info "Habilitando servicios de sistema esenciales..."
     sudo systemctl enable NetworkManager bluetooth sddm
@@ -435,7 +431,7 @@ if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
         fi
     fi
     
-    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- (bash "$HOME/.local/bin/modern-pywal-sync" || true)
+    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- bash -c "$HOME/.local/bin/modern-pywal-sync || true"
 fi
 
 section "DEPLOYMENT COMPLETE"

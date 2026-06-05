@@ -24,4 +24,4 @@ gsettings set net.launchpad.plank.dock.settings items-alignment 'center'
 plank &
 
 # Mostrar notificación de éxito
-notify-send "🚀 Plank Dock" "Dock moderno iniciado con éxito" -t 2000
+notify-send "Plank Dock" "Dock moderno iniciado con éxito" -t 2000

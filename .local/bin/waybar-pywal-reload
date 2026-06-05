@@ -10,10 +10,10 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-log "🔄 Iniciando recarga de Waybar con colores pywal..."
+log "Iniciando recarga de Waybar con colores pywal..."
 
 # 1. Actualizar colores de waybar desde pywal actual
-log "📄 Actualizando colores..."
+log "Actualizando colores..."
 if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
     source "$HOME/.cache/wal/colors.sh"
     
@@ -40,18 +40,18 @@ if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
 @define-color color14 ${color14};
 @define-color color15 ${color15};
 EOF
-    log "✅ Colores actualizados exitosamente"
+    log "Colores actualizados exitosamente"
 else
-    log "❌ No se encontraron colores de pywal"
+    log "No se encontraron colores de pywal"
     exit 1
 fi
 
 # 2. Reiniciar waybar
-log "🔄 Reiniciando Waybar..."
+log "Reiniciando Waybar..."
 
 # Matar waybar actual con timeout
 if pgrep waybar > /dev/null; then
-    log "⏹️ Cerrando Waybar..."
+    log "Cerrando Waybar..."
     pkill waybar
     sleep 2
     
@@ -63,19 +63,19 @@ if pgrep waybar > /dev/null; then
 fi
 
 # 3. Iniciar waybar en background
-log "🚀 Iniciando Waybar..."
+log "Iniciando Waybar..."
 waybar &
 sleep 2
 
 # Verificar que esté funcionando
 if pgrep waybar > /dev/null; then
-    log "✅ Waybar iniciado correctamente"
-    notify-send "🎨 Waybar" "Colores actualizados" -t 2000 2>/dev/null || true
+    log "Waybar iniciado correctamente"
+    notify-send "Waybar" "Colores actualizados" -t 2000 2>/dev/null || true
 else
-    log "❌ Error: Waybar no se inició"
-    notify-send "❌ Error" "No se pudo reiniciar Waybar" -u critical -t 3000 2>/dev/null || true
+    log "Error: Waybar no se inició"
+    notify-send "Error" "No se pudo reiniciar Waybar" -u critical -t 3000 2>/dev/null || true
     exit 1
 fi
 
-log "🎉 Recarga completada"
+log "Recarga completada"
 exit 0

@@ -361,13 +361,13 @@ uptime="$(uptime -p | sed -e 's/up //g')"
 host=$(cat /etc/hostname 2>/dev/null || echo "$USER")
 
 # Options - Iconos mejorados con Nerd Font
-shutdown='⏻'  # Símbolo power
-reboot='󰜉'    # Símbolo restart
-lock='󰌾'     # Símbolo lock
-suspend='󰒲'   # Símbolo sleep
-logout='󰍃'    # Símbolo logout
-yes='✓'      # Checkmark simple
-no='✗'       # X mark simple
+shutdown=''  # Símbolo power
+reboot=''    # Símbolo restart
+lock=''     # Símbolo lock
+suspend=''   # Símbolo sleep
+logout=''    # Símbolo logout
+yes=''      # Checkmark simple
+no=''       # X mark simple
 
 # Rofi CMD con monitor específico
 rofi_cmd() {

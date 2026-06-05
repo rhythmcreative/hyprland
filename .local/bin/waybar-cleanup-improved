@@ -14,64 +14,64 @@ log() {
 
 # Función de notificación
 notify() {
-    notify-send "🧹 Waybar Cleanup" "$1" -t 2000 2>/dev/null || true
+    notify-send "Waybar Cleanup" "$1" -t 2000 2>/dev/null || true
 }
 
-log "🧹 === INICIANDO LIMPIEZA DE WAYBAR ==="
+log "=== INICIANDO LIMPIEZA DE WAYBAR ==="
 notify "Limpiando waybar..."
 
 # Contar instancias actuales
 waybar_count=$(pgrep -x waybar | wc -l)
-log "🔍 Instancias de waybar detectadas: $waybar_count"
+log "Instancias de waybar detectadas: $waybar_count"
 
 if [[ $waybar_count -eq 0 ]]; then
-    log "ℹ️ No hay instancias de waybar ejecutándose"
-    log "🚀 Iniciando waybar..."
+    log "No hay instancias de waybar ejecutándose"
+    log "Iniciando waybar..."
     waybar > /dev/null 2>&1 &
     sleep 2
-    log "✅ Waybar iniciado"
-    notify "✅ Waybar iniciado"
+    log "Waybar iniciado"
+    notify "Waybar iniciado"
     exit 0
 fi
 
 if [[ $waybar_count -eq 1 ]]; then
     # Verificar si waybar está funcionando correctamente
-    log "ℹ️ Solo hay una instancia de waybar - verificando estado..."
+    log "Solo hay una instancia de waybar - verificando estado..."
     
     # Intentar verificar si waybar responde correctamente
     sleep 1
     
     if pgrep -x waybar > /dev/null; then
-        log "✅ Waybar funcionando correctamente - no se necesita limpieza"
-        notify "✅ Waybar OK"
+        log "Waybar funcionando correctamente - no se necesita limpieza"
+        notify "Waybar OK"
         exit 0
     else
-        log "⚠️ Waybar no responde - reiniciando..."
+        log "Waybar no responde - reiniciando..."
         pkill waybar 2>/dev/null || true
         sleep 1
         waybar > /dev/null 2>&1 &
         sleep 2
-        log "✅ Waybar reiniciado"
-        notify "🔄 Waybar reiniciado"
+        log "Waybar reiniciado"
+        notify "Waybar reiniciado"
         exit 0
     fi
 fi
 
 # Si hay múltiples instancias, limpiar todas
-log "⚠️ Múltiples instancias detectadas ($waybar_count) - limpiando..."
-notify "🧹 Limpiando múltiples instancias..."
+log "Múltiples instancias detectadas ($waybar_count) - limpiando..."
+notify "Limpiando múltiples instancias..."
 
 # Obtener PIDs de waybar
 waybar_pids=($(pgrep -x waybar))
-log "📋 PIDs de waybar: ${waybar_pids[*]}"
+log "PIDs de waybar: ${waybar_pids[*]}"
 
 # Cerrar todas las instancias suavemente
-log "🛑 Cerrando instancias con SIGTERM..."
+log "Cerrando instancias con SIGTERM..."
 for pid in "${waybar_pids[@]}"; do
     if kill -TERM "$pid" 2>/dev/null; then
-        log "✅ Enviado SIGTERM a PID $pid"
+        log "Enviado SIGTERM a PID $pid"
     else
-        log "⚠️ No se pudo enviar SIGTERM a PID $pid"
+        log "No se pudo enviar SIGTERM a PID $pid"
     fi
 done
 
@@ -81,12 +81,12 @@ sleep 2
 # Verificar si aún hay instancias corriendo
 remaining_pids=($(pgrep -x waybar 2>/dev/null || true))
 if [[ ${#remaining_pids[@]} -gt 0 ]]; then
-    log "⚠️ Algunas instancias siguen corriendo - forzando cierre..."
+    log "Algunas instancias siguen corriendo - forzando cierre..."
     for pid in "${remaining_pids[@]}"; do
         if kill -KILL "$pid" 2>/dev/null; then
-            log "🔧 Enviado SIGKILL a PID $pid"
+            log "Enviado SIGKILL a PID $pid"
         else
-            log "⚠️ No se pudo enviar SIGKILL a PID $pid"
+            log "No se pudo enviar SIGKILL a PID $pid"
         fi
     done
     sleep 1
@@ -95,12 +95,12 @@ fi
 # Verificación final
 final_count=$(pgrep -x waybar | wc -l)
 if [[ $final_count -eq 0 ]]; then
-    log "✅ Todas las instancias de waybar cerradas exitosamente"
+    log "Todas las instancias de waybar cerradas exitosamente"
     
     # Esperar un momento antes de reiniciar
     sleep 1
     
-    log "🚀 Iniciando nueva instancia limpia de waybar..."
+    log "Iniciando nueva instancia limpia de waybar..."
     waybar > /dev/null 2>&1 &
     new_pid=$!
     
@@ -108,27 +108,27 @@ if [[ $final_count -eq 0 ]]; then
     sleep 3
     
     if pgrep -x waybar > /dev/null; then
-        log "✅ Waybar reiniciado exitosamente (PID: $new_pid)"
+        log "Waybar reiniciado exitosamente (PID: $new_pid)"
         
         # Verificar workspaces después de un momento
         sleep 2
         if hyprctl workspaces | grep -q "workspace ID"; then
-            log "✅ Módulo de workspaces funcionando correctamente"
-            notify "✅ Waybar limpiado y reiniciado"
+            log "Módulo de workspaces funcionando correctamente"
+            notify "Waybar limpiado y reiniciado"
         else
-            log "⚠️ Advertencia: No se pudo verificar el estado de workspaces"
-            notify "⚠️ Waybar reiniciado - verificar workspaces"
+            log "Advertencia: No se pudo verificar el estado de workspaces"
+            notify "Waybar reiniciado - verificar workspaces"
         fi
     else
-        log "❌ Error: No se pudo reiniciar waybar"
-        notify "❌ Error al reiniciar waybar"
+        log "Error: No se pudo reiniciar waybar"
+        notify "Error al reiniciar waybar"
         exit 1
     fi
 else
-    log "❌ Error: Aún hay $final_count instancias de waybar corriendo"
-    notify "❌ Error en limpieza"
+    log "Error: Aún hay $final_count instancias de waybar corriendo"
+    notify "Error en limpieza"
     exit 1
 fi
 
-log "🎉 === LIMPIEZA DE WAYBAR COMPLETADA ==="
+log "=== LIMPIEZA DE WAYBAR COMPLETADA ==="
 exit 0

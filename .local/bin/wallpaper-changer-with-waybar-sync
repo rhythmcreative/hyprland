@@ -27,7 +27,7 @@ hide_waybar() {
     local waybar_pids=$(pgrep -x waybar)
     if [[ -n "$waybar_pids" ]]; then
         # Usar SIGUSR1 para toggle (ocultar/mostrar)
-        kill -USR1 $waybar_pids 2>/dev/null && log "📱 Waybar ocultado temporalmente" || true
+        kill -USR1 $waybar_pids 2>/dev/null && log "Waybar ocultado temporalmente" || true
     fi
 }
 
@@ -36,18 +36,18 @@ show_waybar() {
     local waybar_pids=$(pgrep -x waybar)
     if [[ -n "$waybar_pids" ]]; then
         # Verificar si waybar está oculto y mostrarlo
-        kill -USR1 $waybar_pids 2>/dev/null && log "📱 Waybar mostrado nuevamente" || true
+        kill -USR1 $waybar_pids 2>/dev/null && log "Waybar mostrado nuevamente" || true
         # Dar un momento para que se procese la señal
         sleep 0.5
     else
-        log "🚀 Waybar no estaba corriendo, iniciándolo..."
+        log "Waybar no estaba corriendo, iniciándolo..."
         waybar > /dev/null 2>&1 &
         sleep 1
         # Verificar que se inició correctamente
         if pgrep -x waybar > /dev/null; then
-            log "✅ Waybar iniciado correctamente"
+            log "Waybar iniciado correctamente"
         else
-            log "❌ ERROR: No se pudo iniciar waybar en show_waybar"
+            log "ERROR: No se pudo iniciar waybar en show_waybar"
         fi
     fi
 }
@@ -74,7 +74,7 @@ trap cleanup EXIT INT TERM
 if [[ -f "$LOCK_FILE" ]]; then
     lock_pid=$(cat "$LOCK_FILE" 2>/dev/null)
     if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
-        log "⏳ Cambio de wallpaper+waybar ya en progreso (PID: $lock_pid)"
+        log "Cambio de wallpaper+waybar ya en progreso (PID: $lock_pid)"
         exit 0
     else
         rm -f "$LOCK_FILE"
@@ -90,13 +90,13 @@ log "=== Iniciando selector de wallpapers con sincronización waybar-pywal ==="
 apply_wallpaper_with_waybar_sync() {
     local wallpaper_file="$1"
     
-    log "🖼️ Aplicando wallpaper: $wallpaper_file"
+    log "Aplicando wallpaper: $wallpaper_file"
     
     # Aplicar wallpaper con awww
     if awww img "$wallpaper_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
-        log "✅ Wallpaper aplicado con awww"
+        log "Wallpaper aplicado con awww"
     else
-        log "❌ Error al aplicar wallpaper con awww"
+        log "Error al aplicar wallpaper con awww"
         return 1
     fi
     
@@ -105,53 +105,53 @@ apply_wallpaper_with_waybar_sync() {
     
     # Ejecutar sincronización centralizada
     if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
-        log "🎨 Iniciando sincronización centralizada..."
+        log "Iniciando sincronización centralizada..."
         "$HOME/.local/bin/pywal-wallpaper-sync" "$wallpaper_file"
-        log "✅ Sistema sincronizado"
+        log "Sistema sincronizado"
     else
         # Fallback básico
         wal -i "$wallpaper_file" -n -q
         hyprctl reload
     fi
     
-    notify-send "🎨 Sistema Sincronizado" "$(basename "$wallpaper_file")" -i "$wallpaper_file" -t 3000 2>/dev/null || true
+    notify-send "Sistema Sincronizado" "$(basename "$wallpaper_file")" -i "$wallpaper_file" -t 3000 2>/dev/null || true
 }
 
 # Verificar directorio de wallpapers
 if [[ ! -d "$WALLPAPER_DIR" ]]; then
     log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
-    notify-send "❌ Error" "Directorio de wallpapers no encontrado" -u critical
+    notify-send "Error" "Directorio de wallpapers no encontrado" -u critical
     exit 1
 fi
 
 # Verificar awww
 if ! command -v awww &>/dev/null; then
     log "ERROR: awww no está instalado"
-    notify-send "❌ Error" "awww no está instalado" -u critical
+    notify-send "Error" "awww no está instalado" -u critical
     exit 1
 fi
 
 # Verificar e iniciar awww-daemon si es necesario
 if ! pgrep -x "awww-daemon" > /dev/null; then
-    log "🚀 Iniciando awww-daemon..."
-    notify-send "🔄 Iniciando awww..." "Preparando sistema de wallpapers"
+    log "Iniciando awww-daemon..."
+    notify-send "Iniciando awww..." "Preparando sistema de wallpapers"
     awww-daemon --format xrgb --no-cache &
     sleep 3
 fi
 
 # Buscar imágenes
-log "🔍 Buscando imágenes en $WALLPAPER_DIR"
+log "Buscando imágenes en $WALLPAPER_DIR"
 cd "$WALLPAPER_DIR" || { log "ERROR: No se pudo acceder a $WALLPAPER_DIR"; exit 1; }
 
 mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.bmp" \) | sed 's|^./||' | sort)
 
 if [[ ${#images[@]} -eq 0 ]]; then
     log "ERROR: No se encontraron imágenes"
-    notify-send "❌ Error" "No se encontraron imágenes en el directorio" -u critical
+    notify-send "Error" "No se encontraron imágenes en el directorio" -u critical
     exit 1
 fi
 
-log "📁 Encontradas ${#images[@]} imágenes"
+log "Encontradas ${#images[@]} imágenes"
 
 # Crear archivo temporal para rofi
 > "$TEMP_FILE"
@@ -183,31 +183,31 @@ done
 # Verificar que tenemos entradas
 if [[ ! -s "$TEMP_FILE" ]]; then
     log "ERROR: No se pudieron procesar las imágenes"
-    notify-send "❌ Error" "No se pudieron procesar las imágenes" -u critical
+    notify-send "Error" "No se pudieron procesar las imágenes" -u critical
     exit 1
 fi
 
-log "🎭 Mostrando selector de wallpapers con sincronización waybar..."
+log "Mostrando selector de wallpapers con sincronización waybar..."
 
 # Ocultar Waybar antes de mostrar Rofi
 hide_waybar
-log "📱 Waybar ocultado para mostrar selector"
+log "Waybar ocultado para mostrar selector"
 
 # Ejecutar rofi con tema apropiado
 selected=$(rofi -dmenu -i \
-    -p "🖼️ Wallpaper + Waybar Sync" \
+    -p "Wallpaper + Waybar Sync" \
     -show-icons \
     -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
     < "$TEMP_FILE")
 
 # Si no se selecciónó nada, mostrar waybar y salir
 if [[ -z "$selected" ]]; then
-    log "ℹ️ No se selecciónó ningún wallpaper"
+    log "No se selecciónó ningún wallpaper"
     show_waybar
     exit 0
 fi
 
-log "✅ Seleccionado: $selected"
+log "Seleccionado: $selected"
 
 # Buscar el archivo correspondiente
 selected_file=""
@@ -221,7 +221,7 @@ done
 # Verificar archivo seleccionado
 if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
     log "ERROR: Archivo no encontrado: $selected"
-    notify-send "❌ Error" "Archivo no encontrado" -u critical
+    notify-send "Error" "Archivo no encontrado" -u critical
     exit 1
 fi
 
@@ -229,7 +229,7 @@ fi
 apply_wallpaper_with_waybar_sync "$selected_file"
 
 # NO hacer verificación final para evitar reinicios adicionales
-log "✅ Proceso completado - Waybar debería estar funcionando correctamente"
+log "Proceso completado - Waybar debería estar funcionando correctamente"
 
-log "🎉 Script completado exitosamente - Wallpaper y Waybar sincronizados"
+log "Script completado exitosamente - Wallpaper y Waybar sincronizados"
 exit 0

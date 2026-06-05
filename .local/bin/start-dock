@@ -24,4 +24,4 @@ GTK_THEME="PywalGTK" GTK2_RC_FILES="$HOME/.gtkrc-2.0" nwg-dock-hyprland \
     --nolauncher &
 
 # Opcional: mostrar mensaje de éxito
-notify-send "🚀 Dock + GTK" "nwg-dock-hyprland iniciado con tema sincronizado" -t 2000
+notify-send "Dock + GTK" "nwg-dock-hyprland iniciado con tema sincronizado" -t 2000

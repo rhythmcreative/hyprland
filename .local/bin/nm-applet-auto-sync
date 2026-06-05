@@ -18,7 +18,7 @@ get_pywal_colors() {
     local colors_file="$HOME/.cache/wal/colors.sh"
     
     if [[ ! -f "$colors_file" ]]; then
-        log "❌ Archivo de colores pywal no encontrado: $colors_file"
+        log "Archivo de colores pywal no encontrado: $colors_file"
         return 1
     fi
     
@@ -33,11 +33,11 @@ get_pywal_colors() {
     
     # Validar que los colores tienen formato válido
     if [[ ! "$WAYBAR_BG" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-        log "❌ Color de fondo inválido: $WAYBAR_BG"
+        log "Color de fondo inválido: $WAYBAR_BG"
         return 1
     fi
     
-    log "✅ Colores pywal extraídos:"
+    log "Colores pywal extraídos:"
     log "  BG: $WAYBAR_BG, FG: $WAYBAR_FG, ACCENT: $WAYBAR_ACCENT"
     
     return 0
@@ -53,7 +53,7 @@ create_nm_applet_css() {
     # CSS para GTK3
     local css_file="$gtk3_dir/nm-applet-pywal.css"
     
-    log "🎨 Creando CSS nm-applet con colores pywal..."
+    log "Creando CSS nm-applet con colores pywal..."
     
     cat > "$css_file" << EOF
 /* nm-applet auto-sync CSS - Generado $(date) */
@@ -168,7 +168,7 @@ EOF
     # Copiar a GTK4
     cp "$css_file" "$gtk4_dir/nm-applet-pywal.css"
     
-    log "✅ CSS nm-applet creado: $css_file"
+    log "CSS nm-applet creado: $css_file"
 }
 
 # Actualizar archivos GTK principales
@@ -179,19 +179,19 @@ update_gtk_imports() {
     # GTK3
     if [[ ! -f "$gtk3_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk3_css"; then
         echo '@import "nm-applet-pywal.css";' >> "$gtk3_css"
-        log "✅ Importado nm-applet CSS en GTK3"
+        log "Importado nm-applet CSS en GTK3"
     fi
     
     # GTK4  
     if [[ ! -f "$gtk4_css" ]] || ! grep -q "nm-applet-pywal.css" "$gtk4_css"; then
         echo '@import "nm-applet-pywal.css";' >> "$gtk4_css"
-        log "✅ Importado nm-applet CSS en GTK4"
+        log "Importado nm-applet CSS en GTK4"
     fi
 }
 
 # Aplicar configuraciones GTK
 apply_gtk_settings() {
-    log "🔧 Aplicando configuraciones GTK..."
+    log "Aplicando configuraciones GTK..."
     
     # Variables de entorno
     export GTK_THEME="PywalGTK-Auto"
@@ -202,7 +202,7 @@ apply_gtk_settings() {
     if command -v gsettings &> /dev/null; then
         gsettings set org.gnome.desktop.interface gtk-theme "PywalGTK-Auto" 2>/dev/null || true
         gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
-        log "✅ gsettings aplicado"
+        log "gsettings aplicado"
     fi
     
     # Señales D-Bus para recargar temas
@@ -210,21 +210,21 @@ apply_gtk_settings() {
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
             string:"gtk-theme-name" string:"PywalGTK-Auto" 2>/dev/null || true
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
-        log "✅ Señales D-Bus enviadas"
+        log "Señales D-Bus enviadas"
     fi
 }
 
 # Actualizar nm-applet con nuevos colores SIN REINICIAR
 update_nm_applet_css() {
-    log "🎨 Actualizando CSS de nm-applet sin reiniciar proceso..."
+    log "Actualizando CSS de nm-applet sin reiniciar proceso..."
     
     # Verificar si nm-applet está corriendo
     local nm_running=false
     if pgrep -x nm-applet > /dev/null; then
         nm_running=true
-        log "✅ nm-applet está corriendo, aplicando CSS..."
+        log "nm-applet está corriendo, aplicando CSS..."
     else
-        log "ℹ️ nm-applet no está corriendo, solo se inicializará si es necesario"
+        log "nm-applet no está corriendo, solo se inicializará si es necesario"
     fi
     
     # Aplicar variables de entorno
@@ -237,26 +237,26 @@ update_nm_applet_css() {
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.SettingChanged \
             string:"gtk-theme-name" string:"Arc-Dark" 2>/dev/null || true
         dbus-send --type=signal /org/gtk/Settings org.gtk.Settings.StyleUpdated 2>/dev/null || true
-        log "✅ Señales D-Bus enviadas para recargar CSS"
+        log "Señales D-Bus enviadas para recargar CSS"
     fi
     
     # Solo iniciar nm-applet si NO está corriendo
     if ! $nm_running; then
-        log "🔄 Iniciando nm-applet con nuevos colores..."
+        log "Iniciando nm-applet con nuevos colores..."
         nohup nm-applet > /dev/null 2>&1 &
         sleep 2
         
         if pgrep -x nm-applet > /dev/null; then
-            log "✅ nm-applet iniciado exitosamente"
+            log "nm-applet iniciado exitosamente"
         else
-            log "❌ Error: no se pudo iniciar nm-applet"
+            log "Error: no se pudo iniciar nm-applet"
             return 1
         fi
     fi
     
     # Notificación de éxito
     if command -v notify-send > /dev/null; then
-        notify-send "🎨 nm-applet CSS Actualizado" \
+        notify-send "nm-applet CSS Actualizado" \
             "Colores sincronizados sin reiniciar" \
             -t 3000 -i network-wireless 2>/dev/null || true
     fi
@@ -270,7 +270,7 @@ main() {
     
     # Obtener colores de pywal
     if ! get_pywal_colors; then
-        log "❌ Error obteniendo colores pywal"
+        log "Error obteniendo colores pywal"
         exit 1
     fi
     
@@ -285,17 +285,17 @@ main() {
     
     # Actualizar nm-applet CSS sin reiniciar
     if update_nm_applet_css; then
-        log "🎉 nm-applet auto-sync completado exitosamente"
+        log "nm-applet auto-sync completado exitosamente"
         exit 0
     else
-        log "❌ Error en nm-applet auto-sync"
+        log "Error en nm-applet auto-sync"
         exit 1
     fi
 }
 
 # Permitir ejecución con wallpaper específico
 if [[ "${1:-}" == "--force" ]]; then
-    log "🚀 Forzando nm-applet auto-sync..."
+    log "Forzando nm-applet auto-sync..."
 fi
 
 # Ejecutar función principal

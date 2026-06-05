@@ -6,12 +6,12 @@
 
 # 1. Cargar colores de Pywal
 if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
-    echo "❌ Error: Pywal no ha generado colores aún."
+    echo "Error: Pywal no ha generado colores aún."
     exit 1
 fi
 source "$HOME/.cache/wal/colors.sh"
 
-echo "🎨 Iniciando Sincronización Maestra..."
+echo "Iniciando Sincronización Maestra..."
 
 # 2. Sincronizar GTK 3 y 4 (Método Directo)
 # Copiamos directamente a .config para que sea la prioridad #1 del sistema
@@ -117,7 +117,7 @@ hyprctl reload >/dev/null 2>&1 || true
 
 # 11. Notificación final
 if command -v notify-send &>/dev/null; then
-    notify-send "🎨 Sistema Sincronizado" "Todos los colores han sido actualizados." -t 2000
+    notify-send "Sistema Sincronizado" "Todos los colores han sido actualizados." -t 2000
 fi
 
-echo "✅ ¡Hecho! El sistema ahora debería reflejar los nuevos colores."
+echo "¡Hecho! El sistema ahora debería reflejar los nuevos colores."

@@ -17,7 +17,7 @@ log() {
 backup_current_config() {
     if [[ -f "$MONITORS_CONF" ]]; then
         cp "$MONITORS_CONF" "$BACKUP_CONF"
-        log "✅ Backup creado: $BACKUP_CONF"
+        log "Backup creado: $BACKUP_CONF"
     fi
 }
 
@@ -25,7 +25,7 @@ backup_current_config() {
 generate_safe_config() {
     local temp_conf=$(mktemp)
     
-    log "🔍 Detectando monitores conectados..."
+    log "Detectando monitores conectados..."
     
     # Obtener información de monitores conectados
     local connected_monitors=()
@@ -36,7 +36,7 @@ generate_safe_config() {
         fi
     done < <(hyprctl monitors)
     
-    log "📺 Monitores conectados: ${connected_monitors[*]}"
+    log "Monitores conectados: ${connected_monitors[*]}"
     
     # Escribir header
     cat > "$temp_conf" << EOF
@@ -48,7 +48,7 @@ EOF
     # Generar configuración para cada monitor conectado
     local monitor_index=0
     for monitor in "${connected_monitors[@]}"; do
-        log "⚙️ Configurando monitor: $monitor"
+        log "Configurando monitor: $monitor"
         
         # Obtener información detallada del monitor
         local monitor_info=$(hyprctl monitors | awk "/^Monitor $monitor/,/^$/" | head -20)
@@ -60,10 +60,10 @@ EOF
             # Usar la información actual del monitor
             local position_x=$((monitor_index * 1920))  # Posicionamiento simple lado a lado
             echo "monitor=$monitor,$resolution_line,${position_x}x0,1.0" >> "$temp_conf"
-            log "✅ $monitor configurado: $resolution_line en ${position_x}x0"
+            log "$monitor configurado: $resolution_line en ${position_x}x0"
         else
             # Configuración de fallback
-            log "⚠️ No se pudo detectar resolución para $monitor, usando auto"
+            log "No se pudo detectar resolución para $monitor, usando auto"
             echo "monitor=$monitor,preferred,auto,1.0" >> "$temp_conf"
         fi
         
@@ -74,15 +74,15 @@ EOF
     if [[ -s "$temp_conf" ]]; then
         # Mover la configuración temporal al lugar final
         mv "$temp_conf" "$MONITORS_CONF"
-        log "✅ Nueva configuración de monitores generada exitosamente"
+        log "Nueva configuración de monitores generada exitosamente"
         
         # Mostrar contenido generado
-        log "📄 Contenido de la nueva configuración:"
+        log "Contenido de la nueva configuración:"
         cat "$MONITORS_CONF" >&2
         
         return 0
     else
-        log "❌ Error: No se pudo generar configuración de monitores"
+        log "Error: No se pudo generar configuración de monitores"
         rm -f "$temp_conf"
         return 1
     fi
@@ -93,10 +93,10 @@ restore_config() {
     local backup_file="$1"
     if [[ -f "$backup_file" ]]; then
         cp "$backup_file" "$MONITORS_CONF"
-        log "🔄 Configuración restaurada desde: $backup_file"
+        log "Configuración restaurada desde: $backup_file"
         return 0
     else
-        log "❌ Backup no encontrado: $backup_file"
+        log "Backup no encontrado: $backup_file"
         return 1
     fi
 }
@@ -105,13 +105,13 @@ restore_config() {
 main() {
     case "${1:-generate}" in
         "generate")
-            log "🚀 Generando configuración segura de monitores..."
+            log "Generando configuración segura de monitores..."
             backup_current_config
             if generate_safe_config; then
-                log "🎉 Configuración de monitores actualizada exitosamente"
+                log "Configuración de monitores actualizada exitosamente"
                 exit 0
             else
-                log "❌ Error al generar configuración"
+                log "Error al generar configuración"
                 exit 1
             fi
             ;;
@@ -124,13 +124,13 @@ main() {
                 if [[ -n "$latest_backup" ]]; then
                     restore_config "$latest_backup"
                 else
-                    log "❌ No se encontraron backups"
+                    log "No se encontraron backups"
                     exit 1
                 fi
             fi
             ;;
         "list-backups")
-            log "📋 Backups disponibles:"
+            log "Backups disponibles:"
             ls -la "$HOME/.config/hypr/monitors.conf.backup-"* 2>/dev/null || log "No hay backups disponibles"
             ;;
         *)

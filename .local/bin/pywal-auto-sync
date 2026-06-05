@@ -27,7 +27,7 @@ check_lock() {
         local lock_pid
         lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
         if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
-            log "⚠️ Sincronización ya en progreso (PID: $lock_pid)"
+            log "Sincronización ya en progreso (PID: $lock_pid)"
             exit 0
         else
             rm -f "$LOCK_FILE"
@@ -43,7 +43,7 @@ validate_pywal() {
     local colors_json="$HOME/.cache/wal/colors.json"
     
     if [[ ! -f "$colors_file" ]] || [[ ! -f "$colors_json" ]]; then
-        log "❌ Archivos de pywal no encontrados. Ejecuta 'wal -i /ruta/a/imagen' primero."
+        log "Archivos de pywal no encontrados. Ejecuta 'wal -i /ruta/a/imagen' primero."
         return 1
     fi
     
@@ -51,7 +51,7 @@ validate_pywal() {
     local file_age
     file_age=$(( $(date +%s) - $(stat -c %Y "$colors_json" 2>/dev/null || echo 0) ))
     if (( file_age > 86400 )); then  # 24 horas
-        log "⚠️ Archivos de pywal parecen obsoletos (${file_age}s de antigüedad)"
+        log "Archivos de pywal parecen obsoletos (${file_age}s de antigüedad)"
     fi
     
     return 0
@@ -75,7 +75,7 @@ load_pywal_colors() {
         source "$colors_file"
     fi
     
-    log "✅ Colores de pywal cargados:"
+    log "Colores de pywal cargados:"
     log "   Background: $background"
     log "   Foreground: $foreground"
     log "   Accent colors: $color1, $color2, $color3, $color4"
@@ -84,7 +84,7 @@ load_pywal_colors() {
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━ SINCRONIZACIÓN P10K ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 sync_powerlevel10k() {
-    log "🎨 Sincronizando Powerlevel10k..."
+    log "Sincronizando Powerlevel10k..."
     
     # Función para convertir color hex a número de terminal
     hex_to_color_num() {
@@ -190,14 +190,14 @@ apply_p10k_colors() {
 apply_p10k_colors 2>/dev/null || true
 EOF
     
-    log "✅ Archivo de colores P10k creado: $p10k_colors_file"
+    log "Archivo de colores P10k creado: $p10k_colors_file"
     return 0
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━ SINCRONIZACIÓN KITTY ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 sync_kitty() {
-    log "🐱 Sincronizando Kitty..."
+    log "Sincronizando Kitty..."
     
     # Generar colores para kitty (pywal ya lo hace automáticamente)
     if command -v wal >/dev/null 2>&1; then
@@ -234,9 +234,9 @@ EOF
             fi
         fi
         
-        log "✅ Colores de Kitty sincronizados"
+        log "Colores de Kitty sincronizados"
     else
-        log "⚠️ Archivo de colores de Kitty no encontrado"
+        log "Archivo de colores de Kitty no encontrado"
         return 1
     fi
     
@@ -246,7 +246,7 @@ EOF
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━ NOTIFICACIÓN DE TERMINALES ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 notify_terminals() {
-    log "📡 Notificando a terminales activos..."
+    log "Notificando a terminales activos..."
     
     # Buscar sesiones de zsh activas y enviarles señal para recargar
     local zsh_pids
@@ -255,13 +255,13 @@ notify_terminals() {
     for pid in "${zsh_pids[@]}"; do
         if [[ -n "$pid" ]] && [[ -e "/proc/$pid" ]]; then
             kill -USR1 "$pid" 2>/dev/null || true
-            log "📤 Señal enviada a zsh PID: $pid"
+            log "Señal enviada a zsh PID: $pid"
         fi
     done
     
     # Notificación al usuario
     if command -v notify-send >/dev/null 2>&1; then
-        notify-send "🎨 Pywal Sync" \
+        notify-send "Pywal Sync" \
             "Powerlevel10k y Kitty sincronizados automáticamente.\nReinicia terminales para ver todos los cambios." \
             -t 4000 -u low 2>/dev/null || true
     fi
@@ -270,12 +270,12 @@ notify_terminals() {
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━ FUNCIÓN PRINCIPAL ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 main() {
-    log "🚀 === Iniciando sincronización automática con pywal ==="
+    log "=== Iniciando sincronización automática con pywal ==="
     
     check_lock
     
     if ! validate_pywal; then
-        log "❌ Validación de pywal fallida"
+        log "Validación de pywal fallida"
         exit 1
     fi
     
@@ -285,24 +285,24 @@ main() {
     
     # Sincronizar Powerlevel10k
     if ! sync_powerlevel10k; then
-        log "❌ Error sincronizando Powerlevel10k"
+        log "Error sincronizando Powerlevel10k"
         sync_success=false
     fi
     
     # Sincronizar Kitty
     if ! sync_kitty; then
-        log "❌ Error sincronizando Kitty"
+        log "Error sincronizando Kitty"
         sync_success=false
     fi
     
     if [[ "$sync_success" == "true" ]]; then
         notify_terminals
-        log "🎉 === Sincronización completada exitosamente ==="
-        echo "🎉 ¡Sincronización completa! Powerlevel10k y Kitty actualizados con colores de pywal."
-        echo "💡 Para aplicar cambios inmediatamente: ejecuta 'source ~/.zshrc' en cada terminal"
+        log "=== Sincronización completada exitosamente ==="
+        echo "¡Sincronización completa! Powerlevel10k y Kitty actualizados con colores de pywal."
+        echo "Para aplicar cambios inmediatamente: ejecuta 'source ~/.zshrc' en cada terminal"
     else
-        log "⚠️ === Sincronización completada con errores ==="
-        echo "⚠️ Sincronización completada con algunos errores. Revisa el log: $LOG_FILE"
+        log "=== Sincronización completada con errores ==="
+        echo "Sincronización completada con algunos errores. Revisa el log: $LOG_FILE"
     fi
 }
 

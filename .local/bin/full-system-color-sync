@@ -3,16 +3,16 @@
 # Script de sincronización completa del sistema
 # Sincroniza waybar, nm-applet y otros componentes
 
-echo "🌈 Iniciando sincronización completa del sistema de colores..."
+echo "Iniciando sincronización completa del sistema de colores..."
 
 # First, update waybar colors if pywal colors have changed
-echo "🎨 Actualizando colores de waybar..."
+echo "Actualizando colores de waybar..."
 if [[ -f "$HOME/.local/bin/sync-waybar-pywal" ]]; then
     "$HOME/.local/bin/sync-waybar-pywal"
 else
     # Solo si sync-waybar-pywal no existe, hacer un reinicio simple
     if pgrep -x waybar > /dev/null; then
-        echo "🔄 Recargando waybar (fallback)..."
+        echo "Recargando waybar (fallback)..."
         pkill -USR2 waybar 2>/dev/null || {
             pkill waybar
             sleep 1
@@ -22,32 +22,32 @@ else
 fi
 
 # Reload dunst with new pywal colors
-echo "🔔 Recargando dunst con nuevos colores..."
+echo "Recargando dunst con nuevos colores..."
 if [[ -f "$HOME/.config/dunst/scripts/reload-dunst.sh" ]]; then
     "$HOME/.config/dunst/scripts/reload-dunst.sh" &
     dunst_pid=$!
     # Esperar máximo 8 segundos para dunst
     if timeout 8 wait $dunst_pid 2>/dev/null; then
-        echo "✅ Dunst sincronizado exitosamente"
+        echo "Dunst sincronizado exitosamente"
     else
-        echo "⚠️ Dunst sync continuando en segundo plano..."
+        echo "Dunst sync continuando en segundo plano..."
         disown $dunst_pid 2>/dev/null || true
     fi
 elif [[ -f "$HOME/.config/wal/done.d/dunst-restart.sh" ]]; then
     "$HOME/.config/wal/done.d/dunst-restart.sh" &
     disown
-    echo "✅ Dunst recarga iniciada con script de pywal"
+    echo "Dunst recarga iniciada con script de pywal"
 else
     # Fallback manual: reiniciar dunst directamente
-    echo "🔔 Recargando dunst manualmente..."
+    echo "Recargando dunst manualmente..."
     pkill dunst 2>/dev/null || true
     sleep 1
     dunst >/dev/null 2>&1 &
-    echo "✅ Dunst recargado manualmente"
+    echo "Dunst recargado manualmente"
 fi
 
 # Sync nm-applet with waybar (en segundo plano)
-echo "📶 Sincronizando nm-applet con waybar..."
+echo "Sincronizando nm-applet con waybar..."
 if [[ -f "$HOME/.local/bin/nm-applet-waybar-sync" ]]; then
     "$HOME/.local/bin/nm-applet-waybar-sync" &
     disown
@@ -55,7 +55,7 @@ fi
 
 # Send notification
 if command -v notify-send > /dev/null; then
-    notify-send "🌈 Sincronización Completa" "Waybar + Dunst + nm-applet sincronizados con pywal" -t 3000 -i preferences-desktop-theme
+    notify-send "Sincronización Completa" "Waybar + Dunst + nm-applet sincronizados con pywal" -t 3000 -i preferences-desktop-theme
 fi
 
-echo "🎉 Sincronización completa del sistema finalizada!"
+echo "Sincronización completa del sistema finalizada!"

@@ -103,7 +103,7 @@ or use `install.sh` and from there you can download the packages you want
 | File Manager | Thunar |
 | Theming | Pywal (Sync's with the wallpaper) |
 | Wallpaper | awww |
-| Clipboard | Swappy |
+| Screenshot | Swappy |
 | AUR Helper | yay |
 | Login Manager | SDDM |
 

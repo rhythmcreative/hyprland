@@ -391,7 +391,7 @@ EOF
 
                 # Ejecutar sincronización manual inicial
                 if [ -f "$HOME/.local/bin/sddm-sync-wrapper" ]; then
-                    bash "$HOME/.local/bin/sddm-sync-wrapper"
+                    bash "$HOME/.local/bin/sddm-sync-wrapper" || info "Warning: Initial SDDM sync failed, will retry later."
                 fi
             fi
         fi
@@ -399,7 +399,8 @@ EOF
     fi
 
     info "Habilitando servicios de sistema esenciales..."
-    sudo systemctl enable --now NetworkManager bluetooth sddm
+    sudo systemctl enable NetworkManager bluetooth sddm
+    sudo systemctl start NetworkManager bluetooth
     
     info "Iniciando arquitectura de audio (Pipewire)..."
     systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
@@ -427,18 +428,19 @@ if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
         
         if [ -f "$SDDM_WALLPAPER" ]; then
             info "Generating initial color palette from Astronaut wallpaper..."
-            wal -i "$SDDM_WALLPAPER" -n -q
+            wal -i "$SDDM_WALLPAPER" -n -q || true
         elif [ -f "$DEFAULT_WALLPAPER" ]; then
             info "Generating initial color palette from default wallpaper..."
-            wal -i "$DEFAULT_WALLPAPER" -n -q
+            wal -i "$DEFAULT_WALLPAPER" -n -q || true
         fi
     fi
     
-    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- bash "$HOME/.local/bin/modern-pywal-sync"
+    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- (bash "$HOME/.local/bin/modern-pywal-sync" || true)
 fi
 
 section "DEPLOYMENT COMPLETE"
 echo "$MSG_DONE"
 
 # Start graphical environment automatically
+info "Starting SDDM..."
 sudo systemctl start sddm

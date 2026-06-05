@@ -34,19 +34,18 @@ fi
 # 1. Obtener el wallpaper actual
 if [ -f "$CURRENT_WP_CACHE" ]; then
     CURRENT_WP=$(cat "$CURRENT_WP_CACHE")
+elif [ -f "$REAL_HOME/.cache/wal/wal" ]; then
+    CURRENT_WP=$(cat "$REAL_HOME/.cache/wal/wal")
 else
-    # Fallback al archivo generado por pywal si el cache de wallpaper no existe
-    if [ -f "$REAL_HOME/.cache/wal/wal" ]; then
-        CURRENT_WP=$(cat "$REAL_HOME/.cache/wal/wal")
-    else
-        echo "❌ No se encontró el cache del wallpaper actual."
-        exit 1
-    fi
+    # Fallback definitivo: Usar el fondo por defecto del tema
+    CURRENT_WP="$SDDM_THEME_DIR/Backgrounds/current_wallpaper.jpg"
+    echo "⚠️ No se encontró cache de wallpaper. Usando fondo por defecto: $CURRENT_WP"
 fi
 
+# Si el wallpaper detectado no existe, usar el del tema como último recurso
 if [ ! -f "$CURRENT_WP" ]; then
-    echo "❌ El archivo de wallpaper no existe: $CURRENT_WP"
-    exit 1
+    CURRENT_WP="$SDDM_THEME_DIR/Backgrounds/current_wallpaper.jpg"
+    echo "⚠️ El archivo de wallpaper no existe. Usando fondo del tema."
 fi
 
 echo "📸 Sincronizando wallpaper: $(basename "$CURRENT_WP")"
@@ -62,7 +61,7 @@ fi
 chmod 644 "$TARGET_WP"
 
 # 3. Sincronizar colores de Pywal
-PYWAL_SH="$HOME/.cache/wal/colors.sh"
+PYWAL_SH="$REAL_HOME/.cache/wal/colors.sh"
 if [ -f "$PYWAL_SH" ]; then
     # Leer colores sin importar el entorno
     background=$(grep '^background=' "$PYWAL_SH" | cut -d"'" -f2)
@@ -73,7 +72,7 @@ if [ -f "$PYWAL_SH" ]; then
 
     echo "🎨 Aplicando colores de Pywal a SDDM..."
     
-    sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
+    sed -i "s|^Background=.*|Background=\"../Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
     sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$THEME_CONFIG"
     sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$THEME_CONFIG"
     sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$THEME_CONFIG"
@@ -83,4 +82,6 @@ if [ -f "$PYWAL_SH" ]; then
     echo "✅ SDDM actualizado correctamente."
 else
     echo "⚠️ No se encontraron colores de Pywal, solo se actualizó el wallpaper."
+    # Asegurar que la ruta del background sea correcta incluso sin pywal
+    sed -i "s|^Background=.*|Background=\"../Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
 fi

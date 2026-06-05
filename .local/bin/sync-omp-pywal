@@ -19,15 +19,15 @@ log() {
 # Función de notificación
 notify() {
     if command -v notify-send &> /dev/null; then
-        notify-send "🎨 Oh My Posh" "$1" -t 3000 -i terminal 2>/dev/null || true
+        notify-send "Oh My Posh" "$1" -t 3000 -i terminal 2>/dev/null || true
     fi
 }
 
 # Verificar dependencias
 check_dependencies() {
     if ! command -v oh-my-posh &> /dev/null; then
-        log "❌ Error: oh-my-posh no está instalado"
-        notify "❌ oh-my-posh no encontrado"
+        log "Error: oh-my-posh no está instalado"
+        notify "oh-my-posh no encontrado"
         return 1
     fi
     return 0
@@ -35,29 +35,29 @@ check_dependencies() {
 
 # Verificar que los archivos existan
 if [[ ! -f "$COLORS_FILE" ]] && [[ ! -f "$COLORS_SH" ]]; then
-    log "❌ Error: No se encontraron archivos de colores de pywal"
-    log "💡 Ejecuta 'wal -i /ruta/a/imagen' primero."
-    notify "❌ Archivos de pywal no encontrados"
+    log "Error: No se encontraron archivos de colores de pywal"
+    log "Ejecuta 'wal -i /ruta/a/imagen' primero."
+    notify "Archivos de pywal no encontrados"
     exit 1
 fi
 
 # Crear directorio y archivo de tema si no existe
 mkdir -p "$(dirname "$THEME_FILE")"
 if [[ ! -f "$THEME_FILE" ]]; then
-    log "⚠️ Archivo de tema no encontrado, creando uno base..."
+    log "Archivo de tema no encontrado, creando uno base..."
     cp "$HOME/.config/oh-my-posh/custom.omp.json" "$THEME_FILE" 2>/dev/null || {
-        log "❌ No se pudo crear archivo base, saliendo"
+        log "No se pudo crear archivo base, saliendo"
         exit 1
     }
 fi
 
 # Extraer colores de pywal con método robusto
 extract_colors() {
-    log "🎨 Leyendo colores de pywal..."
+    log "Leyendo colores de pywal..."
     
     # Intentar con jq primero si está disponible
     if command -v jq &> /dev/null && [[ -f "$COLORS_FILE" ]]; then
-        log "✅ Usando jq para extraer colores desde JSON"
+        log "Usando jq para extraer colores desde JSON"
         BACKGROUND=$(jq -r '.special.background' "$COLORS_FILE")
         FOREGROUND=$(jq -r '.special.foreground' "$COLORS_FILE")
         COLOR0=$(jq -r '.colors.color0' "$COLORS_FILE")
@@ -77,7 +77,7 @@ extract_colors() {
         COLOR14=$(jq -r '.colors.color14' "$COLORS_FILE")
         COLOR15=$(jq -r '.colors.color15' "$COLORS_FILE")
     elif [[ -f "$COLORS_SH" ]]; then
-        log "✅ Usando colors.sh como método alternativo"
+        log "Usando colors.sh como método alternativo"
         source "$COLORS_SH"
         BACKGROUND="$background"
         FOREGROUND="$foreground"
@@ -98,18 +98,18 @@ extract_colors() {
         COLOR14="$color14"
         COLOR15="$color15"
     else
-        log "❌ No se pudo extraer colores de pywal"
-        notify "❌ Error extrayendo colores"
+        log "No se pudo extraer colores de pywal"
+        notify "Error extrayendo colores"
         exit 1
     fi
     
     # Validar que los colores tienen formato válido
     if [[ ! "$BACKGROUND" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-        log "❌ Color de fondo inválido: $BACKGROUND"
+        log "Color de fondo inválido: $BACKGROUND"
         exit 1
     fi
     
-    log "✅ Colores extraídos: BG=$BACKGROUND, FG=$FOREGROUND"
+    log "Colores extraídos: BG=$BACKGROUND, FG=$FOREGROUND"
 }
 
 extract_colors
@@ -118,7 +118,7 @@ extract_colors
 cp "$THEME_FILE" "$THEME_FILE.backup.$(date +%Y%m%d_%H%M%S)"
 
 # Actualizar el tema con los nuevos colores usando jq
-echo "🔄 Actualizando tema Oh My Posh..."
+echo "Actualizando tema Oh My Posh..."
 jq --arg bg "$BACKGROUND" \
    --arg fg "$FOREGROUND" \
    --arg c1 "$COLOR1" \
@@ -158,34 +158,34 @@ jq --arg bg "$BACKGROUND" \
 # Verificar resultado y finalizar
 finalize_sync() {
     if [[ $? -eq 0 ]]; then
-        log "✅ Tema Oh My Posh actualizado exitosamente"
-        log "🎯 Colores aplicados:"
+        log "Tema Oh My Posh actualizado exitosamente"
+        log "Colores aplicados:"
         log "   Background: $BACKGROUND"
         log "   Foreground: $FOREGROUND"
         log "   Acento 1: $COLOR1 | Acento 2: $COLOR4"
         
-        notify "✅ Tema actualizado con colores de pywal"
+        notify "Tema actualizado con colores de pywal"
         
         # Opcional: crear variable de entorno para el tema actual
         export POSH_THEME="$THEME_FILE"
         echo "export POSH_THEME='$THEME_FILE'" > "$HOME/.cache/omp-current-theme"
         
-        log "📝 Para aplicar cambios inmediatamente, ejecuta:"
+        log "Para aplicar cambios inmediatamente, ejecuta:"
         log "   source ~/.zshrc"    # Para zsh
         log "   source ~/.bashrc"   # Para bash
         log "   O reinicia tu terminal"
         
         # Intentar recargar el prompt si es posible
         if [[ -n "${ZSH_VERSION:-}" ]] && command -v oh-my-posh &> /dev/null; then
-            log "🔄 Intentando recargar prompt de zsh..."
+            log "Intentando recargar prompt de zsh..."
             # Nota: esto requiere que el usuario configure oh-my-posh en su shell
         fi
         
-        log "🎉 Oh My Posh sincronizado exitosamente con pywal"
+        log "Oh My Posh sincronizado exitosamente con pywal"
         exit 0
     else
-        log "❌ Error al actualizar el tema Oh My Posh"
-        notify "❌ Error en sincronización"
+        log "Error al actualizar el tema Oh My Posh"
+        notify "Error en sincronización"
         exit 1
     fi
 }

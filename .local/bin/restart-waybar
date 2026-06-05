@@ -31,8 +31,8 @@ waybar &
 sleep 2
 
 if pgrep waybar > /dev/null; then
-    echo "✅ Waybar reiniciado exitosamente"
+    echo "Waybar reiniciado exitosamente"
 else
-    echo "❌ Error al reiniciar Waybar"
+    echo "Error al reiniciar Waybar"
     exit 1
 fi

@@ -22,11 +22,11 @@ bt_status=$(bluetoothctl show | grep -i "powered" | awk '{print $2}')
 if [ "$bt_status" = "yes" ]; then
     # Bluetooth está encendido, apagarlo
     bluetoothctl power off
-    notify "Bluetooth desactivado 📴"
+    notify "Bluetooth desactivado"
     echo "Bluetooth desactivado"
 else
     # Bluetooth está apagado, encenderlo
     bluetoothctl power on
-    notify "Bluetooth activado 📶"
+    notify "Bluetooth activado"
     echo "Bluetooth activado"
 fi

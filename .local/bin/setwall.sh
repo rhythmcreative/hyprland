@@ -11,7 +11,7 @@ fi
 
 SELECTED=$(basename "$WALLPAPER_PATH")
 
-notify-send "🎨 Aplicando Wallpaper" "$SELECTED"
+notify-send "Aplicando Wallpaper" "$SELECTED"
 
 # Aplicar con awww
 if command -v awww &> /dev/null; then
@@ -32,4 +32,4 @@ if command -v wal &> /dev/null; then
 fi
 
 echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
-notify-send "✅ Wallpaper actualizado" "$SELECTED"
+notify-send "Wallpaper actualizado" "$SELECTED"

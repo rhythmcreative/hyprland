@@ -262,6 +262,6 @@ textbox {
 }
 EOF
 
-echo "✅ Colores de rofi sincronizados con pywal"
-echo "📄 Archivo de colores actualizado: $ROFI_COLORS_FILE"
-echo "🎨 Tema principal actualizado: $ROFI_THEME_FILE"
+echo "Colores de rofi sincronizados con pywal"
+echo "Archivo de colores actualizado: $ROFI_COLORS_FILE"
+echo "Tema principal actualizado: $ROFI_THEME_FILE"

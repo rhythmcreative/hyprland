@@ -17,15 +17,15 @@ log() {
 
 # Función de notificación
 notify() {
-    notify-send "🎨 Pywal Sync" "$1" -t 2000 2>/dev/null || true
+    notify-send "Pywal Sync" "$1" -t 2000 2>/dev/null || true
 }
 
 # Verificar si ya está ejecutándose
 if [[ -f "$LOCK_FILE" ]]; then
     lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
     if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
-        log "⏳ Sincronización ya en progreso (PID: $lock_pid)"
-        notify "⏳ Sincronización ya en progreso..."
+        log "Sincronización ya en progreso (PID: $lock_pid)"
+        notify "Sincronización ya en progreso..."
         exit 0
     fi
 fi
@@ -39,121 +39,121 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "🚀 === INICIANDO SINCRONIZACIÓN PYWAL ==="
-notify "🎨 Sincronizando colores pywal..."
+log "=== INICIANDO SINCRONIZACIÓN PYWAL ==="
+notify "Sincronizando colores pywal..."
 
 # Verificar que existen los colores de pywal
 if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
-    log "❌ ERROR: Archivos de pywal no encontrados"
-    notify "❌ Error: Archivos de pywal no encontrados"
+    log "ERROR: Archivos de pywal no encontrados"
+    notify "Error: Archivos de pywal no encontrados"
     exit 1
 fi
 
 # Cargar colores de pywal
 source "$HOME/.cache/wal/colors.sh"
-log "✅ Colores pywal cargados"
+log "Colores pywal cargados"
 
 # PASO 1: Recargar configuración Hyprland
-log "🔄 PASO 1: Recargando Hyprland..."
+log "PASO 1: Recargando Hyprland..."
 if hyprctl reload > /dev/null 2>&1; then
-    log "✅ Hyprland recargado"
+    log "Hyprland recargado"
 else
-    log "⚠️ No se pudo recargar Hyprland"
+    log "No se pudo recargar Hyprland"
 fi
 
 # PASO 2: Sincronizar Waybar (recarga suave)
-log "📱 PASO 2: Sincronizando Waybar..."
+log "PASO 2: Sincronizando Waybar..."
 waybar_pids=$(pgrep -x waybar || true)
 if [[ -n "$waybar_pids" ]]; then
     # Intentar recarga suave de CSS
     if kill -USR2 $waybar_pids 2>/dev/null; then
-        log "✅ Waybar CSS recargado (SIGUSR2)"
+        log "Waybar CSS recargado (SIGUSR2)"
         sleep 1
     elif kill -HUP $waybar_pids 2>/dev/null; then
-        log "✅ Waybar recargado (SIGHUP)"
+        log "Waybar recargado (SIGHUP)"
         sleep 1
     else
-        log "🔄 Reiniciando Waybar..."
+        log "Reiniciando Waybar..."
         kill -TERM $waybar_pids 2>/dev/null || true
         sleep 1
         waybar > /dev/null 2>&1 &
         sleep 1
-        log "✅ Waybar reiniciado"
+        log "Waybar reiniciado"
     fi
 else
-    log "🚀 Iniciando Waybar..."
+    log "Iniciando Waybar..."
     waybar > /dev/null 2>&1 &
     sleep 1
 fi
 
 # PASO 3: Actualizar temas GTK sin reiniciar aplicaciones
-log "🎭 PASO 3: Aplicando temas GTK..."
+log "PASO 3: Aplicando temas GTK..."
 if command -v gsettings &> /dev/null; then
     # Aplicar tema oscuro
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface gtk-theme "Arc-Dark" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-black-dark" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
-    log "✅ Configuración GTK aplicada"
+    log "Configuración GTK aplicada"
 fi
 
 # PASO 4: Reiniciar Dunst para aplicar nuevos colores
-log "🔔 PASO 4: Reiniciando Dunst..."
+log "PASO 4: Reiniciando Dunst..."
 if command -v dunst > /dev/null; then
     pkill dunst 2>/dev/null || true
     sleep 0.5
     dunst > /dev/null 2>&1 &
-    log "✅ Dunst reiniciado con nuevos colores"
+    log "Dunst reiniciado con nuevos colores"
 fi
 
 # PASO 5: Sincronizar componentes adicionales en segundo plano
-log "🔧 PASO 5: Sincronizando componentes adicionales..."
+log "PASO 5: Sincronizando componentes adicionales..."
 
 # P10k sync (en segundo plano)
 if [[ -x "$HOME/.local/bin/p10k-auto-sync" ]]; then
     "$HOME/.local/bin/p10k-auto-sync" &
     disown
-    log "✅ P10k sync iniciado"
+    log "P10k sync iniciado"
 fi
 
 # Oh My Posh sync (en segundo plano)
 if [[ -x "$HOME/.local/bin/sync-omp-pywal" ]]; then
     "$HOME/.local/bin/sync-omp-pywal" &
     disown
-    log "✅ Oh My Posh sync iniciado"
+    log "Oh My Posh sync iniciado"
 fi
 
 # Verificación final
-log "🔍 Verificación final..."
+log "Verificación final..."
 components_ok=true
 
 if pgrep -x waybar > /dev/null; then
-    log "✅ Waybar funcionando"
+    log "Waybar funcionando"
 else
-    log "⚠️ Waybar no está corriendo"
+    log "Waybar no está corriendo"
     components_ok=false
 fi
 
 if [[ -f "$HOME/.cache/wal/colors.sh" ]]; then
-    log "✅ Colores pywal disponibles"
+    log "Colores pywal disponibles"
 else
-    log "⚠️ Archivos pywal no encontrados"
+    log "Archivos pywal no encontrados"
     components_ok=false
 fi
 
 # Resultado final
 if $components_ok; then
-    log "🎉 === SINCRONIZACIÓN PYWAL COMPLETADA ==="
-    notify "🎉 Sincronización pywal completada!"
+    log "=== SINCRONIZACIÓN PYWAL COMPLETADA ==="
+    notify "Sincronización pywal completada!"
     
     # Mostrar colores principales en el log
-    log "🎨 Color principal: $color1"
-    log "🎨 Color de fondo: $background"
-    log "🎨 Color de texto: $foreground"
+    log "Color principal: $color1"
+    log "Color de fondo: $background"
+    log "Color de texto: $foreground"
 else
-    log "⚠️ === SINCRONIZACIÓN PARCIAL ==="
-    notify "⚠️ Sincronización parcial - algunos componentes fallaron"
+    log "=== SINCRONIZACIÓN PARCIAL ==="
+    notify "Sincronización parcial - algunos componentes fallaron"
 fi
 
-log "📋 Log disponible en: $LOG_FILE"
+log "Log disponible en: $LOG_FILE"
 exit 0

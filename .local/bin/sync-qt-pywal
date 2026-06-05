@@ -713,6 +713,6 @@ EOF
 # Aplicar el tema a Dolphin
 kwriteconfig5 --file dolphinrc --group General --key ColorScheme PywalColors
 
-echo "✅ Sincronización completa! Los colores de Qt/KDE ahora coinciden con PyWal."
-echo "📝 Nota: Es posible que necesites reiniciar Dolphin para ver los cambios:"
+echo "Sincronización completa! Los colores de Qt/KDE ahora coinciden con PyWal."
+echo "Nota: Es posible que necesites reiniciar Dolphin para ver los cambios:"
 echo "   killall dolphin && dolphin &"

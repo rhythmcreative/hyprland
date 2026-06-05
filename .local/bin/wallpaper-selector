@@ -42,7 +42,7 @@ done
 
 # 3. Mostrar rofi (Carga instantánea)
 selected=$(rofi -dmenu -i \
-    -p "🖼️  Wallpapers" \
+    -p " Wallpapers" \
     -theme "$ROFI_THEME" \
     -show-icons \
     -markup-rows \

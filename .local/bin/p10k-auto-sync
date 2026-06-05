@@ -17,11 +17,11 @@ log() {
 
 # Verificar que pywal haya generado colores
 if [[ ! -f "$COLORS_JSON" ]] || [[ ! -f "$COLORS_FILE" ]]; then
-    log "❌ Archivos de pywal no encontrados, saltando sincronización P10k"
+    log "Archivos de pywal no encontrados, saltando sincronización P10k"
     exit 0
 fi
 
-log "🎨 Iniciando auto-sincronización P10k con pywal"
+log "Iniciando auto-sincronización P10k con pywal"
 
 # Leer colores usando jq o grep como fallback
 if command -v jq >/dev/null 2>&1 && [[ -f "$COLORS_JSON" ]]; then
@@ -53,11 +53,11 @@ fi
 
 # Verificar que los colores se cargaron
 if [[ -z "${color1:-}" ]] || [[ -z "${background:-}" ]]; then
-    log "❌ Error cargando colores de pywal"
+    log "Error cargando colores de pywal"
     exit 1
 fi
 
-log "✅ Colores cargados: bg=$background, fg=$foreground"
+log "Colores cargados: bg=$background, fg=$foreground"
 
 # Crear archivo de configuración dinámica para P10k
 cat > "$P10K_COLORS_FILE" << EOF
@@ -117,23 +117,23 @@ if [[ -n "\${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS:-}" ]]; then
 fi
 EOF
 
-log "✅ Archivo P10k actualizado: $P10K_COLORS_FILE"
+log "Archivo P10k actualizado: $P10K_COLORS_FILE"
 
 # Enviar comando a terminales zsh activas para recargar
 for pid in $(pgrep -x zsh 2>/dev/null || true); do
     if [[ -e "/proc/$pid" ]]; then
         # Solo para terminales interactivas (con tty)
         if [[ -n "$(ps -p $pid -o tty= 2>/dev/null | grep -v '?')" ]]; then
-            log "🔄 Señal de recarga enviada a terminal PID: $pid"
+            log "Señal de recarga enviada a terminal PID: $pid"
             # Usar kill -USR1 como señal personalizada para recargar
             kill -USR1 "$pid" 2>/dev/null || true
         fi
     fi
 done
 
-log "✅ Auto-sincronización P10k completada"
+log "Auto-sincronización P10k completada"
 
 # Mostrar notificación discreta
 if command -v notify-send >/dev/null 2>&1; then
-    notify-send "🎨 P10k Sync" "Colores actualizados automáticamente" -t 2000 >/dev/null 2>&1 || true
+    notify-send "P10k Sync" "Colores actualizados automáticamente" -t 2000 >/dev/null 2>&1 || true
 fi

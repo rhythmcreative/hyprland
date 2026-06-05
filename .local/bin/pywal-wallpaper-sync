@@ -26,11 +26,11 @@ apply_pywal() {
     local wallpaper="$1"
     
     if [ ! -f "$wallpaper" ]; then
-        notify-send "🚫 Pywal Sync" "Wallpaper no encontrado: $wallpaper" 2>/dev/null
+        notify-send "Pywal Sync" "Wallpaper no encontrado: $wallpaper" 2>/dev/null
         return 1
     fi
     
-    echo "🎨 Aplicando pywal con: $(basename "$wallpaper")"
+    echo "Aplicando pywal con: $(basename "$wallpaper")"
     
     # Aplicar pywal con configuraciones optimizadas
     wal -i "$wallpaper" -n -s -t
@@ -40,7 +40,7 @@ apply_pywal() {
     
     # Verificar que los archivos de colores se generaron correctamente
     if [ ! -f ~/.cache/wal/colors-rofi.rasi ]; then
-        notify-send "⚠️ Pywal" "Error generando colores para rofi" 2>/dev/null
+        notify-send "Pywal" "Error generando colores para rofi" 2>/dev/null
         return 1
     fi
     
@@ -49,7 +49,7 @@ apply_pywal() {
 
 # Función para recargar componentes
 reload_components() {
-    echo "🔄 Recargando componentes del sistema con modern-pywal-sync..."
+    echo "Recargando componentes del sistema con modern-pywal-sync..."
     
     if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
         "$HOME/.local/bin/modern-pywal-sync"
@@ -61,7 +61,7 @@ reload_components() {
 
 # Función principal
 main() {
-    echo "🎨 Iniciando sincronización de pywal..."
+    echo "Iniciando sincronización de pywal..."
     
     # Prioridad: 1. Argumento, 2. Cache, 3. Detección awww, 4. Ultimo wal
     if [ -n "${1:-}" ] && [ -f "$1" ]; then
@@ -75,13 +75,13 @@ main() {
         if [ -f ~/.cache/wal/wal ]; then
             CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal)
         else
-            notify-send "🚫 Pywal Sync" "No se pudo detectar el wallpaper actual"
-            echo "❌ Error: No se pudo detectar el wallpaper actual"
+            notify-send "Pywal Sync" "No se pudo detectar el wallpaper actual"
+            echo "Error: No se pudo detectar el wallpaper actual"
             exit 1
         fi
     fi
     
-    echo "🖼️ Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
+    echo "Wallpaper detectado: $(basename "$CURRENT_WALLPAPER")"
     
     # Aplicar pywal
     if apply_pywal "$CURRENT_WALLPAPER"; then
@@ -89,19 +89,19 @@ main() {
         reload_components
         
         # Notificación de éxito
-        notify-send "🎨 Pywal Sincronizado" "Tema actualizado con: $(basename "$CURRENT_WALLPAPER")" -t 3000 2>/dev/null
-        echo "✅ Sincronización completada exitosamente"
+        notify-send "Pywal Sincronizado" "Tema actualizado con: $(basename "$CURRENT_WALLPAPER")" -t 3000 2>/dev/null
+        echo "Sincronización completada exitosamente"
     else
-        notify-send "❌ Error Pywal" "No se pudo sincronizar el tema" -t 3000 2>/dev/null
-        echo "❌ Error en la sincronización"
+        notify-send "Error Pywal" "No se pudo sincronizar el tema" -t 3000 2>/dev/null
+        echo "Error en la sincronización"
         exit 1
     fi
 }
 
 # Verificar dependencias
 if ! command -v wal &> /dev/null; then
-    notify-send "❌ Error" "pywal no está instalado" 2>/dev/null
-    echo "❌ Error: pywal no está instalado"
+    notify-send "Error" "pywal no está instalado" 2>/dev/null
+    echo "Error: pywal no está instalado"
     exit 1
 fi
 

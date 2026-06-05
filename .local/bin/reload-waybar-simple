@@ -13,12 +13,12 @@ log() {
 
 # Verificar que existen colores de pywal
 if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
-    log "❌ ERROR: No hay colores de pywal disponibles"
-    notify-send "❌ Error" "No hay colores de pywal disponibles" -u critical
+    log "ERROR: No hay colores de pywal disponibles"
+    notify-send "Error" "No hay colores de pywal disponibles" -u critical
     exit 1
 fi
 
-log "🔄 Recargando waybar con colores de pywal..."
+log "Recargando waybar con colores de pywal..."
 
 # Cargar colores
 source "$HOME/.cache/wal/colors.sh"
@@ -48,32 +48,32 @@ cat > "$HOME/.config/waybar/colors-pywal.css" << EOF
 @define-color color15 $color15;
 EOF
 
-log "✅ CSS de waybar actualizado con colores pywal"
+log "CSS de waybar actualizado con colores pywal"
 
 # MÉTODO 1: Intentar recarga de CSS SIN reiniciar proceso
 if pgrep -x waybar > /dev/null; then
-    log "🎨 Intentando recarga de CSS sin reiniciar waybar..."
+    log "Intentando recarga de CSS sin reiniciar waybar..."
     
     # Intentar SIGUSR2 (recarga de CSS solamente)
     if pkill -SIGUSR2 waybar 2>/dev/null; then
-        log "✅ CSS recargado exitosamente (método SIGUSR2)"
-        notify-send "🎨 Waybar CSS" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
+        log "CSS recargado exitosamente (método SIGUSR2)"
+        notify-send "Waybar CSS" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
         exit 0
     fi
     
     # Si SIGUSR2 falla, intentar SIGHUP (recarga completa sin reiniciar)
-    log "⚠️ SIGUSR2 falló, intentando SIGHUP..."
+    log "SIGUSR2 falló, intentando SIGHUP..."
     if pkill -SIGHUP waybar 2>/dev/null; then
         sleep 0.5
-        log "✅ Waybar recargado completamente (método SIGHUP)"
-        notify-send "🎨 Waybar" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
+        log "Waybar recargado completamente (método SIGHUP)"
+        notify-send "Waybar" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
         exit 0
     fi
     
     # MÉTODO 2: Solo si los métodos suaves fallan, reiniciar
-    log "⚠️ Métodos de recarga suave fallaron, reiniciando waybar..."
+    log "Métodos de recarga suave fallaron, reiniciando waybar..."
 else
-    log "🚀 Waybar no está corriendo, iniciándolo..."
+    log "Waybar no está corriendo, iniciándolo..."
 fi
 
 # Reiniciar waybar (solo si es necesario)
@@ -86,7 +86,7 @@ while pgrep waybar > /dev/null 2>&1; do
     sleep 0.2
     count=$((count + 1))
     if [[ $count -gt 10 ]]; then
-        log "⚠️ Waybar tomó demasiado tiempo en cerrarse, forzando..."
+        log "Waybar tomó demasiado tiempo en cerrarse, forzando..."
         pkill -9 waybar 2>/dev/null || true
         sleep 0.5
         break
@@ -94,15 +94,15 @@ while pgrep waybar > /dev/null 2>&1; do
 done
 
 # Iniciar waybar
-log "🚀 Iniciando waybar..."
+log "Iniciando waybar..."
 waybar > /dev/null 2>&1 &
 sleep 1
 
 if pgrep waybar > /dev/null 2>&1; then
-    log "✅ Waybar reiniciado exitosamente"
-    notify-send "✅ Waybar" "Reiniciado con colores de pywal" -t 2000 2>/dev/null || true
+    log "Waybar reiniciado exitosamente"
+    notify-send "Waybar" "Reiniciado con colores de pywal" -t 2000 2>/dev/null || true
 else
-    log "❌ ERROR: No se pudo reiniciar waybar"
-    notify-send "❌ Error" "No se pudo reiniciar waybar" -u critical 2>/dev/null || true
+    log "ERROR: No se pudo reiniciar waybar"
+    notify-send "Error" "No se pudo reiniciar waybar" -u critical 2>/dev/null || true
     exit 1
 fi

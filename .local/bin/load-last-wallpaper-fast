@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 🚀 WALLPAPER LOADER - ULTRA FAST VERSION 🚀
+# WALLPAPER LOADER - ULTRA FAST VERSION
 # ═══════════════════════════════════════════════════════════════════════════════
 # Optimizado para inicio ultra rápido de Hyprland
 
@@ -18,14 +18,14 @@ if pgrep -x "awww-daemon" > /dev/null; then
 fi
 
 if [ "$DAEMON_RUNNING" = false ]; then
-    log "🔧 Daemon no detectado, intentando iniciar awww-daemon..."
+    log "Daemon no detectado, intentando iniciar awww-daemon..."
     # Usar setsid para que el daemon no muera con el script
     setsid awww-daemon --format xrgb --no-cache > /dev/null 2>&1 &
 
     # Esperar a que el daemon esté listo
     for i in {1..50}; do
         if awww query > /dev/null 2>&1; then
-            log "✅ Daemon listo tras $((i*100))ms"
+            log "Daemon listo tras $((i*100))ms"
             DAEMON_RUNNING=true
             break
         fi
@@ -34,7 +34,7 @@ if [ "$DAEMON_RUNNING" = false ]; then
 fi
 
 if [ "$DAEMON_RUNNING" = false ]; then
-    log "❌ Error: No se pudo iniciar el daemon de wallpaper"
+    log "Error: No se pudo iniciar el daemon de wallpaper"
     exit 1
 fi
 
@@ -46,20 +46,20 @@ if [[ -f "$CACHE_FILE" ]]; then
     WALLPAPER_PATH=$(cat "$CACHE_FILE")
 
     if [[ -f "$WALLPAPER_PATH" ]]; then
-        log "⚡ Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
+        log "Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
         awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
     else
-        log "⚠️ Wallpaper en cache no existe: $WALLPAPER_PATH"
+        log "Wallpaper en cache no existe: $WALLPAPER_PATH"
     fi
 elif [[ -f "$HOME/.cache/wal/wal" ]]; then
     FALLBACK=$(cat "$HOME/.cache/wal/wal")
-    log "⚡ Usando fallback de pywal: $(basename "$FALLBACK")"
+    log "Usando fallback de pywal: $(basename "$FALLBACK")"
     awww img "$FALLBACK" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
 elif [[ -f "$SDDM_WP" ]]; then
-    log "⚡ Sincronizando con wallpaper de SDDM..."
+    log "Sincronizando con wallpaper de SDDM..."
     awww img "$SDDM_WP" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 > /dev/null 2>&1 || true
     # Opcional: registrarlo como actual para pywal
     echo "$SDDM_WP" > "$CACHE_FILE"
 fi
 
-log "✅ Proceso de carga completado"
+log "Proceso de carga completado"

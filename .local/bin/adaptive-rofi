@@ -32,20 +32,18 @@ ACTIVE_MONITOR=$(get_active_monitor)
 MONITOR_COUNT=$(xrandr --listmonitors 2>/dev/null | tail -n +2 | wc -l || echo 1)
 
 # Configurar argumentos de rofi según el modo
-WALLPAPER_MODI="wallpapers:$HOME/.local/bin/rofi-wallpaper-mode"
-
 case "$MODE" in
     "drun")
-        ROFI_ARGS="-show drun -modi drun,$WALLPAPER_MODI"
+        ROFI_ARGS="-show drun"
         ;;
     "run")
-        ROFI_ARGS="-show run -modi run,$WALLPAPER_MODI"
+        ROFI_ARGS="-show run"
         ;;
     "window")
-        ROFI_ARGS="-show window -modi window,$WALLPAPER_MODI"
+        ROFI_ARGS="-show window"
         ;;
     *)
-        ROFI_ARGS="-show $MODE -modi $MODE,$WALLPAPER_MODI"
+        ROFI_ARGS="-show $MODE"
         ;;
 esac
 

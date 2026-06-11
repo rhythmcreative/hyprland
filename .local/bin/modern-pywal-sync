@@ -103,7 +103,7 @@ if pgrep -x waybar > /dev/null 2>&1; then
         nm-applet --indicator > /dev/null 2>&1 &
     fi
 else
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh"
 fi
 
 # 6b. Reiniciar rust-dock para que recargue el tema GTK actualizado

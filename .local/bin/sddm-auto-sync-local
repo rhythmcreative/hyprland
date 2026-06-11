@@ -7,7 +7,7 @@ set -e
 
 # Rutas
 SDDM_THEME_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
-THEME_CONFIG="$SDDM_THEME_DIR/Themes/theme1.conf"
+THEME_CONFIG="$SDDM_THEME_DIR/theme.conf"
 BACKGROUNDS_DIR="$SDDM_THEME_DIR/Backgrounds"
 
 # Detectar el usuario real y su HOME
@@ -72,7 +72,7 @@ if [ -f "$PYWAL_SH" ]; then
 
     echo "Aplicando colores de Pywal a SDDM..."
     
-    sed -i "s|^Background=.*|Background=\"../Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
+    sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
     sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$THEME_CONFIG"
     sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$THEME_CONFIG"
     sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$THEME_CONFIG"
@@ -83,5 +83,5 @@ if [ -f "$PYWAL_SH" ]; then
 else
     echo "No se encontraron colores de Pywal, solo se actualizó el wallpaper."
     # Asegurar que la ruta del background sea correcta incluso sin pywal
-    sed -i "s|^Background=.*|Background=\"../Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
+    sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
 fi

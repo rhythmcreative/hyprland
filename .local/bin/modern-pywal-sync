@@ -92,6 +92,14 @@ if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
     pkill -SIGUSR2 waybar || true
 fi
 
+# 6b. Reiniciar rust-dock para que recargue el tema GTK actualizado
+echo "  • rust-dock..."
+if pgrep -x rust-dock > /dev/null 2>&1; then
+    pkill rust-dock 2>/dev/null
+    sleep 0.3
+    "$HOME/.local/bin/rust-dock-launcher" &
+fi
+
 # 7. Sincronizar Rofi
 echo "  • Rofi..."
 if [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then

@@ -52,6 +52,13 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
+# Ocultar rust-dock mientras rofi está abierto
+_rust_dock_was_running=false
+if pgrep -x rust-dock > /dev/null 2>&1; then
+    _rust_dock_was_running=true
+    pkill -SIGUSR1 rust-dock 2>/dev/null || true
+fi
+
 # Configuración para múltiples monitores
 if [ "$MONITOR_COUNT" -gt 1 ] && command -v hyprctl &> /dev/null; then
     # En Hyprland, rofi aparecerá en el monitor activo automáticamente
@@ -59,4 +66,9 @@ if [ "$MONITOR_COUNT" -gt 1 ] && command -v hyprctl &> /dev/null; then
 else
     # Monitor único o sistema sin Hyprland
     rofi $ROFI_ARGS
+fi
+
+# Restaurar rust-dock al cerrar rofi
+if [ "$_rust_dock_was_running" = true ]; then
+    pkill -SIGUSR2 rust-dock 2>/dev/null || true
 fi

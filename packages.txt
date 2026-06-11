@@ -22,6 +22,7 @@ flatpak
 fwupd
 git
 github-cli
+gnome-keyring
 grim
 gst-libav
 gum

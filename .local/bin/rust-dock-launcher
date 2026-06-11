@@ -1,0 +1,15 @@
+#!/bin/bash
+# Lanza una instancia de rust-dock por cada monitor conectado
+
+RUST_DOCK="$HOME/.local/bin/rust-dock"
+
+monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name')
+
+if [ -z "$monitors" ]; then
+    "$RUST_DOCK" &
+    exit 0
+fi
+
+while IFS= read -r monitor; do
+    "$RUST_DOCK" -o "$monitor" &
+done <<< "$monitors"

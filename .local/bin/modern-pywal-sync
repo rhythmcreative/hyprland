@@ -64,13 +64,6 @@ if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
     "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1 &
 fi
 
-# Reiniciar nm-applet para aplicar cambios
-if pgrep -x nm-applet > /dev/null; then
-    pkill -9 nm-applet
-    sleep 0.2
-    nm-applet --indicator > /dev/null 2>&1 &
-fi
-
 # 4. Forzar Recarga de GTK (Reset de tema)
 if command -v gsettings &>/dev/null; then
     # Forzamos a Adwaita que es el que mejor acepta overrides de CSS
@@ -85,11 +78,33 @@ if [ -x "$HOME/.local/bin/sync-qt-pywal" ]; then
     "$HOME/.local/bin/sync-qt-pywal" >/dev/null 2>&1 || true
 fi
 
-# 6. Sincronizar Waybar
+# 6. Sincronizar Waybar — reinicio completo para sincronizar todos los colores
 echo "  • Waybar..."
-if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
-    cp -f "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
-    pkill -SIGUSR2 waybar || true
+if pgrep -x waybar > /dev/null 2>&1; then
+    # Matar nm-applet ANTES de matar waybar para evitar el registro fantasma
+    NM_WAS_RUNNING=false
+    if pgrep -x nm-applet > /dev/null 2>&1; then
+        NM_WAS_RUNNING=true
+        pkill nm-applet 2>/dev/null || true
+        sleep 0.1
+    fi
+
+    "$HOME/.config/waybar/launch.sh"
+
+    # Esperar a que waybar exista como proceso
+    for i in $(seq 1 30); do
+        pgrep -x waybar > /dev/null 2>&1 && break
+        sleep 0.1
+    done
+    # Dar tiempo a que waybar registre StatusNotifierWatcher en D-Bus
+    sleep 1.0
+
+    # Reiniciar nm-applet para que se registre con el nuevo SNW
+    if [ "$NM_WAS_RUNNING" = true ]; then
+        nm-applet --indicator > /dev/null 2>&1 &
+    fi
+else
+    waybar > /dev/null 2>&1 &
 fi
 
 # 6b. Reiniciar rust-dock para que recargue el tema GTK actualizado

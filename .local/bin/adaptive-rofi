@@ -52,9 +52,9 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-# Ocultar rust-dock mientras rofi está abierto
+# Ocultar rust-dock mientras rofi está abierto (solo si estaba visible)
 _rust_dock_was_running=false
-if pgrep -x rust-dock > /dev/null 2>&1; then
+if [ -f /tmp/rust-dock-visible ] && pgrep -x rust-dock > /dev/null 2>&1; then
     _rust_dock_was_running=true
     pkill -SIGUSR1 rust-dock 2>/dev/null || true
 fi

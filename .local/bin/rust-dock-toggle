@@ -1,0 +1,16 @@
+#!/bin/bash
+# Toggle rust-dock manteniendo estado para que rofi no lo active por accidente
+
+STATE_FILE="/tmp/rust-dock-visible"
+
+if ! pgrep -x rust-dock > /dev/null 2>&1; then
+    exit 0
+fi
+
+if [ -f "$STATE_FILE" ]; then
+    pkill -SIGUSR1 rust-dock 2>/dev/null || true
+    rm -f "$STATE_FILE"
+else
+    pkill -SIGUSR2 rust-dock 2>/dev/null || true
+    touch "$STATE_FILE"
+fi

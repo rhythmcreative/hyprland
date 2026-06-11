@@ -112,16 +112,18 @@ show_waybar() {
 
 # Función para ocultar rust-dock
 hide_rust_dock() {
-    if pgrep -x rust-dock > /dev/null 2>&1; then
+    if [ -f /tmp/rust-dock-visible ] && pgrep -x rust-dock > /dev/null 2>&1; then
         log_debug "Ocultando rust-dock..."
         pkill -SIGUSR1 rust-dock 2>/dev/null || true
         sleep 0.1
     fi
 }
 
-# Función para mostrar rust-dock
+# Función para mostrar rust-dock (solo si estaba visible antes de rofi)
 show_rust_dock() {
-    pkill -SIGUSR2 rust-dock 2>/dev/null || true
+    if [ -f /tmp/rust-dock-visible ] && pgrep -x rust-dock > /dev/null 2>&1; then
+        pkill -SIGUSR2 rust-dock 2>/dev/null || true
+    fi
 }
 
 # Función de cleanup al salir

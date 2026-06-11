@@ -232,7 +232,7 @@ install_rust_dock() {
 step_software() {
     section "CORE SYSTEM DEPLOYMENT"
     
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct gnome-keyring"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils blueman pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct gnome-keyring"
 
     info "$MSG_CORE_INSTALL"
     yay -S --needed --noconfirm $CORE_PKGS
@@ -552,17 +552,41 @@ if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
         fi
     fi
     
-    gum spin --spinner moon --title "CALIBRATING COLORS & SDDM..." -- bash -c "$HOME/.local/bin/modern-pywal-sync || true"
+    gum spin --spinner dot --title "CALIBRATING COLORS & SDDM..." -- bash -c "$HOME/.local/bin/modern-pywal-sync || true"
 fi
 
-section "DEPLOYMENT COMPLETE"
+# --- FINAL SCREEN ---
+clear
+
+echo "  ██████╗ ███████╗██████╗ ██╗      ██████╗ ██╗   ██╗███████╗██████╗ "
+echo "  ██╔══██╗██╔════╝██╔══██╗██║     ██╔═══██╗╚██╗ ██╔╝██╔════╝██╔══██╗"
+echo "  ██║  ██║█████╗  ██████╔╝██║     ██║   ██║ ╚████╔╝ █████╗  ██║  ██║"
+echo "  ██║  ██║██╔══╝  ██╔═══╝ ██║     ██║   ██║  ╚██╔╝  ██╔══╝  ██║  ██║"
+echo "  ██████╔╝███████╗██║     ███████╗╚██████╔╝   ██║   ███████╗██████╔╝"
+echo "  ╚═════╝ ╚══════╝╚═╝     ╚══════╝ ╚═════╝    ╚═╝   ╚══════╝╚═════╝ "
+echo ""
 
 gum style \
-    --border normal \
-    --margin "1 2" \
-    --padding "1 4" \
+    --border double \
+    --margin "0 2" \
+    --padding "1 3" \
     --border-foreground 7 \
-    "$(echo -e "  System deployed successfully.\n\n  Wallpapers   ~/Pictures/Wallpapers\n  Keybinds     Super+A  launcher\n               Super+Space  dock toggle\n               Super+P  screenshot\n               Super+L  lock screen\n               Super+BackSpace  power menu\n\n  Colors sync automatically when you change the wallpaper.\n  Run ~/.local/bin/pywal-wallpaper-sync to force a re-sync.\n\n  Relog or reboot to start the graphical session.")"
+    --bold \
+    "RHYTHM CREATIVE DOTFILES  //  ARCH + HYPRLAND  //  DEPLOYMENT COMPLETE"
 
-info "Starting SDDM..."
+echo ""
+
+gum style --border normal --border-foreground 7 --margin "0 2" --padding "0 2" \
+    "$(printf '%-22s %s\n' "WALLPAPERS" "~/Pictures/Wallpapers")"
+
+echo ""
+
+gum style --border normal --border-foreground 7 --margin "0 2" --padding "0 2" \
+    "$(printf '%s\n' "COLORS  ->  sync automatically on wallpaper change"
+       printf '%s\n' "MANUAL  ->  ~/.local/bin/pywal-wallpaper-sync")"
+
+echo ""
+gum style --margin "0 4" --bold "  INITIALIZING DISPLAY MANAGER..."
+echo ""
+
 sudo systemctl start sddm

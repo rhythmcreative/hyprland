@@ -7,26 +7,6 @@ WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
 PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
 ROFI_THEME="$HOME/.config/rofi/wallpaper-select-pywal.rasi"
 
-# --- Ocultar waybar y rust-dock mientras rofi está abierto ---
-_waybar_was_running=false
-if pgrep -x waybar > /dev/null 2>&1; then
-    _waybar_was_running=true
-    pkill -SIGUSR1 waybar 2>/dev/null || true
-fi
-
-_rust_dock_toggled=false
-_rust_dock_pids=$(pgrep -x rust-dock 2>/dev/null | paste -sd '|')
-if [ -n "$_rust_dock_pids" ] && hyprctl layers 2>/dev/null | grep -qE "pid: ($_rust_dock_pids)"; then
-    _rust_dock_toggled=true
-    pkill -SIGUSR1 rust-dock 2>/dev/null || true
-fi
-
-cleanup() {
-    [ "$_waybar_was_running" = true ]  && pkill -SIGUSR1 waybar 2>/dev/null || true
-    [ "$_rust_dock_toggled" = true ]   && pkill -SIGUSR1 rust-dock 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
 # Verificar si el directorio existe
 if [[ ! -d "$WALLPAPER_DIR" ]]; then
     rofi -e "Directorio $WALLPAPER_DIR no encontrado"
@@ -62,7 +42,7 @@ done
 
 # 3. Mostrar rofi (Carga instantánea)
 selected=$(rofi -dmenu -i \
-    -p "🖼️  Wallpapers" \
+    -p " Wallpapers" \
     -theme "$ROFI_THEME" \
     -show-icons \
     -markup-rows \
@@ -79,8 +59,8 @@ selected_path="$WALLPAPER_DIR/$selected"
 
 # 4. APLICACIÓN INSTANTÁNEA (En paralelo para máxima velocidad)
 
-# A. Wallpaper (swww es casi instantáneo)
-swww img "$selected_path" --transition-type grow --transition-pos "0.9,0.1" --transition-duration 1.0 &
+# A. Wallpaper (awww with premium transition)
+awww img "$selected_path" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 &
 
 # B. Sincronización de Colores (Pywal y GTK)
 (

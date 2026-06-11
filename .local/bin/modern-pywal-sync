@@ -91,13 +91,12 @@ if pgrep -x waybar > /dev/null 2>&1; then
 
     "$HOME/.config/waybar/launch.sh"
 
-    # Esperar a que waybar exista como proceso
+    # Esperar a que waybar registre StatusNotifierWatcher en D-Bus (máx 3s)
     for i in $(seq 1 30); do
-        pgrep -x waybar > /dev/null 2>&1 && break
+        pgrep -x waybar > /dev/null 2>&1 || { sleep 0.1; continue; }
+        busctl --user list 2>/dev/null | grep -q "StatusNotifierWatcher" && break
         sleep 0.1
     done
-    # Dar tiempo a que waybar registre StatusNotifierWatcher en D-Bus
-    sleep 1.0
 
     # Reiniciar nm-applet para que se registre con el nuevo SNW
     if [ "$NM_WAS_RUNNING" = true ]; then

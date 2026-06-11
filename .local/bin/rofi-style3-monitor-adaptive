@@ -110,18 +110,20 @@ show_waybar() {
     sleep 0.1
 }
 
-# Función para ocultar rust-dock
+_RUST_DOCK_WAS_VISIBLE=false
+
 hide_rust_dock() {
-    if pgrep -x rust-dock > /dev/null 2>&1; then
-        log_debug "Ocultando rust-dock..."
+    local pids
+    pids=$(pgrep -x rust-dock 2>/dev/null | paste -sd '|')
+    [ -z "$pids" ] && return
+    if hyprctl layers 2>/dev/null | grep -qE "pid: ($pids)"; then
+        _RUST_DOCK_WAS_VISIBLE=true
         pkill -SIGUSR1 rust-dock 2>/dev/null || true
-        sleep 0.1
     fi
 }
 
-# Función para mostrar rust-dock
 show_rust_dock() {
-    pkill -SIGUSR2 rust-dock 2>/dev/null || true
+    [ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null || true
 }
 
 # Función de cleanup al salir
@@ -256,7 +258,6 @@ launch_rofi() {
     # NUEVO: Sincronizar colores de rofi con pywal antes de mostrar rofi
     sync_rofi_colors
     
-    # Ocultar waybar y rust-dock para una experiencia más limpia
     hide_waybar
     hide_rust_dock
     

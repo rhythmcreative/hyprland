@@ -110,19 +110,24 @@ show_waybar() {
     sleep 0.1
 }
 
+# Rastrear si hicimos toggle de rust-dock (para restaurar estado original)
+_RUST_DOCK_TOGGLED=false
+
 # Función para ocultar rust-dock
 hide_rust_dock() {
-    if [ -f /tmp/rust-dock-visible ] && pgrep -x rust-dock > /dev/null 2>&1; then
+    if pgrep -x rust-dock > /dev/null 2>&1; then
         log_debug "Ocultando rust-dock..."
         pkill -SIGUSR1 rust-dock 2>/dev/null || true
+        _RUST_DOCK_TOGGLED=true
         sleep 0.1
     fi
 }
 
-# Función para mostrar rust-dock (solo si estaba visible antes de rofi)
+# Función para restaurar rust-dock al estado original (toggle inverso)
 show_rust_dock() {
-    if [ -f /tmp/rust-dock-visible ] && pgrep -x rust-dock > /dev/null 2>&1; then
-        pkill -SIGUSR2 rust-dock 2>/dev/null || true
+    if [ "$_RUST_DOCK_TOGGLED" = true ]; then
+        pkill -SIGUSR1 rust-dock 2>/dev/null || true
+        _RUST_DOCK_TOGGLED=false
     fi
 }
 

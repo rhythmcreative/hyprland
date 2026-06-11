@@ -1,3 +1,5 @@
+> [!WARNING]
+> This project is in active development, there may be errors and bugs.+
 
 <h1 align="center">Dotfiles rhythmcreative</h1>
 

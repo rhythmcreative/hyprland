@@ -110,12 +110,15 @@ show_waybar() {
     sleep 0.1
 }
 
-# Rastrear si hicimos toggle de rust-dock (para restaurar estado original)
+# Rastrear si ocultamos rust-dock (para restaurarlo al salir)
 _RUST_DOCK_TOGGLED=false
 
-# Función para ocultar rust-dock
+# Función para ocultar rust-dock (solo si está visible en Hyprland layers)
 hide_rust_dock() {
-    if pgrep -x rust-dock > /dev/null 2>&1; then
+    local rust_pids
+    rust_pids=$(pgrep -x rust-dock 2>/dev/null | paste -sd '|')
+    [ -z "$rust_pids" ] && return
+    if hyprctl layers 2>/dev/null | grep -qE "pid: ($rust_pids)"; then
         log_debug "Ocultando rust-dock..."
         pkill -SIGUSR1 rust-dock 2>/dev/null || true
         _RUST_DOCK_TOGGLED=true
@@ -123,7 +126,7 @@ hide_rust_dock() {
     fi
 }
 
-# Función para restaurar rust-dock al estado original (toggle inverso)
+# Función para mostrar rust-dock (solo si lo ocultamos nosotros)
 show_rust_dock() {
     if [ "$_RUST_DOCK_TOGGLED" = true ]; then
         pkill -SIGUSR1 rust-dock 2>/dev/null || true

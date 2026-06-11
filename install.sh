@@ -398,8 +398,70 @@ step_system() {
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
         
         # Configurar SDDM para usar el tema
-        sudo mkdir -p /etc/sddm.conf.d
+        sudo mkdir -p /etc/sddm.conf.d /etc/sddm
         echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+
+        # --- MULTI-MONITOR AUTOMÁTICO ---
+        info "Configurando soporte multi-monitor automático para SDDM..."
+        sudo tee /etc/sddm/Xsetup > /dev/null << 'XSETUP'
+#!/bin/sh
+# Detectar y configurar todos los monitores conectados automáticamente
+
+get_width() {
+    xrandr --query | awk -v m="$1" '
+        $0 ~ m " connected" { f=1; next }
+        f && /^[[:space:]]+[0-9]+x/ { split($1,a,"x"); print a[1]; exit }
+        f && !/^[[:space:]]/ { exit }
+    '
+}
+
+i=0
+while [ "$i" -lt 10 ]; do
+    xrandr --query | grep -q " connected" && break
+    sleep 0.5
+    i=$((i + 1))
+done
+
+CONNECTED=$(xrandr --query | awk '/connected/ && !/disconnected/ { print $1 }')
+COUNT=$(printf '%s\n' "$CONNECTED" | grep -c .)
+
+if [ "$COUNT" -eq 0 ]; then
+    xrandr --auto
+    exit 0
+fi
+
+EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)')
+INTERNAL=$(printf '%s\n'  "$CONNECTED" | grep -E  '^(eDP|LVDS)')
+
+X=0
+FIRST=true
+
+for mon in $EXTERNALS; do
+    W=$(get_width "$mon")
+    [ -z "$W" ] && W=1920
+    if [ "$FIRST" = true ]; then
+        xrandr --output "$mon" --auto --pos "${X}x0" --primary
+        FIRST=false
+    else
+        xrandr --output "$mon" --auto --pos "${X}x0"
+    fi
+    X=$((X + W))
+done
+
+for mon in $INTERNAL; do
+    W=$(get_width "$mon")
+    [ -z "$W" ] && W=1920
+    if [ "$FIRST" = true ]; then
+        xrandr --output "$mon" --auto --pos "${X}x0" --primary
+        FIRST=false
+    else
+        xrandr --output "$mon" --auto --pos "${X}x0"
+    fi
+    X=$((X + W))
+done
+XSETUP
+        sudo chmod +x /etc/sddm/Xsetup
+        echo -e "[X11]\nDisplayCommand=/etc/sddm/Xsetup" | sudo tee /etc/sddm.conf.d/xsetup.conf > /dev/null
 
         # --- INTEGRACIÓN SDDM-ROOT-HELPER (Sincronización Pywal) ---
         # 1. Configurar permisos sudo para que el script de sincronización se ejecute sin contraseña

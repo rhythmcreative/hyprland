@@ -32,7 +32,7 @@ setup_language() {
             MSG_FLATPAK_CONFIRM="¿Instalar Flatpaks de tu lista flatpaks.txt?"
             MSG_WALL_CONFIRM="¿Descargar fondos de pantalla personalizados?"
             MSG_ZSH_CONFIRM="¿Establecer Zsh como shell por defecto?"
-            MSG_DONE="Despliegue completado con exito."
+            MSG_DONE="Despliegue completado."
             ;;
         *)
             # Default to English
@@ -47,7 +47,7 @@ setup_language() {
             MSG_FLATPAK_CONFIRM="Install Flatpaks from your flatpaks.txt list?"
             MSG_WALL_CONFIRM="Download custom wallpaper assets?"
             MSG_ZSH_CONFIRM="Set Zsh as your default shell?"
-            MSG_DONE="System successfully reconfigured. Deployment complete."
+            MSG_DONE="Deployment complete."
             ;;
     esac
 }
@@ -185,16 +185,63 @@ unified_app_search() {
     fi
 }
 
+install_rust_dock() {
+    section "RUST-DOCK DEPLOYMENT"
+
+    # Build-time deps: Rust toolchain + GTK4 headers + layer-shell headers + pkg-config
+    info "Installing rust-dock build dependencies..."
+    yay -S --needed --noconfirm \
+        rust \
+        pkgconf \
+        gtk4 \
+        gtk4-layer-shell \
+        grim \
+        > /dev/null 2>&1
+
+    # Verify the toolchain is actually usable before trying to compile
+    if ! command -v cargo > /dev/null 2>&1; then
+        info "WARNING: cargo not found after installing rust. Skipping rust-dock build."
+        info "  You can build it manually: git clone https://github.com/rhythmcreative/rust-dock.git && cd rust-dock && cargo build --release"
+        return
+    fi
+
+    info "Building rust-dock from source..."
+    local build_dir="/tmp/rust-dock-build"
+    rm -rf "$build_dir"
+
+    if ! git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$build_dir" > /dev/null 2>&1; then
+        info "WARNING: Could not clone rust-dock repository. Skipping."
+        return
+    fi
+
+    gum spin --spinner dot --title "Compiling rust-dock (this may take a minute)..." -- \
+        bash -c "cd '$build_dir' && cargo build --release 2>&1 | tail -3 > /tmp/rust-dock-build.log"
+
+    if [ -f "$build_dir/target/release/rust-dock" ]; then
+        mkdir -p "$HOME/.local/bin"
+        cp "$build_dir/target/release/rust-dock" "$HOME/.local/bin/rust-dock"
+        chmod +x "$HOME/.local/bin/rust-dock"
+        success "rust-dock installed to ~/.local/bin/rust-dock"
+    else
+        info "WARNING: rust-dock build failed. Check /tmp/rust-dock-build.log for details."
+        info "  Manual build: git clone https://github.com/rhythmcreative/rust-dock.git && cd rust-dock && cargo build --release"
+    fi
+    rm -rf "$build_dir"
+}
+
 step_software() {
     section "CORE SYSTEM DEPLOYMENT"
     
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct"
-    
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting ulauncher nwg-displays wl-clipboard xdg-utils jq bc quickshell imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct gnome-keyring"
+
     info "$MSG_CORE_INSTALL"
     yay -S --needed --noconfirm $CORE_PKGS
 
     section "CUSTOM MODULE DEPLOYMENT"
-    
+
+    # Build and install rust-dock from source
+    install_rust_dock
+
     # Automatic Driver Detection
     auto_detect_drivers
 
@@ -397,7 +444,19 @@ EOF
     info "Habilitando servicios de sistema esenciales..."
     sudo systemctl enable NetworkManager bluetooth sddm
     sudo systemctl start NetworkManager bluetooth
-    
+
+    info "Configurando gnome-keyring para Wayland..."
+    # Enable PAM integration so gnome-keyring unlocks automatically on login
+    if [ -f /etc/pam.d/login ] && ! grep -q "gnome-keyring-daemon" /etc/pam.d/login; then
+        sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' /etc/pam.d/login
+        sudo sed -i '/^session.*pam_unix/a session    optional     pam_gnome_keyring.so auto_start' /etc/pam.d/login
+    fi
+    # Also apply to SDDM PAM profile if it exists
+    if [ -f /etc/pam.d/sddm ] && ! grep -q "gnome-keyring-daemon" /etc/pam.d/sddm; then
+        sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' /etc/pam.d/sddm
+        sudo sed -i '/^session.*pam_unix/a session    optional     pam_gnome_keyring.so auto_start' /etc/pam.d/sddm
+    fi
+
     info "Iniciando arquitectura de audio (Pipewire)..."
     systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service
 
@@ -435,8 +494,13 @@ if [ -f "$HOME/.local/bin/modern-pywal-sync" ]; then
 fi
 
 section "DEPLOYMENT COMPLETE"
-echo "$MSG_DONE"
 
-# Start graphical environment automatically
+gum style \
+    --border normal \
+    --margin "1 2" \
+    --padding "1 4" \
+    --border-foreground 7 \
+    "$(echo -e "  System deployed successfully.\n\n  Wallpapers   ~/Pictures/Wallpapers\n  Keybinds     Super+A  launcher\n               Super+Space  dock toggle\n               Super+P  screenshot\n               Super+L  lock screen\n               Super+BackSpace  power menu\n\n  Colors sync automatically when you change the wallpaper.\n  Run ~/.local/bin/pywal-wallpaper-sync to force a re-sync.\n\n  Relog or reboot to start the graphical session.")"
+
 info "Starting SDDM..."
 sudo systemctl start sddm

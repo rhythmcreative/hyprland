@@ -275,6 +275,7 @@ launch_rofi() {
     
     # Lanzar rofi con el tema adaptado
     rofi -show drun \
+         -modi "drun,wallpapers:$HOME/.local/bin/rofi-wallpaper-mode" \
          -theme "$ADAPTED_STYLE" \
          -monitor "$ACTIVE_MONITOR"
     

@@ -1,0 +1,47 @@
+#!/bin/bash
+# Modo de rofi para seleccionar wallpaper con thumbnails
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
+
+mkdir -p "$PREVIEW_DIR"
+
+if [ -z "$1" ]; then
+    # Lista inicial: nombre + icono (thumbnail o imagen original)
+    find "$WALLPAPER_DIR" -maxdepth 1 -type f \
+        \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \
+           -o -iname "*.webp" -o -iname "*.bmp" \) | sort | \
+    while IFS= read -r img; do
+        base="${img##*/}"
+        thumb="$PREVIEW_DIR/${base%.*}_thumb.jpg"
+        icon="${thumb:-$img}"
+        [ -f "$thumb" ] && icon="$thumb" || icon="$img"
+        printf "%s\0icon\x1f%s\n" "$base" "$icon"
+    done
+
+    # Generar thumbnails faltantes en background
+    find "$WALLPAPER_DIR" -maxdepth 1 -type f \
+        \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \
+           -o -iname "*.webp" -o -iname "*.bmp" \) | \
+    while IFS= read -r img; do
+        base="${img##*/}"
+        thumb="$PREVIEW_DIR/${base%.*}_thumb.jpg"
+        [ -f "$thumb" ] || magick "$img" -resize 300x200^ -gravity center \
+            -extent 300x200 "$thumb" 2>/dev/null
+    done &
+else
+    # Aplicar wallpaper seleccionado
+    selected_path="$WALLPAPER_DIR/$1"
+    [ -f "$selected_path" ] || exit 0
+
+    swww img "$selected_path" \
+        --transition-type grow --transition-pos "0.9,0.1" \
+        --transition-duration 1.0 &
+
+    (
+        echo "$selected_path" > "$HOME/.cache/current-wallpaper"
+        if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
+            "$HOME/.local/bin/pywal-wallpaper-sync" "$selected_path"
+        fi
+    ) &
+fi

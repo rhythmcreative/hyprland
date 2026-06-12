@@ -13,6 +13,7 @@ brave-origin-nightly-bin
 brightnessctl
 btop
 btrfs-progs
+cava
 cmake
 code
 cryptsetup

@@ -126,13 +126,13 @@
 #custom-cava {
   background-color: @background;
   padding: 0.3rem 0.7rem;
-  margin: 5px 0px;
+  margin: 5px 5px 5px 0px;
   border-radius: 6px;
-  box-shadow: 0 1px 3px alpha(@color4, 0.38);
+  box-shadow: 0 1px 3px alpha(@color6, 0.3);
   min-width: 0;
   border: none;
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
-  color: @color4;
+  color: @color6;
+  font-size: 12px;
   font-weight: 700;
 }
 

@@ -9,7 +9,8 @@
   "exclusive": true,
   "modules-left": [
     "hyprland/workspaces",
-    "group/system-info"
+    "group/system-info",
+    "custom/cava"
   ],
   "modules-center": [
     "clock"
@@ -265,6 +266,11 @@
     "exec": "$HOME/.config/waybar/scripts/nvidia-temp.sh",
     "interval": 10,
     "tooltip": true
+  },
+  "custom/cava": {
+    "format": "{}",
+    "exec": "$HOME/.config/waybar/scripts/cava.sh",
+    "tooltip": false
   },
   "tray": {
     "icon-size": 18,

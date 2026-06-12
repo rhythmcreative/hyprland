@@ -1,0 +1,45 @@
+#!/bin/bash
+# Watches Hyprland IPC for monitor add/remove events and relaunches rust-dock.
+# This prevents instances from stacking or going missing when monitors change.
+
+LAUNCHER="$HOME/.local/bin/rust-dock-launcher"
+STATE_FILE="/tmp/rust-dock-visible"
+
+# Auto-detect Hyprland instance signature if not set
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    HYPRLAND_INSTANCE_SIGNATURE=$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)
+fi
+
+SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+if [ ! -S "$SOCKET" ]; then
+    echo "rust-dock-monitor-watcher: socket not found: $SOCKET" >&2
+    exit 1
+fi
+
+restart_dock() {
+    local prev_state
+    prev_state=$(cat "$STATE_FILE" 2>/dev/null)
+    [ -z "$prev_state" ] && prev_state="visible"
+
+    pkill -x rust-dock 2>/dev/null
+    sleep 0.4
+
+    "$LAUNCHER"
+
+    # Restore hidden state if the dock was hidden before
+    if [ "$prev_state" = "hidden" ]; then
+        sleep 0.4
+        pkill -SIGUSR1 rust-dock 2>/dev/null || true
+        echo "hidden" > "$STATE_FILE"
+    fi
+}
+
+socat - "UNIX-CONNECT:$SOCKET" 2>/dev/null | while read -r event; do
+    case "$event" in
+        monitoradded*|monitorremoved*)
+            sleep 0.5
+            restart_dock
+            ;;
+    esac
+done

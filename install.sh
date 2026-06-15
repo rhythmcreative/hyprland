@@ -557,36 +557,13 @@ fi
 
 # --- FINAL SCREEN ---
 clear
-
-echo "  ██████╗ ███████╗██████╗ ██╗      ██████╗ ██╗   ██╗███████╗██████╗ "
-echo "  ██╔══██╗██╔════╝██╔══██╗██║     ██╔═══██╗╚██╗ ██╔╝██╔════╝██╔══██╗"
-echo "  ██║  ██║█████╗  ██████╔╝██║     ██║   ██║ ╚████╔╝ █████╗  ██║  ██║"
-echo "  ██║  ██║██╔══╝  ██╔═══╝ ██║     ██║   ██║  ╚██╔╝  ██╔══╝  ██║  ██║"
-echo "  ██████╔╝███████╗██║     ███████╗╚██████╔╝   ██║   ███████╗██████╔╝"
-echo "  ╚═════╝ ╚══════╝╚═╝     ╚══════╝ ╚═════╝    ╚═╝   ╚══════╝╚═════╝ "
+if [ "$LANG_CHOICE" == "Español" ]; then
+    echo "Instalación completada con éxito."
+    echo "Iniciando SDDM..."
+else
+    echo "Deployment complete."
+    echo "Starting SDDM..."
+fi
 echo ""
-
-gum style \
-    --border double \
-    --margin "0 2" \
-    --padding "1 3" \
-    --border-foreground 7 \
-    --bold \
-    "RHYTHM CREATIVE DOTFILES  //  ARCH + HYPRLAND  //  DEPLOYMENT COMPLETE"
-
-echo ""
-
-gum style --border normal --border-foreground 7 --margin "0 2" --padding "0 2" \
-    "$(printf '%-22s %s\n' "WALLPAPERS" "~/Pictures/Wallpapers")"
-
-echo ""
-
-gum style --border normal --border-foreground 7 --margin "0 2" --padding "0 2" \
-    "$(printf '%s\n' "COLORS  ->  sync automatically on wallpaper change"
-       printf '%s\n' "MANUAL  ->  ~/.local/bin/pywal-wallpaper-sync")"
-
-echo ""
-gum style --margin "0 4" --bold "  INITIALIZING DISPLAY MANAGER..."
-echo ""
-
 sudo systemctl start sddm
+

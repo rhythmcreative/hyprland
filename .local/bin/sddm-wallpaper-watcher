@@ -6,7 +6,7 @@
 
 LOG_FILE="$HOME/.cache/sddm-wallpaper-watcher.log"
 CURRENT_WALLPAPER_FILE="$HOME/.cache/current-wallpaper"
-SYNC_SCRIPT="$HOME/.local/bin/sync-sddm-wallpaper-sudo"
+SYNC_SCRIPT="$HOME/.local/bin/sddm-sync-wrapper"
 PID_FILE="$HOME/.cache/sddm-wallpaper-watcher.pid"
 
 # Función de logging

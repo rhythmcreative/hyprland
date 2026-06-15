@@ -72,16 +72,27 @@ if [ -f "$PYWAL_SH" ]; then
 
     echo "Aplicando colores de Pywal a SDDM..."
     
-    sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
-    sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$THEME_CONFIG"
-    sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$THEME_CONFIG"
-    sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$THEME_CONFIG"
-    sed -i "s|^PlaceholderColor=.*|PlaceholderColor=\"$color8\"|" "$THEME_CONFIG"
-    sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$color1\"|" "$THEME_CONFIG"
+    for config_file in "$THEME_CONFIG" "$SDDM_THEME_DIR/Themes/theme1.conf"; do
+        if [ -f "$config_file" ]; then
+            sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$config_file"
+            sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$config_file"
+            sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$config_file"
+            sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$config_file"
+            sed -i "s|^PlaceholderColor=.*|PlaceholderColor=\"$color8\"|" "$config_file"
+            sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$color1\"|" "$config_file"
+            sed -i "s|^DimBackground=.*|DimBackground=\"0.92\"|" "$config_file"
+            sed -i "s|^FullBlur=.*|FullBlur=\"true\"|" "$config_file"
+        fi
+    done
     
     echo "SDDM actualizado correctamente."
 else
     echo "No se encontraron colores de Pywal, solo se actualizó el wallpaper."
-    # Asegurar que la ruta del background sea correcta incluso sin pywal
-    sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$THEME_CONFIG"
+    for config_file in "$THEME_CONFIG" "$SDDM_THEME_DIR/Themes/theme1.conf"; do
+        if [ -f "$config_file" ]; then
+            sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$config_file"
+            sed -i "s|^DimBackground=.*|DimBackground=\"0.92\"|" "$config_file"
+            sed -i "s|^FullBlur=.*|FullBlur=\"true\"|" "$config_file"
+        fi
+    done
 fi

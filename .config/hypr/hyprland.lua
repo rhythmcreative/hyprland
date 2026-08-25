@@ -1,14 +1,43 @@
 -- Hyprland Lua Configuration
--- Migrated from hyprland.conf (hyprlang deprecated since v0.55)
+-- Migrated from hyprland.conf
 
--- Source legacy conf files for pywal colors and monitors
-require("~/.cache/wal/colors-hyprland-enhanced.conf")
-require("~/.config/hypr/monitors.conf")
-
--- Set programs
 local mainMod = "SUPER"
 local terminal = "kitty"
 local fileManager = "dolphin"
+
+-- Colors from pywal (inline instead of require)
+local color0  = "rgb(101012)"
+local color1  = "rgb(546065)"
+local color2  = "rgb(A45E4C)"
+local color3  = "rgb(E59A78)"
+local color4  = "rgb(5B7A84)"
+local color5  = "rgb(6F8C94)"
+local color6  = "rgb(9A9D9E)"
+local color7  = "rgb(c2c8c9)"
+local color8  = "rgb(878c8c)"
+local color9  = "rgb(546065)"
+local color10 = "rgb(A45E4C)"
+local color11 = "rgb(E59A78)"
+local color12 = "rgb(5B7A84)"
+local color13 = "rgb(6F8C94)"
+local color14 = "rgb(9A9D9E)"
+local color15 = "rgb(c2c8c9)"
+local background = "rgb(101012)"
+
+-- Monitors (from nwg-displays)
+hl.monitor({
+    output   = "eDP-1",
+    mode     = "1920x1080@144.0",
+    position = "2560x0",
+    scale    = "1",
+})
+
+hl.monitor({
+    output   = "DP-6",
+    mode     = "2560x1440@239.97",
+    position = "0x0",
+    scale    = "1",
+})
 
 -- Autostart
 hl.on("hyprland.start", function ()
@@ -41,12 +70,12 @@ hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
 -- General
 hl.config({
     general = {
-        gaps_in = 5,
-        gaps_out = 20,
+        gaps_in = 3,
+        gaps_out = 10,
         border_size = 2,
         col = {
-            active_border   = { colors = {"$color6"}, angle = 0 },
-            inactive_border = "$color8",
+            active_border   = color6,
+            inactive_border = color8,
         },
         resize_on_border = false,
         allow_tearing = false,
@@ -64,7 +93,7 @@ hl.config({
             enabled = true,
             range = 4,
             render_power = 3,
-            color = "$background",
+            color = background,
         },
         blur = {
             enabled = true,
@@ -160,6 +189,13 @@ hl.device({
     sensitivity = -0.5,
 })
 
+-- Gestures
+hl.gesture({
+    fingers = 3,
+    direction = "horizontal",
+    action = "workspace",
+})
+
 -- Window rules
 hl.window_rule({
     name  = "suppress-maximize",
@@ -173,35 +209,7 @@ hl.layer_rule({
     blur = true,
 })
 
--- Plugin: hyprexpo
-hl.config({
-    plugin = {
-        hyprexpo = {
-            columns = 3,
-            gap_size = 5,
-            bg_col = "rgb(111111)",
-            workspace_method = "center current",
-            enable_gesture = "on",
-            fingers = 3,
-            distance = 300,
-            positive = "on",
-        },
-    },
-})
-
--- Plugin: hyprbars (config loaded via ~/.config/hypr/hyprland/colors.conf)
-
--- Plugin: dynamic-cursors
-hl.config({
-    plugin = {
-        ["dynamic-cursors"] = {
-            enabled = true,
-            shake = {
-                enabled = true,
-            },
-        },
-    },
-})
+-- Plugins config is in hyprland.conf (hyprbars) and hyprexpo defaults are fine
 
 ---------------------
 ---- KEYBINDINGS ----
@@ -232,36 +240,35 @@ hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-selec
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/wallpaper-change-adaptive"))
 hl.bind(mainMod .. " + ALT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-changer-with-waybar-sync"))
 
--- Focus with arrow keys
+-- Focus
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
 
--- Switch workspaces with mainMod + [0-9]
--- Move active window to a workspace with mainMod + SHIFT + [0-9]
+-- Workspaces
 for i = 1, 10 do
     local key = i % 10
     hl.bind(mainMod .. " + " .. key,         hl.dsp.focus({ workspace = i }))
     hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
 
--- Screenshot area
+-- Screenshot
 hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd('grim -g "$(slurp)" - | swappy -f -'))
 
 -- Special workspace
 hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("magic"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
 
--- Scroll through existing workspaces
+-- Scroll workspaces
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 
--- Move/resize windows with mainMod + LMB/RMB and dragging
+-- Mouse binds
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
--- Volume and brightness (Dynamic Island style)
+-- Volume and brightness
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic up"),    { locked = true, repeating = true })
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic down"),  { locked = true, repeating = true })
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("~/.local/bin/volume-dynamic mute"),  { locked = true, repeating = true })
@@ -269,28 +276,17 @@ hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_S
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic up"),   { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic down"), { locked = true, repeating = true })
 
--- Media controls (locked)
+-- Media
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
--- Toggle bluetooth with F10
+-- Misc
 hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
-
--- Toggle keyboard layout between English and Spanish with Super + K
 hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("~/.local/bin/toggle-keyboard-layout"))
-
--- Volume control with F11/F12
 hl.bind("F11", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"))
 hl.bind("F12", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"))
-
--- Keyboard backlight control (Fn+F2/F3 on ASUS)
 hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
 hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
-
--- Ulauncher
-hl.bind(mainMod .. " + Space", hl.dsp.exec_cmd("ulauncher-toggle"))
-
--- Power save toggle
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh"))

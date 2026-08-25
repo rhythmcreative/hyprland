@@ -262,32 +262,32 @@ hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- Volume and brightness (Dynamic Island style)
-hl.bind("", "XF86AudioRaiseVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic up"),    { locked = true, repeating = true })
-hl.bind("", "XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic down"),  { locked = true, repeating = true })
-hl.bind("", "XF86AudioMute",        hl.dsp.exec_cmd("~/.local/bin/volume-dynamic mute"),  { locked = true, repeating = true })
-hl.bind("", "XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true, repeating = true })
-hl.bind("", "XF86MonBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic up"),   { locked = true, repeating = true })
-hl.bind("", "XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic down"), { locked = true, repeating = true })
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic up"),    { locked = true, repeating = true })
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic down"),  { locked = true, repeating = true })
+hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("~/.local/bin/volume-dynamic mute"),  { locked = true, repeating = true })
+hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic up"),   { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic down"), { locked = true, repeating = true })
 
 -- Media controls (locked)
-hl.bind("", "XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
-hl.bind("", "XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
-hl.bind("", "XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
-hl.bind("", "XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
+hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
+hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
 -- Toggle bluetooth with F10
-hl.bind("", "F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
+hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
 
 -- Toggle keyboard layout between English and Spanish with Super + K
 hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("~/.local/bin/toggle-keyboard-layout"))
 
 -- Volume control with F11/F12
-hl.bind("", "F11", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"))
-hl.bind("", "F12", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"))
+hl.bind("F11", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"))
+hl.bind("F12", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"))
 
 -- Keyboard backlight control (Fn+F2/F3 on ASUS)
-hl.bind("", "XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
-hl.bind("", "XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
+hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
+hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
 
 -- Ulauncher
 hl.bind(mainMod .. " + Space", hl.dsp.exec_cmd("ulauncher-toggle"))

@@ -13,7 +13,7 @@ log() {
 
 # Verificación de daemon (soporta awww)
 DAEMON_RUNNING=false
-if pgrep -x "awww-daemon" > /dev/null; then
+if awww query > /dev/null 2>&1 || pgrep -x "awww-daemon" > /dev/null; then
     DAEMON_RUNNING=true
 fi
 

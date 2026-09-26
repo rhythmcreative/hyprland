@@ -7,6 +7,8 @@
   "margin-right": 0,
   "spacing": 0,
   "exclusive": true,
+  "on-sigusr1": "hide",
+  "on-sigusr2": "show",
   "modules-left": [
     "hyprland/workspaces",
     "group/system-info",
@@ -20,8 +22,7 @@
     "tray",
     "pulseaudio",
     "backlight",
-    "battery#bat0",
-    "battery#bat1"
+    "battery"
   ],
   "custom/desktop-power": {
     "format": "󰚥",

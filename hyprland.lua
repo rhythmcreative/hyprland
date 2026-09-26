@@ -53,6 +53,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("~/.local/bin/rust-dock-launcher")
     hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher")
     hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher")
+    hl.exec_cmd("~/.local/bin/waybar_auto_hide")
 end)
 
 -- Environment variables
@@ -219,7 +220,7 @@ hl.layer_rule({
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("exit"))
+hl.bind(mainMod .. " + M", hl.dsp.exit())
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + W", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/rofi-style3-monitor-adaptive"))

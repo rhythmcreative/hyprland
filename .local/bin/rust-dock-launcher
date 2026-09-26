@@ -4,6 +4,13 @@
 RUST_DOCK="$HOME/.local/bin/rust-dock"
 STATE_FILE="/tmp/rust-dock-visible"
 
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    HYPR_SIG=$(ls -t "/run/user/$(id -u)/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$HYPR_SIG" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    fi
+fi
+
 monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name')
 
 if [ -z "$monitors" ]; then

@@ -961,8 +961,25 @@ ShellRoot {
                         // Session & Close buttons
                         RowLayout {
                             spacing: 6
-                            Layout.preferredWidth: 150
+                            Layout.preferredWidth: 170
                             Layout.alignment: Qt.AlignRight
+
+                            Rectangle {
+                                width: 28; height: 28; radius: 14
+                                color: root.colSurface
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰒓"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 13
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.expanded = false; root.runCmd("~/.local/bin/desktop-settings"); }
+                                }
+                            }
 
                             Rectangle {
                                 width: 28; height: 28; radius: 14

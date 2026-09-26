@@ -1,17 +1,13 @@
 #!/bin/bash
-# Toggle all rust-dock instances using SIGUSR1 (hide) / SIGUSR2 (show)
+# Toggle all rust-dock instances seamlessly
 STATE_FILE="/tmp/rust-dock-visible"
 
-if [ ! -s "$STATE_FILE" ]; then
-    echo "visible" > "$STATE_FILE"
-fi
+# Usar SIGHUP para invocar toggle_visibility() nativamente en rust-dock sin matar este script
+pkill -x -HUP rust-dock 2>/dev/null || true
 
-state=$(cat "$STATE_FILE")
-
-if [ "$state" = "visible" ]; then
-    pkill -SIGUSR1 rust-dock 2>/dev/null || true
-    echo "hidden" > "$STATE_FILE"
+# Alternar el estado registrado
+if [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE" 2>/dev/null)" = "hidden" ]; then
+    echo "visible" > "$STATE_FILE" 2>/dev/null || true
 else
-    pkill -SIGUSR2 rust-dock 2>/dev/null || true
-    echo "visible" > "$STATE_FILE"
+    echo "hidden" > "$STATE_FILE" 2>/dev/null || true
 fi

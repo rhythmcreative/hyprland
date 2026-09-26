@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+import sys
+import subprocess
+import json
+
+def get_wifi_list():
+    try:
+        out = subprocess.check_output(
+            ['nmcli', '-t', '-f', 'IN-USE,SSID,SECURITY,BARS,SIGNAL', 'device', 'wifi', 'list'],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        networks = []
+        seen = set()
+        for line in out.strip().split('\n'):
+            if not line:
+                continue
+            parts = line.split(':')
+            if len(parts) < 5:
+                continue
+            in_use = parts[0].strip() == '*'
+            ssid = parts[1].strip()
+            if not ssid:
+                continue
+            # Deduplicate by SSID, preferring connected or strongest signal
+            if ssid in seen:
+                continue
+            seen.add(ssid)
+            sec = parts[2].strip() or 'Abierta'
+            bars = parts[3].strip()
+            try:
+                signal = int(parts[4].strip())
+            except ValueError:
+                signal = 0
+
+            networks.append({
+                'ssid': ssid,
+                'connected': in_use,
+                'security': sec,
+                'bars': bars,
+                'signal': signal
+            })
+        # Sort connected first, then by signal descending
+        networks.sort(key=lambda x: (not x['connected'], -x['signal']))
+        return networks
+    except Exception as e:
+        return []
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'list'
+
+    if cmd == 'list':
+        print(json.dumps(get_wifi_list()))
+    elif cmd == 'rescan':
+        try:
+            subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+        except Exception:
+            pass
+        print(json.dumps(get_wifi_list()))
+    elif cmd == 'toggle':
+        try:
+            state = subprocess.check_output(['nmcli', '-fields', 'WIFI', 'g'], text=True).strip().split()[-1]
+            new_state = 'off' if 'enabled' in state else 'on'
+            subprocess.run(['nmcli', 'radio', 'wifi', new_state], check=True)
+            print(json.dumps({'status': 'ok', 'enabled': new_state == 'on'}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+    elif cmd == 'connect':
+        if len(sys.argv) < 3:
+            print(json.dumps({'status': 'error', 'message': 'Missing SSID'}))
+            sys.exit(1)
+        ssid = sys.argv[2]
+        password = sys.argv[3] if len(sys.argv) > 3 else None
+        try:
+            call_args = ['nmcli', 'dev', 'wifi', 'connect', ssid]
+            if password:
+                call_args.extend(['password', password])
+            res = subprocess.run(call_args, capture_output=True, text=True, timeout=15)
+            if res.returncode == 0:
+                print(json.dumps({'status': 'ok', 'message': res.stdout.strip()}))
+            else:
+                print(json.dumps({'status': 'error', 'message': res.stderr.strip() or res.stdout.strip()}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+    elif cmd == 'disconnect':
+        try:
+            # Find active wifi interface
+            out = subprocess.check_output(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'dev'], text=True)
+            for line in out.strip().split('\n'):
+                parts = line.split(':')
+                if len(parts) >= 3 and parts[1] == 'wifi' and parts[2] == 'connected':
+                    subprocess.run(['nmcli', 'device', 'disconnect', parts[0]], check=True)
+                    break
+            print(json.dumps({'status': 'ok'}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+    else:
+        print(json.dumps({'status': 'unknown_command'}))
+
+if __name__ == '__main__':
+    main()

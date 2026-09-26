@@ -26,6 +26,8 @@ if [ "$bt_status" = "yes" ]; then
     echo "Bluetooth desactivado"
 else
     # Bluetooth está apagado, encenderlo
+    rfkill unblock bluetooth 2>/dev/null || true
+    sleep 0.2
     bluetoothctl power on
     notify "Bluetooth activado"
     echo "Bluetooth activado"

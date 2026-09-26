@@ -1,74 +1,110 @@
 #!/bin/bash
 
 # Visor interactivo de atajos de teclado para Hyprland
-# Tema y colores sincronizados dinámicamente con Pywal
+# Tema y colores sincronizados dinamicamente con Pywal
 
 THEME_FILE="$HOME/.config/rofi/hotkeys.rasi"
 
-# Si ya está abierto, cerrarlo (comportamiento toggle)
-if pgrep -f "rofi.*hotkeys.rasi" > /dev/null 2>&1; then
-    pkill -f "rofi.*hotkeys.rasi"
+# Toggle behavior: if rofi hotkeys is already running, close it
+if pgrep -u "$(id -u)" -x rofi >/dev/null 2>&1 && pgrep -u "$(id -u)" -f "rofi -dmenu.*hotkeys.rasi" >/dev/null 2>&1; then
+    pkill -u "$(id -u)" -f "rofi -dmenu.*hotkeys.rasi"
     exit 0
 fi
 
-# Gestionar visibilidad de rust-dock para evitar solapamiento
-_rust_pids=$(pgrep -x rust-dock 2>/dev/null | paste -sd '|')
-_rust_was_visible=false
-if [ -n "$_rust_pids" ] && hyprctl layers 2>/dev/null | grep -qE "pid: ($_rust_pids)"; then
-    _rust_was_visible=true
-    pkill -SIGUSR1 rust-dock 2>/dev/null || true
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+if [ -z "$WAYLAND_DISPLAY" ]; then
+    WL_DISP=$(ls "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
+    if [ -n "$WL_DISP" ]; then
+        export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+    else
+        export WAYLAND_DISPLAY="wayland-1"
+    fi
+fi
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$HYPR_SIG" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    fi
 fi
 
-# Lista completa de combinaciones de teclas
-read -r -d '' HOTKEYS << 'EOF'
-SUPER + Return            │ Abrir terminal (Kitty)           │ Sistema
-SUPER + SPACE             │ Alternar Rust-Dock               │ Lanzador
-SUPER + I                 │ Alternar Dynamic Island (Notch)  │ Barra
-SUPER + F                 │ Visor de atajos de teclado       │ Ayuda
-SUPER + A                 │ Lanzador de aplicaciones         │ Rofi
-SUPER + R                 │ Ejecutar comando (Run)           │ Rofi
-SUPER + E                 │ Explorador de archivos           │ Archivos
-SUPER + Q                 │ Cerrar ventana activa            │ Ventana
-SUPER + W                 │ Alternar ventana flotante        │ Ventana
-SUPER + J                 │ Alternar division horizontal     │ Tiling
-ALT + Return              │ Pantalla completa (Fullscreen)   │ Ventana
-SUPER + Tab               │ Vista general (Overview)         │ Ventana
-SUPER + ALT + Tab         │ Selector de ventanas abiertas    │ Rofi
-SUPER + M                 │ Salir de la sesion Hyprland      │ Sesion
-SUPER + L                 │ Bloquear pantalla (Hyprlock)     │ Seguridad
-SUPER + BackSpace         │ Menu de apagado (Powermenu)      │ Sesion
-SUPER + P                 │ Captura de pantalla y editar     │ Utilidad
-SUPER + SHIFT + P         │ Cuentagotas / Selector color     │ Utilidad
-SUPER + SHIFT + Print     │ Captura de pantalla directa      │ Utilidad
-SUPER + SHIFT + G         │ Modo rendimiento / ahorro        │ Sistema
-SUPER + SHIFT + W         │ Selector visual de wallpapers    │ Wallpaper
-SUPER + SHIFT + B         │ Cambio rapido de wallpaper       │ Wallpaper
-SUPER + ALT + W           │ Cambiar wallpaper + Waybar       │ Wallpaper
-SUPER + XF86Back / Prior  │ Resincronizar colores con Pywal  │ Tema
-SUPER + S                 │ Alternar espacio magico (scratch)│ Workspace
-SUPER + SHIFT + S         │ Enviar a espacio magico          │ Workspace
-SUPER + 1 .. 9, 0         │ Cambiar a espacio 1 al 10        │ Navegacion
-SUPER + SHIFT + 1 .. 0    │ Mover ventana a espacio 1 al 10  │ Navegacion
-SUPER + Flechas           │ Mover foco (Izq / Der / Arr / Aba│ Navegacion
-SUPER + Scroll Raton      │ Cambiar entre espacios           │ Navegacion
-SUPER + Clic Izquierdo    │ Arrastrar ventana flotante       │ Raton
-SUPER + Clic Derecho      │ Redimensionar ventana flotante   │ Raton
-Volumen Up / Down / Mute  │ Audio dinamico con notch         │ Hardware
-Brillo Up / Down          │ Brillo de pantalla con notch     │ Hardware
-F10                       │ Alternar Bluetooth               │ Hardware
-F11 / F12                 │ Ajuste fino de volumen (- / +)   │ Hardware
-XF86AudioPlay / Pause     │ Reproducir o pausar musica       │ Media
-XF86AudioNext / Prev      │ Pista siguiente o anterior       │ Media
-XF86KbdBrightnessUp/Down  │ Brillo de teclado Asus           │ Hardware
+# Manage visibility of Waybar, Rust-Dock and Quickshell
+_RUST_DOCK_WAS_VISIBLE=false
+_QUICKSHELL_WAS_VISIBLE=false
+_WAYBAR_WAS_VISIBLE=false
+
+if pgrep -x waybar >/dev/null 2>&1; then
+    _WAYBAR_WAS_VISIBLE=true
+    pkill -SIGUSR1 waybar 2>/dev/null &
+fi
+if pgrep -x rust-dock >/dev/null 2>&1; then
+    _RUST_DOCK_WAS_VISIBLE=true
+    pkill -SIGUSR1 rust-dock 2>/dev/null &
+fi
+if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+    _QUICKSHELL_WAS_VISIBLE=true
+    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
+fi
+wait
+
+# Full list of keybindings in English
+HOTKEYS_DATA=$(cat << 'EOF'
+SUPER + Return            │ Launch Terminal (Kitty)          │ System
+SUPER + SPACE             │ Toggle Rust-Dock                 │ Launcher
+SUPER + I                 │ Toggle Dynamic Island (Notch)    │ Bar
+SUPER + F                 │ Keybindings Cheatsheet           │ Help
+SUPER + X                 │ System Settings Menu             │ Settings
+SUPER + N                 │ Wi-Fi Network Menu               │ Network
+SUPER + B                 │ Bluetooth Devices Menu           │ Network
+SUPER + A                 │ Application Launcher             │ Rofi
+SUPER + R                 │ Run Command                      │ Rofi
+SUPER + E                 │ File Manager (Thunar)            │ Files
+SUPER + Q                 │ Close Active Window              │ Window
+SUPER + W                 │ Toggle Floating Window           │ Window
+SUPER + J                 │ Toggle Horizontal / Split        │ Tiling
+ALT + Return              │ Fullscreen Toggle                │ Window
+SUPER + Tab               │ Workspace Overview               │ Window
+SUPER + ALT + Tab         │ Switch Open Windows              │ Rofi
+SUPER + M                 │ Exit Hyprland Session            │ Session
+SUPER + L                 │ Lock Screen (Hyprlock)           │ Security
+SUPER + BackSpace         │ Power Menu (Shutdown/Reboot)     │ Session
+SUPER + P                 │ Screenshot & Edit (Swappy)       │ Utility
+SUPER + SHIFT + P         │ Color Picker (Hyprpicker)        │ Utility
+SUPER + SHIFT + Print     │ Instant Full Screenshot          │ Utility
+SUPER + SHIFT + G         │ Toggle Performance Mode          │ System
+SUPER + SHIFT + W         │ Wallpaper Visual Selector        │ Wallpaper
+SUPER + Ctrl + W          │ Wallpaper Visual Selector        │ Wallpaper
+SUPER + SHIFT + B         │ Quick Random Wallpaper           │ Wallpaper
+SUPER + ALT + W           │ Change Wallpaper + Sync Waybar   │ Wallpaper
+SUPER + XF86Back / Prior  │ Resync Colors with Pywal         │ Theme
+SUPER + S                 │ Toggle Special Workspace (Scratch)│ Workspace
+SUPER + SHIFT + S         │ Move Window to Special Workspace │ Workspace
+SUPER + 1 .. 9, 0         │ Switch to Workspace 1 .. 10      │ Navigation
+SUPER + SHIFT + 1 .. 0    │ Move Window to Workspace 1 .. 10 │ Navigation
+SUPER + Arrow Keys        │ Move Focus (Left/Right/Up/Down)  │ Navigation
+SUPER + Mouse Scroll      │ Cycle Through Workspaces         │ Navigation
+SUPER + Left Mouse Drag   │ Move Floating Window             │ Mouse
+SUPER + Right Mouse Drag  │ Resize Floating Window           │ Mouse
+Volume Up / Down / Mute   │ Dynamic Audio with Notch         │ Hardware
+Brightness Up / Down      │ Screen Brightness with Notch     │ Hardware
+F10                       │ Toggle Bluetooth                 │ Hardware
+F11 / F12                 │ Fine Volume Tuning (- / +)       │ Hardware
+XF86AudioPlay / Pause     │ Play / Pause Media               │ Media
+XF86AudioNext / Prev      │ Next / Previous Track            │ Media
+XF86KbdBrightnessUp/Down  │ Asus Keyboard Backlight          │ Hardware
 EOF
+)
 
-# Mostrar menu Rofi
-selected=$(echo "$HOTKEYS" | rofi -dmenu -i -p "Atajos" -theme "$THEME_FILE")
+# Display Rofi menu with English prompt
+selected=$(printf "%s\n" "$HOTKEYS_DATA" | rofi -dmenu -i -p "Hotkeys" -theme "$THEME_FILE")
 
-# Restaurar visibilidad de rust-dock si estaba activo antes
-if [ "$_rust_was_visible" = true ]; then
-    pkill -SIGUSR2 rust-dock 2>/dev/null || true
-fi
+# Restore bars simultaneously in parallel
+[ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
+[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
+[ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
+wait
 
 # Accion opcional al pulsar Enter en un atajo
 if [ -n "$selected" ]; then
@@ -81,6 +117,15 @@ if [ -n "$selected" ]; then
             ;;
         *"SUPER + I"*)
             "$HOME/.local/bin/toggle-island" &
+            ;;
+        *"SUPER + X"*)
+            "$HOME/.local/bin/settings-menu" &
+            ;;
+        *"SUPER + N"*)
+            "$HOME/.local/bin/rofi-wifi-menu" &
+            ;;
+        *"SUPER + B"*)
+            "$HOME/.local/bin/rofi-bluetooth-menu" &
             ;;
         *"SUPER + A"*)
             "$HOME/.local/bin/rofi-style3-monitor-adaptive" &
@@ -100,7 +145,7 @@ if [ -n "$selected" ]; then
         *"SUPER + SHIFT + P"*)
             hyprpicker -a &
             ;;
-        *"SUPER + SHIFT + W"*)
+        *"SUPER + SHIFT + W"*|*"SUPER + Ctrl + W"*)
             "$HOME/.local/bin/wallpaper-selector" &
             ;;
         *"SUPER + SHIFT + B"*)

@@ -17,8 +17,8 @@ cava
 cmake
 code
 cryptsetup
-dolphin
 dosfstools
+file-roller
 flatpak
 fwupd
 git
@@ -100,6 +100,8 @@ telegram-desktop
 thermald
 throttled
 thunar
+thunar-archive-plugin
+thunar-volman
 tlp
 ttf-jetbrains-mono-nerd
 ufw

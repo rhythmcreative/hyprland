@@ -3,7 +3,7 @@
 
 local mainMod = "SUPER"
 local terminal = "kitty"
-local fileManager = "dolphin"
+local fileManager = "thunar"
 
 -- Colors from pywal (inline instead of require)
 local color0  = "rgb(101012)"

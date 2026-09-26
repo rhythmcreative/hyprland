@@ -219,6 +219,8 @@ hl.layer_rule({
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/toggle-island"))
+hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("~/.local/bin/desktop-settings"))
+hl.bind(mainMod .. " + SHIFT + I", hl.dsp.exec_cmd("~/.local/bin/desktop-settings"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("~/.local/bin/show-hotkeys"))
 hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("~/.local/bin/settings-menu"))
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/rofi-wifi-menu"))

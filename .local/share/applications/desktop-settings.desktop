@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Desktop Settings
-Comment=System & Desktop Settings for Hyprland & Quickshell
-Exec=/home/rhythmcreative/.local/bin/desktop-settings
-Icon=preferences-system
-Terminal=false
-Type=Application
-Categories=Settings;DesktopSettings;System;
-Keywords=Settings;Preferences;Hyprland;Network;Bluetooth;Audio;Display;Wallpaper;

@@ -575,12 +575,6 @@ MONCONF
     chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
     step_ok "Executables deployed."
 
-    step_item "Deploying shared assets and desktop entries to ~/.local/share/..."
-    if [ -d "$DOTFILES_DIR/.local/share" ]; then
-        cp -r "$DOTFILES_DIR/.local/share"/* "$HOME/.local/share/" 2>/dev/null || true
-    fi
-    step_ok "Shared assets deployed."
-
     # Shell and GTK dotfiles
     for pkg in zsh bash gtk; do
         if [ -d "$pkg" ]; then

@@ -112,6 +112,7 @@ ShellRoot {
         sysStatsProc.running = true
         nightLightCheckProc.running = true
         caffeineCheckProc.running = true
+        hyprStatusProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
         if (root.controlSubView === 2) btStatusProc.running = true
         if (root.controlSubView === 3) audioSinksProc.running = true
@@ -119,6 +120,7 @@ ShellRoot {
 
     onCurrentTabChanged: {
         root.controlSubView = 0
+        if (root.currentTab === 1) hyprStatusProc.running = true
     }
 
     onExpandedChanged: {
@@ -328,9 +330,12 @@ ShellRoot {
         }
     }
 
-    // Process helper to run quick commands
+    // Process helper to run quick commands with full environment
     function runCmd(cmd) {
-        Quickshell.execDetached(["bash", "-c", cmd])
+        const envInit = "export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; " +
+                        "[ -z \"$WAYLAND_DISPLAY\" ] && export WAYLAND_DISPLAY=\"wayland-1\"; " +
+                        "[ -z \"$HYPRLAND_INSTANCE_SIGNATURE\" ] && export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t \"$XDG_RUNTIME_DIR/hypr/\" 2>/dev/null | grep -v '\\.lock$' | head -n1); "
+        Quickshell.execDetached(["bash", "-c", envInit + cmd])
     }
 
     // Get live volume & brightness
@@ -539,6 +544,31 @@ ShellRoot {
                 root.caffeineEnabled = text.trim() === "on"
             }
         }
+    }
+
+    Process {
+        id: hyprStatusProc
+        command: ["bash", "-c", "$HOME/.local/bin/notch-hypr-helper status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const data = JSON.parse(text.trim())
+                    root.hyprAnim = data.anim
+                    root.hyprBlur = data.blur
+                    root.hyprShadow = data.shadow
+                    root.hyprRounding = data.rounding
+                    root.hyprGaps = data.gaps
+                    root.perfMode = data.perf
+                } catch(e) {}
+            }
+        }
+    }
+
+    Timer {
+        id: hyprRefreshTimer
+        interval: 350
+        repeat: false
+        onTriggered: hyprStatusProc.running = true
     }
 
     Timer {
@@ -2936,7 +2966,7 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.hyprAnim = !root.hyprAnim
-                                        root.runCmd("hyprctl eval 'hl.config({ animations = { enabled = " + root.hyprAnim + " } })'")
+                                        root.runCmd("$HOME/.local/bin/notch-hypr-helper set-anim " + root.hyprAnim)
                                     }
                                 }
                             }
@@ -2965,7 +2995,7 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.hyprBlur = !root.hyprBlur
-                                        root.runCmd("hyprctl eval 'hl.config({ decoration = { blur = { enabled = " + root.hyprBlur + " } } })'")
+                                        root.runCmd("$HOME/.local/bin/notch-hypr-helper set-blur " + root.hyprBlur)
                                     }
                                 }
                             }
@@ -2994,7 +3024,7 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.hyprShadow = !root.hyprShadow
-                                        root.runCmd("hyprctl eval 'hl.config({ decoration = { shadow = { enabled = " + root.hyprShadow + " } } })'")
+                                        root.runCmd("$HOME/.local/bin/notch-hypr-helper set-shadow " + root.hyprShadow)
                                     }
                                 }
                             }
@@ -3023,7 +3053,8 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.perfMode = !root.perfMode
-                                        root.runCmd("~/.config/hypr/scripts/toggle_performance.sh")
+                                        root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-perf")
+                                        hyprRefreshTimer.restart()
                                     }
                                 }
                             }
@@ -3081,7 +3112,7 @@ ShellRoot {
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: {
                                                     root.hyprRounding = modelData.val
-                                                    root.runCmd("hyprctl eval 'hl.config({ decoration = { rounding = " + modelData.val + " } })'")
+                                                    root.runCmd("$HOME/.local/bin/notch-hypr-helper set-rounding " + modelData.val)
                                                 }
                                             }
                                         }
@@ -3127,7 +3158,7 @@ ShellRoot {
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: {
                                                     root.hyprGaps = modelData.val
-                                                    root.runCmd("hyprctl eval 'hl.config({ general = { gaps_out = " + modelData.val + " } })'")
+                                                    root.runCmd("$HOME/.local/bin/notch-hypr-helper set-gaps " + modelData.val)
                                                 }
                                             }
                                         }
@@ -3147,7 +3178,7 @@ ShellRoot {
                                     Text { text: "󰍹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Monitors"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("nwg-displays"); } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("$HOME/.local/bin/notch-hypr-helper monitors"); } }
                             }
 
                             Rectangle {
@@ -3156,7 +3187,7 @@ ShellRoot {
                                     Text { text: "󰕰"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Split Layout"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("hyprctl dispatch togglesplit") }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-split") }
                             }
 
                             Rectangle {
@@ -3165,7 +3196,7 @@ ShellRoot {
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Reload"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("hyprctl reload") }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.runCmd("$HOME/.local/bin/notch-hypr-helper reload"); hyprRefreshTimer.restart(); } }
                             }
                         }
                     }

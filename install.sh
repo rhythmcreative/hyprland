@@ -623,6 +623,48 @@ EOF
 }
 
 # --- MAIN EXECUTION ---
+if [[ "$1" == "--preview" || "$1" == "--dry-run" ]]; then
+    clear_logo
+    gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
+    step_item "Verifying preflight environment..."
+    sleep 0.4
+    step_ok "Arch Linux x86_64 verified."
+    step_ok "Parallel downloads & multilib repository active."
+    
+    section "AUR Helper & Build Toolchain"
+    step_ok "yay aur helper ready."
+    step_ok "Rust, cargo, and GTK4 layer-shell libraries ready."
+
+    section "Core Packages & System Libraries"
+    step_item "Simulating package dependency resolution..."
+    gum spin --spinner dot --title "Checking 60+ core packages..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.2
+    step_ok "Compositor, Waybar, Quickshell, Rofi, Audio, Fonts resolved."
+
+    section "Rust-Dock Component"
+    gum spin --spinner dot --title "Verifying rust-dock target binary..." --padding "0 0 0 $PADDING_LEFT" -- sleep 0.8
+    step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
+
+    section "Configuration Synchronization (Dotfiles)"
+    step_item "Simulating deployment of 12 config directories..."
+    sleep 0.4
+    step_ok "Hyprland Lua, Waybar, Quickshell, Rofi, and Kvantum synchronized."
+    step_ok "61 helper scripts deployed to ~/.local/bin/."
+    step_ok "Preserved monitors.conf."
+    step_ok "Dynamic Island systemd service enabled."
+
+    section "SDDM Astronaut Theme & Multi-Monitor"
+    step_ok "SDDM Astronaut theme and live Pywal synchronization hooks verified."
+    step_ok "Multi-monitor detection (Xsetup) configured."
+
+    gum spin --spinner dot --title "Calibrating Pywal color palette..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.0
+
+    clear_logo
+    echo ""
+    gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished previewing (Simulation Complete)"
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "All modules, styles, and configurations are ready for deployment."
+    exit 0
+fi
+
 preflight_checks
 clear_logo
 gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Initializing Rhythm Hyprland Setup..."

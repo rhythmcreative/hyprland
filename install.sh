@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# --- Rhythm Arch Hyprland Installer v3 (Minimal White / Omarchy Inspired) ---
-# Instalador profesional, modular y robusto para Arch Linux y Hyprland
+# --- Rhythm Hyprland Installer (Omarchy Style Presentation) ---
+# Automated, modular, and resilient deployment for Arch Linux & Hyprland
 
 set -eEo pipefail
 
@@ -10,121 +10,101 @@ handle_error() {
     local exit_code=$?
     local line_number=$1
     echo ""
-    echo "  [ERROR] Ocurrio un fallo en la linea $line_number (codigo de salida: $exit_code)."
-    echo "  [ERROR] La instalacion se detuvo para proteger la integridad del sistema."
-    exit $exit_code
+    if [[ -n "$PADDING_LEFT_SPACES" ]]; then
+        printf "%s\033[31m  [ERROR] An error occurred on line %s (exit code: %s).\033[0m\n" "$PADDING_LEFT_SPACES" "$line_number" "$exit_code"
+        printf "%s\033[31m  [ERROR] Installation halted to protect system integrity.\033[0m\n" "$PADDING_LEFT_SPACES"
+    else
+        echo "  [ERROR] An error occurred on line $line_number (exit code: $exit_code)."
+        echo "  [ERROR] Installation halted to protect system integrity."
+    fi
+    exit "$exit_code"
 }
 trap 'handle_error $LINENO' ERR
 
-# Environment variables for gum aesthetic
-export GUM_CHOOSE_CURSOR_FOREGROUND="7"
-export GUM_CHOOSE_HEADER_FOREGROUND="7"
-export GUM_CHOOSE_SELECTED_FOREGROUND="7"
-export GUM_SPIN_SPINNER_FOREGROUND="7"
-export GUM_STYLE_FOREGROUND="7"
-export GUM_CONFIRM_PROMPT_FOREGROUND="7"
-export GUM_CONFIRM_SELECTED_BACKGROUND="7"
-export GUM_CONFIRM_SELECTED_FOREGROUND="0"
-
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+LOG_FILE="/tmp/hyprland-install.log"
+: > "$LOG_FILE"
 
-# --- UI LOGGING HELPERS ---
+# --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
+if [[ -e /dev/tty ]]; then
+    TERM_SIZE=$(stty size 2>/dev/null </dev/tty || echo "24 80")
+    export TERM_HEIGHT=$(echo "$TERM_SIZE" | cut -d' ' -f1)
+    export TERM_WIDTH=$(echo "$TERM_SIZE" | cut -d' ' -f2)
+else
+    export TERM_WIDTH=80
+    export TERM_HEIGHT=24
+fi
+
+LOGO_PATH="$DOTFILES_DIR/logo.txt"
+if [[ -f "$LOGO_PATH" ]]; then
+    LOGO_WIDTH=$(awk '{ if (length > max) max = length } END { print max+0 }' "$LOGO_PATH" 2>/dev/null || echo 69)
+else
+    LOGO_WIDTH=69
+fi
+
+PADDING_LEFT=$(((TERM_WIDTH - LOGO_WIDTH) / 2))
+if (( PADDING_LEFT < 0 )); then
+    PADDING_LEFT=0
+fi
+PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
+
+# Tokyo Night theme for gum (Omarchy style)
+export GUM_CONFIRM_PROMPT_FOREGROUND="6"     # Cyan
+export GUM_CONFIRM_SELECTED_FOREGROUND="0"   # Black
+export GUM_CONFIRM_SELECTED_BACKGROUND="2"   # Green
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7" # White
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="0" # Black
+export PADDING="0 0 0 $PADDING_LEFT"
+export GUM_CHOOSE_PADDING="$PADDING"
+export GUM_FILTER_PADDING="$PADDING"
+export GUM_INPUT_PADDING="$PADDING"
+export GUM_SPIN_PADDING="$PADDING"
+export GUM_TABLE_PADDING="$PADDING"
+export GUM_CONFIRM_PADDING="$PADDING"
+
+clear_logo() {
+    printf "\033[H\033[2J"
+    if [[ -f "$LOGO_PATH" ]]; then
+        gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+    fi
+}
+
 section() {
     echo ""
-    gum style --bold --margin "1 0" --underline "$MSG_SECTION $1 "
+    gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
 }
 
-info() {
-    echo "  [SISTEMA] $1"
+step_item() {
+    printf "%s\033[90m  → %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
 }
 
-success() {
-    echo "  [OK] $1"
+step_ok() {
+    printf "%s\033[32m  ✓ %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
 }
 
-warn() {
-    echo "  [AVISO] $1"
-}
-
-error() {
-    echo "  [ERROR] $1"
-}
-
-print_banner() {
-    clear
-    echo "██████╗ ██╗  ██╗██╗   ██╗████████╗██╗  ██╗███╗   ███╗ ██████╗██████╗ ███████╗ █████╗ ████████╗██╗██╗   ██╗███████╗"
-    echo "██╔══██╗██║  ██║╚██╗ ██╔╝╚══██╔══╝██║  ██║████╗ ████║██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║██║   ██║██╔════╝"
-    echo "██████╔╝███████║ ╚████╔╝    ██║   ███████║██╔████╔██║██║     ██████╔╝█████╗  ███████║   ██║   ██║██║   ██║█████╗  "
-    echo "██╔══██╗██╔══██║  ╚██╔╝     ██║   ██╔══██║██║╚██╔╝██║██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██║╚██╗ ██╔╝██╔══╝  "
-    echo "██║  ██║██║  ██║   ██║      ██║   ██║  ██║██║ ╚═╝ ██║╚██████╗██║  ██║███████╗██║  ██║   ██║   ██║ ╚████╔╝ ███████╗"
-    echo "╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝"
-    echo ""
-    echo "██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗"
-    echo "██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝"
-    echo "██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗"
-    echo "██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║"
-    echo "██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║"
-    echo "╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝"
-    echo ""
-}
-
-# --- LOCALIZATION ---
-setup_language() {
-    LANG_CHOICE=$(gum choose --header "Select Language / Selecciona Idioma" "Español" "English")
-    
-    case "$LANG_CHOICE" in
-        "Español")
-            MSG_ERROR_ROOT="No ejecutes este script como root."
-            MSG_SECTION="SECCION:"
-            MSG_CORE_INSTALL="Instalando paquetes base y dependencias del sistema..."
-            MSG_SEARCH_PROMPT="Buscar Apps: "
-            MSG_SEARCH_HEADER="[TAB] Seleccionar | [ENTER] Instalar | [ESC] Omitir"
-            MSG_SEARCH_LAUNCH="Iniciando buscador de aplicaciones interactivas (Oficial + AUR)..."
-            MSG_DRIVER_HEADER="DRIVERS DE HARDWARE"
-            MSG_DEPLOY_DRIVERS="Instalando controladores detectados..."
-            MSG_FLATPAK_CONFIRM="Deseas instalar aplicaciones Flatpak de tu lista flatpaks.txt?"
-            MSG_WALL_CONFIRM="Deseas descargar paquetes adicionales de fondos de pantalla?"
-            MSG_ZSH_CONFIRM="Establecer Zsh como tu shell por defecto?"
-            MSG_REBOOT_CONFIRM="Deseas reiniciar el sistema ahora para iniciar Hyprland?"
-            MSG_DONE="Instalacion completada con exito."
-            ;;
-        *)
-            MSG_ERROR_ROOT="Do not run this script as root."
-            MSG_SECTION="SECTION:"
-            MSG_CORE_INSTALL="Installing core system packages and dependencies..."
-            MSG_SEARCH_PROMPT="Search Apps: "
-            MSG_SEARCH_HEADER="[TAB] Select Multiple | [ENTER] Install | [ESC] Skip"
-            MSG_SEARCH_LAUNCH="Launching interactive application discovery (Official + AUR)..."
-            MSG_DRIVER_HEADER="HARDWARE DRIVERS"
-            MSG_DEPLOY_DRIVERS="Deploying detected hardware drivers..."
-            MSG_FLATPAK_CONFIRM="Install Flatpaks from flatpaks.txt list?"
-            MSG_WALL_CONFIRM="Download additional wallpaper packs?"
-            MSG_ZSH_CONFIRM="Set Zsh as your default shell?"
-            MSG_REBOOT_CONFIRM="Reboot system now to start Hyprland?"
-            MSG_DONE="Installation completed successfully."
-            ;;
-    esac
+step_warn() {
+    printf "%s\033[33m  ! %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
 }
 
 # --- PREFLIGHT CHECKS ---
 preflight_checks() {
     if [ "$EUID" -eq 0 ]; then
-        echo "ERROR: Do not run this script as root."
+        echo "ERROR: Do not run this installer as root."
         exit 1
     fi
 
     if [ ! -f /etc/arch-release ]; then
-        echo "ERROR: Este instalador solo es compatible con Arch Linux."
+        echo "ERROR: This installer is only compatible with Arch Linux."
         exit 1
     fi
 
-    # Check internet connectivity
+    # Network verification
     if ! ping -c 1 archlinux.org >/dev/null 2>&1 && ! curl -s --head https://archlinux.org >/dev/null 2>&1; then
-        echo "ERROR: No hay conexion activa a internet. Conectate a la red antes de continuar."
+        echo "ERROR: No active internet connection detected. Please connect before continuing."
         exit 1
     fi
 
-    # Optimize pacman config if not done yet
+    # Pacman optimizations (ParallelDownloads and Color)
     if grep -q "^#ParallelDownloads" /etc/pacman.conf 2>/dev/null; then
         sudo sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
     fi
@@ -133,10 +113,10 @@ preflight_checks() {
     fi
     if grep -q "^#\[multilib\]" /etc/pacman.conf 2>/dev/null; then
         sudo sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
-        sudo pacman -Sy
+        sudo pacman -Sy >> "$LOG_FILE" 2>&1
     fi
 
-    # Core bootstrap tools
+    # Ensure bootstrap tools exist
     local bootstrap_pkgs=()
     for pkg in gum fzf git base-devel stow zsh curl sudo; do
         if ! pacman -Q "$pkg" >/dev/null 2>&1; then
@@ -144,89 +124,86 @@ preflight_checks() {
         fi
     done
     if [ ${#bootstrap_pkgs[@]} -gt 0 ]; then
-        sudo pacman -S --needed --noconfirm "${bootstrap_pkgs[@]}" >/dev/null 2>&1
+        sudo pacman -S --needed --noconfirm "${bootstrap_pkgs[@]}" >> "$LOG_FILE" 2>&1
     fi
 }
 
-# --- AUR HELPER INSTALLATION ---
+# --- AUR HELPER SETUP (YAY) ---
 install_yay() {
     if ! command -v yay > /dev/null 2>&1; then
-        section "DEPENDENCIAS: AUR HELPER (YAY)"
-        info "Instalando yay..."
-        sudo pacman -S --needed --noconfirm base-devel git
+        section "AUR Helper (yay)"
+        step_item "Building yay from AUR..."
+        sudo pacman -S --needed --noconfirm base-devel git >> "$LOG_FILE" 2>&1
         rm -rf /tmp/yay
-        git clone https://aur.archlinux.org/yay.git /tmp/yay
-        (cd /tmp/yay && makepkg -si --noconfirm)
+        git clone https://aur.archlinux.org/yay.git /tmp/yay >> "$LOG_FILE" 2>&1
+        (cd /tmp/yay && makepkg -si --noconfirm) >> "$LOG_FILE" 2>&1
         rm -rf /tmp/yay
         cd "$DOTFILES_DIR"
         if command -v yay > /dev/null 2>&1; then
-            success "yay helper inicializado correctamente."
+            step_ok "AUR helper initialized."
         else
-            error "No se pudo compilar yay."
+            echo "ERROR: Failed to compile yay."
             exit 1
         fi
     fi
 }
 
-# --- HARDWARE DETECTION ---
+# --- HARDWARE DRIVERS DETECTION ---
 auto_detect_drivers() {
-    section "DETECCION AUTOMATICA DE HARDWARE"
+    section "Hardware Drivers & GPU Detection"
     local EXTRA_PKGS=()
     
-    # GPU Detection
     local GPU_INFO
     GPU_INFO=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
 
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
-        info "GPU NVIDIA detectada. Agregando controladores propietarios y utilidades..."
+        step_item "NVIDIA GPU detected. Adding proprietary drivers & utilities..."
         EXTRA_PKGS+=(nvidia-open nvidia-settings nvidia-utils nvidia-prime lib32-nvidia-utils)
     fi
     if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
-        info "GPU AMD detectada. Agregando controladores Mesa y Vulkan..."
+        step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
         EXTRA_PKGS+=(lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils)
     fi
     if [[ $GPU_INFO == *"Intel"* ]]; then
-        info "GPU Intel detectada. Agregando aceleracion por hardware y Vulkan..."
+        step_item "Intel GPU detected. Adding hardware acceleration drivers..."
         EXTRA_PKGS+=(intel-media-driver libva-intel-driver vulkan-intel)
     fi
 
-    # Laptop / Device Specific Detection
     local SYS_VENDOR PROD_NAME
     SYS_VENDOR=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)
     PROD_NAME=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
 
     if [[ $SYS_VENDOR == *"ASUSTeK"* ]]; then
-        info "Hardware ASUS detectado. Agregando soporte Asusctl y Supergfxctl..."
+        step_item "ASUS hardware detected. Adding asusctl & supergfxctl..."
         EXTRA_PKGS+=(asusctl supergfxctl rog-control-center)
     fi
 
     if [[ $PROD_NAME == *"Surface"* ]]; then
-        info "Hardware Microsoft Surface detectado. Agregando utilidades Surface..."
+        step_item "Microsoft Surface detected. Adding surface utilities..."
         EXTRA_PKGS+=(linux-surface linux-surface-headers surface-control)
     fi
 
     if [ ${#EXTRA_PKGS[@]} -gt 0 ]; then
-        info "Instalando paquetes especificos: ${EXTRA_PKGS[*]}"
-        yay -S --needed --noconfirm "${EXTRA_PKGS[@]}" || warn "Algunos controladores opcionales no pudieron instalarse."
-        success "Controladores configurados."
+        step_item "Installing: ${EXTRA_PKGS[*]}"
+        yay -S --needed --noconfirm "${EXTRA_PKGS[@]}" >> "$LOG_FILE" 2>&1 || step_warn "Some hardware packages could not be installed."
+        step_ok "Hardware drivers configured."
     else
-        info "No se requirieron controladores especiales adicionales."
+        step_ok "Standard hardware configuration applied."
     fi
 }
 
-# --- RUST DOCK DEPLOYMENT ---
+# --- RUST-DOCK COMPILATION & SETUP ---
 install_rust_dock() {
-    section "DESPLIEGUE DE RUST-DOCK"
+    section "Rust-Dock Component"
 
-    info "Instalando dependencias de compilacion para rust-dock..."
-    yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim > /dev/null 2>&1
+    step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
+    yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
 
     if ! command -v cargo > /dev/null 2>&1; then
-        warn "Cargo no encontrado tras instalar rust. Omitiendo compilacion automatica de rust-dock."
+        step_warn "Cargo not found. Skipping rust-dock build."
         return
     fi
 
-    info "Compilando rust-dock desde codigo fuente..."
     local source_dir=""
     local temp_clone=false
 
@@ -237,16 +214,16 @@ install_rust_dock() {
     else
         source_dir="/tmp/rust-dock-build"
         rm -rf "$source_dir"
-        if git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$source_dir" > /dev/null 2>&1; then
+        if git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$source_dir" >> "$LOG_FILE" 2>&1; then
             temp_clone=true
         else
-            warn "No se pudo clonar el repositorio de rust-dock. Omitiendo."
+            step_warn "Could not clone rust-dock repository. Skipping build."
             return
         fi
     fi
 
-    gum spin --spinner dot --title "Compilando rust-dock en release..." -- \
-        bash -c "cd '$source_dir' && cargo build --release 2>&1 | tail -3 > /tmp/rust-dock-build.log" || true
+    gum spin --spinner dot --title "Compiling rust-dock (release)..." --padding "0 0 0 $PADDING_LEFT" -- \
+        bash -c "cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || true
 
     if [ -f "$source_dir/target/release/rust-dock" ]; then
         mkdir -p "$HOME/.local/bin"
@@ -262,9 +239,9 @@ vesktop
 org.telegram.desktop
 PINNED
         fi
-        success "rust-dock instalado en ~/.local/bin/rust-dock"
+        step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
     else
-        warn "La compilacion de rust-dock fallo. Consulta /tmp/rust-dock-build.log."
+        step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
     fi
 
     if [ "$temp_clone" = true ]; then
@@ -274,11 +251,10 @@ PINNED
 
 # --- SYSTEM PACKAGES DEPLOYMENT ---
 step_software() {
-    section "PAQUETES Y COMPONENTES PRINCIPALES"
+    section "Core Packages & System Libraries"
 
-    # Core packages including Quickshell for Dynamic Island, Waybar, Rofi, Audio, Portal, Qt, etc.
     local CORE_PKGS=(
-        # Compositor y entorno
+        # Compositor & Wayland core
         hyprland
         hypridle
         hyprlock
@@ -287,18 +263,18 @@ step_software() {
         xdg-desktop-portal-hyprland
         xdg-desktop-portal-gtk
 
-        # Barras, islas y lanzadores
+        # Bars, Dynamic Island & Launchers
         waybar
         quickshell
         rofi-wayland
 
-        # Terminal y Shell
+        # Terminal & Shell
         kitty
         zsh
         zsh-autosuggestions
         zsh-syntax-highlighting
 
-        # Gestores de archivos y miniaturas
+        # File Management & Media Thumbnails
         thunar
         thunar-archive-plugin
         thunar-volman
@@ -312,7 +288,7 @@ step_software() {
         libgepub
         gwenview
 
-        # Red y Bluetooth
+        # Networking & Bluetooth
         networkmanager
         network-manager-applet
         bluez
@@ -320,7 +296,7 @@ step_software() {
         blueman
         bluez-obex
 
-        # Arquitectura de sonido
+        # Audio Architecture
         pipewire
         pipewire-pulse
         wireplumber
@@ -328,7 +304,7 @@ step_software() {
         playerctl
         pamixer
 
-        # Control de hardware y captura
+        # Hardware, Screen & Capture Tools
         brightnessctl
         swappy
         grim
@@ -337,7 +313,7 @@ step_software() {
         libnotify
         socat
 
-        # Frameworks Qt (Requeridos para SDDM y Quickshell)
+        # Qt Frameworks (Quickshell, SDDM & Theming)
         qt5-graphicaleffects
         qt5-quickcontrols2
         qt5-svg
@@ -350,12 +326,12 @@ step_software() {
         qt6ct
         kvantum
 
-        # Login manager y autenticacion
+        # Display Manager & Authentication
         sddm
         polkit-kde-agent
         gnome-keyring
 
-        # Temas, iconos, cursores y fondos
+        # Visuals, Pywal & Wallpaper Engine
         nwg-look
         bibata-cursor-theme
         tela-circle-icon-theme-all
@@ -363,12 +339,12 @@ step_software() {
         awww
         cava
 
-        # Fuentes
+        # Fonts
         ttf-jetbrains-mono-nerd
         otf-font-awesome
         ttf-font-awesome
 
-        # Utilidades del sistema
+        # System Utilities
         flatpak
         stow
         curl
@@ -380,82 +356,54 @@ step_software() {
         fastfetch
     )
 
-    info "$MSG_CORE_INSTALL"
-    yay -S --needed --noconfirm "${CORE_PKGS[@]}"
+    gum spin --spinner dot --title "Installing core packages and dependencies..." --padding "0 0 0 $PADDING_LEFT" -- \
+        bash -c "yay -S --needed --noconfirm ${CORE_PKGS[*]} >> '$LOG_FILE' 2>&1"
+    step_ok "Core packages installed."
 
-    # Install rust-dock from source
+    # Build and deploy rust-dock
     install_rust_dock
 
-    # Install Hyprland plugins via hyprpm
-    section "PLUGINS DE HYPRLAND"
+    # Configure Hyprland plugins
+    section "Hyprland Plugins"
     if command -v hyprpm > /dev/null 2>&1; then
-        info "Sincronizando repositorios de plugins oficiales..."
-        hyprpm add https://github.com/hyprwm/hyprland-plugins 2>&1 | tail -1 || true
-        hyprpm update 2>&1 | tail -1 || true
-        info "Habilitando plugins hyprbars, hyprexpo..."
-        hyprpm enable hyprbars 2>&1 | tail -1 || true
-        hyprpm enable hyprexpo 2>&1 | tail -1 || true
-        hyprpm reload 2>&1 || true
-        success "Plugins de Hyprland configurados."
+        step_item "Syncing official plugin repository..."
+        hyprpm add https://github.com/hyprwm/hyprland-plugins >> "$LOG_FILE" 2>&1 || true
+        hyprpm update >> "$LOG_FILE" 2>&1 || true
+        step_item "Enabling hyprbars and hyprexpo..."
+        hyprpm enable hyprbars >> "$LOG_FILE" 2>&1 || true
+        hyprpm enable hyprexpo >> "$LOG_FILE" 2>&1 || true
+        hyprpm reload >> "$LOG_FILE" 2>&1 || true
+        step_ok "Hyprland plugins active."
     else
-        warn "hyprpm no disponible. Omitiendo plugins de Hyprland."
+        step_warn "hyprpm not available. Skipping plugins."
     fi
 
-    # Hardware drivers detection
+    # Hardware detection
     auto_detect_drivers
 
-    # Unified app search
-    unified_app_search
-
-    # Flatpaks deployment
-    if gum confirm "$MSG_FLATPAK_CONFIRM"; then
-        if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
-            section "DESPLIEGUE FLATPAK"
-            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    # Flatpak packages
+    if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
+        if gum confirm "Install applications from flatpaks.txt?"; then
+            section "Flatpak Applications"
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1
             while read -r app; do
                 [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
-                info "Instalando: $app"
-                sudo flatpak install -y --system flathub "$app" || true
+                step_item "Installing flatpak: $app"
+                sudo flatpak install -y --system flathub "$app" >> "$LOG_FILE" 2>&1 || true
             done < "$DOTFILES_DIR/flatpaks.txt"
-            success "Flatpaks procesados."
+            step_ok "Flatpaks installed."
         fi
-    fi
-}
-
-unified_app_search() {
-    section "DESCUBRIMIENTO OPCIONAL DE APLICACIONES"
-    info "$MSG_SEARCH_LAUNCH"
-    
-    local fzf_args=(
-      --multi
-      --ansi
-      --prompt="$MSG_SEARCH_PROMPT"
-      --header="$MSG_SEARCH_HEADER"
-      --preview 'yay -Si {1} 2>/dev/null || echo "Cargando informacion..." '
-      --preview-window 'right:60%:wrap'
-      --bind 'change:top'
-    )
-
-    local SELECTED_APPS
-    SELECTED_APPS=$(yay -Slqa | fzf "${fzf_args[@]}" || true)
-
-    if [[ -n "$SELECTED_APPS" ]]; then
-        info "Instalando aplicaciones seleccionadas..."
-        yay -S --needed --noconfirm $SELECTED_APPS
-        success "Aplicaciones adicionales instaladas."
-    else
-        info "No se seleccionaron aplicaciones adicionales."
     fi
 }
 
 # --- DOTFILES DEPLOYMENT ---
 step_dotfiles() {
-    section "SINCRONIZACION DE CONFIGURACIONES (DOTFILES)"
+    section "Configuration Synchronization (Dotfiles)"
     mkdir -p "$HOME/.config" "$HOME/.local/bin" "$HOME/.local/share" "$HOME/.cache"
     
     cd "$DOTFILES_DIR"
 
-    info "Copiando carpetas de configuracion a ~/.config/..."
+    step_item "Linking configurations into ~/.config/..."
     for item in .config/*; do
         [ -e "$item" ] || continue
         local name
@@ -463,26 +411,25 @@ step_dotfiles() {
         local target="$HOME/.config/$name"
         
         if [ -e "$target" ]; then
-            info "Creando respaldo de .config/$name -> .config/$name.bak"
             rm -rf "$target.bak"
             mv "$target" "$target.bak"
         fi
         
         cp -r "$DOTFILES_DIR/.config/$name" "$target"
-        echo "  INSTALADO: .config/$name"
     done
+    step_ok "Config files synchronized."
 
     # Generate default monitors.conf if missing
     if [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
-        info "Generando monitors.conf generico..."
         cat > "$HOME/.config/hypr/monitors.conf" << 'MONCONF'
-# Archivo autogenerado por el instalador
-# Editalo con nwg-displays o manualmente: monitor=NOMBRE,RESOLUCION@TASA,POSICION,ESCALA
+# Generated by installer - edit via nwg-displays or manually
+# Format: monitor=NAME,RESOLUTION@RATE,POSITION,SCALE
 monitor=,preferred,auto,1
 MONCONF
+        step_ok "Default monitors.conf created."
     fi
 
-    info "Copiando ejecutables a ~/.local/bin/..."
+    step_item "Deploying helper executables to ~/.local/bin/..."
     for file in .local/bin/*; do
         [ -e "$file" ] || continue
         local name
@@ -498,9 +445,9 @@ MONCONF
         chmod +x "$target"
     done
     chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
-    echo "  INSTALADO: Scripts ejecutables en ~/.local/bin/"
+    step_ok "Executables deployed."
 
-    # Handle shell & gtk dotfiles if present
+    # Shell and GTK dotfiles
     for pkg in zsh bash gtk; do
         if [ -d "$pkg" ]; then
             find "$pkg" -mindepth 1 -maxdepth 1 -name ".*" | while read -r file; do
@@ -512,109 +459,103 @@ MONCONF
                     mv "$target" "$target.bak"
                 fi
                 cp -r "$DOTFILES_DIR/$file" "$target"
-                echo "  INSTALADO: ~/$name"
             done
         fi
     done
 
-    info "Adaptando rutas fijas al usuario actual ($USER)..."
+    # Replace hardcoded home paths with real current user path
+    step_item "Adapting file paths to current user ($USER)..."
     grep -rIl "/home/rhythmcreative" "$HOME/.config" "$HOME/.local/bin" "$HOME/.bashrc" "$HOME/.zshrc" 2>/dev/null | while read -r file; do
         sed -i "s|/home/rhythmcreative|$HOME|g" "$file" 2>/dev/null || true
     done
 
-    # Enable user systemd service for Dynamic Island
-    info "Habilitando servicio systemd de usuario para Dynamic Island..."
-    systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable waybar-island.service 2>/dev/null || true
+    # Enable Dynamic Island systemd user service
+    step_item "Enabling Dynamic Island user service..."
+    systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
 
-    # Default GTK Theme configuration
-    info "Aplicando temas GTK por defecto..."
+    # GTK defaults
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
     
-    success "Dotfiles desplegados y adaptados al usuario."
+    step_ok "Dotfiles fully deployed."
 }
 
-# --- WALLPAPERS DOWNLOAD ---
+# --- OPTIONAL WALLPAPERS DOWNLOAD ---
 step_wallpapers() {
-    section "PAQUETES DE FONDOS DE PANTALLA"
-    if gum confirm "$MSG_WALL_CONFIRM"; then
+    if gum confirm "Download additional wallpaper packs?"; then
+        section "Wallpaper Packs"
         local WALL_DIR="$HOME/Pictures/Wallpapers"
         mkdir -p "$WALL_DIR"
         local TEMP_WALL="/tmp/wallpaper_install"
         mkdir -p "$TEMP_WALL"
         
         local REPO_URL="https://raw.githubusercontent.com/rhythmcreative/wallpapers/main"
-        local HEADER_TEXT="Selecciona el modo de descarga"
-        [ "$LANG_CHOICE" == "English" ] && HEADER_TEXT="Select download protocol"
 
         local CHOICE
-        CHOICE=$(gum choose --header "$HEADER_TEXT" \
-            "DESCARGAR TODOS LOS PACKS (4GB+)" \
-            "SELECCIONAR PACKS ESPECIFICOS" \
-            "SELECCION ALEATORIA (3 PACKS)" \
-            "OMITIR")
+        CHOICE=$(gum choose --header "Select download mode" \
+            "Download All Packs (4GB+)" \
+            "Select Specific Packs" \
+            "Random Selection (3 Packs)" \
+            "Skip")
         
-        if [ "$CHOICE" == "DESCARGAR TODOS LOS PACKS (4GB+)" ]; then
+        if [ "$CHOICE" == "Download All Packs (4GB+)" ]; then
             for i in {1..49}; do
-                info "Descargando pack $i/49..."
-                curl -L "$REPO_URL/pack_$i.zip" -o "$TEMP_WALL/pack_$i.zip"
+                step_item "Downloading pack $i/49..."
+                curl -L "$REPO_URL/pack_$i.zip" -o "$TEMP_WALL/pack_$i.zip" >> "$LOG_FILE" 2>&1
                 unzip -q -o "$TEMP_WALL/pack_$i.zip" -d "$TEMP_WALL"
                 [ -d "$TEMP_WALL/pack_$i" ] && cp -r "$TEMP_WALL/pack_$i"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$i"
                 rm -f "$TEMP_WALL/pack_$i.zip"
             done
-        elif [ "$CHOICE" == "SELECCIONAR PACKS ESPECIFICOS" ]; then
-            local PLACEHOLDER="Numeros separados por espacio (ej: 1 5 12)"
-            [ "$LANG_CHOICE" == "English" ] && PLACEHOLDER="Numbers separated by space (e.g. 1 5 12)"
+        elif [ "$CHOICE" == "Select Specific Packs" ]; then
             local PACKS
-            PACKS=$(gum input --placeholder "$PLACEHOLDER")
+            PACKS=$(gum input --placeholder "Numbers separated by space (e.g. 1 5 12)")
             for p in $PACKS; do
-                info "Descargando pack $p..."
-                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip"
+                step_item "Downloading pack $p..."
+                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip" >> "$LOG_FILE" 2>&1
                 unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
                 [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
                 rm -f "$TEMP_WALL/pack_$p.zip"
             done
-        elif [ "$CHOICE" == "SELECCION ALEATORIA (3 PACKS)" ]; then
-            info "Descargando 3 packs aleatorios..."
+        elif [ "$CHOICE" == "Random Selection (3 Packs)" ]; then
+            step_item "Downloading 3 random packs..."
             for i in {1..3}; do
                 local p
                 p=$(shuf -i 1-49 -n 1)
-                info "Descargando pack $p..."
-                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip"
+                step_item "Downloading pack $p..."
+                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip" >> "$LOG_FILE" 2>&1
                 unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
                 [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
                 rm -f "$TEMP_WALL/pack_$p.zip"
             done
         fi
         rm -rf "$TEMP_WALL"
-        success "Fondos descargados en ~/Pictures/Wallpapers."
+        step_ok "Wallpapers installed."
     fi
 }
 
-# --- SYSTEM INTEGRATION & SERVICES ---
+# --- SYSTEM SERVICES & FINISHING ---
 step_system() {
-    section "SERVICIOS DEL SISTEMA Y FINALIZACION"
+    section "System Services & Finalization"
     
-    if gum confirm "$MSG_ZSH_CONFIRM"; then
+    if gum confirm "Set Zsh as your default shell?"; then
         if [ "$SHELL" != "$(which zsh)" ]; then
             sudo chsh -s "$(which zsh)" "$USER"
-            success "Shell predeterminada cambiada a Zsh."
+            step_ok "Default shell set to Zsh."
         fi
     fi
 
-    # SDDM Theme and Sudoers Sync Integration
+    # SDDM Astronaut Theme
     if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
-        info "Instalando tema SDDM Astronaut..."
+        step_item "Deploying SDDM Astronaut theme..."
         sudo mkdir -p /usr/share/sddm/themes
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
         
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
         echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
 
-        # Multi-monitor detection for SDDM
-        info "Configurando soporte multi-monitor para pantalla de inicio..."
+        # SDDM Multi-monitor script
         sudo tee /etc/sddm/Xsetup > /dev/null << 'XSETUP'
 #!/bin/sh
 get_width() {
@@ -666,13 +607,12 @@ XSETUP
         sudo chmod +x /etc/sddm/Xsetup
         echo -e "[X11]\nDisplayCommand=/etc/sddm/Xsetup" | sudo tee /etc/sddm.conf.d/xsetup.conf > /dev/null
 
-        # SDDM NOPASSWD helper for pywal live background sync
-        info "Configurando permisos de sincronizacion de fondos para SDDM..."
+        # Sudoers NOPASSWD helper for live pywal sync
         sudo mkdir -p /etc/sudoers.d
         echo "$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
         sudo chmod 440 /etc/sudoers.d/sddm-sync
 
-        # Pywal hook for SDDM
+        # Pywal SDDM sync hook
         mkdir -p "$HOME/.config/wal/hooks"
         cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
 #!/bin/bash
@@ -682,21 +622,22 @@ fi
 EOF
         chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
 
-        # Generate initial color palette from SDDM wallpaper
+        # Initial color palette generation
         local SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
         if [ -f "$SDDM_WALLPAPER" ]; then
-            wal -i "$SDDM_WALLPAPER" -n -q 2>/dev/null || true
+            wal -i "$SDDM_WALLPAPER" -n -q >> "$LOG_FILE" 2>&1 || true
             mkdir -p "$HOME/.cache"
             echo "$SDDM_WALLPAPER" > "$HOME/.cache/current-wallpaper"
         fi
+        step_ok "SDDM Astronaut theme configured."
     fi
 
-    info "Habilitando servicios esenciales del sistema..."
-    sudo systemctl enable NetworkManager bluetooth sddm 2>/dev/null || true
-    sudo systemctl start NetworkManager bluetooth 2>/dev/null || true
+    # Core system services
+    step_item "Enabling NetworkManager, Bluetooth, and SDDM..."
+    sudo systemctl enable NetworkManager bluetooth sddm >> "$LOG_FILE" 2>&1 || true
+    sudo systemctl start NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
 
-    # PAM gnome-keyring configuration
-    info "Configurando desbloqueo automatico de gnome-keyring..."
+    # PAM gnome-keyring unlock
     for pam_file in /etc/pam.d/login /etc/pam.d/sddm; do
         if [ -f "$pam_file" ] && ! grep -q "pam_gnome_keyring.so" "$pam_file"; then
             sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' "$pam_file"
@@ -704,23 +645,19 @@ EOF
         fi
     done
 
-    # Pipewire audio configuration
-    info "Habilitando servicios de audio Pipewire..."
-    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+    # Pipewire audio sockets
+    step_item "Enabling Pipewire user audio services..."
+    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
 
-    # Add user to required hardware groups
-    info "Agregando usuario a los grupos de hardware..."
+    # Add user to required groups
     sudo usermod -aG video,input,render,wheel,audio,storage "$USER"
-    
-    success "Servicios y permisos del sistema configurados."
+    step_ok "System services and permissions configured."
 }
 
 # --- MAIN EXECUTION ---
 preflight_checks
-print_banner
-setup_language
-
-gum spin --spinner pulse --title "INICIANDO INSTALACION..." -- sleep 1
+clear_logo
+gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Initializing Rhythm Hyprland Setup..."
 
 install_yay
 step_software
@@ -728,25 +665,25 @@ step_dotfiles
 step_wallpapers
 step_system
 
-# Calibration with modern-pywal-sync
+# Calibrate colors
 if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-    gum spin --spinner dot --title "CALIBRANDO COLORES Y TEMAS DEL SISTEMA..." -- bash -c "$HOME/.local/bin/modern-pywal-sync >/dev/null 2>&1 || true"
+    gum spin --spinner dot --title "Calibrating Pywal color scheme..." --padding "0 0 0 $PADDING_LEFT" -- \
+        bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
 fi
 
-# --- SUMMARY & COMPLETION ---
-clear
-section "RESUMEN"
-echo "  $MSG_DONE"
+# --- COMPLETION & REBOOT SCREEN ---
+clear_logo
 echo ""
+gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished installing"
 
-# Do not restart SDDM abruptly if inside an active Wayland/X11 session
 if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
-    info "Actualmente estas en una sesion grafica activa."
-    info "Reinicia el equipo para iniciar con SDDM y cargar todas las configuraciones y grupos nuevos."
-    if gum confirm "$MSG_REBOOT_CONFIRM"; then
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start SDDM cleanly."
+    if gum confirm "Reboot into Hyprland now?"; then
         sudo reboot
     fi
 else
-    info "Iniciando gestor de sesion SDDM..."
-    sudo systemctl start sddm
+    if gum confirm "Start SDDM login manager now?"; then
+        sudo systemctl start sddm
+    fi
 fi

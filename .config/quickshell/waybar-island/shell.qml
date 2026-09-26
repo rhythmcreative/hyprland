@@ -167,6 +167,35 @@ ShellRoot {
             }
             return root.expanded ? "expanded" : "collapsed"
         }
+        function openWifi(): string {
+            root.expanded = true
+            root.currentTab = 0
+            root.controlSubView = 1
+            root.wifiScanning = true
+            wifiListProc.running = true
+            return "wifi"
+        }
+        function openBluetooth(): string {
+            root.expanded = true
+            root.currentTab = 0
+            root.controlSubView = 2
+            root.btScanning = true
+            btStatusProc.running = true
+            return "bluetooth"
+        }
+        function openControl(): string {
+            root.expanded = true
+            root.currentTab = 0
+            root.controlSubView = 0
+            root.refreshAllStates()
+            return "control"
+        }
+        function openHyprland(): string {
+            root.expanded = true
+            root.currentTab = 1
+            root.refreshAllStates()
+            return "hyprland"
+        }
         function collapse(): string {
             root.expanded = false
             return "collapsed"
@@ -996,51 +1025,128 @@ ShellRoot {
                             }
                         }
 
-                        // Quick Toggles Grid (Wi-Fi, Bluetooth, Rust-Dock, Fondos)
+                        // Quick Toggles Grid (Wi-Fi, Bluetooth, Rust-Dock, Wallpaper) - Material 3 Dual-Action Pills
                         GridLayout {
                             Layout.fillWidth: true
                             columns: 2
                             rowSpacing: 10
                             columnSpacing: 10
 
-                            // Wi-Fi Tile
+                            // Wi-Fi Tile (Material 3 Split Pill)
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 52
-                                radius: 14
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
                                 color: root.wifiEnabled ? root.colAccent : root.colSurface
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                                border.color: root.wifiEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 10
-                                    Text {
-                                        text: root.wifiEnabled ? "󰖩" : "󰖪"
-                                        color: root.wifiEnabled ? root.colBg : root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 18
-                                    }
-                                    ColumnLayout {
-                                        spacing: 0
+                                    spacing: 0
+
+                                    // Main Left Action: Toggle Power
+                                    Item {
                                         Layout.fillWidth: true
-                                        Text { text: "Wi-Fi"; color: root.wifiEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
-                                        Text { text: root.wifiSsid; color: root.wifiEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Layout.fillHeight: true
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 6
+                                            spacing: 10
+
+                                            // Icon container / badge
+                                            Rectangle {
+                                                width: 34; height: 34; radius: 17
+                                                color: root.wifiEnabled ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: root.wifiEnabled ? "󰖩" : "󰖪"
+                                                    color: root.wifiEnabled ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 17
+                                                }
+                                            }
+
+                                            // Text Column
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+                                                Text {
+                                                    text: "Wi-Fi"
+                                                    color: root.wifiEnabled ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: root.wifiEnabled ? (root.wifiSsid || "Connected") : "Disabled"
+                                                    color: root.wifiEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onClicked: mouse => {
+                                                if (mouse.button === Qt.RightButton) {
+                                                    root.controlSubView = 1
+                                                    root.wifiScanning = true
+                                                    wifiListProc.running = true
+                                                } else {
+                                                    if (root.wifiEnabled) {
+                                                        root.runCmd("nmcli radio wifi off")
+                                                        root.wifiEnabled = false
+                                                        root.wifiSsid = "Disabled"
+                                                    } else {
+                                                        root.runCmd("nmcli radio wifi on")
+                                                        root.wifiEnabled = true
+                                                        root.wifiSsid = "Connecting..."
+                                                        wifiProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
-                                    // Chevron / Button for dedicated Wi-Fi menu inside notch
+                                    // Subtle Vertical Separator
                                     Rectangle {
-                                        width: 26; height: 26; radius: 13
-                                        color: root.wifiEnabled ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                                        width: 1
+                                        height: 24
+                                        Layout.alignment: Qt.AlignVCenter
+                                        color: root.wifiEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                    }
+
+                                    // Right Expand Action: Dedicated Chevron Button
+                                    Rectangle {
+                                        width: 38
+                                        Layout.fillHeight: true
+                                        color: wifiChevHover.containsMouse ? (root.wifiEnabled ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(255, 255, 255, 0.08)) : "transparent"
+                                        radius: 16
+
                                         Text {
                                             anchors.centerIn: parent
                                             text: "󰅂"
                                             color: root.wifiEnabled ? root.colBg : root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 12
+                                            font.pixelSize: 14
                                         }
+
                                         MouseArea {
+                                            id: wifiChevHover
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
                                                 root.controlSubView = 1
@@ -1050,142 +1156,243 @@ ShellRoot {
                                         }
                                     }
                                 }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.rightMargin: 30
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            root.controlSubView = 1
-                                            root.wifiScanning = true
-                                            wifiListProc.running = true
-                                        } else {
-                                            if (root.wifiEnabled) {
-                                                root.runCmd("nmcli radio wifi off")
-                                                root.wifiEnabled = false
-                                                root.wifiSsid = "Disabled"
-                                            } else {
-                                                root.runCmd("nmcli radio wifi on")
-                                                root.wifiEnabled = true
-                                                root.wifiSsid = "Connecting..."
-                                                wifiProc.running = true
-                                            }
-                                        }
-                                    }
-                                }
                             }
 
-                            // Bluetooth Tile
+                            // Bluetooth Tile (Material 3 Split Pill)
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 52
-                                radius: 14
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
                                 color: root.btEnabled ? root.colAccent : root.colSurface
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                                border.color: root.btEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 10
-                                    Text {
-                                        text: root.btEnabled ? "󰂯" : "󰂲"
-                                        color: root.btEnabled ? root.colBg : root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 18
-                                    }
-                                    ColumnLayout {
-                                        spacing: 0
+                                    spacing: 0
+
+                                    // Main Left Action: Toggle Power
+                                    Item {
                                         Layout.fillWidth: true
-                                        Text { text: "Bluetooth"; color: root.btEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
-                                        Text { text: root.btEnabled ? "Enabled" : "Disabled"; color: root.btEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Layout.fillHeight: true
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 6
+                                            spacing: 10
+
+                                            // Icon container / badge
+                                            Rectangle {
+                                                width: 34; height: 34; radius: 17
+                                                color: root.btEnabled ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: root.btEnabled ? "󰂯" : "󰂲"
+                                                    color: root.btEnabled ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 17
+                                                }
+                                            }
+
+                                            // Text Column
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+                                                Text {
+                                                    text: "Bluetooth"
+                                                    color: root.btEnabled ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: root.btEnabled ? (root.btDevices.filter(d => d.connected).length > 0 ? root.btDevices.filter(d => d.connected)[0].name : "Enabled") : "Disabled"
+                                                    color: root.btEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onClicked: mouse => {
+                                                if (mouse.button === Qt.RightButton) {
+                                                    root.controlSubView = 2
+                                                    btStatusProc.running = true
+                                                } else {
+                                                    root.btEnabled = !root.btEnabled
+                                                    root.runCmd("~/.local/bin/toggle-bluetooth")
+                                                    btStatusProc.running = true
+                                                }
+                                            }
+                                        }
                                     }
 
-                                    // Chevron / Button for dedicated Bluetooth menu inside notch
+                                    // Subtle Vertical Separator
                                     Rectangle {
-                                        width: 26; height: 26; radius: 13
-                                        color: root.btEnabled ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                                        width: 1
+                                        height: 24
+                                        Layout.alignment: Qt.AlignVCenter
+                                        color: root.btEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                    }
+
+                                    // Right Expand Action: Dedicated Chevron Button
+                                    Rectangle {
+                                        width: 38
+                                        Layout.fillHeight: true
+                                        color: btChevHover.containsMouse ? (root.btEnabled ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(255, 255, 255, 0.08)) : "transparent"
+                                        radius: 16
+
                                         Text {
                                             anchors.centerIn: parent
                                             text: "󰅂"
                                             color: root.btEnabled ? root.colBg : root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 12
+                                            font.pixelSize: 14
                                         }
+
                                         MouseArea {
+                                            id: btChevHover
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
                                                 root.controlSubView = 2
+                                                root.btScanning = true
                                                 btStatusProc.running = true
                                             }
                                         }
                                     }
                                 }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.rightMargin: 30
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            root.controlSubView = 2
-                                            btStatusProc.running = true
-                                        } else {
-                                            root.btEnabled = !root.btEnabled
-                                            root.runCmd("~/.local/bin/toggle-bluetooth")
-                                        }
-                                    }
-                                }
                             }
 
-                            // Rust-Dock Tile
+                            // Rust-Dock Tile (Material 3 Card)
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 52
-                                radius: 14
-                                color: root.colSurface
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: dockHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
                                     spacing: 10
-                                    Text { text: "󰻂"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰻂"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
                                     ColumnLayout {
-                                        spacing: 0
                                         Layout.fillWidth: true
-                                        Text { text: "Rust-Dock"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
-                                        Text { text: "Toggle bottom dock"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        spacing: 1
+                                        Text {
+                                            text: "Rust-Dock"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: "Toggle bottom dock"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
+
                                 MouseArea {
+                                    id: dockHover
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: root.runCmd("~/.local/bin/rust-dock-toggle-all")
                                 }
                             }
 
-                            // Fondos Tile
+                            // Wallpaper Tile (Material 3 Card)
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 52
-                                radius: 14
-                                color: root.colSurface
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: wallHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
                                     spacing: 10
-                                    Text { text: "󰸉"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰸉"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
                                     ColumnLayout {
-                                        spacing: 0
                                         Layout.fillWidth: true
-                                        Text { text: "Wallpaper"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
-                                        Text { text: "Interactive Gallery"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        spacing: 1
+                                        Text {
+                                            text: "Wallpaper"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: "Interactive Gallery"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
+
                                 MouseArea {
+                                    id: wallHover
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.expanded = false
@@ -1195,178 +1402,218 @@ ShellRoot {
                             }
                         }
 
-                        // Sliders Card (Volume & Brightness)
-                        Rectangle {
+                        // Sliders Card (Material 3 Pill Sliders: Volume & Brightness)
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 84
-                            radius: 14
-                            color: root.colSurface
-                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                            border.width: 1
+                            spacing: 10
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 10
+                            // Volume Pill Slider
+                            Rectangle {
+                                id: volSliderTrack
+                                Layout.fillWidth: true
+                                height: 42
+                                radius: 21
+                                color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                clip: true
 
-                                // Volume Slider
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    Text {
-                                        text: root.isMuted ? "󰝟" : (root.volumeLevel > 0.5 ? "󰕾" : "󰖀")
-                                        color: root.isMuted ? "#ff5555" : root.colAccent
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 18
-                                        Layout.preferredWidth: 24
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                root.isMuted = !root.isMuted
-                                                root.runCmd("pamixer -t")
-                                            }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        height: 20
-                                        radius: 10
-                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-
-                                        Rectangle {
-                                            width: parent.width * (root.isMuted ? 0 : root.volumeLevel)
-                                            height: parent.height
-                                            radius: 10
-                                            color: root.isMuted ? root.colMuted : root.colAccent
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: mouse => {
-                                                const p = Math.max(0, Math.min(1, mouse.x / width))
-                                                root.volumeLevel = p
-                                                root.isMuted = false
-                                                root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
-                                            }
-                                            onPositionChanged: mouse => {
-                                                if (pressed) {
-                                                    const p = Math.max(0, Math.min(1, mouse.x / width))
-                                                    root.volumeLevel = p
-                                                    root.isMuted = false
-                                                    root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Text {
-                                        text: root.isMuted ? "0%" : (Math.round(root.volumeLevel * 100) + "%")
-                                        color: root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                        Layout.preferredWidth: 36
-                                        horizontalAlignment: Text.AlignRight
+                                // Progress Fill Bar
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.max(parent.height, parent.width * (root.isMuted ? 0 : root.volumeLevel))
+                                    radius: 21
+                                    color: root.isMuted ? root.colMuted : root.colAccent
+                                    visible: !root.isMuted && root.volumeLevel > 0
+                                    Behavior on width {
+                                        enabled: !volMouseArea.pressed
+                                        NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
                                     }
                                 }
 
-                                // Brightness Slider
                                 RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 14
+                                    spacing: 8
 
+                                    // Inset Icon Button
                                     Text {
-                                        text: "󰃠"
-                                        color: root.colAccent
+                                        text: root.isMuted ? "󰝟" : (root.volumeLevel > 0.5 ? "󰕾" : (root.volumeLevel > 0 ? "󰖀" : "󰕿"))
+                                        color: (!root.isMuted && root.volumeLevel > 0.12) ? root.colBg : (root.isMuted ? "#ff5555" : root.colAccent)
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 18
-                                        Layout.preferredWidth: 24
-                                    }
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        height: 20
-                                        radius: 10
-                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-
-                                        Rectangle {
-                                            width: parent.width * root.brightnessLevel
-                                            height: parent.height
-                                            radius: 10
-                                            color: root.colAccent
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: mouse => {
-                                                const p = Math.max(0.05, Math.min(1, mouse.x / width))
-                                                root.brightnessLevel = p
-                                                root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
-                                            }
-                                            onPositionChanged: mouse => {
-                                                if (pressed) {
-                                                    const p = Math.max(0.05, Math.min(1, mouse.x / width))
-                                                    root.brightnessLevel = p
-                                                    root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
-                                                }
-                                            }
-                                        }
+                                        font.weight: Font.Bold
                                     }
 
                                     Text {
-                                        text: Math.round(root.brightnessLevel * 100) + "%"
-                                        color: root.colFg
+                                        text: "Volume"
+                                        color: (!root.isMuted && root.volumeLevel > 0.3) ? root.colBg : root.colFg
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
                                         font.weight: Font.Bold
-                                        Layout.preferredWidth: 36
-                                        horizontalAlignment: Text.AlignRight
+                                        opacity: (!root.isMuted && root.volumeLevel > 0.3) ? 0.9 : 0.6
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: root.isMuted ? "Muted" : (Math.round(root.volumeLevel * 100) + "%")
+                                        color: (!root.isMuted && root.volumeLevel > 0.85) ? root.colBg : root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: volMouseArea
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: mouse => {
+                                        if (mouse.x < 36) {
+                                            root.isMuted = !root.isMuted
+                                            root.runCmd("pamixer -t")
+                                        } else {
+                                            const p = Math.max(0, Math.min(1, mouse.x / width))
+                                            root.volumeLevel = p
+                                            root.isMuted = false
+                                            root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                        }
+                                    }
+                                    onPositionChanged: mouse => {
+                                        if (pressed) {
+                                            const p = Math.max(0, Math.min(1, mouse.x / width))
+                                            root.volumeLevel = p
+                                            root.isMuted = false
+                                            root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Brightness Pill Slider
+                            Rectangle {
+                                id: brightSliderTrack
+                                Layout.fillWidth: true
+                                height: 42
+                                radius: 21
+                                color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                clip: true
+
+                                // Progress Fill Bar
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.max(parent.height, parent.width * root.brightnessLevel)
+                                    radius: 21
+                                    color: root.colAccent
+                                    Behavior on width {
+                                        enabled: !brightMouseArea.pressed
+                                        NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                    }
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 14
+                                    spacing: 8
+
+                                    // Inset Icon Button
+                                    Text {
+                                        text: "󰃠"
+                                        color: root.brightnessLevel > 0.12 ? root.colBg : root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 18
+                                        font.weight: Font.Bold
+                                    }
+
+                                    Text {
+                                        text: "Brightness"
+                                        color: root.brightnessLevel > 0.35 ? root.colBg : root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                        opacity: root.brightnessLevel > 0.35 ? 0.9 : 0.6
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: Math.round(root.brightnessLevel * 100) + "%"
+                                        color: root.brightnessLevel > 0.85 ? root.colBg : root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: brightMouseArea
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: mouse => {
+                                        const p = Math.max(0.05, Math.min(1, mouse.x / width))
+                                        root.brightnessLevel = p
+                                        root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                    }
+                                    onPositionChanged: mouse => {
+                                        if (pressed) {
+                                            const p = Math.max(0.05, Math.min(1, mouse.x / width))
+                                            root.brightnessLevel = p
+                                            root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                        }
                                     }
                                 }
                             }
                         }
 
-                        // Bottom Action Chips
+                        // Bottom Action Chips (Material 3 Pills)
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 10
+                            spacing: 8
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                    Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Random"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("~/.local/bin/wallpaper-changer-with-waybar-sync") }
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                    Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Resources"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("kitty -e htop"); } }
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰘳"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                    Text { text: "󰘳"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Shortcuts"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("~/.local/bin/show-hotkeys"); } }
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰌌"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                    Text { text: "󰌌"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: root.kbLayout; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.runCmd("~/.local/bin/toggle-keyboard-layout"); kbProc.running = true; } }

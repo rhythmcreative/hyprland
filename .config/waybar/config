@@ -15,7 +15,6 @@
     "custom/cava"
   ],
   "modules-center": [
-    "clock"
   ],
   "modules-right": [
     "hyprland/language",

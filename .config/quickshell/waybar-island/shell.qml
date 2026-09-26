@@ -2199,11 +2199,13 @@ ShellRoot {
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 10
                                         elide: Text.ElideRight
-                                        Layout.fillWidth: true
                                     }
                                 }
 
+                                Item { Layout.fillWidth: true }
+
                                 RowLayout {
+                                    Layout.alignment: Qt.AlignRight
                                     spacing: 8
 
                                     // Rescan button
@@ -2558,7 +2560,6 @@ ShellRoot {
 
                                 ColumnLayout {
                                     spacing: 2
-                                    Layout.fillWidth: true
                                     Text {
                                         text: "Bluetooth"
                                         color: root.colFg
@@ -2574,7 +2575,10 @@ ShellRoot {
                                     }
                                 }
 
+                                Item { Layout.fillWidth: true }
+
                                 RowLayout {
+                                    Layout.alignment: Qt.AlignRight
                                     spacing: 8
 
                                     // Rescan / Scan toggle button

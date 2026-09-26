@@ -4,23 +4,41 @@
 RUST_DOCK="$HOME/.local/bin/rust-dock"
 STATE_FILE="/tmp/rust-dock-visible"
 
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+
+if [ -z "$WAYLAND_DISPLAY" ]; then
+    WL_DISP=$(ls "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
+    if [ -n "$WL_DISP" ]; then
+        export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+    fi
+fi
+
 if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
-    HYPR_SIG=$(ls -t "/run/user/$(id -u)/hypr/" 2>/dev/null | head -n1)
+    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
     if [ -n "$HYPR_SIG" ]; then
         export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
     fi
 fi
 
-monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name')
+# Detectar monitores activos de forma segura
+monitors=""
+if command -v hyprctl >/dev/null 2>&1 && [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    mon_json=$(hyprctl monitors -j 2>/dev/null || true)
+    if [ -n "$mon_json" ]; then
+        monitors=$(echo "$mon_json" | jq -r '.[].name' 2>/dev/null || true)
+    fi
+fi
 
-if [ -z "$monitors" ]; then
+if [ -z "$monitors" ] || [ "$monitors" = "null" ]; then
     "$RUST_DOCK" &
-    echo "visible" > "$STATE_FILE"
+    echo "visible" > "$STATE_FILE" 2>/dev/null || true
     exit 0
 fi
 
 while IFS= read -r monitor; do
-    "$RUST_DOCK" -o "$monitor" &
+    [ -n "$monitor" ] && "$RUST_DOCK" -o "$monitor" &
 done <<< "$monitors"
 
-echo "visible" > "$STATE_FILE"
+echo "visible" > "$STATE_FILE" 2>/dev/null || true

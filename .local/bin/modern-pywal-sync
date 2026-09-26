@@ -8,6 +8,24 @@ if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -e "/run/user/$(id -u)/bus" ]; then
     export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 fi
 
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+
+if [ -z "$WAYLAND_DISPLAY" ]; then
+    WL_DISP=$(ls "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
+    if [ -n "$WL_DISP" ]; then
+        export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+    fi
+fi
+
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$HYPR_SIG" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    fi
+fi
+
 # 1. Cargar colores de Pywal
 if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
     echo "Error: Pywal no ha generado colores aún."
@@ -82,6 +100,10 @@ fi
 
 # 6. Sincronizar Waybar — reinicio completo para sincronizar todos los colores
 echo "  • Waybar..."
+if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
+    ln -sf "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
+fi
+
 if pgrep -x waybar > /dev/null 2>&1; then
     # Matar nm-applet ANTES de matar waybar para evitar el registro fantasma
     NM_WAS_RUNNING=false
@@ -108,12 +130,18 @@ else
     "$HOME/.config/waybar/launch.sh"
 fi
 
-# 6b. Reiniciar rust-dock para que recargue el tema GTK actualizado
+# 6b. Reiniciar rust-dock para que recargue el tema GTK y colores actualizados
 echo "  • rust-dock..."
-if pgrep -x rust-dock > /dev/null 2>&1; then
-    pkill rust-dock 2>/dev/null
-    sleep 0.3
-    "$HOME/.local/bin/rust-dock-launcher" &
+pkill -x rust-dock 2>/dev/null || true
+sleep 0.2
+"$HOME/.local/bin/rust-dock-launcher" &
+
+# 6c. Sincronizar daemon de auto-ocultación para Waybar y rust-dock
+echo "  • Auto-Hide Daemon..."
+pkill -x waybar_auto_hide 2>/dev/null || true
+sleep 0.3
+if [ -x "$HOME/.local/bin/waybar_auto_hide" ]; then
+    "$HOME/.local/bin/waybar_auto_hide" >/dev/null 2>&1 &
 fi
 
 # 7. Sincronizar Rofi

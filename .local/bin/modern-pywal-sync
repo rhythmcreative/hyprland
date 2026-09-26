@@ -66,8 +66,7 @@ fi
 
 # 4. Forzar Recarga de GTK (Reset de tema)
 if command -v gsettings &>/dev/null; then
-    # Forzamos a Adwaita que es el que mejor acepta overrides de CSS
-    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono"
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle"
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 fi

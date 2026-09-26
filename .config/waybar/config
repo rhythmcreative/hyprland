@@ -41,11 +41,11 @@
       "warning": 30,
       "critical": 15
     },
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
+    "format": "{capacity}%",
+    "format-charging": "󱐋 {capacity}%",
     "format-plugged": "󰂄 {capacity}%",
-    "format-alt": "{icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "format-alt": "{time}",
+    "tooltip-format": "Batería 0: {capacity}% ({power:.1f}W)",
     "on-click": "true"
   },
   "battery#bat1": {
@@ -54,11 +54,11 @@
       "warning": 30,
       "critical": 15
     },
-    "format": "| {icon} {capacity}%",
-    "format-charging": "| 󰂄 {capacity}%",
+    "format": "| {capacity}%",
+    "format-charging": "| 󱐋 {capacity}%",
     "format-plugged": "| 󰂄 {capacity}%",
-    "format-alt": "| {icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "format-alt": "| {time}",
+    "tooltip-format": "Batería 1: {capacity}% ({power:.1f}W)",
     "on-click": "true"
   },
   "battery": {
@@ -66,11 +66,11 @@
       "warning": 30,
       "critical": 15
     },
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
+    "format": "{capacity}%",
+    "format-charging": "󱐋 {capacity}%",
     "format-plugged": "󰂄 {capacity}%",
-    "format-alt": "{icon} {time}",
-    "format-icons": ["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+    "format-alt": "{time}",
+    "tooltip-format": "{timeTo}, {capacity}% ({power:.1f}W)",
     "on-click": "true"
   },
   "custom/battery-mode": {

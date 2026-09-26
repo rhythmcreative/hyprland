@@ -250,17 +250,40 @@
   color: @color6;
 }
 
-/* Battery with color4 */
+/* Battery with color4 - Android 16 style */
 #battery {
+  background-color: alpha(@color4, 0.15);
   color: @color4;
+  border: 1.5px solid @color4;
+  border-radius: 6px;
+  padding: 0.15rem 0.55rem;
+  margin: 5px 7px 5px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s ease-in-out;
 }
 
-#battery.charging {
-  color: @color5;
+#battery:hover {
+  background-color: alpha(@color4, 0.28);
+}
+
+#battery.charging,
+#battery.plugged {
+  background-color: alpha(@color2, 0.2);
+  color: @color2;
+  border-color: @color2;
 }
 
 #battery.warning:not(.charging) {
+  background-color: alpha(@color3, 0.22);
+  color: @color3;
+  border-color: @color3;
+}
+
+#battery.critical:not(.charging) {
+  background-color: alpha(@color1, 0.28);
   color: @color1;
+  border-color: @color1;
 }
 
 /* Tray gets foreground color */

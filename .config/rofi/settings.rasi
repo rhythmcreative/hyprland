@@ -1,0 +1,93 @@
+@import "colors-pywal.rasi"
+
+* {
+    font: "JetBrainsMono Nerd Font 11";
+    background-color: transparent;
+    text-color: @foreground;
+}
+
+window {
+    transparency: "real";
+    location: center;
+    anchor: center;
+    width: 880px;
+    height: 620px;
+    border: 2px solid;
+    border-radius: 16px;
+    border-color: @selected;
+    background-color: @background-trans;
+    cursor: "default";
+}
+
+mainbox {
+    spacing: 12px;
+    padding: 22px;
+    children: [ "inputbar", "listview" ];
+}
+
+inputbar {
+    spacing: 10px;
+    padding: 10px 16px;
+    border: 1px solid;
+    border-radius: 10px;
+    border-color: rgba(255, 255, 255, 0.15);
+    background-color: rgba(0, 0, 0, 0.25);
+    children: [ "prompt", "entry" ];
+}
+
+prompt {
+    font: "JetBrainsMono Nerd Font Bold 11";
+    text-color: @selected;
+}
+
+entry {
+    placeholder: "Search system settings (e.g. wifi, bluetooth, audio, display, theme)...";
+    placeholder-color: @foreground-alt;
+    text-color: @foreground;
+}
+
+listview {
+    columns: 1;
+    lines: 12;
+    cycle: true;
+    dynamic: true;
+    scrollbar: true;
+    layout: vertical;
+    spacing: 5px;
+    padding: 6px 0px;
+}
+
+scrollbar {
+    width: 4px;
+    border: 0;
+    handle-width: 6px;
+    padding: 0;
+    handle-color: @selected;
+}
+
+element {
+    padding: 9px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+element normal.normal {
+    background-color: transparent;
+    text-color: @foreground;
+}
+
+element alternate.normal {
+    background-color: rgba(255, 255, 255, 0.02);
+    text-color: @foreground;
+}
+
+element selected.normal {
+    background-color: @selected;
+    text-color: @background;
+}
+
+element-text {
+    background-color: transparent;
+    text-color: inherit;
+    cursor: pointer;
+}

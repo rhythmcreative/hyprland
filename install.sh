@@ -158,18 +158,67 @@ install_yay() {
 auto_detect_drivers() {
     section "Hardware Drivers & GPU Detection"
     local EXTRA_PKGS=()
+    local IS_NVIDIA=false
     
     local GPU_INFO
     GPU_INFO=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
 
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
-        step_item "NVIDIA GPU detected. Adding proprietary drivers & utilities..."
-        EXTRA_PKGS+=(nvidia-open nvidia-settings nvidia-utils nvidia-prime lib32-nvidia-utils)
+        IS_NVIDIA=true
+        step_item "NVIDIA GPU detected. Analyzing architecture and installed kernels..."
+
+        # 1. Detect installed kernels and install matching kernel headers
+        local KERNEL_HEADERS=()
+        for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-lts|-zen|-hardened)?$'); do
+            KERNEL_HEADERS+=("${k}-headers")
+        done
+        if [ ${#KERNEL_HEADERS[@]} -gt 0 ]; then
+            step_item "Installing matching kernel headers: ${KERNEL_HEADERS[*]}..."
+            sudo pacman -S --needed --noconfirm "${KERNEL_HEADERS[@]}" >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        # 2. Select the latest driver package based on GPU architecture and kernel type
+        local USE_OPEN=true
+        if echo "$GPU_INFO" | grep -i -E "GTX (10[0-9]{2}|9[0-9]{2}|8[0-9]{2}|7[0-9]{2}|6[0-9]{2}|[0-9]{3})|GeForce 8|GeForce 9|GeForce [0-9]{3}M|GeForce MX" >/dev/null 2>&1; then
+            USE_OPEN=false
+        fi
+
+        local IS_CUSTOM_KERNEL=false
+        if pacman -Qq 2>/dev/null | grep -E '^linux-(lts|zen|hardened)$' >/dev/null 2>&1; then
+            IS_CUSTOM_KERNEL=true
+        fi
+
+        if [ "$USE_OPEN" = true ]; then
+            if [ "$IS_CUSTOM_KERNEL" = true ]; then
+                step_item "Selecting latest NVIDIA Open DKMS driver (nvidia-open-dkms)..."
+                EXTRA_PKGS+=(nvidia-open-dkms)
+            else
+                step_item "Selecting latest official NVIDIA Open driver (nvidia-open)..."
+                EXTRA_PKGS+=(nvidia-open)
+            fi
+        else
+            step_item "Legacy NVIDIA architecture detected. Selecting proprietary DKMS driver (nvidia-dkms)..."
+            EXTRA_PKGS+=(nvidia-dkms)
+        fi
+
+        # 3. Core NVIDIA driver utilities, 32-bit gaming and Wayland support
+        EXTRA_PKGS+=(
+            nvidia-utils
+            nvidia-settings
+            nvidia-prime
+            lib32-nvidia-utils
+            egl-wayland
+            egl-wayland2
+            libva-nvidia-driver
+            opencl-nvidia
+        )
     fi
+
     if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
         step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
         EXTRA_PKGS+=(lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils)
     fi
+
     if [[ $GPU_INFO == *"Intel"* ]]; then
         step_item "Intel GPU detected. Adding hardware acceleration drivers..."
         EXTRA_PKGS+=(intel-media-driver libva-intel-driver vulkan-intel)
@@ -195,6 +244,65 @@ auto_detect_drivers() {
         step_ok "Hardware drivers configured."
     else
         step_ok "Standard hardware configuration applied."
+    fi
+
+    # Post-driver configuration for NVIDIA
+    if [ "$IS_NVIDIA" = true ]; then
+        section "NVIDIA System & Wayland Optimization"
+
+        # Direct Rendering Manager (DRM) Kernel Mode Setting & Framebuffer Device
+        step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
+        sudo mkdir -p /etc/modprobe.d
+        cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+# Enable Direct Rendering Manager (DRM) Kernel Mode Setting and Framebuffer Device for Wayland & Hyprland
+options nvidia-drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+EOF
+
+        # Enable NVIDIA power management systemd services for seamless sleep/wake
+        step_item "Enabling NVIDIA power management & suspend services..."
+        sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
+
+        # Early KMS in mkinitcpio
+        if [ -f /etc/mkinitcpio.conf ]; then
+            if ! grep -q "nvidia_drm" /etc/mkinitcpio.conf; then
+                step_item "Adding NVIDIA modules to /etc/mkinitcpio.conf for early KMS..."
+                sudo sed -i -E 's/^MODULES=\((.*)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+                sudo sed -i 's/  */ /g' /etc/mkinitcpio.conf
+            fi
+        fi
+
+        # Automatic pacman hook for initramfs rebuilding
+        step_item "Configuring automatic NVIDIA pacman hook for kernel updates..."
+        sudo mkdir -p /etc/pacman.d/hooks
+        cat << 'EOF' | sudo tee /etc/pacman.d/hooks/nvidia.hook > /dev/null
+[Trigger]
+Operation=Install
+Operation=Upgrade
+Operation=Remove
+Type=Package
+Target=nvidia
+Target=nvidia-open
+Target=nvidia-dkms
+Target=nvidia-open-dkms
+Target=nvidia-open-lts
+Target=linux
+Target=linux-lts
+Target=linux-zen
+Target=linux-hardened
+
+[Action]
+Description=Updating NVIDIA initramfs images...
+Depends=mkinitcpio
+When=PostTransaction
+Exec=/usr/bin/mkinitcpio -P
+EOF
+
+        # Build initramfs images
+        step_item "Generating initramfs images with mkinitcpio..."
+        sudo mkinitcpio -P >> "$LOG_FILE" 2>&1 || step_warn "mkinitcpio image generation encountered warnings."
+        step_ok "NVIDIA system optimization complete."
     fi
 }
 
@@ -301,6 +409,7 @@ step_software() {
         bluez-utils
         blueman
         bluez-obex
+        rfkill
 
         # Audio Architecture
         pipewire
@@ -356,7 +465,8 @@ step_software() {
         gtk4
         gtk4-layer-shell
 
-        # System Utilities
+        # System Utilities & Scripting Runtimes
+        python
         flatpak
         stow
         curl
@@ -641,18 +751,23 @@ if [[ "$1" == "--preview" || "$1" == "--dry-run" ]]; then
 
     section "Core Packages & System Libraries"
     step_item "Simulating package dependency resolution..."
-    gum spin --spinner dot --title "Checking 60+ core packages..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.2
+    gum spin --spinner dot --title "Checking 65+ core packages..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.2
     step_ok "Compositor, Waybar, Quickshell, Rofi, Audio, Fonts resolved."
+
+    section "Hardware Drivers & GPU Optimization"
+    step_item "Simulating hardware auto-detection (NVIDIA/AMD/Intel)..."
+    sleep 0.5
+    step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
 
     section "Rust-Dock Component"
     gum spin --spinner dot --title "Verifying rust-dock target binary..." --padding "0 0 0 $PADDING_LEFT" -- sleep 0.8
     step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
 
     section "Configuration Synchronization (Dotfiles)"
-    step_item "Simulating deployment of 12 config directories..."
+    step_item "Simulating deployment of config directories..."
     sleep 0.4
-    step_ok "Hyprland Lua, Waybar, Quickshell, Rofi, and Kvantum synchronized."
-    step_ok "61 helper scripts deployed to ~/.local/bin/."
+    step_ok "Hyprland Lua, Waybar, Quickshell Dynamic Island, Rofi, and Kvantum synchronized."
+    step_ok "65+ helper scripts deployed to ~/.local/bin/."
     step_ok "Preserved monitors.conf."
     step_ok "Dynamic Island systemd service enabled."
 

@@ -1,0 +1,212 @@
+#!/bin/bash
+
+# Menu interactivo de Wi-Fi para Rofi y Hyprland
+# Tema y colores sincronizados con Pywal
+
+THEME_FILE="$HOME/.config/rofi/settings.rasi"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+if [ -z "$WAYLAND_DISPLAY" ]; then
+    WL_DISP=$(ls "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
+    if [ -n "$WL_DISP" ]; then
+        export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+    else
+        export WAYLAND_DISPLAY="wayland-1"
+    fi
+fi
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$HYPR_SIG" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    fi
+fi
+
+get_active_monitor() {
+    local mon=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)
+    [ -n "$mon" ] && [ "$mon" != "null" ] && echo "$mon" && return
+    echo "eDP-1"
+}
+ACTIVE_MON=$(get_active_monitor)
+
+# Hide Waybar, Rust-Dock and Quickshell while Rofi is open
+if [ -z "$_BARS_HIDDEN" ]; then
+    export _BARS_HIDDEN=1
+    if pgrep -x waybar >/dev/null 2>&1; then
+        export _WAYBAR_WAS_VISIBLE=true
+        pkill -SIGUSR1 waybar 2>/dev/null
+    fi
+    if pgrep -x rust-dock >/dev/null 2>&1; then
+        export _RUST_DOCK_WAS_VISIBLE=true
+        pkill -SIGUSR1 rust-dock 2>/dev/null
+    fi
+    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+        export _QUICKSHELL_WAS_VISIBLE=true
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1
+    fi
+fi
+
+restore_bars() {
+    [ "$_WAYBAR_WAS_VISIBLE" = "true" ] && pkill -SIGUSR2 waybar 2>/dev/null
+    [ "$_RUST_DOCK_WAS_VISIBLE" = "true" ] && pkill -SIGUSR2 rust-dock 2>/dev/null
+    [ "$_QUICKSHELL_WAS_VISIBLE" = "true" ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1
+}
+trap restore_bars EXIT
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -t 3000 -i network-wireless "Wi-Fi" "$1"
+    fi
+}
+
+# Obtener estado de Wi-Fi
+WIFI_STATE=$(nmcli -fields WIFI g 2>/dev/null | tail -n 1 | tr -d ' ')
+
+if [[ "$WIFI_STATE" =~ enabled ]] || [ "$WIFI_STATE" = "enabled" ]; then
+    TOGGLE_TEXT="󰖪  Desactivar Wi-Fi"
+else
+    TOGGLE_TEXT="󰖩  Activar Wi-Fi"
+fi
+
+# Si el Wi-Fi esta desactivado, mostrar opcion para activarlo
+if [ "$WIFI_STATE" != "enabled" ]; then
+    CHOSEN=$(echo -e "$TOGGLE_TEXT\n󰒓  Abrir Administrador (nm-connection-editor)" | rofi -dmenu -i -p "Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    case "$CHOSEN" in
+        *"Activar Wi-Fi"*)
+            nmcli radio wifi on
+            notify "Wi-Fi activado. Buscando redes..."
+            sleep 2
+            exec "$0"
+            ;;
+        *"Abrir Administrador"*)
+            nm-connection-editor &
+            ;;
+    esac
+    exit 0
+fi
+
+# Escanear y listar redes disponibles (instantaneo usando cache de NetworkManager)
+RAW_NETWORKS=$(nmcli -t -f "IN-USE,SSID,SECURITY,BARS,SIGNAL" device wifi list 2>/dev/null | awk -F: '$2 != "" && !seen[$2]++ { print }')
+
+ACTIVE_CONN=""
+NET_ITEMS=""
+
+while IFS=: read -r in_use ssid security bars signal; do
+    [ -z "$ssid" ] && continue
+    sec_label="Abierta"
+    [ -n "$security" ] && [ "$security" != "--" ] && sec_label="$security"
+
+    if [ "$in_use" = "*" ]; then
+        ACTIVE_CONN="$ssid"
+        NET_ITEMS="${NET_ITEMS}󰤨  $ssid (Conectado) │ Señal: ${signal}% ($bars) │ $sec_label\n"
+    else
+        # Icono segun senal
+        if [ "$signal" -ge 75 ]; then
+            icon="󰤨"
+        elif [ "$signal" -ge 50 ]; then
+            icon="󰤥"
+        elif [ "$signal" -ge 25 ]; then
+            icon="󰤢"
+        else
+            icon="󰤟"
+        fi
+        [ "$sec_label" != "Abierta" ] && icon="${icon}"
+        NET_ITEMS="${NET_ITEMS}${icon}  $ssid │ Señal: ${signal}% ($bars) │ $sec_label\n"
+    fi
+done <<< "$RAW_NETWORKS"
+
+# Cabecera de acciones
+HEADER="$TOGGLE_TEXT\n󰑐  Escanear redes de nuevo\n󰒓  Abrir Administrador de Conexiones\n󱛂  Conectar a red oculta (Manual)\n────────────────────────────────────────"
+
+MENU_CONTENT=$(echo -e "${HEADER}\n${NET_ITEMS}")
+
+CHOSEN=$(echo -e "$MENU_CONTENT" | rofi -dmenu -i -p "Redes Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+
+[ -z "$CHOSEN" ] && exit 0
+[[ "$CHOSEN" =~ ^─ ]] && exit 0
+
+case "$CHOSEN" in
+    *"Desactivar Wi-Fi"*)
+        nmcli radio wifi off
+        notify "Wi-Fi desactivado"
+        exit 0
+        ;;
+    *"Activar Wi-Fi"*)
+        nmcli radio wifi on
+        notify "Wi-Fi activado"
+        exit 0
+        ;;
+    *"Escanear redes"*)
+        notify "Escaneando redes disponibles..."
+        nmcli device wifi rescan 2>/dev/null || true
+        sleep 1.5
+        exec "$0"
+        ;;
+    *"Abrir Administrador"*)
+        nm-connection-editor &
+        exit 0
+        ;;
+    *"Conectar a red oculta"*)
+        HIDDEN_SSID=$(rofi -dmenu -p "Nombre de red (SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        [ -z "$HIDDEN_SSID" ] && exit 0
+        HIDDEN_PASS=$(rofi -dmenu -password -p "Contraseña para $HIDDEN_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        if [ -n "$HIDDEN_PASS" ]; then
+            nmcli dev wifi connect "$HIDDEN_SSID" password "$HIDDEN_PASS" hidden yes
+        else
+            nmcli dev wifi connect "$HIDDEN_SSID" hidden yes
+        fi
+        exit 0
+        ;;
+esac
+
+# Extraer el SSID seleccionado
+SELECTED_SSID=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰤨󰤥󰤢󰤟󰖩󰖪* ]+//' | sed 's/ (Conectado)//' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+[ -z "$SELECTED_SSID" ] && exit 0
+
+# Si es la red activa, ofrecer desconectar u olvidar
+if [ "$SELECTED_SSID" = "$ACTIVE_CONN" ]; then
+    ACTION=$(echo -e "󰅖  Desconectar de $SELECTED_SSID\n󰆴  Olvidar esta red\n󰅁  Volver" | rofi -dmenu -i -p "$SELECTED_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    case "$ACTION" in
+        *"Desconectar"*)
+            nmcli connection down id "$SELECTED_SSID" 2>/dev/null || nmcli device disconnect wlan0 2>/dev/null
+            notify "Desconectado de $SELECTED_SSID"
+            ;;
+        *"Olvidar"*)
+            nmcli connection delete id "$SELECTED_SSID" 2>/dev/null
+            notify "Red $SELECTED_SSID eliminada"
+            ;;
+    esac
+    exit 0
+fi
+
+# Verificar si la conexion ya existe en el sistema
+SAVED_CONN=$(nmcli -t -f NAME connection show | grep -Fx "$SELECTED_SSID" | head -n 1)
+
+if [ -n "$SAVED_CONN" ]; then
+    notify "Conectando a red guardada: $SELECTED_SSID..."
+    if nmcli connection up id "$SELECTED_SSID" 2>/dev/null; then
+        notify "Conectado exitosamente a $SELECTED_SSID"
+    else
+        notify "Fallo al conectar a $SELECTED_SSID. Intentando reconectar..."
+        nmcli dev wifi connect "$SELECTED_SSID"
+    fi
+else
+    # Red nueva: verificar si requiere contraseña
+    SEC_TYPE=$(echo "$CHOSEN" | awk -F'│' '{print $3}' | tr -d ' ')
+    if [ "$SEC_TYPE" = "Abierta" ] || [ -z "$SEC_TYPE" ] || [ "$SEC_TYPE" = "--" ]; then
+        notify "Conectando a red abierta: $SELECTED_SSID..."
+        nmcli dev wifi connect "$SELECTED_SSID"
+    else
+        WIFI_PASSWORD=$(rofi -dmenu -password -p "Contraseña ($SELECTED_SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        [ -z "$WIFI_PASSWORD" ] && exit 0
+        notify "Conectando a $SELECTED_SSID..."
+        if nmcli dev wifi connect "$SELECTED_SSID" password "$WIFI_PASSWORD"; then
+            notify "Conectado exitosamente a $SELECTED_SSID"
+        else
+            notify "Error de autenticacion al conectar a $SELECTED_SSID"
+        fi
+    fi
+fi

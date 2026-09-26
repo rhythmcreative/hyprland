@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Script para probar notificaciones en la Dynamic Island
+
+APP="${1:-Dynamic Island}"
+TITLE="${2:-Notificacion de Prueba}"
+BODY="${3:-El daemon de notificaciones funciona a la perfeccion en la Dynamic Island.}"
+
+notify-send -a "$APP" "$TITLE" "$BODY"

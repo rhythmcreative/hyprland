@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Visor interactivo de atajos de teclado para Hyprland
+# Tema y colores sincronizados dinámicamente con Pywal
+
+THEME_FILE="$HOME/.config/rofi/hotkeys.rasi"
+
+# Si ya está abierto, cerrarlo (comportamiento toggle)
+if pgrep -f "rofi.*hotkeys.rasi" > /dev/null 2>&1; then
+    pkill -f "rofi.*hotkeys.rasi"
+    exit 0
+fi
+
+# Gestionar visibilidad de rust-dock para evitar solapamiento
+_rust_pids=$(pgrep -x rust-dock 2>/dev/null | paste -sd '|')
+_rust_was_visible=false
+if [ -n "$_rust_pids" ] && hyprctl layers 2>/dev/null | grep -qE "pid: ($_rust_pids)"; then
+    _rust_was_visible=true
+    pkill -SIGUSR1 rust-dock 2>/dev/null || true
+fi
+
+# Lista completa de combinaciones de teclas
+read -r -d '' HOTKEYS << 'EOF'
+SUPER + Return            │ Abrir terminal (Kitty)           │ Sistema
+SUPER + SPACE             │ Alternar Rust-Dock               │ Lanzador
+SUPER + I                 │ Alternar Dynamic Island (Notch)  │ Barra
+SUPER + F                 │ Visor de atajos de teclado       │ Ayuda
+SUPER + A                 │ Lanzador de aplicaciones         │ Rofi
+SUPER + R                 │ Ejecutar comando (Run)           │ Rofi
+SUPER + E                 │ Explorador de archivos           │ Archivos
+SUPER + Q                 │ Cerrar ventana activa            │ Ventana
+SUPER + W                 │ Alternar ventana flotante        │ Ventana
+SUPER + J                 │ Alternar division horizontal     │ Tiling
+ALT + Return              │ Pantalla completa (Fullscreen)   │ Ventana
+SUPER + Tab               │ Vista general (Overview)         │ Ventana
+SUPER + ALT + Tab         │ Selector de ventanas abiertas    │ Rofi
+SUPER + M                 │ Salir de la sesion Hyprland      │ Sesion
+SUPER + L                 │ Bloquear pantalla (Hyprlock)     │ Seguridad
+SUPER + BackSpace         │ Menu de apagado (Powermenu)      │ Sesion
+SUPER + P                 │ Captura de pantalla y editar     │ Utilidad
+SUPER + SHIFT + P         │ Cuentagotas / Selector color     │ Utilidad
+SUPER + SHIFT + Print     │ Captura de pantalla directa      │ Utilidad
+SUPER + SHIFT + G         │ Modo rendimiento / ahorro        │ Sistema
+SUPER + SHIFT + W         │ Selector visual de wallpapers    │ Wallpaper
+SUPER + SHIFT + B         │ Cambio rapido de wallpaper       │ Wallpaper
+SUPER + ALT + W           │ Cambiar wallpaper + Waybar       │ Wallpaper
+SUPER + XF86Back / Prior  │ Resincronizar colores con Pywal  │ Tema
+SUPER + S                 │ Alternar espacio magico (scratch)│ Workspace
+SUPER + SHIFT + S         │ Enviar a espacio magico          │ Workspace
+SUPER + 1 .. 9, 0         │ Cambiar a espacio 1 al 10        │ Navegacion
+SUPER + SHIFT + 1 .. 0    │ Mover ventana a espacio 1 al 10  │ Navegacion
+SUPER + Flechas           │ Mover foco (Izq / Der / Arr / Aba│ Navegacion
+SUPER + Scroll Raton      │ Cambiar entre espacios           │ Navegacion
+SUPER + Clic Izquierdo    │ Arrastrar ventana flotante       │ Raton
+SUPER + Clic Derecho      │ Redimensionar ventana flotante   │ Raton
+Volumen Up / Down / Mute  │ Audio dinamico con notch         │ Hardware
+Brillo Up / Down          │ Brillo de pantalla con notch     │ Hardware
+F10                       │ Alternar Bluetooth               │ Hardware
+F11 / F12                 │ Ajuste fino de volumen (- / +)   │ Hardware
+XF86AudioPlay / Pause     │ Reproducir o pausar musica       │ Media
+XF86AudioNext / Prev      │ Pista siguiente o anterior       │ Media
+XF86KbdBrightnessUp/Down  │ Brillo de teclado Asus           │ Hardware
+EOF
+
+# Mostrar menu Rofi
+selected=$(echo "$HOTKEYS" | rofi -dmenu -i -p "Atajos" -theme "$THEME_FILE")
+
+# Restaurar visibilidad de rust-dock si estaba activo antes
+if [ "$_rust_was_visible" = true ]; then
+    pkill -SIGUSR2 rust-dock 2>/dev/null || true
+fi
+
+# Accion opcional al pulsar Enter en un atajo
+if [ -n "$selected" ]; then
+    case "$selected" in
+        *"SUPER + Return"*)
+            kitty &
+            ;;
+        *"SUPER + SPACE"*)
+            "$HOME/.local/bin/rust-dock-toggle-all" &
+            ;;
+        *"SUPER + I"*)
+            "$HOME/.local/bin/toggle-island" &
+            ;;
+        *"SUPER + A"*)
+            "$HOME/.local/bin/rofi-style3-monitor-adaptive" &
+            ;;
+        *"SUPER + R"*)
+            "$HOME/.local/bin/adaptive-rofi" run &
+            ;;
+        *"SUPER + E"*)
+            thunar &
+            ;;
+        *"SUPER + BackSpace"*)
+            "$HOME/.local/bin/powermenu-with-monitor-detection" &
+            ;;
+        *"SUPER + P"*)
+            grim -g "$(slurp)" - | swappy -f - &
+            ;;
+        *"SUPER + SHIFT + P"*)
+            hyprpicker -a &
+            ;;
+        *"SUPER + SHIFT + W"*)
+            "$HOME/.local/bin/wallpaper-selector" &
+            ;;
+        *"SUPER + SHIFT + B"*)
+            "$HOME/.local/bin/wallpaper-change-adaptive" &
+            ;;
+        *"SUPER + ALT + W"*)
+            "$HOME/.local/bin/wallpaper-changer-with-waybar-sync" &
+            ;;
+        *"SUPER + L"*)
+            hyprlock &
+            ;;
+        *"SUPER + SHIFT + G"*)
+            "$HOME/.config/hypr/scripts/toggle_performance.sh" &
+            ;;
+        *"F10"*)
+            "$HOME/.local/bin/toggle-bluetooth" &
+            ;;
+    esac
+fi

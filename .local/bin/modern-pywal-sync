@@ -4,6 +4,10 @@
 # Este script ignora temas externos y aplica los colores directamente
 # sobre el tema base de GTK para asegurar que NADA se quede "estancado".
 
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -e "/run/user/$(id -u)/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+fi
+
 # 1. Cargar colores de Pywal
 if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
     echo "Error: Pywal no ha generado colores aún."
@@ -61,13 +65,12 @@ fi
 # 3. Sincronizar Iconos (Tela Circle)
 echo "  • Iconos (Tela-Circle)..."
 if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
-    "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1 &
+    "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1
 fi
 
 # 4. Forzar Recarga de GTK (Reset de tema)
 if command -v gsettings &>/dev/null; then
     gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono"
-    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle"
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
 fi
 

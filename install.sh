@@ -372,8 +372,11 @@ MONCONF
 
     # Apply GTK Theme defaults
     info "Applying GTK theme defaults (PywalSync-Mono)..."
-    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
+    if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
+        "$HOME/.local/bin/pywal-tela-sync" 2>/dev/null || true
+    else
+        gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
+    fi
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
 }

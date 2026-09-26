@@ -148,6 +148,13 @@ success() {
 # --- LOGIC ---
 
 install_yay() {
+    # Ensure multilib repository is enabled
+    if grep -q "^#\[multilib\]" /etc/pacman.conf; then
+        info "Enabling multilib repository in /etc/pacman.conf..."
+        sudo sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
+        sudo pacman -Sy
+    fi
+
     if ! command -v yay > /dev/null 2>&1; then
         section "DEPENDENCY: AUR HELPER"
         info "Deploying yay AUR helper..."

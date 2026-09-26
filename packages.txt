@@ -108,6 +108,8 @@ ufw
 unzip
 util-linux
 vesktop
+virtualbox
+virtualbox-guest-iso
 vulkan-radeon
 waybar
 wget

@@ -498,7 +498,7 @@ ShellRoot {
 
             readonly property real ala: 16
             width: root.expanded ? 640 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? 560 : (root.notifActive ? 56 : 36)
+            height: root.expanded ? 535 : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
@@ -732,10 +732,10 @@ ShellRoot {
             Item {
                 id: expandedView
                 anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                anchors.topMargin: 34
-                anchors.bottomMargin: 18
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                anchors.topMargin: 32
+                anchors.bottomMargin: 20
                 visible: opacity > 0
                 opacity: root.expanded ? 1 : 0
 
@@ -745,7 +745,7 @@ ShellRoot {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: 12
+                    spacing: 14
 
                     // ── 1. HEADER ROW (Date, Time, Notch grabber, Close/Lock/Power) ──
                     RowLayout {
@@ -924,13 +924,13 @@ ShellRoot {
                     // ── 3. TAB 0: CONTROL & SISTEMA ──
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: 12
                         visible: root.currentTab === 0 && root.controlSubView === 0
 
                         // Media Player Card
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 72
+                            Layout.preferredHeight: 74
                             radius: 14
                             color: root.colSurface
                             border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
@@ -1000,21 +1000,21 @@ ShellRoot {
                         GridLayout {
                             Layout.fillWidth: true
                             columns: 2
-                            rowSpacing: 8
-                            columnSpacing: 8
+                            rowSpacing: 10
+                            columnSpacing: 10
 
                             // Wi-Fi Tile
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 50
+                                height: 52
                                 radius: 14
                                 color: root.wifiEnabled ? root.colAccent : root.colSurface
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
+                                    anchors.margins: 10
+                                    spacing: 10
                                     Text {
                                         text: root.wifiEnabled ? "󰖩" : "󰖪"
                                         color: root.wifiEnabled ? root.colBg : root.colFg
@@ -1079,15 +1079,15 @@ ShellRoot {
                             // Bluetooth Tile
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 50
+                                height: 52
                                 radius: 14
                                 color: root.btEnabled ? root.colAccent : root.colSurface
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
+                                    anchors.margins: 10
+                                    spacing: 10
                                     Text {
                                         text: root.btEnabled ? "󰂯" : "󰂲"
                                         color: root.btEnabled ? root.colBg : root.colFg
@@ -1142,14 +1142,14 @@ ShellRoot {
                             // Rust-Dock Tile
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 50
+                                height: 52
                                 radius: 14
                                 color: root.colSurface
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
+                                    anchors.margins: 10
+                                    spacing: 10
                                     Text { text: "󰻂"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
                                     ColumnLayout {
                                         spacing: 0
@@ -1168,15 +1168,15 @@ ShellRoot {
                             // Fondos Tile
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 50
+                                height: 52
                                 radius: 14
                                 color: root.colSurface
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
-                                    Text { text: "󰏘"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    Text { text: "󰸉"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
                                     ColumnLayout {
                                         spacing: 0
                                         Layout.fillWidth: true
@@ -1189,134 +1189,144 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.expanded = false
-                                        root.runCmd("~/.local/bin/wallpaper-selector")
+                                        root.runCmd("~/.local/bin/wallpaper-gallery")
                                     }
                                 }
                             }
                         }
 
-                        // Sliders (Volume & Brightness)
-                        ColumnLayout {
+                        // Sliders Card (Volume & Brightness)
+                        Rectangle {
                             Layout.fillWidth: true
-                            spacing: 8
+                            Layout.preferredHeight: 84
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
 
-                            // Volume Slider
-                            RowLayout {
-                                Layout.fillWidth: true
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
                                 spacing: 10
 
-                                Text {
-                                    text: root.isMuted ? "󰝟" : (root.volumeLevel > 0.5 ? "󰕾" : "󰖀")
-                                    color: root.isMuted ? "#ff5555" : root.colAccent
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 18
-                                    Layout.preferredWidth: 22
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.isMuted = !root.isMuted
-                                            root.runCmd("pamixer -t")
+                                // Volume Slider
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Text {
+                                        text: root.isMuted ? "󰝟" : (root.volumeLevel > 0.5 ? "󰕾" : "󰖀")
+                                        color: root.isMuted ? "#ff5555" : root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 18
+                                        Layout.preferredWidth: 24
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.isMuted = !root.isMuted
+                                                root.runCmd("pamixer -t")
+                                            }
                                         }
                                     }
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 20
-                                    radius: 10
-                                    color: root.colSurface
 
                                     Rectangle {
-                                        width: parent.width * (root.isMuted ? 0 : root.volumeLevel)
-                                        height: parent.height
+                                        Layout.fillWidth: true
+                                        height: 20
                                         radius: 10
-                                        color: root.isMuted ? root.colMuted : root.colAccent
-                                    }
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
 
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: mouse => {
-                                            const p = Math.max(0, Math.min(1, mouse.x / width))
-                                            root.volumeLevel = p
-                                            root.isMuted = false
-                                            root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                        Rectangle {
+                                            width: parent.width * (root.isMuted ? 0 : root.volumeLevel)
+                                            height: parent.height
+                                            radius: 10
+                                            color: root.isMuted ? root.colMuted : root.colAccent
                                         }
-                                        onPositionChanged: mouse => {
-                                            if (pressed) {
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: mouse => {
                                                 const p = Math.max(0, Math.min(1, mouse.x / width))
                                                 root.volumeLevel = p
                                                 root.isMuted = false
                                                 root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
                                             }
+                                            onPositionChanged: mouse => {
+                                                if (pressed) {
+                                                    const p = Math.max(0, Math.min(1, mouse.x / width))
+                                                    root.volumeLevel = p
+                                                    root.isMuted = false
+                                                    root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                                }
+                                            }
                                         }
+                                    }
+
+                                    Text {
+                                        text: root.isMuted ? "0%" : (Math.round(root.volumeLevel * 100) + "%")
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                        Layout.preferredWidth: 36
+                                        horizontalAlignment: Text.AlignRight
                                     }
                                 }
 
-                                Text {
-                                    text: root.isMuted ? "0%" : (Math.round(root.volumeLevel * 100) + "%")
-                                    color: root.colFg
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.weight: Font.Bold
-                                    Layout.preferredWidth: 35
-                                    horizontalAlignment: Text.AlignRight
-                                }
-                            }
-
-                            // Brightness Slider
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-
-                                Text {
-                                    text: "󰃠"
-                                    color: root.colAccent
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 18
-                                    Layout.preferredWidth: 22
-                                }
-
-                                Rectangle {
+                                // Brightness Slider
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    height: 20
-                                    radius: 10
-                                    color: root.colSurface
+                                    spacing: 10
+
+                                    Text {
+                                        text: "󰃠"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 18
+                                        Layout.preferredWidth: 24
+                                    }
 
                                     Rectangle {
-                                        width: parent.width * root.brightnessLevel
-                                        height: parent.height
+                                        Layout.fillWidth: true
+                                        height: 20
                                         radius: 10
-                                        color: root.colAccent
-                                    }
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
 
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: mouse => {
-                                            const p = Math.max(0.05, Math.min(1, mouse.x / width))
-                                            root.brightnessLevel = p
-                                            root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                        Rectangle {
+                                            width: parent.width * root.brightnessLevel
+                                            height: parent.height
+                                            radius: 10
+                                            color: root.colAccent
                                         }
-                                        onPositionChanged: mouse => {
-                                            if (pressed) {
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: mouse => {
                                                 const p = Math.max(0.05, Math.min(1, mouse.x / width))
                                                 root.brightnessLevel = p
                                                 root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
                                             }
+                                            onPositionChanged: mouse => {
+                                                if (pressed) {
+                                                    const p = Math.max(0.05, Math.min(1, mouse.x / width))
+                                                    root.brightnessLevel = p
+                                                    root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                                }
+                                            }
                                         }
                                     }
-                                }
 
-                                Text {
-                                    text: Math.round(root.brightnessLevel * 100) + "%"
-                                    color: root.colFg
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.weight: Font.Bold
-                                    Layout.preferredWidth: 35
-                                    horizontalAlignment: Text.AlignRight
+                                    Text {
+                                        text: Math.round(root.brightnessLevel * 100) + "%"
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                        Layout.preferredWidth: 36
+                                        horizontalAlignment: Text.AlignRight
+                                    }
                                 }
                             }
                         }
@@ -1324,10 +1334,10 @@ ShellRoot {
                         // Bottom Action Chips
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 10
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 34; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
                                 RowLayout { anchors.centerIn: parent; spacing: 6
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
                                     Text { text: "Aleatorio"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
@@ -1336,7 +1346,7 @@ ShellRoot {
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 34; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
                                 RowLayout { anchors.centerIn: parent; spacing: 6
                                     Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
                                     Text { text: "Recursos"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
@@ -1345,7 +1355,7 @@ ShellRoot {
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 34; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
                                 RowLayout { anchors.centerIn: parent; spacing: 6
                                     Text { text: "󰘳"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
                                     Text { text: "Atajos"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
@@ -1354,7 +1364,7 @@ ShellRoot {
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 34; radius: 10; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
                                 RowLayout { anchors.centerIn: parent; spacing: 6
                                     Text { text: "󰌌"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
                                     Text { text: root.kbLayout; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
@@ -2174,91 +2184,107 @@ ShellRoot {
                             }
                         }
 
-                        // Presets de Redondeo (Rounding)
-                        RowLayout {
+                        // Card de Estilo y Ventanas (Redondeo y Gaps)
+                        Rectangle {
                             Layout.fillWidth: true
-                            spacing: 10
+                            Layout.preferredHeight: 96
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
 
-                            Text {
-                                text: "Redondeo:"
-                                color: root.colFg
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
-                                font.weight: Font.Bold
-                                Layout.preferredWidth: 80
-                            }
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
 
-                            Repeater {
-                                model: [
-                                    { label: "Recto (0px)", val: 0 },
-                                    { label: "Normal (10px)", val: 10 },
-                                    { label: "Curvo (16px)", val: 16 }
-                                ]
-                                Rectangle {
+                                // Presets de Redondeo (Rounding)
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    height: 32
-                                    radius: 10
-                                    color: root.hyprRounding === modelData.val ? root.colAccent : root.colSurface
+                                    spacing: 10
+
                                     Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.label
-                                        color: root.hyprRounding === modelData.val ? root.colBg : root.colFg
+                                        text: "Redondeo:"
+                                        color: root.colFg
                                         font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 11
                                         font.weight: Font.Bold
+                                        Layout.preferredWidth: 80
                                     }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.hyprRounding = modelData.val
-                                            root.runCmd("hyprctl eval 'hl.config({ decoration = { rounding = " + modelData.val + " } })'")
+
+                                    Repeater {
+                                        model: [
+                                            { label: "Recto (0px)", val: 0 },
+                                            { label: "Normal (10px)", val: 10 },
+                                            { label: "Curvo (16px)", val: 16 }
+                                        ]
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 30
+                                            radius: 8
+                                            color: root.hyprRounding === modelData.val ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: root.hyprRounding === modelData.val ? root.colBg : root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.hyprRounding = modelData.val
+                                                    root.runCmd("hyprctl eval 'hl.config({ decoration = { rounding = " + modelData.val + " } })'")
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        }
 
-                        // Presets de Gaps (Espaciado)
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Text {
-                                text: "Gaps:"
-                                color: root.colFg
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
-                                font.weight: Font.Bold
-                                Layout.preferredWidth: 80
-                            }
-
-                            Repeater {
-                                model: [
-                                    { label: "0px", val: 0 },
-                                    { label: "6px", val: 6 },
-                                    { label: "10px", val: 10 },
-                                    { label: "16px", val: 16 }
-                                ]
-                                Rectangle {
+                                // Presets de Gaps (Espaciado)
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    height: 32
-                                    radius: 10
-                                    color: root.hyprGaps === modelData.val ? root.colAccent : root.colSurface
+                                    spacing: 10
+
                                     Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.label
-                                        color: root.hyprGaps === modelData.val ? root.colBg : root.colFg
+                                        text: "Gaps:"
+                                        color: root.colFg
                                         font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 11
                                         font.weight: Font.Bold
+                                        Layout.preferredWidth: 80
                                     }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.hyprGaps = modelData.val
-                                            root.runCmd("hyprctl eval 'hl.config({ general = { gaps_out = " + modelData.val + " } })'")
+
+                                    Repeater {
+                                        model: [
+                                            { label: "0px", val: 0 },
+                                            { label: "6px", val: 6 },
+                                            { label: "10px", val: 10 },
+                                            { label: "16px", val: 16 }
+                                        ]
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 30
+                                            radius: 8
+                                            color: root.hyprGaps === modelData.val ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: root.hyprGaps === modelData.val ? root.colBg : root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.hyprGaps = modelData.val
+                                                    root.runCmd("hyprctl eval 'hl.config({ general = { gaps_out = " + modelData.val + " } })'")
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2268,7 +2294,7 @@ ShellRoot {
                         // Herramientas Hyprland
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 10
 
                             Rectangle {
                                 Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface

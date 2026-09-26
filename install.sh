@@ -369,6 +369,13 @@ MONCONF
         sed -i "s|/home/rhythmcreative|$HOME|g" "$file"
         echo "  FIXED: $file"
     done
+
+    # Apply GTK Theme defaults
+    info "Applying GTK theme defaults (PywalSync-Mono)..."
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
 }
 
 step_wallpapers() {

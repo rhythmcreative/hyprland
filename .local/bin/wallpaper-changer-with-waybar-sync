@@ -113,8 +113,6 @@ apply_wallpaper_with_waybar_sync() {
         wal -i "$wallpaper_file" -n -q
         hyprctl reload
     fi
-    
-    notify-send "Sistema Sincronizado" "$(basename "$wallpaper_file")" -i "$wallpaper_file" -t 3000 2>/dev/null || true
 }
 
 # Verificar directorio de wallpapers

@@ -87,9 +87,6 @@ main() {
     if apply_pywal "$CURRENT_WALLPAPER"; then
         # Recargar componentes
         reload_components
-        
-        # Notificación de éxito
-        notify-send "Pywal Sincronizado" "Tema actualizado con: $(basename "$CURRENT_WALLPAPER")" -t 3000 2>/dev/null
         echo "Sincronización completada exitosamente"
     else
         notify-send "Error Pywal" "No se pudo sincronizar el tema" -t 3000 2>/dev/null

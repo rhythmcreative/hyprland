@@ -11,8 +11,6 @@ fi
 
 SELECTED=$(basename "$WALLPAPER_PATH")
 
-notify-send "Aplicando Wallpaper" "$SELECTED"
-
 # Aplicar con awww
 if command -v awww &> /dev/null; then
     awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
@@ -32,4 +30,3 @@ if command -v wal &> /dev/null; then
 fi
 
 echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
-notify-send "Wallpaper actualizado" "$SELECTED"

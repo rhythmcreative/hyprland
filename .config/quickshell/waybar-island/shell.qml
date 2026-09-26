@@ -35,6 +35,23 @@ ShellRoot {
 
         onNotification: function(n) {
             n.tracked = true
+            const app = (n.appName || "").toLowerCase()
+            const summary = (n.summary || "").toLowerCase()
+            const body = (n.body || "").toLowerCase()
+            const full = `${app} ${summary} ${body}`
+
+            // Filtrar y silenciar notificaciones repetitivas de cambio de wallpaper / pywal / sync
+            const ignoredKeywords = [
+                "pywal", "wallpaper", "sincroniz", "fondo", "sddm", "waybar",
+                "oh my posh", "colores", "tema actualizado", "aplicando",
+                "nm-applet", "p10k", "recargado", "reiniciado", "mako"
+            ]
+            const isSpam = ignoredKeywords.some(kw => full.includes(kw))
+            if (isSpam) {
+                n.dismiss()
+                return
+            }
+
             root.currentNotification = n
             root.notifAppName = n.appName || "Sistema"
             root.notifSummary = n.summary || ""

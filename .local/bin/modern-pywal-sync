@@ -173,9 +173,5 @@ fi
 echo "  • Hyprland..."
 hyprctl reload >/dev/null 2>&1 || true
 
-# 11. Notificación final
-if command -v notify-send &>/dev/null; then
-    notify-send "Sistema Sincronizado" "Todos los colores han sido actualizados." -t 2000
-fi
-
+# 11. Sincronización completada silenciosamente
 echo "¡Hecho! El sistema ahora debería reflejar los nuevos colores."

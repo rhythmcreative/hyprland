@@ -52,6 +52,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("sleep 1.0 && ~/.local/bin/modern-pywal-sync")
     hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher")
     hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher")
+    hl.exec_cmd("~/.local/bin/quickshell-island &")
 end)
 
 -- Environment variables
@@ -217,6 +218,7 @@ hl.layer_rule({
 -- General
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
+hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/toggle-island"))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + M", hl.dsp.exit())
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))

@@ -144,6 +144,12 @@ if [ -x "$HOME/.local/bin/waybar_auto_hide" ]; then
     "$HOME/.local/bin/waybar_auto_hide" >/dev/null 2>&1 &
 fi
 
+# 6d. Asegurar Dynamic Island corriendo
+echo "  • Dynamic Island (Quickshell)..."
+if ! pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+    "$HOME/.local/bin/quickshell-island" &
+fi
+
 # 7. Sincronizar Rofi
 echo "  • Rofi..."
 if [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then

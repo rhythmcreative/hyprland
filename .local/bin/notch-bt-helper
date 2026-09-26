@@ -3,77 +3,202 @@ import sys
 import subprocess
 import json
 import re
+import time
 
 def get_bt_status():
     try:
-        out = subprocess.check_output(['bluetoothctl', 'show'], text=True, stderr=subprocess.DEVNULL)
-        powered = 'Powered: yes' in out
+        sh = subprocess.check_output(['bluetoothctl', 'show'], text=True, stderr=subprocess.DEVNULL)
+        powered = 'Powered: yes' in sh
+        discovering = 'Discovering: yes' in sh
     except Exception:
         powered = False
+        discovering = False
 
     devices = []
     if powered:
+        seen_macs = set()
+        paired_macs = set()
+
+        # 1. Paired devices
         try:
-            raw_devs = subprocess.check_output(['bluetoothctl', 'devices'], text=True, stderr=subprocess.DEVNULL)
-            for line in raw_devs.strip().split('\n'):
-                if not line:
+            raw_paired = subprocess.check_output(['bluetoothctl', 'devices', 'Paired'], text=True, stderr=subprocess.DEVNULL)
+            for line in raw_paired.strip().split('\n'):
+                if not line.startswith('Device '):
                     continue
-                parts = line.split(' ')
-                if len(parts) < 3:
-                    continue
-                mac = parts[1].strip()
-                name = ' '.join(parts[2:]).strip()
-                if not mac:
-                    continue
-                
-                info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, stderr=subprocess.DEVNULL)
-                connected = 'Connected: yes' in info
-                paired = 'Paired: yes' in info
-                icon_type = 'other'
-                for il in info.split('\n'):
-                    if 'Icon:' in il:
-                        icon_type = il.split(':')[1].strip()
-                        break
-                devices.append({
-                    'mac': mac,
-                    'name': name,
-                    'connected': connected,
-                    'paired': paired,
-                    'icon': icon_type
-                })
+                parts = line.split(' ', 2)
+                if len(parts) >= 3:
+                    mac = parts[1].strip()
+                    name = parts[2].strip()
+                    seen_macs.add(mac)
+                    paired_macs.add(mac)
+                    devices.append({
+                        'mac': mac,
+                        'name': name,
+                        'paired': True,
+                        'connected': False,
+                        'has_name': True,
+                        'icon': 'other',
+                        'rssi': None
+                    })
         except Exception:
             pass
 
-    devices.sort(key=lambda d: (not d['connected'], not d['paired'], d['name']))
-    return {'powered': powered, 'devices': devices}
+        # 2. Scanned / known devices
+        try:
+            raw_all = subprocess.check_output(['bluetoothctl', 'devices'], text=True, stderr=subprocess.DEVNULL)
+            for line in raw_all.strip().split('\n'):
+                if not line.startswith('Device '):
+                    continue
+                parts = line.split(' ', 2)
+                if len(parts) >= 2:
+                    mac = parts[1].strip()
+                    name = parts[2].strip() if len(parts) >= 3 else ''
+                    if mac not in seen_macs:
+                        seen_macs.add(mac)
+                        devices.append({
+                            'mac': mac,
+                            'name': name,
+                            'paired': False,
+                            'connected': False,
+                            'has_name': False,
+                            'icon': 'other',
+                            'rssi': None
+                        })
+        except Exception:
+            pass
+
+        # 3. Enrich info from bluetoothctl info
+        clean_devs = []
+        for d in devices:
+            mac = d['mac']
+            info = ''
+            try:
+                info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+            d['connected'] = 'Connected: yes' in info
+            d['paired'] = 'Paired: yes' in info or (mac in paired_macs)
+
+            real_name = None
+            alias = None
+            icon = 'other'
+            rssi = None
+
+            for il in info.split('\n'):
+                il = il.strip()
+                if il.startswith('Name:'):
+                    real_name = il.split(':', 1)[1].strip()
+                elif il.startswith('Alias:'):
+                    alias = il.split(':', 1)[1].strip()
+                elif il.startswith('Icon:'):
+                    icon = il.split(':', 1)[1].strip()
+                elif il.startswith('RSSI:'):
+                    try:
+                        rssi_val = il.split('(', 1)[1].replace(')', '').strip()
+                        rssi = int(rssi_val)
+                    except Exception:
+                        pass
+
+            # Detect if name is a real human name or just MAC
+            best_name = real_name or alias or d['name'] or ''
+            # Check if name is MAC-like (e.g. 63-DF-71-6D-8A-D2 or 63:DF:71:6D:8A:D2)
+            is_mac_like = bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$', best_name.strip()))
+
+            if not best_name or is_mac_like:
+                d['has_name'] = False
+                d['name'] = 'Unknown Device'
+            else:
+                d['has_name'] = True
+                d['name'] = best_name
+
+            d['icon'] = icon
+            d['rssi'] = rssi
+            clean_devs.append(d)
+
+        # Sort: Connected first, then Paired, then Named devices, then signal strength, then name
+        clean_devs.sort(key=lambda x: (
+            not x['connected'],
+            not x['paired'],
+            not x['has_name'],
+            -(x['rssi'] or -999),
+            x['name'].lower()
+        ))
+        devices = clean_devs
+
+    return {'powered': powered, 'discovering': discovering, 'devices': devices}
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'status'
 
     if cmd == 'status':
         print(json.dumps(get_bt_status()))
+
+    elif cmd == 'on':
+        try:
+            subprocess.run(['rfkill', 'unblock', 'bluetooth'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['bluetoothctl', 'power', 'on'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.3)
+            print(json.dumps({'status': 'ok', 'powered': True}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+
+    elif cmd == 'off':
+        try:
+            subprocess.run(['bluetoothctl', 'power', 'off'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.3)
+            print(json.dumps({'status': 'ok', 'powered': False}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+
     elif cmd == 'toggle':
         try:
             status = get_bt_status()
             if status['powered']:
                 subprocess.run(['bluetoothctl', 'power', 'off'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(0.3)
                 print(json.dumps({'status': 'ok', 'powered': False}))
             else:
                 subprocess.run(['rfkill', 'unblock', 'bluetooth'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(['bluetoothctl', 'power', 'on'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(0.3)
                 print(json.dumps({'status': 'ok', 'powered': True}))
         except Exception as e:
             print(json.dumps({'status': 'error', 'message': str(e)}))
+
+    elif cmd == 'scan':
+        try:
+            # Run scan in background for 15 seconds
+            subprocess.Popen(['bluetoothctl', '--timeout', '15', 'scan', 'on'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(json.dumps({'status': 'ok', 'message': 'scanning'}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+
+    elif cmd == 'stop_scan':
+        try:
+            subprocess.run(['bluetoothctl', 'scan', 'off'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(json.dumps({'status': 'ok', 'message': 'scan_stopped'}))
+        except Exception as e:
+            print(json.dumps({'status': 'error', 'message': str(e)}))
+
     elif cmd == 'connect':
         if len(sys.argv) < 3:
             print(json.dumps({'status': 'error', 'message': 'Missing MAC'}))
             sys.exit(1)
         mac = sys.argv[2]
         try:
-            res = subprocess.run(['bluetoothctl', 'connect', mac], capture_output=True, text=True, timeout=10)
+            # Check paired state
+            info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, stderr=subprocess.DEVNULL)
+            if 'Paired: yes' not in info:
+                # Trust and pair before connecting
+                subprocess.run(['bluetoothctl', 'trust', mac], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                subprocess.run(['bluetoothctl', 'pair', mac], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+            
+            res = subprocess.run(['bluetoothctl', 'connect', mac], capture_output=True, text=True, timeout=12)
             print(json.dumps({'status': 'ok' if res.returncode == 0 else 'error', 'message': res.stdout.strip() or res.stderr.strip()}))
         except Exception as e:
             print(json.dumps({'status': 'error', 'message': str(e)}))
+
     elif cmd == 'disconnect':
         if len(sys.argv) < 3:
             print(json.dumps({'status': 'error', 'message': 'Missing MAC'}))
@@ -84,12 +209,7 @@ def main():
             print(json.dumps({'status': 'ok' if res.returncode == 0 else 'error', 'message': res.stdout.strip() or res.stderr.strip()}))
         except Exception as e:
             print(json.dumps({'status': 'error', 'message': str(e)}))
-    elif cmd == 'scan':
-        try:
-            subprocess.Popen(['bluetoothctl', '--timeout', '5', 'scan', 'on'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(json.dumps({'status': 'ok', 'message': 'scanning'}))
-        except Exception as e:
-            print(json.dumps({'status': 'error', 'message': str(e)}))
+
     elif cmd == 'remove':
         if len(sys.argv) < 3:
             print(json.dumps({'status': 'error', 'message': 'Missing MAC'}))
@@ -100,8 +220,6 @@ def main():
             print(json.dumps({'status': 'ok' if res.returncode == 0 else 'error', 'message': res.stdout.strip() or res.stderr.strip()}))
         except Exception as e:
             print(json.dumps({'status': 'error', 'message': str(e)}))
-    else:
-        print(json.dumps({'status': 'unknown_command'}))
 
 if __name__ == '__main__':
     main()

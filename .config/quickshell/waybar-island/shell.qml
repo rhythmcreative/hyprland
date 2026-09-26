@@ -99,6 +99,9 @@ ShellRoot {
     property bool wifiScanning: false
     property bool btScanning: false
     property string selectedWifiSsid: ""
+    property bool showUnnamedBtDevices: false
+    readonly property var namedBtDevices: (root.btDevices || []).filter(d => d.has_name || d.paired || d.connected)
+    readonly property var unnamedBtDevices: (root.btDevices || []).filter(d => !d.has_name && !d.paired && !d.connected)
 
     function refreshAllStates() {
         volProc.running = true
@@ -127,6 +130,19 @@ ShellRoot {
         if (root.expanded) {
             root.controlSubView = 0
             root.refreshAllStates()
+        } else {
+            root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+        }
+    }
+
+    onControlSubViewChanged: {
+        if (root.controlSubView === 2) {
+            btStatusProc.running = true
+            if (root.btEnabled) {
+                root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
+            }
+        } else {
+            root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
         }
     }
 
@@ -249,14 +265,33 @@ ShellRoot {
         }
     }
 
+    IpcHandler {
+        target: "theme"
+        function reload(): string {
+            walFile.reload()
+            root._walReloadCounter++
+            return "reloaded"
+        }
+    }
+
     // Live pywal colors
+    property int _walReloadCounter: 0
+
     FileView {
         id: walFile
         path: Quickshell.env("HOME") + "/.cache/wal/colors.json"
         watchChanges: true
+        onFileChanged: {
+            walFile.reload()
+            root._walReloadCounter++
+        }
+        onTextChanged: {
+            root._walReloadCounter++
+        }
     }
 
     readonly property var walData: {
+        const _dep = root._walReloadCounter
         try {
             return JSON.parse(walFile.text())
         } catch(e) {
@@ -474,10 +509,10 @@ ShellRoot {
         command: ["bash", "-c", "$HOME/.local/bin/notch-bt-helper status"]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.btScanning = false
                 try {
                     const data = JSON.parse(text.trim())
                     root.btEnabled = data.powered || false
+                    root.btScanning = data.discovering || false
                     root.btDevices = data.devices || []
                 } catch(e) {
                     root.btDevices = []
@@ -487,11 +522,24 @@ ShellRoot {
     }
 
     Timer {
-        id: btRescanTimer
-        interval: 5000
+        id: btPollTimer
+        interval: 1500
+        repeat: true
+        running: root.expanded && root.controlSubView === 2 && root.btEnabled
+        onTriggered: {
+            if (!btStatusProc.running) {
+                btStatusProc.running = true
+            }
+        }
+    }
+
+    Timer {
+        id: btDebounceSyncTimer
+        interval: 350
         repeat: false
         onTriggered: {
             btStatusProc.running = true
+            btProc.running = true
         }
     }
 
@@ -1376,9 +1424,14 @@ ShellRoot {
                                                     root.controlSubView = 2
                                                     btStatusProc.running = true
                                                 } else {
-                                                    root.btEnabled = !root.btEnabled
-                                                    root.runCmd("~/.local/bin/toggle-bluetooth")
-                                                    btStatusProc.running = true
+                                                    const newState = !root.btEnabled
+                                                    root.btEnabled = newState
+                                                    if (newState) {
+                                                        root.runCmd("$HOME/.local/bin/notch-bt-helper on")
+                                                    } else {
+                                                        root.runCmd("$HOME/.local/bin/notch-bt-helper off")
+                                                    }
+                                                    btDebounceSyncTimer.restart()
                                                 }
                                             }
                                         }
@@ -2514,7 +2567,7 @@ ShellRoot {
                                         font.weight: Font.Bold
                                     }
                                     Text {
-                                        text: root.btEnabled ? "Enabled & Ready" : "Disabled"
+                                        text: !root.btEnabled ? "Disabled" : (root.btScanning ? "Scanning nearby..." : (root.namedBtDevices.length > 0 ? root.namedBtDevices.length + " devices available" : "Ready to pair"))
                                         color: root.colMuted
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 10
@@ -2524,7 +2577,7 @@ ShellRoot {
                                 RowLayout {
                                     spacing: 8
 
-                                    // Rescan button
+                                    // Rescan / Scan toggle button
                                     Rectangle {
                                         width: 32; height: 32; radius: 16
                                         color: root.btScanning ? root.colAccent : Qt.rgba(255, 255, 255, 0.08)
@@ -2539,9 +2592,14 @@ ShellRoot {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.btScanning = true
-                                                root.runCmd("~/.local/bin/notch-bt-helper scan")
-                                                btRescanTimer.restart()
+                                                if (root.btScanning) {
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+                                                    root.btScanning = false
+                                                } else {
+                                                    root.btScanning = true
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
+                                                    btPollTimer.restart()
+                                                }
                                             }
                                         }
                                     }
@@ -2584,9 +2642,16 @@ ShellRoot {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.btEnabled = !root.btEnabled
-                                                root.runCmd("~/.local/bin/notch-bt-helper toggle")
-                                                btStatusProc.running = true
+                                                const newState = !root.btEnabled
+                                                root.btEnabled = newState
+                                                if (newState) {
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper on")
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
+                                                } else {
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper off")
+                                                    root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+                                                }
+                                                btDebounceSyncTimer.restart()
                                             }
                                         }
                                     }
@@ -2594,12 +2659,75 @@ ShellRoot {
                             }
                         }
 
-                        // Devices List
-                        Flickable {
+                        // Disabled state placeholder
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 355
+                            Layout.topMargin: 30
+                            spacing: 10
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: !root.btEnabled
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 56; height: 56; radius: 28
+                                color: root.colSurface
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰂲"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 26
+                                }
+                            }
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "Bluetooth is Disabled"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "Turn on Bluetooth to discover and connect nearby devices"
+                                color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 10
+                            }
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.topMargin: 6
+                                width: 160; height: 32; radius: 16
+                                color: root.colAccent
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Turn On Bluetooth"
+                                    color: root.colBg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    font.weight: Font.Bold
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.btEnabled = true
+                                        root.runCmd("$HOME/.local/bin/notch-bt-helper on")
+                                        root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
+                                        btDebounceSyncTimer.restart()
+                                    }
+                                }
+                            }
+                        }
+
+                        // Enabled: Devices List
+                        Flickable {
+                            visible: root.btEnabled
+                            Layout.fillWidth: true
+                            Layout.topMargin: 8
+                            Layout.preferredHeight: 350
                             contentWidth: width
-                            contentHeight: btDevColumn.implicitHeight
+                            contentHeight: btDevColumn.implicitHeight + 20
                             clip: true
 
                             ColumnLayout {
@@ -2607,8 +2735,46 @@ ShellRoot {
                                 width: parent.width
                                 spacing: 6
 
+                                // Scanning banner
+                                Rectangle {
+                                    visible: root.btScanning
+                                    Layout.fillWidth: true
+                                    height: 28
+                                    radius: 8
+                                    color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.12)
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 6
+                                        Text {
+                                            text: "󰑐"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                        }
+                                        Text {
+                                            text: "Scanning nearby Bluetooth devices..."
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                        }
+                                    }
+                                }
+
+                                // Empty state when no named devices
+                                Text {
+                                    visible: root.namedBtDevices.length === 0 && !root.btScanning
+                                    text: "No paired or named devices found. Click Scan above."
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.topMargin: 20
+                                }
+
+                                // 1. Named / Paired / Connected Devices
                                 Repeater {
-                                    model: root.btDevices
+                                    model: root.namedBtDevices
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
                                         height: 48
@@ -2625,11 +2791,14 @@ ShellRoot {
                                             Text {
                                                 text: {
                                                     const t = (modelData.icon || "").toLowerCase()
-                                                    if (t.indexOf("audio") >= 0 || t.indexOf("headset") >= 0 || t.indexOf("headphone") >= 0) return "󰋋"
-                                                    if (t.indexOf("keyboard") >= 0) return "󰌌"
-                                                    if (t.indexOf("mouse") >= 0) return "󰍽"
-                                                    if (t.indexOf("phone") >= 0) return "󰄡"
-                                                    if (t.indexOf("gamepad") >= 0) return "󰊴"
+                                                    const n = (modelData.name || "").toLowerCase()
+                                                    if (t.indexOf("audio") >= 0 || t.indexOf("headset") >= 0 || t.indexOf("headphone") >= 0 || n.indexOf("wh-") >= 0 || n.indexOf("airpods") >= 0 || n.indexOf("buds") >= 0) return "󰋋"
+                                                    if (t.indexOf("speaker") >= 0 || n.indexOf("speaker") >= 0 || n.indexOf("flip") >= 0 || n.indexOf("charge") >= 0 || n.indexOf("jbl") >= 0) return "󰓃"
+                                                    if (t.indexOf("keyboard") >= 0 || n.indexOf("key") >= 0) return "󰌌"
+                                                    if (t.indexOf("mouse") >= 0 || n.indexOf("mouse") >= 0) return "󰍽"
+                                                    if (t.indexOf("phone") >= 0 || n.indexOf("iphone") >= 0 || n.indexOf("galaxy") >= 0) return "󰄡"
+                                                    if (t.indexOf("gamepad") >= 0 || n.indexOf("controller") >= 0 || n.indexOf("dualsense") >= 0 || n.indexOf("xbox") >= 0) return "󰊴"
+                                                    if (t.indexOf("computer") >= 0 || n.indexOf("mac") >= 0 || n.indexOf("pc") >= 0) return "󰌢"
                                                     return "󰂯"
                                                 }
                                                 color: modelData.connected ? root.colAccent : root.colFg
@@ -2650,21 +2819,22 @@ ShellRoot {
                                                     Layout.fillWidth: true
                                                 }
                                                 Text {
-                                                    text: modelData.mac + (modelData.paired ? "  •  Paired" : "")
-                                                    color: root.colMuted
+                                                    text: modelData.mac + (modelData.connected ? "  •  Connected" : (modelData.paired ? "  •  Paired" : (modelData.rssi ? "  •  " + modelData.rssi + " dBm" : "  •  Available")))
+                                                    color: modelData.connected ? root.colAccent : root.colMuted
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 9
                                                 }
                                             }
 
+                                            // Connect / Disconnect / Pair Button
                                             Rectangle {
                                                 height: 26
-                                                width: modelData.connected ? 95 : 72
+                                                width: modelData.connected ? 95 : (modelData.paired ? 72 : 90)
                                                 radius: 8
                                                 color: modelData.connected ? Qt.rgba(255, 85, 85, 0.2) : root.colAccent
                                                 Text {
                                                     anchors.centerIn: parent
-                                                    text: modelData.connected ? "Disconnect" : "Connect"
+                                                    text: modelData.connected ? "Disconnect" : (modelData.paired ? "Connect" : "Pair & Link")
                                                     color: modelData.connected ? "#ff5555" : root.colBg
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 10
@@ -2675,16 +2845,18 @@ ShellRoot {
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: {
                                                         if (modelData.connected) {
-                                                             root.runCmd("~/.local/bin/notch-bt-helper disconnect " + modelData.mac)
+                                                             root.runCmd("$HOME/.local/bin/notch-bt-helper disconnect " + modelData.mac)
                                                         } else {
-                                                             root.runCmd("~/.local/bin/notch-bt-helper connect " + modelData.mac)
+                                                             root.runCmd("$HOME/.local/bin/notch-bt-helper connect " + modelData.mac)
                                                         }
-                                                        btStatusProc.running = true
+                                                        btDebounceSyncTimer.restart()
                                                     }
                                                 }
                                             }
 
+                                            // Remove / Unpair Button (only for paired or connected)
                                             Rectangle {
+                                                visible: modelData.paired || modelData.connected
                                                 width: 26; height: 26; radius: 8
                                                 color: Qt.rgba(255, 255, 255, 0.06)
                                                 Text {
@@ -2698,8 +2870,8 @@ ShellRoot {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: {
-                                                        root.runCmd("~/.local/bin/notch-bt-helper remove " + modelData.mac)
-                                                        btStatusProc.running = true
+                                                        root.runCmd("$HOME/.local/bin/notch-bt-helper remove " + modelData.mac)
+                                                        btDebounceSyncTimer.restart()
                                                     }
                                                 }
                                             }
@@ -2707,14 +2879,105 @@ ShellRoot {
                                     }
                                 }
 
-                                Text {
-                                    visible: root.btDevices.length === 0
-                                    text: root.btScanning ? "Scanning nearby Bluetooth devices..." : (root.btEnabled ? "No paired devices found. Click Scan." : "Bluetooth is disabled.")
-                                    color: root.colMuted
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.topMargin: 20
+                                // 2. Collapsible Unnamed Devices Section
+                                Rectangle {
+                                    visible: root.unnamedBtDevices.length > 0
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 4
+                                    height: 32
+                                    radius: 8
+                                    color: Qt.rgba(255, 255, 255, 0.04)
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 8
+                                        spacing: 6
+                                        Text {
+                                            text: root.showUnnamedBtDevices ? "󰅀" : "󰅂"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                        }
+                                        Text {
+                                            text: (root.showUnnamedBtDevices ? "Hide " : "Show ") + root.unnamedBtDevices.length + " unnamed devices (beacons)"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.showUnnamedBtDevices = !root.showUnnamedBtDevices
+                                    }
+                                }
+
+                                Repeater {
+                                    model: root.showUnnamedBtDevices ? root.unnamedBtDevices : []
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 42
+                                        radius: 10
+                                        color: Qt.rgba(255, 255, 255, 0.03)
+                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.04)
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 8
+
+                                            Text {
+                                                text: "󰂯"
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 14
+                                            }
+
+                                            ColumnLayout {
+                                                spacing: 0
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    text: "Unnamed Device"
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                }
+                                                Text {
+                                                    text: modelData.mac + (modelData.rssi ? "  •  " + modelData.rssi + " dBm" : "")
+                                                    color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.6)
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 8
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                height: 24
+                                                width: 60
+                                                radius: 6
+                                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Pair"
+                                                    color: root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    font.weight: Font.Bold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        root.runCmd("$HOME/.local/bin/notch-bt-helper connect " + modelData.mac)
+                                                        btDebounceSyncTimer.restart()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

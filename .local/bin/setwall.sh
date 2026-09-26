@@ -20,13 +20,16 @@ fi
 if command -v wal &> /dev/null; then
     wal -i "$WALLPAPER_PATH" -n -q
     
-    [ -x "$HOME/.local/bin/sync-waybar-pywal" ] && "$HOME/.local/bin/sync-waybar-pywal"
-    [ -x "$HOME/.local/bin/sync-mako-pywal" ] && "$HOME/.local/bin/sync-mako-pywal"
-    [ -x "$HOME/.local/bin/sync-rofi-pywal" ] && "$HOME/.local/bin/sync-rofi-pywal"
-    [ -x "$HOME/.local/bin/full-system-color-sync" ] && "$HOME/.local/bin/full-system-color-sync"
-    
-    hyprctl reload
-    pkill waybar && nohup waybar > /dev/null 2>&1 &
+    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+        "$HOME/.local/bin/modern-pywal-sync"
+    else
+        [ -x "$HOME/.local/bin/sync-waybar-pywal" ] && "$HOME/.local/bin/sync-waybar-pywal"
+        [ -x "$HOME/.local/bin/sync-mako-pywal" ] && "$HOME/.local/bin/sync-mako-pywal"
+        [ -x "$HOME/.local/bin/sync-rofi-pywal" ] && "$HOME/.local/bin/sync-rofi-pywal"
+        [ -x "$HOME/.local/bin/full-system-color-sync" ] && "$HOME/.local/bin/full-system-color-sync"
+        hyprctl reload
+        pkill waybar && nohup waybar > /dev/null 2>&1 &
+    fi
 fi
 
 echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"

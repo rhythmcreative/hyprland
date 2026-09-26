@@ -218,12 +218,7 @@
 #bluetooth,
 #tray,
 #pulseaudio,
-#backlight,
-#battery,
-#battery-bat0,
-#battery-bat1,
-#battery-bat2,
-#custom-dual-battery {
+#backlight {
   background-color: @background;
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
@@ -238,12 +233,7 @@
 #bluetooth:hover,
 #tray:hover,
 #pulseaudio:hover,
-#backlight:hover,
-#battery:hover,
-#battery-bat0:hover,
-#battery-bat1:hover,
-#battery-bat2:hover,
-#custom-dual-battery:hover {
+#backlight:hover {
   background-color: @color8;
 }
 
@@ -256,21 +246,42 @@
 
 /* Middle elements - no border radius */
 #tray,
-#pulseaudio,
-#backlight {
+#pulseaudio {
   border-radius: 0;
 }
 
-/* Last element - rounded right with separation from screen edge */
+/* Backlight - rounded right of continuous block */
+#backlight {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-right: none;
+  margin-right: 6px;
+}
+
+/* --- Android 16 Style Battery Pill (Number inside battery) --- */
 #battery,
 #battery-bat0,
 #battery-bat1,
 #battery-bat2,
 #custom-dual-battery {
-  border-top-right-radius: 6px;
-  border-bottom-right-radius: 6px;
-  border-right: none;
-  margin-right: 7px;
+  background-color: alpha(@color4, 0.15);
+  color: @color4;
+  border: 1.5px solid @color4;
+  border-radius: 6px;
+  padding: 0.15rem 0.55rem;
+  margin: 5px 7px 5px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: none;
+  transition: all 0.2s ease-in-out;
+}
+
+#battery:hover,
+#battery-bat0:hover,
+#battery-bat1:hover,
+#battery-bat2:hover,
+#custom-dual-battery:hover {
+  background-color: alpha(@color4, 0.28);
 }
 
 /* --- Module Colors - USING PYWAL COLORS --- */
@@ -318,7 +329,7 @@
   color: @color6;
 }
 
-/* Battery with color4 */
+/* Battery with color4 - Android 16 states */
 #battery,
 #battery.bat0,
 #battery.bat1,
@@ -328,14 +339,27 @@
 
 #battery.charging,
 #battery.bat0.charging,
-#battery.bat1.charging {
-  color: @color5;
+#battery.bat1.charging,
+#battery.plugged {
+  background-color: alpha(@color2, 0.2);
+  color: @color2;
+  border-color: @color2;
 }
 
 #battery.warning:not(.charging),
 #battery.bat0.warning:not(.charging),
 #battery.bat1.warning:not(.charging) {
+  background-color: alpha(@color3, 0.22);
+  color: @color3;
+  border-color: @color3;
+}
+
+#battery.critical:not(.charging),
+#battery.bat0.critical:not(.charging),
+#battery.bat1.critical:not(.charging) {
+  background-color: alpha(@color1, 0.28);
   color: @color1;
+  border-color: @color1;
 }
 
 

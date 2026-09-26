@@ -5,7 +5,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/home/rhythmcreative/.local/bin/quickshell-island
+ExecStart=%h/.local/bin/quickshell-island
 Restart=on-failure
 RestartSec=1s
 

@@ -18,12 +18,20 @@
     "clock"
   ],
   "modules-right": [
+    "hyprland/language",
     "bluetooth",
     "tray",
     "pulseaudio",
     "backlight",
     "battery"
   ],
+  "hyprland/language": {
+    "format": "󰌌 {}",
+    "format-en": "US",
+    "format-es": "ES",
+    "tooltip-format": "Teclado: {long}",
+    "on-click": "hyprctl switchxkblayout all next"
+  },
   "custom/desktop-power": {
     "format": "󰚥",
     "tooltip-format": "Equipo de Escritorio - Conectado a CA"

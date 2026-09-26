@@ -194,7 +194,26 @@
   outline: none;
 }
 
-/* --- Right Modules (Single, Seamless Bar with varied colors) --- */
+/* --- Language Module (Isolated Bubble to the left of Bluetooth) --- */
+#language {
+  background-color: @background;
+  color: @color5;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 6px 5px 0px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  min-width: 0;
+  border: none;
+  outline: none;
+  font-weight: 600;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+#language:hover {
+  background-color: @color8;
+  color: @foreground;
+}
+
 /* --- Right Modules (Single, Seamless Bar with varied colors) --- */
 #bluetooth,
 #tray,

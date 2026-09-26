@@ -34,9 +34,16 @@ echo "Starting Waybar with config: $CONFIG and style: $STYLE" >> "$LOG_FILE"
 # Small delay to ensure display and IPC are ready
 sleep 0.2
 
-# Check if we are in a Wayland session
+# Check and auto-detect Wayland and Hyprland environment if missing
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
 if [ -z "$WAYLAND_DISPLAY" ]; then
-    echo "WARNING: WAYLAND_DISPLAY is not set. Waybar might fail." >> "$LOG_FILE"
+    export WAYLAND_DISPLAY=$(find "$XDG_RUNTIME_DIR" -maxdepth 1 -name "wayland-[0-9]*" ! -name "*.lock" -printf "%f\n" 2>/dev/null | head -n 1)
+    [ -z "$WAYLAND_DISPLAY" ] && export WAYLAND_DISPLAY="wayland-1"
+fi
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -n 1)
 fi
 
 waybar -c "$CONFIG" -s "$STYLE" >> "$LOG_FILE" 2>&1 &

@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+import sys
+import os
+import subprocess
+import json
+import glob
+
+# Ensure environment variables are set for Hyprland IPC
+xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+os.environ["XDG_RUNTIME_DIR"] = xdg_runtime
+
+if "HYPRLAND_INSTANCE_SIGNATURE" not in os.environ:
+    sig_paths = glob.glob(f"{xdg_runtime}/hypr/*")
+    if sig_paths:
+        sig_paths.sort(key=os.path.getmtime, reverse=True)
+        for sp in sig_paths:
+            base = os.path.basename(sp)
+            if not base.endswith(".lock"):
+                os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = base
+                break
+
+PERF_FILE = "/tmp/hypr_performance_mode"
+
+def run_hyprctl(args):
+    try:
+        res = subprocess.run(["hyprctl"] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return res.stdout
+    except Exception as e:
+        return ""
+
+def get_option(opt_name):
+    out = run_hyprctl(["getoption", opt_name])
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith("bool:"):
+            return line.split(":", 1)[1].strip() == "true"
+        if line.startswith("int:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return 0
+        if line.startswith("css gap data:"):
+            parts = line.split(":", 1)[1].strip().split()
+            if parts:
+                try:
+                    return int(parts[0])
+                except ValueError:
+                    return 10
+    return None
+
+def status():
+    anim = get_option("animations:enabled")
+    blur = get_option("decoration:blur:enabled")
+    shadow = get_option("decoration:shadow:enabled")
+    rounding = get_option("decoration:rounding")
+    gaps = get_option("general:gaps_out")
+    perf = os.path.exists(PERF_FILE)
+
+    data = {
+        "anim": anim if anim is not None else True,
+        "blur": blur if blur is not None else True,
+        "shadow": shadow if shadow is not None else True,
+        "rounding": rounding if rounding is not None else 10,
+        "gaps": gaps if gaps is not None else 10,
+        "perf": perf
+    }
+    print(json.dumps(data))
+
+def main():
+    if len(sys.argv) < 2:
+        status()
+        return
+
+    cmd = sys.argv[1]
+
+    if cmd == "status":
+        status()
+    elif cmd == "set-anim" and len(sys.argv) > 2:
+        val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
+        run_hyprctl(["eval", f"hl.config({{ animations = {{ enabled = {val} }} }})"])
+    elif cmd == "set-blur" and len(sys.argv) > 2:
+        val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
+        run_hyprctl(["eval", f"hl.config({{ decoration = {{ blur = {{ enabled = {val} }} }} }})"])
+    elif cmd == "set-shadow" and len(sys.argv) > 2:
+        val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
+        run_hyprctl(["eval", f"hl.config({{ decoration = {{ shadow = {{ enabled = {val} }} }} }})"])
+    elif cmd == "set-rounding" and len(sys.argv) > 2:
+        try:
+            r = int(sys.argv[2])
+            run_hyprctl(["eval", f"hl.config({{ decoration = {{ rounding = {r} }} }})"])
+        except ValueError:
+            pass
+    elif cmd == "set-gaps" and len(sys.argv) > 2:
+        try:
+            g = int(sys.argv[2])
+            run_hyprctl(["eval", f"hl.config({{ general = {{ gaps_out = {g} }} }})"])
+        except ValueError:
+            pass
+    elif cmd == "toggle-perf":
+        if os.path.exists(PERF_FILE):
+            try:
+                os.remove(PERF_FILE)
+            except OSError:
+                pass
+            run_hyprctl(["reload"])
+            subprocess.run(["notify-send", "Performance", "Balanced mode restored"], stderr=subprocess.DEVNULL)
+        else:
+            try:
+                with open(PERF_FILE, "w") as f:
+                    f.write("perf\n")
+            except OSError:
+                pass
+            run_hyprctl(["eval", "hl.config({ decoration = { blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
+            subprocess.run(["notify-send", "Performance", "Max performance enabled"], stderr=subprocess.DEVNULL)
+    elif cmd == "toggle-split":
+        run_hyprctl(["dispatch", 'hl.dsp.layout("togglesplit")'])
+    elif cmd == "reload":
+        run_hyprctl(["reload"])
+    elif cmd == "monitors":
+        subprocess.Popen(["nwg-displays"])
+    else:
+        status()
+
+if __name__ == "__main__":
+    main()

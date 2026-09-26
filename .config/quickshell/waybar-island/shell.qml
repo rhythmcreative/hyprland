@@ -349,11 +349,16 @@ ShellRoot {
 
     Process {
         id: volProc
-        command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{print $2}'"]
+        command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const val = parseFloat(text.trim())
-                if (!isNaN(val)) root.volumeLevel = Math.min(1.0, val)
+                const raw = text.trim()
+                root.isMuted = raw.includes("[MUTED]")
+                const match = raw.match(/Volume:\s+([0-9.]+)/)
+                if (match && match[1]) {
+                    const val = parseFloat(match[1])
+                    if (!isNaN(val)) root.volumeLevel = Math.min(1.0, val)
+                }
             }
         }
     }
@@ -421,7 +426,7 @@ ShellRoot {
 
     Process {
         id: muteProc
-        command: ["bash", "-c", "pamixer --get-mute 2>/dev/null || echo false"]
+        command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q 'MUTED' && echo true || echo false"]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.isMuted = text.trim() === "true"
@@ -627,10 +632,18 @@ ShellRoot {
             height: root.expanded ? (root.currentTab === 1 ? 485 : (root.controlSubView !== 0 ? 550 : 645)) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
-                NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
+                NumberAnimation {
+                    id: capsuleWidthAnim
+                    duration: 320
+                    easing.type: Easing.OutCubic
+                }
             }
             Behavior on height {
-                NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
+                NumberAnimation {
+                    id: capsuleHeightAnim
+                    duration: 320
+                    easing.type: Easing.OutCubic
+                }
             }
 
             // Silueta con esquinas invertidas (alas) que funden con el borde superior de la pantalla
@@ -1704,7 +1717,7 @@ ShellRoot {
                                     color: root.isMuted ? root.colMuted : root.colAccent
                                     visible: !root.isMuted && root.volumeLevel > 0
                                     Behavior on width {
-                                        enabled: !volMouseArea.pressed
+                                        enabled: !volMouseArea.pressed && !capsuleWidthAnim.running && root.expanded
                                         NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
                                     }
                                 }
@@ -1718,29 +1731,33 @@ ShellRoot {
                                     // Inset Icon Button
                                     Text {
                                         text: root.isMuted ? "󰝟" : (root.volumeLevel > 0.5 ? "󰕾" : (root.volumeLevel > 0 ? "󰖀" : "󰕿"))
-                                        color: (!root.isMuted && root.volumeLevel > 0.12) ? root.colBg : (root.isMuted ? "#ff5555" : root.colAccent)
+                                        color: root.isMuted ? "#ff5555" : (root.volumeLevel > 0 ? root.colBg : root.colAccent)
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 18
                                         font.weight: Font.Bold
-                                    }
-
-                                    Text {
-                                        text: "Volume"
-                                        color: (!root.isMuted && root.volumeLevel > 0.3) ? root.colBg : root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                        opacity: (!root.isMuted && root.volumeLevel > 0.3) ? 0.9 : 0.6
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
 
                                     Item { Layout.fillWidth: true }
 
                                     Text {
-                                        text: root.isMuted ? "Muted" : (Math.round(root.volumeLevel * 100) + "%")
+                                        text: "Volume"
                                         color: (!root.isMuted && root.volumeLevel > 0.85) ? root.colBg : root.colFg
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        opacity: (!root.isMuted && root.volumeLevel > 0.85) ? 0.9 : 0.7
+                                        visible: !root.isMuted
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
+
+                                    Text {
+                                        text: root.isMuted ? "Muted" : (Math.round(root.volumeLevel * 100) + "%")
+                                        color: (!root.isMuted && root.volumeLevel > 0.85) ? root.colBg : (root.isMuted ? "#ff5555" : root.colFg)
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
                                         font.weight: Font.Bold
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
                                 }
 
@@ -1751,7 +1768,7 @@ ShellRoot {
                                     onClicked: mouse => {
                                         if (mouse.x < 36) {
                                             root.isMuted = !root.isMuted
-                                            root.runCmd("pamixer -t")
+                                            root.runCmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle")
                                         } else {
                                             const p = Math.max(0, Math.min(1, mouse.x / width))
                                             root.volumeLevel = p
@@ -1790,7 +1807,7 @@ ShellRoot {
                                     radius: 21
                                     color: root.colAccent
                                     Behavior on width {
-                                        enabled: !brightMouseArea.pressed
+                                        enabled: !brightMouseArea.pressed && !capsuleWidthAnim.running && root.expanded
                                         NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
                                     }
                                 }
@@ -1803,23 +1820,25 @@ ShellRoot {
 
                                     // Inset Icon Button
                                     Text {
-                                        text: "󰃠"
-                                        color: root.brightnessLevel > 0.12 ? root.colBg : root.colAccent
+                                        text: root.brightnessLevel > 0.6 ? "󰃠" : (root.brightnessLevel > 0.25 ? "󰃟" : "󰃞")
+                                        color: root.colBg
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 18
                                         font.weight: Font.Bold
-                                    }
-
-                                    Text {
-                                        text: "Brightness"
-                                        color: root.brightnessLevel > 0.35 ? root.colBg : root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                        opacity: root.brightnessLevel > 0.35 ? 0.9 : 0.6
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
 
                                     Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: "Brightness"
+                                        color: root.brightnessLevel > 0.85 ? root.colBg : root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        opacity: root.brightnessLevel > 0.85 ? 0.9 : 0.7
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
 
                                     Text {
                                         text: Math.round(root.brightnessLevel * 100) + "%"
@@ -1827,6 +1846,7 @@ ShellRoot {
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
                                         font.weight: Font.Bold
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
                                 }
 

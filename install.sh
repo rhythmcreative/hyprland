@@ -24,8 +24,12 @@ handle_error() {
 trap 'handle_error $LINENO' ERR
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-LOG_FILE="/tmp/hyprland-install.log"
-: > "$LOG_FILE"
+LOG_FILE="/tmp/hyprland-install-${USER:-$(id -un)}.log"
+if ! touch "$LOG_FILE" 2>/dev/null; then
+    LOG_FILE=$(mktemp /tmp/hyprland-install-XXXXXX.log 2>/dev/null || echo "$HOME/.cache/hyprland-install.log")
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+fi
+: > "$LOG_FILE" 2>/dev/null || true
 
 # --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
 if [[ -e /dev/tty ]]; then

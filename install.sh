@@ -372,6 +372,7 @@ step_software() {
         hyprland
         hypridle
         hyprlock
+        hyprsunset
         hyprpicker
         hyprpm
         xdg-desktop-portal-hyprland

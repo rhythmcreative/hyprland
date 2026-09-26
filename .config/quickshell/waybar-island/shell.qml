@@ -72,7 +72,7 @@ ShellRoot {
 
     property bool islandVisible: true
     property int currentTab: 0 // 0 = Control & Sistema, 1 = Ajustes Hyprland
-    property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi Subsection, 2 = Bluetooth Subsection
+    property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output
 
     // Hyprland live state
     property bool hyprAnim: true
@@ -91,6 +91,11 @@ ShellRoot {
 
     property var wifiList: []
     property var btDevices: []
+    property var audioSinks: []
+    property string activeSinkName: "Default Output"
+    property bool nightLightEnabled: false
+    property bool caffeineEnabled: false
+    property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
     property bool wifiScanning: false
     property bool btScanning: false
     property string selectedWifiSsid: ""
@@ -103,8 +108,13 @@ ShellRoot {
         perfProc.running = true
         kbProc.running = true
         muteProc.running = true
+        audioSinksProc.running = true
+        sysStatsProc.running = true
+        nightLightCheckProc.running = true
+        caffeineCheckProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
         if (root.controlSubView === 2) btStatusProc.running = true
+        if (root.controlSubView === 3) audioSinksProc.running = true
     }
 
     IpcHandler {
@@ -150,6 +160,14 @@ ShellRoot {
             root.refreshAllStates()
             return "expanded"
         }
+        function open_audio(): string {
+            root.expanded = true
+            root.currentTab = 0
+            root.controlSubView = 3
+            audioSinksProc.running = true
+            root.refreshAllStates()
+            return "expanded"
+        }
         function close(): string {
             root.expanded = false
             return "collapsed"
@@ -182,6 +200,13 @@ ShellRoot {
             root.btScanning = true
             btStatusProc.running = true
             return "bluetooth"
+        }
+        function openAudio(): string {
+            root.expanded = true
+            root.currentTab = 0
+            root.controlSubView = 3
+            audioSinksProc.running = true
+            return "audio"
         }
         function openControl(): string {
             root.expanded = true
@@ -449,6 +474,67 @@ ShellRoot {
         }
     }
 
+    Process {
+        id: audioSinksProc
+        command: ["bash", "-c", "$HOME/.local/bin/notch-audio-helper list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const list = JSON.parse(text.trim())
+                    root.audioSinks = list
+                    const active = list.find(s => s.active)
+                    if (active) {
+                        root.activeSinkName = active.name
+                    }
+                } catch(e) {
+                    root.audioSinks = []
+                }
+            }
+        }
+    }
+
+    Process {
+        id: sysStatsProc
+        command: ["bash", "-c", "$HOME/.local/bin/notch-sys-stats"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.sysStats = JSON.parse(text.trim())
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
+        id: nightLightCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/toggle-nightlight status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.nightLightEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Process {
+        id: caffeineCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/toggle-caffeine status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.caffeineEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Timer {
+        id: statsTimer
+        interval: 3000
+        repeat: true
+        running: root.expanded && root.currentTab === 0 && root.controlSubView === 0
+        onTriggered: {
+            sysStatsProc.running = true
+        }
+    }
+
     // Main Dynamic Island Window
     PanelWindow {
         id: islandWin
@@ -526,8 +612,8 @@ ShellRoot {
             }
 
             readonly property real ala: 16
-            width: root.expanded ? 640 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? 535 : (root.notifActive ? 56 : 36)
+            width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
+            height: root.expanded ? 645 : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
@@ -1276,6 +1362,115 @@ ShellRoot {
                                 }
                             }
 
+                            // Audio Output Tile (Material 3 Split Pill)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.isMuted ? root.colSurface : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                border.color: root.isMuted ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08) : root.colAccent
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 0
+
+                                    // Main Left Action: Toggle Mute
+                                    Item {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 6
+                                            spacing: 10
+
+                                            Rectangle {
+                                                width: 34; height: 34; radius: 17
+                                                color: root.isMuted ? root.colSurface : root.colAccent
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: root.isMuted ? "󰝟" : "󰓃"
+                                                    color: root.isMuted ? "#ff5555" : root.colBg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 17
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+                                                Text {
+                                                    text: "Audio Output"
+                                                    color: root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: root.isMuted ? "Muted" : root.activeSinkName
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.isMuted = !root.isMuted
+                                                root.runCmd("pamixer -t")
+                                                muteProc.running = true
+                                            }
+                                        }
+                                    }
+
+                                    // Subtle Vertical Separator
+                                    Rectangle {
+                                        width: 1
+                                        height: 24
+                                        Layout.alignment: Qt.AlignVCenter
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                    }
+
+                                    // Right Expand Action: Dedicated Chevron Button to Audio Subview
+                                    Rectangle {
+                                        width: 38
+                                        Layout.fillHeight: true
+                                        color: audioChevHover.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"
+                                        radius: 16
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰅂"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                        }
+
+                                        MouseArea {
+                                            id: audioChevHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.controlSubView = 3
+                                                audioSinksProc.running = true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Rust-Dock Tile (Material 3 Card)
                             Rectangle {
                                 Layout.fillWidth: true
@@ -1337,16 +1532,16 @@ ShellRoot {
                                 }
                             }
 
-                            // Wallpaper Tile (Material 3 Card)
+                            // Night Light Tile (Material 3 Card)
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 1
                                 height: 54
                                 radius: 16
-                                color: wallHover.containsMouse ? root.colSurfaceHover : root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                color: root.nightLightEnabled ? root.colAccent : (nightHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.nightLightEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
                                 border.width: 1
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on color { ColorAnimation { duration: 180 } }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1356,11 +1551,11 @@ ShellRoot {
 
                                     Rectangle {
                                         width: 34; height: 34; radius: 17
-                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "󰸉"
-                                            color: root.colAccent
+                                            text: "󰖔"
+                                            color: root.nightLightEnabled ? root.colBg : root.colAccent
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 17
                                         }
@@ -1370,8 +1565,8 @@ ShellRoot {
                                         Layout.fillWidth: true
                                         spacing: 1
                                         Text {
-                                            text: "Wallpaper"
-                                            color: root.colFg
+                                            text: "Night Light"
+                                            color: root.nightLightEnabled ? root.colBg : root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
                                             font.weight: Font.Bold
@@ -1379,8 +1574,8 @@ ShellRoot {
                                             Layout.fillWidth: true
                                         }
                                         Text {
-                                            text: "Interactive Gallery"
-                                            color: root.colMuted
+                                            text: root.nightLightEnabled ? "4500K Active" : "Inactive"
+                                            color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
                                             elide: Text.ElideRight
@@ -1390,13 +1585,77 @@ ShellRoot {
                                 }
 
                                 MouseArea {
-                                    id: wallHover
+                                    id: nightHover
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        root.expanded = false
-                                        root.runCmd("~/.local/bin/wallpaper-gallery")
+                                        root.nightLightEnabled = !root.nightLightEnabled
+                                        root.runCmd("~/.local/bin/toggle-nightlight")
+                                    }
+                                }
+                            }
+
+                            // Caffeine Tile (Material 3 Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.caffeineEnabled ? root.colAccent : (caffeineHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.caffeineEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: root.caffeineEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰅶"
+                                            color: root.caffeineEnabled ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Caffeine"
+                                            color: root.caffeineEnabled ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.caffeineEnabled ? "Awake Mode" : "Normal Sleep"
+                                            color: root.caffeineEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: caffeineHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.caffeineEnabled = !root.caffeineEnabled
+                                        root.runCmd("~/.local/bin/toggle-caffeine")
                                     }
                                 }
                             }
@@ -1574,15 +1833,127 @@ ShellRoot {
                             }
                         }
 
+                        // Hardware Monitoring Card (Material 3 Segmented Stats)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 52
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 12
+
+                                // CPU Stat
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    RowLayout {
+                                        spacing: 6
+                                        Text { text: "󰻠"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                        Text { text: "CPU"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                        Item { Layout.fillWidth: true }
+                                        Text { text: (root.sysStats?.cpu_pct ?? 0) + "%"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true; height: 4; radius: 2
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                        Rectangle {
+                                            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                                            width: Math.max(0, Math.min(parent.width, parent.width * ((root.sysStats?.cpu_pct ?? 0) / 100.0)))
+                                            radius: 2; color: root.colAccent
+                                            Behavior on width { NumberAnimation { duration: 200 } }
+                                        }
+                                    }
+                                }
+
+                                // Separator
+                                Rectangle { width: 1; height: 26; color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1) }
+
+                                // RAM Stat
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    RowLayout {
+                                        spacing: 6
+                                        Text { text: "󰍛"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                        Text { text: "RAM " + (root.sysStats?.ram_used ?? ""); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight }
+                                        Item { Layout.fillWidth: true }
+                                        Text { text: (root.sysStats?.ram_pct ?? 0) + "%"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true; height: 4; radius: 2
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                        Rectangle {
+                                            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                                            width: Math.max(0, Math.min(parent.width, parent.width * ((root.sysStats?.ram_pct ?? 0) / 100.0)))
+                                            radius: 2; color: root.colAccent
+                                            Behavior on width { NumberAnimation { duration: 200 } }
+                                        }
+                                    }
+                                }
+
+                                // Separator
+                                Rectangle { width: 1; height: 26; color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1) }
+
+                                // Disk Stat
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    RowLayout {
+                                        spacing: 6
+                                        Text { text: "󰋊"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                        Text { text: "SSD " + (root.sysStats?.disk_used ?? ""); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight }
+                                        Item { Layout.fillWidth: true }
+                                        Text { text: (root.sysStats?.disk_pct ?? 0) + "%"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true; height: 4; radius: 2
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                        Rectangle {
+                                            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                                            width: Math.max(0, Math.min(parent.width, parent.width * ((root.sysStats?.disk_pct ?? 0) / 100.0)))
+                                            radius: 2; color: root.colAccent
+                                            Behavior on width { NumberAnimation { duration: 200 } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Bottom Action Chips (Material 3 Pills)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                RowLayout { anchors.centerIn: parent; spacing: 6
+                                RowLayout { anchors.centerIn: parent; spacing: 5
+                                    Text { text: "󰈊"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                    Text { text: "Picker"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("hyprpicker -a"); } }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
+                                RowLayout { anchors.centerIn: parent; spacing: 5
+                                    Text { text: "󰸉"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                    Text { text: "Gallery"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("~/.local/bin/wallpaper-gallery"); } }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
+                                RowLayout { anchors.centerIn: parent; spacing: 5
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Random"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
@@ -1590,33 +1961,23 @@ ShellRoot {
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
-                                    Text { text: "Resources"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
-                                }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("kitty -e htop"); } }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                RowLayout { anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰘳"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
-                                    Text { text: "Shortcuts"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
-                                }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("~/.local/bin/show-hotkeys"); } }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true; height: 38; radius: 19; color: root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                RowLayout { anchors.centerIn: parent; spacing: 6
+                                RowLayout { anchors.centerIn: parent; spacing: 5
                                     Text { text: "󰌌"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: root.kbLayout; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.runCmd("~/.local/bin/toggle-keyboard-layout"); kbProc.running = true; } }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
+                                RowLayout { anchors.centerIn: parent; spacing: 5
+                                    Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                    Text { text: "Tasks"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("kitty -e htop"); } }
                             }
                         }
                     }
@@ -2282,6 +2643,206 @@ ShellRoot {
                                 Text {
                                     visible: root.btDevices.length === 0
                                     text: root.btScanning ? "Scanning nearby Bluetooth devices..." : (root.btEnabled ? "No paired devices found. Click Scan." : "Bluetooth is disabled.")
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.topMargin: 20
+                                }
+                            }
+                        }
+                    }
+
+                    // ── 4. SUBSECCIÓN: DISPOSITIVOS DE AUDIO (CONTROL) ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: root.currentTab === 0 && root.controlSubView === 3
+
+                        // Sub-header with back button
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Rectangle {
+                                width: 100
+                                height: 32
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Text {
+                                        text: "󰁍"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+                                    Text {
+                                        text: "Back"
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.controlSubView = 0
+                                }
+                            }
+
+                            Text {
+                                text: "Audio Output Devices"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            // Refresh button
+                            Rectangle {
+                                width: 32; height: 32; radius: 16
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰑐"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: audioSinksProc.running = true
+                                }
+                            }
+
+                            // Pavucontrol GUI button
+                            Rectangle {
+                                width: 32; height: 32; radius: 16
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰒓"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.expanded = false
+                                        root.runCmd("pavucontrol")
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sinks List
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 380
+                            contentWidth: width
+                            contentHeight: audioSinksColumn.implicitHeight
+                            clip: true
+
+                            ColumnLayout {
+                                id: audioSinksColumn
+                                width: parent.width
+                                spacing: 8
+
+                                Repeater {
+                                    model: root.audioSinks
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 54
+                                        radius: 14
+                                        color: modelData.active ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.18) : (sinkHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                        border.color: modelData.active ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                        border.width: 1
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 12
+
+                                            Rectangle {
+                                                width: 34; height: 34; radius: 17
+                                                color: modelData.active ? root.colAccent : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.active ? "󰓃" : "󰕾"
+                                                    color: modelData.active ? root.colBg : root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 16
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                spacing: 2
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    text: modelData.name || ("Sink #" + modelData.id)
+                                                    color: root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: modelData.active ? Font.Bold : Font.Normal
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: "ID: " + modelData.id + "  •  Volume: " + modelData.volume + "%"
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                width: modelData.active ? 72 : 80
+                                                height: 30
+                                                radius: 15
+                                                color: modelData.active ? root.colAccent : Qt.rgba(255, 255, 255, 0.08)
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.active ? "󰄬 Active" : "Select"
+                                                    color: modelData.active ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: sinkHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.runCmd("~/.local/bin/notch-audio-helper set " + modelData.id)
+                                                root.activeSinkName = modelData.name
+                                                audioSinksProc.running = true
+                                                volProc.running = true
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.audioSinks.length === 0
+                                    text: "No audio output devices detected."
                                     color: root.colMuted
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11

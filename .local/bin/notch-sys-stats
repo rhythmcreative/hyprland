@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+import os
+import shutil
+import json
+
+mem = {}
+try:
+    with open('/proc/meminfo') as f:
+        for line in f:
+            p = line.split(':')
+            if len(p) == 2:
+                mem[p[0].strip()] = int(p[1].strip().split()[0])
+    total_ram = mem.get('MemTotal', 0) / 1024 / 1024
+    avail_ram = mem.get('MemAvailable', 0) / 1024 / 1024
+    used_ram = total_ram - avail_ram
+    ram_pct = int(round((used_ram / total_ram) * 100)) if total_ram else 0
+except Exception:
+    total_ram, used_ram, ram_pct = 16, 0, 0
+
+try:
+    total_d, used_d, free_d = shutil.disk_usage('/')
+    disk_pct = int(round((used_d / total_d) * 100))
+    disk_used_str = f"{used_d / (1024**3):.0f}G"
+except Exception:
+    disk_pct, disk_used_str = 0, "0G"
+
+try:
+    load1, _, _ = os.getloadavg()
+    cpu_count = os.cpu_count() or 1
+    cpu_pct = min(100, int(round((load1 / cpu_count) * 100)))
+except Exception:
+    cpu_pct = 0
+
+print(json.dumps({
+    'cpu_pct': cpu_pct,
+    'ram_used': f"{used_ram:.1f}G",
+    'ram_total': f"{total_ram:.1f}G",
+    'ram_pct': ram_pct,
+    'disk_used': disk_used_str,
+    'disk_pct': disk_pct
+}))

@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+import sys
+import subprocess
+import re
+import json
+
+def get_sinks():
+    try:
+        out = subprocess.check_output(['wpctl', 'status'], text=True)
+    except Exception:
+        return []
+    sinks = []
+    in_sinks = False
+    for line in out.split('\n'):
+        if 'Sinks:' in line:
+            in_sinks = True
+            continue
+        if in_sinks:
+            if line.strip().startswith('Sources:') or line.strip().startswith('Filters:') or line.strip().startswith('Streams:'):
+                break
+            if not line.strip() or '─' in line:
+                continue
+            m = re.search(r'([*]?)\s*(\d+)\.\s+(.*?)\s*\[vol:\s*([\d.]+)\]', line)
+            if m:
+                is_active = m.group(1) == '*'
+                sink_id = int(m.group(2))
+                name = m.group(3).strip()
+                vol = float(m.group(4))
+                
+                icon = "󰓃"
+                name_l = name.lower()
+                if "headphone" in name_l or "headset" in name_l:
+                    icon = "󰋋"
+                elif "bluetooth" in name_l:
+                    icon = "󰂯"
+                elif "hdmi" in name_l or "displayport" in name_l:
+                    icon = "󰍹"
+                elif "usb" in name_l:
+                    icon = "󰓃"
+                
+                sinks.append({
+                    'id': sink_id,
+                    'name': name,
+                    'active': is_active,
+                    'volume': int(round(vol * 100)),
+                    'icon': icon
+                })
+    return sinks
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'list'
+    if cmd == 'list':
+        print(json.dumps(get_sinks()))
+    elif cmd == 'set':
+        if len(sys.argv) > 2:
+            sink_id = sys.argv[2]
+            subprocess.run(['wpctl', 'set-default', sink_id], check=True)
+            print(json.dumps({'status': 'ok', 'selected': sink_id}))
+        else:
+            print(json.dumps({'status': 'error', 'message': 'missing sink id'}))
+
+if __name__ == '__main__':
+    main()

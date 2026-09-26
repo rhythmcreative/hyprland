@@ -1,0 +1,31 @@
+#!/bin/bash
+ACTION="${1:-toggle}"
+
+case "$ACTION" in
+    status)
+        if pgrep -x hyprsunset >/dev/null; then
+            echo "on"
+        else
+            echo "off"
+        fi
+        ;;
+    on)
+        if ! pgrep -x hyprsunset >/dev/null; then
+            nohup hyprsunset -t 4500 >/dev/null 2>&1 &
+        fi
+        echo "on"
+        ;;
+    off)
+        pkill -x hyprsunset 2>/dev/null || true
+        echo "off"
+        ;;
+    toggle|*)
+        if pgrep -x hyprsunset >/dev/null; then
+            pkill -x hyprsunset 2>/dev/null || true
+            echo "off"
+        else
+            nohup hyprsunset -t 4500 >/dev/null 2>&1 &
+            echo "on"
+        fi
+        ;;
+esac

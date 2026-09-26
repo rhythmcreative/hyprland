@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
+import Quickshell.Services.Notifications
 
 ShellRoot {
     id: root
@@ -16,6 +17,41 @@ ShellRoot {
     property bool isPlaying: false
     property real volumeLevel: 0.5
     property real brightnessLevel: 0.5
+
+    // Notification state
+    property bool notifActive: false
+    property string notifAppName: ""
+    property string notifSummary: ""
+    property string notifBody: ""
+    property string notifIcon: ""
+    property var currentNotification: null
+
+    NotificationServer {
+        id: notifServer
+        keepOnReload: true
+        bodySupported: true
+        bodyMarkupSupported: false
+        actionsSupported: true
+
+        onNotification: function(n) {
+            n.tracked = true
+            root.currentNotification = n
+            root.notifAppName = n.appName || "Sistema"
+            root.notifSummary = n.summary || ""
+            root.notifBody = n.body || ""
+            root.notifIcon = n.appIcon || ""
+            root.notifActive = true
+            notifTimer.restart()
+        }
+    }
+
+    Timer {
+        id: notifTimer
+        interval: 4500
+        onTriggered: {
+            root.notifActive = false
+        }
+    }
 
     IpcHandler {
         target: "island"
@@ -215,8 +251,8 @@ ShellRoot {
             anchors.horizontalCenter: parent.horizontalCenter
 
             readonly property real ala: 16
-            width: root.expanded ? 580 : (collapsedContent.width + capsule.ala * 2 + 36)
-            height: root.expanded ? 420 : 36
+            width: root.expanded ? 580 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
+            height: root.expanded ? 420 : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
@@ -230,7 +266,7 @@ ShellRoot {
                 id: silueta
                 anchors.fill: parent
                 ala: capsule.ala
-                cuerpoRadio: root.expanded ? 20 : 12
+                cuerpoRadio: root.expanded ? 20 : (root.notifActive ? 16 : 12)
                 relleno: root.colBg
                 lado: "arriba"
 
@@ -254,7 +290,7 @@ ShellRoot {
                 id: collapsedView
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: root.expanded ? 0 : 1
+                opacity: (!root.expanded && !root.notifActive) ? 1 : 0
 
                 Behavior on opacity {
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
@@ -333,6 +369,113 @@ ShellRoot {
                         font.pixelSize: 11
                         opacity: 0.6
                         anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // ─────────────────────────────────────────────────────────────
+            // NOTIFICATION BANNER VIEW (Dynamic Island Banner)
+            // ─────────────────────────────────────────────────────────────
+            Item {
+                id: notifView
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                visible: opacity > 0
+                opacity: (!root.expanded && root.notifActive) ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.currentNotification) {
+                            root.currentNotification.dismiss()
+                        }
+                        root.notifActive = false
+                    }
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.topMargin: 2
+                    anchors.bottomMargin: 4
+                    spacing: 10
+
+                    // Notification Icon Bubble
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                        Layout.alignment: Qt.AlignVCenter
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "󰂚"
+                            color: root.colAccent
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 16
+                        }
+                    }
+
+                    // Content Details
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 1
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: root.notifAppName.toUpperCase()
+                                color: root.colAccent
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: "ahora"
+                                color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 9
+                            }
+                        }
+
+                        Text {
+                            text: root.notifSummary || "Notificación"
+                            color: root.colFg
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            font.weight: Font.Bold
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        Text {
+                            visible: root.notifBody !== ""
+                            text: root.notifBody
+                            color: root.colMuted
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // Dismiss X icon
+                    Text {
+                        text: "󰅖"
+                        color: root.colMuted
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        opacity: 0.7
+                        Layout.alignment: Qt.AlignVCenter
                     }
                 }
             }

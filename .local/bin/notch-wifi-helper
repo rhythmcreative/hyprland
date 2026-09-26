@@ -3,12 +3,12 @@ import sys
 import subprocess
 import json
 
-def get_wifi_list():
+def get_wifi_list(rescan=False):
     try:
-        out = subprocess.check_output(
-            ['nmcli', '-t', '-f', 'IN-USE,SSID,SECURITY,BARS,SIGNAL', 'device', 'wifi', 'list'],
-            text=True, stderr=subprocess.DEVNULL
-        )
+        args = ['nmcli', '-t', '-f', 'IN-USE,SSID,SECURITY,BARS,SIGNAL', 'device', 'wifi', 'list']
+        if not rescan:
+            args.extend(['--rescan', 'no'])
+        out = subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL)
         networks = []
         seen = set()
         for line in out.strip().split('\n'):

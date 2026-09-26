@@ -1,43 +1,51 @@
 #!/bin/sh
-# Detectar y configurar todos los monitores conectados automáticamente
+# Configuración rápida y atómica de monitores para SDDM
+
+# Obtener query de xrandr rápidamente (máximo 2 reintentos de 50ms)
+XR_OUT=""
+for _ in 1 2 3; do
+    XR_OUT=$(xrandr --query 2>/dev/null)
+    if printf '%s\n' "$XR_OUT" | grep -q "connected"; then
+        break
+    fi
+    sleep 0.05
+done
+
+if [ -z "$XR_OUT" ]; then
+    xrandr --auto 2>/dev/null || true
+    exit 0
+fi
+
+# Detectar monitores conectados
+CONNECTED=$(printf '%s\n' "$XR_OUT" | awk '/\yconnected\y/ && !/disconnected/ { print $1 }')
+if [ -z "$CONNECTED" ]; then
+    xrandr --auto 2>/dev/null || true
+    exit 0
+fi
+
+EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)')
+INTERNAL=$(printf '%s\n' "$CONNECTED" | grep -E '^(eDP|LVDS)')
 
 get_width() {
-    xrandr --query | awk -v m="$1" '
-        $0 ~ m " connected" { f=1; next }
+    printf '%s\n' "$XR_OUT" | awk -v m="$1" '
+        $1 == m && /connected/ { f=1; next }
         f && /^[[:space:]]+[0-9]+x/ { split($1,a,"x"); print a[1]; exit }
         f && !/^[[:space:]]/ { exit }
     '
 }
 
-i=0
-while [ "$i" -lt 10 ]; do
-    xrandr --query | grep -q " connected" && break
-    sleep 0.5
-    i=$((i + 1))
-done
-
-CONNECTED=$(xrandr --query | awk '/connected/ && !/disconnected/ { print $1 }')
-COUNT=$(printf '%s\n' "$CONNECTED" | grep -c .)
-
-if [ "$COUNT" -eq 0 ]; then
-    xrandr --auto
-    exit 0
-fi
-
-EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)')
-INTERNAL=$(printf '%s\n'  "$CONNECTED" | grep -E  '^(eDP|LVDS)')
-
 X=0
 FIRST=true
+CMD="xrandr"
 
 for mon in $EXTERNALS; do
     W=$(get_width "$mon")
     [ -z "$W" ] && W=1920
     if [ "$FIRST" = true ]; then
-        xrandr --output "$mon" --auto --pos "${X}x0" --primary
+        CMD="$CMD --output $mon --auto --pos ${X}x0 --primary"
         FIRST=false
     else
-        xrandr --output "$mon" --auto --pos "${X}x0"
+        CMD="$CMD --output $mon --auto --pos ${X}x0"
     fi
     X=$((X + W))
 done
@@ -46,10 +54,12 @@ for mon in $INTERNAL; do
     W=$(get_width "$mon")
     [ -z "$W" ] && W=1920
     if [ "$FIRST" = true ]; then
-        xrandr --output "$mon" --auto --pos "${X}x0" --primary
+        CMD="$CMD --output $mon --auto --pos ${X}x0 --primary"
         FIRST=false
     else
-        xrandr --output "$mon" --auto --pos "${X}x0"
+        CMD="$CMD --output $mon --auto --pos ${X}x0"
     fi
     X=$((X + W))
 done
+
+eval "$CMD" 2>/dev/null || xrandr --auto 2>/dev/null || true

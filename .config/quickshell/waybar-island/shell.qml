@@ -215,7 +215,7 @@ ShellRoot {
             anchors.horizontalCenter: parent.horizontalCenter
 
             readonly property real ala: 16
-            width: root.expanded ? 580 : (root.isPlaying && root.activePlayerTitle !== "" ? 440 : 320)
+            width: root.expanded ? 580 : (collapsedContent.width + capsule.ala * 2 + 36)
             height: root.expanded ? 420 : 36
 
             Behavior on width {
@@ -274,22 +274,23 @@ ShellRoot {
                     }
                 }
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
+                Row {
+                    id: collapsedContent
+                    anchors.centerIn: parent
                     spacing: 8
 
                     // Media indicator if playing
-                    RowLayout {
+                    Row {
                         visible: root.isPlaying && root.activePlayerTitle !== ""
                         spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
 
                         Text {
                             text: "󰝚"
                             color: root.colAccent
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 13
+                            anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Text {
@@ -301,7 +302,8 @@ ShellRoot {
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
-                            Layout.maximumWidth: 100
+                            maximumLineCount: 1
+                            anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Rectangle {
@@ -309,6 +311,7 @@ ShellRoot {
                             height: 12
                             color: root.colMuted
                             opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
@@ -319,7 +322,7 @@ ShellRoot {
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 13
                         font.weight: Font.Bold
-                        Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+                        anchors.verticalCenter: parent.verticalCenter
                     }
 
                     // Indicator icon
@@ -329,7 +332,7 @@ ShellRoot {
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 11
                         opacity: 0.6
-                        Layout.alignment: Qt.AlignVCenter
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
             }

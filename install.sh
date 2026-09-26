@@ -148,13 +148,20 @@ success() {
 # --- LOGIC ---
 
 install_yay() {
-    if ! command -v yay > /dev/null; then
+    if ! command -v yay > /dev/null 2>&1; then
         section "DEPENDENCY: AUR HELPER"
-        gum spin --spinner dot --title "Deploying yay..." -- sleep 2
-        git clone https://aur.archlinux.org/yay.git /tmp/yay > /dev/null 2>&1
-        cd /tmp/yay && makepkg -si --noconfirm > /dev/null 2>&1
+        info "Deploying yay AUR helper..."
+        sudo pacman -S --needed --noconfirm base-devel git
+        rm -rf /tmp/yay
+        git clone https://aur.archlinux.org/yay.git /tmp/yay
+        (cd /tmp/yay && makepkg -si --noconfirm)
         cd "$DOTFILES_DIR"
-        success "yay helper initialized."
+        if command -v yay > /dev/null 2>&1; then
+            success "yay helper initialized."
+        else
+            echo "ERROR: Failed to install yay."
+            exit 1
+        fi
     fi
 }
 
@@ -241,7 +248,7 @@ PINNED
 step_software() {
     section "CORE SYSTEM DEPLOYMENT"
     
-    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker hyprpm xdg-desktop-portal-hyprland waybar rofi kitty networkmanager network-manager-applet bluez bluez-utils blueman pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting nwg-displays wl-clipboard xdg-utils jq bc imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct gnome-keyring cava"
+    CORE_PKGS="hyprland sddm hypridle hyprlock hyprpicker hyprpm xdg-desktop-portal-hyprland waybar rofi kitty thunar thunar-archive-plugin thunar-volman file-roller networkmanager network-manager-applet bluez bluez-utils blueman pipewire pipewire-pulse wireplumber pavucontrol playerctl pamixer brightnessctl gvfs polkit-kde-agent swappy grim slurp nwg-look bibata-cursor-theme tela-circle-icon-theme-all otf-font-awesome ttf-jetbrains-mono-nerd flatpak python-pywal awww stow qt5-graphicaleffects qt5-quickcontrols2 qt5-svg qt5-declarative qt6-svg curl unzip zsh-autosuggestions zsh-syntax-highlighting nwg-displays wl-clipboard xdg-utils jq bc imagemagick htop fastfetch bluez-obex gwenview tumbler ffmpegthumbnailer poppler-glib libgsf libopenraw libgepub kvantum qt5ct qt6ct gnome-keyring cava"
 
     info "$MSG_CORE_INSTALL"
     yay -S --needed --noconfirm $CORE_PKGS

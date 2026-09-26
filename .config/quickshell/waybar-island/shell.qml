@@ -117,6 +117,17 @@ ShellRoot {
         if (root.controlSubView === 3) audioSinksProc.running = true
     }
 
+    onCurrentTabChanged: {
+        root.controlSubView = 0
+    }
+
+    onExpandedChanged: {
+        if (root.expanded) {
+            root.controlSubView = 0
+            root.refreshAllStates()
+        }
+    }
+
     IpcHandler {
         target: "settings"
         function toggle(): string {
@@ -613,7 +624,7 @@ ShellRoot {
 
             readonly property real ala: 16
             width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? 645 : (root.notifActive ? 56 : 36)
+            height: root.expanded ? (root.currentTab === 1 ? 420 : (root.controlSubView !== 0 ? 550 : 645)) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
@@ -661,7 +672,13 @@ ShellRoot {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.expanded = !root.expanded
+                    onClicked: {
+                        root.expanded = !root.expanded
+                        if (root.expanded) {
+                            root.controlSubView = 0
+                            root.refreshAllStates()
+                        }
+                    }
 
                     Rectangle {
                         anchors.fill: parent
@@ -961,7 +978,7 @@ ShellRoot {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 12
-                        visible: root.controlSubView === 0
+                        visible: root.currentTab === 1 || root.controlSubView === 0
 
                         // Tab 0: Control & Sistema
                         Rectangle {

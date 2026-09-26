@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -47,8 +48,10 @@ ShellRoot {
     readonly property color colSurfaceHover: Qt.rgba(colFg.r, colFg.g, colFg.b, 0.16)
     readonly property color colBorder: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.25)
 
-    // Current time
+    // Current time & date exactly matching Waybar format: {:%H:%M:%S  -  %A, %d}
     property string timeStr: ""
+    property string dayStr: ""
+    property string clockStr: ""
     property string dateStr: ""
 
     Timer {
@@ -58,8 +61,22 @@ ShellRoot {
         triggeredOnStart: true
         onTriggered: {
             const now = new Date()
-            root.timeStr = Qt.formatTime(now, "HH:mm:ss")
-            root.dateStr = Qt.formatDate(now, "dddd, d 'de' MMMM")
+            const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+            const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            
+            const dayName = days[now.getDay()]
+            const dayNum = now.getDate()
+            const monthName = months[now.getMonth()]
+            
+            const hours = String(now.getHours()).padStart(2, '0')
+            const mins = String(now.getMinutes()).padStart(2, '0')
+            const secs = String(now.getSeconds()).padStart(2, '0')
+
+            root.timeStr = `${hours}:${mins}:${secs}`
+            root.dayStr = `${dayName}, ${dayNum}`
+            // Exact Waybar format: {:%H:%M:%S  -  %A, %d}
+            root.clockStr = `${root.timeStr}  -  ${root.dayStr}`
+            root.dateStr = `${dayName}, ${dayNum} de ${monthName}`
         }
     }
 
@@ -147,7 +164,8 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
 
-        WlrLayershell.layer: root.expanded ? WlrLayer.Overlay : WlrLayer.Top
+        aboveWindows: true
+        WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: root.expanded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         mask: Region {
@@ -189,41 +207,45 @@ ShellRoot {
             }
         }
 
-        // Island container
-        Rectangle {
+        // Dynamic Island container fused to top screen edge (Mac notch style)
+        Item {
             id: capsule
             anchors.top: parent.top
-            anchors.topMargin: 5
+            anchors.topMargin: 0
             anchors.horizontalCenter: parent.horizontalCenter
 
-            width: root.expanded ? 560 : (root.isPlaying && root.activePlayerTitle !== "" ? 280 : 210)
-            height: root.expanded ? 400 : 30
-            radius: root.expanded ? 14 : 6
-
-            color: root.colBg
-            border.color: root.colBorder
-            border.width: 1
-            clip: true
+            readonly property real ala: 16
+            width: root.expanded ? 580 : (root.isPlaying && root.activePlayerTitle !== "" ? 440 : 320)
+            height: root.expanded ? 420 : 36
 
             Behavior on width {
-                NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
             }
             Behavior on height {
-                NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-            }
-            Behavior on radius {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }
             }
 
-            // Subtle glow/shadow
-            Rectangle {
+            // Silueta con esquinas invertidas (alas) que funden con el borde superior de la pantalla
+            SiluetaIsla {
+                id: silueta
                 anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.38)
-                border.width: root.expanded ? 1.5 : 1
-                opacity: 0.6
+                ala: capsule.ala
+                cuerpoRadio: root.expanded ? 20 : 12
+                relleno: root.colBg
+                lado: "arriba"
+
+                Behavior on cuerpoRadio {
+                    NumberAnimation { duration: 200 }
+                }
             }
+
+            // Area de contenido (dentro del cuerpo de la isla, entre las alas)
+            Item {
+                id: contentArea
+                anchors.fill: parent
+                anchors.leftMargin: capsule.ala
+                anchors.rightMargin: capsule.ala
+                clip: true
 
             // ─────────────────────────────────────────────────────────────
             // COLLAPSED VIEW (Waybar-style integrated clock / media pill)
@@ -290,9 +312,9 @@ ShellRoot {
                         }
                     }
 
-                    // Clock (exact Waybar format and style)
+                    // Clock (exact Waybar format: 17:04:12  -  Sábado, 26)
                     Text {
-                        text: root.timeStr
+                        text: root.clockStr
                         color: root.colAccent
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 13
@@ -771,3 +793,5 @@ ShellRoot {
         }
     }
 }
+}
+

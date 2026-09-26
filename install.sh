@@ -77,10 +77,10 @@ auto_detect_drivers() {
     EXTRA_PKGS=""
     
     # GPU Detection
-    GPU_INFO=$(lspci | grep -i vga)
+    GPU_INFO=$(lspci | grep -i -E "vga|3d|display")
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
-        info "Detected NVIDIA GPU. Adding proprietary drivers..."
-        EXTRA_PKGS="$EXTRA_PKGS nvidia nvidia-settings nvidia-utils"
+        info "Detected NVIDIA GPU. Adding drivers..."
+        EXTRA_PKGS="$EXTRA_PKGS nvidia-open nvidia-settings nvidia-utils nvidia-prime"
     elif [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
         info "Detected AMD GPU. Adding Mesa drivers..."
         EXTRA_PKGS="$EXTRA_PKGS lib32-mesa vulkan-radeon lib32-vulkan-radeon mesa-utils"
@@ -221,6 +221,15 @@ install_rust_dock() {
         mkdir -p "$HOME/.local/bin"
         cp "$build_dir/target/release/rust-dock" "$HOME/.local/bin/rust-dock"
         chmod +x "$HOME/.local/bin/rust-dock"
+        mkdir -p "$HOME/.local/share/rust-dock"
+        if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
+            cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
+kitty
+chromium
+vesktop
+org.telegram.desktop
+PINNED
+        fi
         success "rust-dock installed to ~/.local/bin/rust-dock"
     else
         info "WARNING: rust-dock build failed. Check /tmp/rust-dock-build.log for details."

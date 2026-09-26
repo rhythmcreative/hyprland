@@ -195,14 +195,16 @@
 }
 
 /* --- Right Modules (Single, Seamless Bar with varied colors) --- */
+/* --- Right Modules (Single, Seamless Bar with varied colors) --- */
 #bluetooth,
 #tray,
 #pulseaudio,
 #backlight,
 #battery,
+#battery-bat0,
+#battery-bat1,
 #battery-bat2,
-#custom-dual-battery,
-#battery-bat1 {
+#custom-dual-battery {
   background-color: @background;
   padding: 0.3rem 0.7rem;
   margin: 5px 0px;
@@ -219,45 +221,18 @@
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover,
+#battery-bat0:hover,
+#battery-bat1:hover,
 #battery-bat2:hover,
-#custom-dual-battery:hover,
-#battery-bat1:hover {
+#custom-dual-battery:hover {
   background-color: @color8;
 }
 
-/* First element - rounded left - Bluetooth is actually the first element */
+/* First element - rounded left */
 #bluetooth {
   margin-left: 5px;
   border-top-left-radius: 6px;
   border-bottom-left-radius: 6px;
-}
-
-/* Last element - rounded right */
-/* Last element - rounded right */
-#battery,
-#battery-bat2,
-#custom-dual-battery {
-  border-top-right-radius: 6px;
-  border-bottom-right-radius: 6px;
-  border-right: none;
-  margin-right: 7px;
-}
-
-/* Dual Battery Joined Styles */
-#battery-bat1 {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  border-right: none;
-  margin-right: 0;
-  padding-right: 3px;
-}
-
-#battery-bat2 {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  margin-left: 0;
-  padding-left: 3px;
-  /* Inherits right radius from above */
 }
 
 /* Middle elements - no border radius */
@@ -265,6 +240,18 @@
 #pulseaudio,
 #backlight {
   border-radius: 0;
+}
+
+/* Last element - rounded right with separation from screen edge */
+#battery,
+#battery-bat0,
+#battery-bat1,
+#battery-bat2,
+#custom-dual-battery {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-right: none;
+  margin-right: 7px;
 }
 
 /* --- Module Colors - USING PYWAL COLORS --- */
@@ -332,21 +319,7 @@
   color: @color1;
 }
 
-/* Dual battery joined styles */
-#battery.bat0 {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  border-right: none;
-  margin-right: 0;
-  padding-right: 2px;
-}
 
-#battery.bat1 {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  margin-left: 0;
-  padding-left: 2px;
-}
 
 /* Tray gets foreground color */
 #tray {

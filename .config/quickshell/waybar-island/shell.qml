@@ -624,7 +624,7 @@ ShellRoot {
 
             readonly property real ala: 16
             width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? (root.currentTab === 1 ? 420 : (root.controlSubView !== 0 ? 550 : 645)) : (root.notifActive ? 56 : 36)
+            height: root.expanded ? (root.currentTab === 1 ? 485 : (root.controlSubView !== 0 ? 550 : 645)) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation { duration: 340; easing.type: Easing.OutBack; easing.overshoot: 0.3 }

@@ -90,28 +90,16 @@ log "=== Iniciando selector de wallpapers con sincronización waybar-pywal ==="
 apply_wallpaper_with_waybar_sync() {
     local wallpaper_file="$1"
     
-    log "Aplicando wallpaper: $wallpaper_file"
+    log "Aplicando wallpaper con animacion sincronizada: $wallpaper_file"
     
-    # Aplicar wallpaper con awww
-    if awww img "$wallpaper_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
-        log "Wallpaper aplicado con awww"
-    else
-        log "Error al aplicar wallpaper con awww"
-        return 1
-    fi
-    
-    # Guardar wallpaper actual
-    echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
-    
-    # Ejecutar sincronización centralizada
-    if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
-        log "Iniciando sincronización centralizada..."
-        "$HOME/.local/bin/pywal-wallpaper-sync" "$wallpaper_file"
+    if [ -x "$HOME/.local/bin/sync-wallpaper-animation" ]; then
+        "$HOME/.local/bin/sync-wallpaper-animation" "$wallpaper_file"
         log "Sistema sincronizado"
     else
-        # Fallback básico
+        awww img "$wallpaper_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
+        echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
         wal -i "$wallpaper_file" -n -q
-        hyprctl reload
+        "$HOME/.local/bin/modern-pywal-sync"
     fi
 }
 

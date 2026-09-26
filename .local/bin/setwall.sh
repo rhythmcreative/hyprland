@@ -11,25 +11,16 @@ fi
 
 SELECTED=$(basename "$WALLPAPER_PATH")
 
-# Aplicar con awww
-if command -v awww &> /dev/null; then
-    awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
-fi
-
-# Sincronizar colores
-if command -v wal &> /dev/null; then
-    wal -i "$WALLPAPER_PATH" -n -q
-    
-    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-        "$HOME/.local/bin/modern-pywal-sync"
-    else
-        [ -x "$HOME/.local/bin/sync-waybar-pywal" ] && "$HOME/.local/bin/sync-waybar-pywal"
-        [ -x "$HOME/.local/bin/sync-mako-pywal" ] && "$HOME/.local/bin/sync-mako-pywal"
-        [ -x "$HOME/.local/bin/sync-rofi-pywal" ] && "$HOME/.local/bin/sync-rofi-pywal"
-        [ -x "$HOME/.local/bin/full-system-color-sync" ] && "$HOME/.local/bin/full-system-color-sync"
-        hyprctl reload
-        pkill waybar && nohup waybar > /dev/null 2>&1 &
+# Aplicar wallpaper con animacion sincronizada de waybar, quickshell y rust-dock
+if [ -x "$HOME/.local/bin/sync-wallpaper-animation" ]; then
+    "$HOME/.local/bin/sync-wallpaper-animation" "$WALLPAPER_PATH"
+else
+    if command -v awww &> /dev/null; then
+        awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
     fi
+    if command -v wal &> /dev/null; then
+        wal -i "$WALLPAPER_PATH" -n -q
+        "$HOME/.local/bin/modern-pywal-sync"
+    fi
+    echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
 fi
-
-echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"

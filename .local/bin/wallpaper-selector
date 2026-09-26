@@ -103,39 +103,22 @@ selected=$(rofi -dmenu -i \
     < "$TEMP_LIST")
 
 rm -f "$TEMP_LIST"
-show_all_bars
 
-# Si no se seleccionó nada, salir
-[[ -z "$selected" ]] && exit 0
+# Si no se seleccionó nada, restaurar barras y salir
+if [[ -z "$selected" ]]; then
+    show_all_bars
+    exit 0
+fi
 
 # Encontrar ruta completa
 selected_path="$WALLPAPER_DIR/$selected"
-[[ ! -f "$selected_path" ]] && exit 1
+if [[ ! -f "$selected_path" ]]; then
+    show_all_bars
+    exit 1
+fi
 
-# 4. APLICACIÓN INSTANTÁNEA (En paralelo para máxima velocidad)
-
-# A. Wallpaper (awww with premium transition)
-awww img "$selected_path" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 &
-
-# B. Sincronización de Colores (Pywal y GTK)
-(
-    # Registrar wallpaper actual primero para evitar race conditions
-    echo "$selected_path" > "$HOME/.cache/current-wallpaper"
-
-    # Ejecutar el script centralizado de sincronización con la ruta directa
-    if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
-        "$HOME/.local/bin/pywal-wallpaper-sync" "$selected_path"
-    else
-        # Fallback si el script no existe
-        wal -i "$selected_path" -n -q
-        hyprctl reload
-    fi
-
-    # Otros componentes específicos
-    [ -x "$HOME/.local/bin/sync-mako-pywal" ] && "$HOME/.local/bin/sync-mako-pywal"
-    [ -x "$HOME/.local/bin/pywal-asusctl-sync" ] && "$HOME/.local/bin/pywal-asusctl-sync" &
-    # [ -x "$HOME/.local/bin/sddm-sync-wrapper" ] && "$HOME/.local/bin/sddm-sync-wrapper" &
-) &
+# 4. APLICACIÓN CON ANIMACIÓN SINCRONIZADA
+"$HOME/.local/bin/sync-wallpaper-animation" "$selected_path"
 
 # 5. Generar thumbnails faltantes (mantenimiento en background)
 (

@@ -115,7 +115,7 @@ def main():
                     f.write("perf\n")
             except OSError:
                 pass
-            run_hyprctl(["eval", "hl.config({ decoration = { blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
+            run_hyprctl(["eval", "hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 1.0, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
             subprocess.run(["notify-send", "Performance", "Max performance enabled"], stderr=subprocess.DEVNULL)
     elif cmd == "toggle-split":
         run_hyprctl(["dispatch", 'hl.dsp.layout("togglesplit")'])

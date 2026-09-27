@@ -467,7 +467,7 @@ run_cmd() {
             systemctl suspend
         elif [[ $1 == '--logout' ]]; then
             if [[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]]; then
-                hyprctl dispatch exit
+                loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || pkill -x Hyprland
             elif [[ "$DESKTOP_SESSION" == 'openbox' ]]; then
                 openbox --exit
             elif [[ "$DESKTOP_SESSION" == 'bspwm' ]]; then

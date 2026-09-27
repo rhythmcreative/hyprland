@@ -1,132 +1,196 @@
-<h1 align="center">Dotfiles rhythmcreative</h1>
+<h1 align="center">Rhythm Hyprland Dotfiles</h1>
 
 <div align="center">
- <p><i>Personal Arch config, for everyone to use :)</i></p>
+  <p><i>A modern, responsive Hyprland desktop environment powered by Quickshell Dynamic Island, Rust-Dock, and full-system Pywal palette synchronization.</i></p>
 </div>
 
 <div align="center">
 
-[![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793d1?style=for-the-badge&logo=archlinux&logoColor=white "Arch Linux - A simple, lightweight distribution")](https://archlinux.org/)
-[![Hyprland](https://img.shields.io/badge/Hyprland-abd6fd?style=for-the-badge "Hyprland - A dynamic tiling Wayland compositor based on wlroots that doesn't sacrifice on its looks")](https://hyprland.org/)
-[![Waybar](https://img.shields.io/badge/Waybar-cdd6f4?style=for-the-badge "Waybar - Highly customizable Wayland bar for Sway and Wlroots based compositors")](https://github.com/Alexays/Waybar)
-[![Hyprlock](https://img.shields.io/badge/Hyprlock-89dceb?style=for-the-badge "Hyprlock - Hyprland's GPU-accelerated screen locking utility")](https://github.com/hyprwm/hyprlock)
-[![Rofi](https://img.shields.io/badge/Rofi-fab387?style=for-the-badge "Rofi- A window switcher, application launcher and dmenu replacement")](https://github.com/lbonn/rofi)
-[![Sddm](https://img.shields.io/badge/Sddm-a6e3a1?style=for-the-badge "Simple Desktop Display Manager")](https://github.com/sddm/sddm)
-[![Pywal](https://img.shields.io/badge/Pywal-cba6f7?style=for-the-badge "Pywal - A tool that generates a color palette from the dominant colors in an image")](https://github.com/dylanaraps/pywal)
+[![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793d1?style=for-the-badge&logo=archlinux&logoColor=white "Arch Linux")](https://archlinux.org/)
+[![Hyprland](https://img.shields.io/badge/Hyprland-abd6fd?style=for-the-badge&logo=hyprland&logoColor=black "Hyprland")](https://hyprland.org/)
+[![Quickshell](https://img.shields.io/badge/Quickshell-7aa2f7?style=for-the-badge "Quickshell Dynamic Island")](https://github.com/outfoxxed/quickshell)
+[![Rust--Dock](https://img.shields.io/badge/Rust--Dock-f7768e?style=for-the-badge "Rust-Dock")](https://github.com/rhythmcreative/rust-dock)
+[![Waybar](https://img.shields.io/badge/Waybar-cdd6f4?style=for-the-badge "Waybar")](https://github.com/Alexays/Waybar)
+[![Hyprlock](https://img.shields.io/badge/Hyprlock-89dceb?style=for-the-badge "Hyprlock")](https://github.com/hyprwm/hyprlock)
+[![Rofi](https://img.shields.io/badge/Rofi-fab387?style=for-the-badge "Rofi")](https://github.com/lbonn/rofi)
+[![Pywal](https://img.shields.io/badge/Pywal-cba6f7?style=for-the-badge "Pywal")](https://github.com/dylanaraps/pywal)
+[![SDDM](https://img.shields.io/badge/SDDM_Astronaut-a6e3a1?style=for-the-badge "SDDM Astronaut")](https://github.com/sddm/sddm)
 
 </div>
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)
-<p align="center">
-<img width="2555" height="1435" alt="image" src="https://github.com/user-attachments/assets/32849cc1-4239-4515-b6c3-f3c5b522b67c" />
-</p>
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=DESKTOP+SHOWCASE)](https://git.io/typing-svg)
 
 <p align="center">
- <img width="2550" height="1418" alt="image" src="https://github.com/user-attachments/assets/109227de-e886-4b8e-8e9d-e2fc5b3ea54c" />
+  <img alt="Desktop Showcase" src="assets/desktop.png" width="100%" />
 </p>
 
-<p align="center">
-<img width="2537" height="1413" alt="image" src="https://github.com/user-attachments/assets/faab3b29-7a7e-4b22-b00e-118915efc53a" />
-</p>
+---
 
-<p align="center">
-<img width="2527" height="1425" alt="image" src="https://github.com/user-attachments/assets/85c9f5d4-6bfa-43fb-9ffb-630e58eba559" />
-</p>
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=DYNAMIC+ISLAND+%26+CONTROL+CENTER)](https://git.io/typing-svg)
 
-<p align="center">
-<img width="1920" height="1080" alt="Hola" src="https://github.com/user-attachments/assets/fa1f3449-ab38-48e7-af89-879c38161e86" />
-</p>
-
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW+PYWAL)](https://git.io/typing-svg)
 <table>
- <tr>
-  <td width="50%"> <img width="2552" height="1437" alt="image" src="https://github.com/user-attachments/assets/4ad9216b-ce6f-4641-b017-4366fdf06e44" />
-
-</td>
-    <td width="50%"> <img width="2545" height="1436" alt="image" src="https://github.com/user-attachments/assets/bb3d5667-082d-4827-818f-b6e59398f5b4" />
-
-</td>
-  </tr>
   <tr>
-    <td width="50%"><img width="2555" height="1434" alt="image" src="https://github.com/user-attachments/assets/c7dc9236-9542-45ed-a161-e9ed8f1e95b1" />
-
-</td>
-    <td width="50%"><img width="2555" height="1436" alt="image" src="https://github.com/user-attachments/assets/fdfe3243-b250-4d93-9f31-002cdbd6ac5a" />
-
-</td>
+    <td width="50%">
+      <h3 align="center">Control & System Center</h3>
+      <img alt="Control Center" src="assets/control_center_crop.png" width="100%" />
+      <p align="center"><i>Interactive Material 3 quick toggles (Wi-Fi, Bluetooth, Audio, Rust-Dock, Night Light, Caffeine), pill sliders, and MPRIS player.</i></p>
+    </td>
+    <td width="50%">
+      <h3 align="center">Hyprland Compositor Settings</h3>
+      <img alt="Hyprland Settings" src="assets/hyprland_settings_crop.png" width="100%" />
+      <p align="center"><i>Real-time live adjustment of window corner rounding, gaps, shadows, blur effects, animations, and monitor profiles.</i></p>
+    </td>
   </tr>
 </table>
 
-> [!NOTE]
-> Everything syncs with Pywal to have a theme that fits the wallpaper included with SDDM.
+---
 
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=RUST-DOCK+PILL)](https://git.io/typing-svg)
 
+<p align="center">
+  <img alt="Rust-Dock" src="assets/rust_dock_crop.png" width="80%" />
+</p>
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=INSTALLATION)](https://git.io/typing-svg)
+- **High-Performance Native Dock**: Written in Rust using GTK4 and `gtk4-layer-shell`.
+- **Multi-Monitor Awareness**: Automatically synchronizes and spawns across attached monitors.
+- **Dynamic Theming**: Color palettes instantly adapt to the current wallpaper through Pywal CSS injection.
+- **App Launching & Pinning**: Pinned application management with live running app indicators.
 
-For installation it is done through the commands below
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=LAUNCHER+%26+CHEATSHEET)](https://git.io/typing-svg)
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3 align="center">Application Launcher (Super + A)</h3>
+      <img alt="Application Launcher" src="assets/rofi_launcher_crop.png" width="100%" />
+    </td>
+    <td width="50%">
+      <h3 align="center">Interactive Cheatsheet (Super + F)</h3>
+      <img alt="Keybindings Cheatsheet" src="assets/rofi_hotkeys_crop.png" width="100%" />
+    </td>
+  </tr>
+</table>
+
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=INSTALLATION)](https://git.io/typing-svg)
+
+### One-Line Quick Install
+
+Run the installer directly from your terminal using curl:
 
 ```bash
-git clone https://github.com/rhythmcreative/hyprland.git
-cd ~/hyprland
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
+```
+
+### Manual Installation
+
+Clone the repository and launch the installer:
+
+```bash
+git clone https://github.com/rhythmcreative/hyprland.git ~/.config/hyprland-repo
+cd ~/.config/hyprland-repo
 ./install.sh
 ```
+
 > [!IMPORTANT]
-> Do <b>NOT</b> run `install.sh` as sudo so that the installation is done correctly
+> Do **NOT** run `install.sh` as root or with `sudo`. The script requests root permissions with `sudo` internally when required.
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS)](https://git.io/typing-svg)
+### Installer Command-Line Flags
 
-You can have more than 3000 wallpapers, all of them can be downloaded through the following commands:
+The installer supports non-interactive execution and custom overrides:
+
+| Flag | Description |
+|---|---|
+| `-y`, `--yes` | Assume yes to all confirmation prompts (unattended mode) |
+| `--preview`, `--dry-run` | Run visual preview mode without modifying system files |
+| `--no-reboot` | Prevent automatic reboot prompt upon installation completion |
+| `--wallpapers <mode>` | Pre-select wallpaper mode: `all`, `random`, or `none` |
+| `--skip-wallpapers` | Skip downloading wallpaper packs |
+| `--gpu <type>` | Force specific GPU driver stack: `nvidia`, `amd`, `intel`, `auto`, `none` |
+| `--skip-gpu` | Skip GPU driver detection and setup |
+| `--skip-rust-dock` | Skip compiling rust-dock from source |
+| `--skip-flatpaks` | Skip installing Flatpak applications |
+| `--replace-configs-all` | Overwrite existing configurations directly without `.bak` backups |
+| `-h`, `--help` | Display CLI help and flag usage |
+
+#### Automated Unattended Example
 
 ```bash
-curl -L "https://raw.githubusercontent.com/rhythmcreative/wallpapers/main/pack_[NUMBER].zip" -o
-"/tmp/pack_[NUMBER].zip"
-unzip -q -o "/tmp/pack_[NUMBER].zip" -d "/tmp/wallpaper_install"
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --no-reboot --skip-wallpapers
+```
+
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS)](https://git.io/typing-svg)
+
+A curated collection of over 3,000 wallpapers is organized into downloadable packs. You can choose to download all packs or a selection during installation, or manually download individual packs:
+
+```bash
+curl -L "https://raw.githubusercontent.com/rhythmcreative/wallpapers/main/pack_1.zip" -o "/tmp/pack_1.zip"
+unzip -q -o "/tmp/pack_1.zip" -d "/tmp/wallpaper_install"
 cp -r "/tmp/wallpaper_install/pack_1"/* ~/Pictures/Wallpapers/
 rm -rf "/tmp/wallpaper_install" "/tmp/pack_1.zip"
 ```
-or use `install.sh` and from there you can download the packages you want
 
 > [!NOTE]
-> All wallpapers are taken from this page [Link](https://bjarneo.github.io/wallpapers/)
+> Wallpapers are curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=COMPONENTS)](https://git.io/typing-svg)
+---
 
-| Component | Tool |
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=CORE+COMPONENTS)](https://git.io/typing-svg)
+
+| Component | Tool / Implementation |
 |---|---|
-| Window Manager | Hyprland |
-| Status Bar | Waybar |
+| Compositor | Hyprland (Wayland) with Hyprland Plugins |
+| Dynamic Island | Quickshell (Qt6 QML with IPC control) |
+| Application Dock | Rust-Dock (GTK4 + gtk4-layer-shell) |
+| Status Bar | Waybar with Pywal synchronization |
 | Terminal | Kitty |
-| Launcher | Rofi |
-| Lockscreen | Hyprlock + Hypridle |
-| File Manager | Thunar |
-| Theming | Pywal (Sync's with the wallpaper) |
-| Wallpaper | awww |
-| Screenshot | Swappy |
+| Shell | Zsh with syntax highlighting and autosuggestions |
+| Application Launcher | Rofi (Tokyo Night / Pywal themes) |
+| Screen Locker | Hyprlock + Hypridle |
+| File Manager | Thunar + Plugins & Tumbler thumbnails |
+| Dynamic Theming | Python-Pywal (System-wide color coordination) |
+| Wallpaper Engine | awww with smooth synchronized fade transitions |
+| Audio Server | Pipewire + Wireplumber |
+| Display Manager | SDDM with Astronaut Theme & Pywal sync |
 | AUR Helper | yay |
-| Login Manager | SDDM |
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=F7F7F7&vCenter=true&multiline=true&width=435&height=35&lines=KEYBINDINGS)](https://git.io/typing-svg)
+---
 
-| Binding | Action |
-| --- | --- |
-| `Super + Return` | Launch kitty |
-| `Super + Q` | Kill active window |
-| `Super + A` | Launcher (rofi) |
-| `Super + E` | File manager (thunar) |
-| `Super + W` | Toggle floating |
-| `Super + L` | Lock screen |
-| `Super + P` | Screenshot (area) |
-| `Super + M` | Exit Hyprland |
-| `Super + Z` | Enable power sade mode (for laptop's) |
-| `Super + K` | Toogle keyboard layout |
-| `Alt + Return` | Fullscreen |
-| `Super + BackSpace` | Power menu |
-| `Super + Shift + W` | Wallpaper Selector |
-| `Super + Shift + P` | Selector of colors |
-| `F10` | Enable / Disable Bluetooth |
-| `F11 & F12` | Volumen Up / Down |
-| `Super + 1 to 0` | Switch workspaces |
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=7AA2F7&vCenter=true&multiline=true&width=435&height=35&lines=KEYBINDINGS)](https://git.io/typing-svg)
 
-
-Configurations are adapted and customized for personal use. :)
+| Shortcut | Description | Category |
+|---|---|---|
+| `Super + Return` | Launch Terminal (Kitty) | System |
+| `Super + Space` | Toggle Rust-Dock visibility | Launcher |
+| `Super + I` | Toggle Dynamic Island / Notch | Dynamic Island |
+| `Super + F` | Interactive Keybindings Cheatsheet | Help |
+| `Super + X` | Quick Compositor Settings Menu | Settings |
+| `Super + N` | Wi-Fi Network Selector Menu | Network |
+| `Super + B` | Bluetooth Device Manager Menu | Network |
+| `Super + A` | Application Launcher | Launcher |
+| `Super + R` | Command Runner | Rofi |
+| `Super + E` | Open File Manager (Thunar) | Files |
+| `Super + Q` | Close Active Window | Window |
+| `Super + W` | Toggle Floating Mode | Window |
+| `Super + J` | Toggle Window Split / Orientation | Layout |
+| `Alt + Return` | Toggle Fullscreen | Window |
+| `Super + Tab` | Workspace Overview | Window |
+| `Super + M` | Exit Hyprland Session | Session |
+| `Super + L` | Lock Screen (Hyprlock) | Security |
+| `Super + BackSpace` | Power Menu (Reboot / Shutdown) | Session |
+| `Super + P` | Screenshot Region with Swappy editor | Utility |
+| `Super + Shift + P` | Color Picker (Hyprpicker) | Utility |
+| `Super + Shift + Print` | Instant Fullscreen Screenshot | Utility |
+| `Super + Shift + W` | Wallpaper Visual Selector | Wallpaper |
+| `Super + Shift + B` | Quick Random Wallpaper | Wallpaper |
+| `Super + Alt + W` | Change Wallpaper + Waybar Resync | Wallpaper |
+| `Super + Shift + G` | Toggle Performance Mode | System |
+| `Super + 1 .. 0` | Switch to Workspace 1 to 10 | Navigation |
+| `Super + Shift + 1 .. 0` | Move Window to Workspace 1 to 10 | Navigation |
+| `F10` | Toggle Bluetooth | Hardware |
+| `F11 / F12` | Volume Down / Volume Up | Hardware |

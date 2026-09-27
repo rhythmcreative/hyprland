@@ -671,8 +671,12 @@ step_software() {
 unified_app_search() {
     clear_logo
     echo ""
-    gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Universal Application Discovery (Pacman + AUR)"
-    step_item "Launching fzf search... [TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+    if ! command -v yay > /dev/null 2>&1; then
+        install_yay
+    fi
+
+    step_item "Launching fzf search (120,000+ Pacman & AUR packages)..."
+    step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
     sleep 0.8
 
     local fzf_args=(
@@ -1311,9 +1315,9 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 preflight_checks
+install_yay
 first_run_choices
 
-install_yay
 step_software
 step_applications
 step_dotfiles

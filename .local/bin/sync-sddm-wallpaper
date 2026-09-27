@@ -136,7 +136,7 @@ log "Sincronización de wallpaper de SDDM completada exitosamente"
 # Si se ejecuta desde un entorno gráfico, mostrar notificación
 if [[ -n "$DISPLAY" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
     # Ejecutar como el usuario correcto para la notificación
-    sudo -u "$REAL_USER" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" notify-send "SDDM Wallpaper" "Wallpaper sincronizado con SDDM" 2>/dev/null || true
+    sudo -u "$REAL_USER" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" notify-send "SDDM Wallpaper" "Wallpaper synchronized with SDDM" 2>/dev/null || true
 fi
 
 exit 0

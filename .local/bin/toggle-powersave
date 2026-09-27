@@ -70,7 +70,7 @@ EOF
     done
 
     # 6. Desktop Notification
-    notify-send -a "Ahorro de Batería" -i battery-caution "Ahorro de batería activado" "Rendimiento optimizado, ventanas sólidas y bajo consumo" 2>/dev/null || true
+    notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true
     echo "on"
 }
 
@@ -112,7 +112,7 @@ disable_powersave() {
     done
 
     # 6. Desktop Notification
-    notify-send -a "Ahorro de Batería" -i battery-good "Ahorro de batería desactivado" "Rendimiento y efectos visuales normales restaurados" 2>/dev/null || true
+    notify-send -a "Battery Saver" -i battery-good "Battery Saver Turned Off" "Normal performance and visual effects restored" 2>/dev/null || true
     echo "off"
 }
 

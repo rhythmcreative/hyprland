@@ -172,4 +172,4 @@ else
 fi
 
 # Intentar enviar notificación, pero no fallar si no funciona
-notify-send "Waybar + nm-applet Sync" "Colores sincronizados con pywal" -t 2000 2>/dev/null || true
+notify-send "Waybar + nm-applet Sync" "Colors synchronized with Pywal" -t 2000 2>/dev/null || true

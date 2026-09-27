@@ -22,16 +22,16 @@ echo "Status: Single=$HAS_SINGLE, Dual=$HAS_DUAL"
 
 if [ "$HAS_DUAL" == "true" ]; then
     echo "Mode: Dual -> PC Mode"
-    notify-send "Energía" "Modo PC (Sin batería en barra)" -i battery
+    notify-send "Power" "Desktop PC Mode (No battery module)" -i battery
     jq '.["modules-right"] |= map(select(. != "battery" and . != "custom/dual-battery"))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
 elif [ "$HAS_SINGLE" == "false" ]; then
     echo "Mode: PC -> Single"
-    notify-send "Energía" "Modo Batería Simple" -i battery
+    notify-send "Power" "Single Battery Mode" -i battery
     # Add 'battery' after 'custom/battery-mode'
     jq '.["modules-right"] |= (reduce .[] as $item ([]; if $item == "custom/battery-mode" then . + [$item, "battery"] else . + [$item] end))' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
 else
     echo "Mode: Single -> Dual"
-    notify-send "Energía" "Modo Batería Dual (Thinkpad/ASUS)" -i battery
+    notify-send "Power" "Dual Battery Mode (ThinkPad/ASUS)" -i battery
     # Replace 'battery' with 'custom/dual-battery'
     jq '.["modules-right"] |= map(if . == "battery" then "custom/dual-battery" else . end)' "$WAYBAR_CONFIG" > "$WAYBAR_CONFIG.tmp"
 fi

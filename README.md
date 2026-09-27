@@ -37,12 +37,12 @@ The top notch expands smoothly on hover or via shortcut (`Super + I`), providing
 <table>
   <tr>
     <td width="50%">
-      <h3 align="center">Control & System Center</h3>
+      <h3 align="center">Control & system center</h3>
       <img alt="Control Center Full" src="assets/dynamic_island_full.png" width="100%" />
       <p align="center"><i>Quick toggles for Wi-Fi, Bluetooth, Audio sinks, Rust-Dock, Night Light, Caffeine, volume/brightness sliders, and MPRIS media player.</i></p>
     </td>
     <td width="50%">
-      <h3 align="center">Hyprland Compositor Settings (Super + X)</h3>
+      <h3 align="center">Hyprland compositor settings (Super + X)</h3>
       <img alt="Hyprland Settings Full" src="assets/dynamic_island_settings_full.png" width="100%" />
       <p align="center"><i>Live controls for corner rounding, window gaps, shadows, blur effects, animations, and monitor profiles without restarting.</i></p>
     </td>

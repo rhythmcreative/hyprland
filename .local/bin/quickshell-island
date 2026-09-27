@@ -18,6 +18,11 @@ fi
 
 export QT_QPA_PLATFORM="wayland"
 
+# Si corre bajo un servicio systemd activo y se invoco manualmente, delegar reinicio
+if [ -z "$INVOCATION_ID" ] && systemctl --user is-active waybar-island.service >/dev/null 2>&1; then
+    exec systemctl --user restart waybar-island.service
+fi
+
 pkill -f "quickshell -p .*waybar-island" 2>/dev/null || true
 sleep 0.2
 

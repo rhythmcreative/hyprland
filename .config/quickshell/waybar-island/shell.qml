@@ -633,7 +633,7 @@ ShellRoot {
     PanelWindow {
         id: islandWin
         screen: Quickshell.screens[0]
-        visible: root.islandVisible || capsule.opacity > 0.01
+        visible: root.islandVisible
 
         anchors {
             top: true
@@ -694,16 +694,8 @@ ShellRoot {
         Item {
             id: capsule
             anchors.top: parent.top
-            anchors.topMargin: root.islandVisible ? 0 : -height - 20
             anchors.horizontalCenter: parent.horizontalCenter
-            opacity: root.islandVisible ? 1.0 : 0.0
-
-            Behavior on anchors.topMargin {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-            Behavior on opacity {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
+            opacity: 1.0
 
             readonly property real ala: 16
             width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))

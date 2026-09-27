@@ -32,7 +32,7 @@ RowLayout {
             icon.width: 2 * Math.round((root.font.pointSize * 3) / 2)
             icon.color: config.SystemButtonsIconColor
             display: AbstractButton.TextUnderIcon
-            visible: config.HideSystemButtons != "true" && modelData[2]
+            visible: config.HideSystemButtons != "true" && (modelData[2] || typeof sddm === "undefined" || (!sddm.canPowerOff && !sddm.canReboot))
             hoverEnabled: true
             palette.buttonText: config.SystemButtonsIconColor
             background: Rectangle {

@@ -261,14 +261,6 @@
   border-radius: 0;
 }
 
-/* Bat0 when followed by Bat1 */
-#battery-bat0 {
-  border-radius: 0;
-  margin-right: 0;
-  padding-right: 0.35rem;
-  border-right: none;
-}
-
 /* Last element - rounded right with separation from screen edge */
 #battery,
 #battery-bat1,
@@ -281,9 +273,28 @@
   margin-right: 7px;
 }
 
+/* First battery when dual (seamlessly joined to Bat1) */
+#battery.bat0,
+#battery-bat0 {
+  border-top-right-radius: 0px;
+  border-bottom-right-radius: 0px;
+  margin-right: 0px;
+  border-right: 1px solid @color8;
+  padding-right: 0.45rem;
+}
+
+/* Second battery when dual (ends the unified right pill) */
+#battery.bat1,
 #battery-bat1 {
-  padding-left: 0.35rem;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-left-radius: 0px;
+  border-bottom-left-radius: 0px;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  margin-left: 0px;
+  margin-right: 7px;
+  padding-left: 0.45rem;
+  border-left: none;
+  border-right: none;
 }
 
 /* --- Module Colors - USING PYWAL COLORS --- */

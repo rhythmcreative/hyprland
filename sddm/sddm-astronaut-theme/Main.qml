@@ -283,11 +283,11 @@ Pane {
             id: blurMask
 
             sourceItem: backgroundImage
-            width: form.width
+            width: config.FullBlur == "true" ? parent.width : form.width
             height: parent.height
-            anchors.centerIn: form
-            sourceRect: Qt.rect(x,y,width,height)
-            visible: config.FullBlur == "true" || config.PartialBlur == "true" ? true : false
+            anchors.centerIn: config.FullBlur == "true" ? parent : form
+            sourceRect: config.FullBlur == "true" ? Qt.rect(0, 0, parent.width, parent.height) : Qt.rect(x,y,width,height)
+            visible: false
         }
 
         MultiEffect {
@@ -295,11 +295,11 @@ Pane {
 
             height: parent.height
             width: config.FullBlur == "true" ? parent.width : form.width
-            source: config.FullBlur == "true" ? backgroundImage : blurMask
+            source: blurMask
             blurEnabled: true
             autoPaddingEnabled: false
-            blur: config.Blur == "" ? 2.0 : config.Blur
-            blurMax: config.BlurMax == "" ? 48 : config.BlurMax
+            blur: config.Blur == "" ? 1.0 : config.Blur
+            blurMax: config.BlurMax == "" ? 64 : config.BlurMax
             anchors.centerIn: config.FullBlur == "true" ? parent : form
             visible: config.FullBlur == "true" || config.PartialBlur == "true" ? true : false
         }

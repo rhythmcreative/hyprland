@@ -1,6 +1,7 @@
 #!/bin/bash
-# toggle-powersave - Power saving manager for Dynamic Island, Waybar and Hyprland
-# Optimizes CPU frequency/EPP, display brightness, GPU/Hyprland effects and window opacity.
+# toggle-powersave - Power saving manager for Dynamic Island and Hyprland
+# Optimizes CPU frequency/EPP, display brightness, GPU effects and window/rofi opacity.
+# Maintains full animations and leaves Waybar battery in its original configuration.
 
 STATE_FILE="/tmp/powersave-active"
 BRIGHTNESS_BACKUP="/tmp/powersave_brightness_backup"
@@ -32,13 +33,13 @@ enable_powersave() {
         fi
     fi
 
-    # 3. Disable heavy Hyprland visual effects and ensure solid/opaque windows (no background bleed-through)
+    # 3. Disable heavy Hyprland blur/shadows but PRESERVE animations (animations = true)
     if command -v hyprctl >/dev/null 2>&1; then
-        hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })' >/dev/null 2>&1 || true
+        hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = true } })' >/dev/null 2>&1 || true
         hyprctl eval 'hl.window_rule({ name = "powersave-opaque", match = { class = ".*" }, opaque = true })' >/dev/null 2>&1 || true
     fi
 
-    # Set kitty background opacity to 1.0 for solid dark terminal
+    # 4. Set kitty background opacity to 1.0 for solid dark terminal (no background bleed)
     for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
         if [ -f "$kconf" ]; then
             sed -i 's/background_opacity [0-9.]*/background_opacity 1.0/' "$kconf" 2>/dev/null || true
@@ -46,23 +47,29 @@ enable_powersave() {
     done
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
-    # 4. Waybar dynamic battery color (Android Yellow #f1c40f)
-    for dir in "$HOME/.config/waybar" "/home/rhythmcreative/.config/waybar"; do
-        if [ -d "$dir" ]; then
-            cat > "$dir/powersave.css" << 'EOF'
-/* Modo ahorro de bateria activado (estilo Android) */
-window#waybar #battery:not(.charging),
-window#waybar #battery.bat0:not(.charging),
-window#waybar #battery.bat1:not(.charging),
-window#waybar #custom-desktop-power {
-    color: #f1c40f;
+    # 5. Make Rofi completely solid/opaque in powersave mode
+    local bg_c
+    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+    [ -n "$bg_c" ] || bg_c="#101516"
+    for rdir in "$HOME/.config/rofi" "/home/rhythmcreative/.config/rofi"; do
+        if [ -d "$rdir" ]; then
+            cat > "$rdir/colors-powersave.rasi" << EOF
+* {
+    bgcolor: ${bg_c};
+    background-trans: ${bg_c};
+    background-alt-trans: ${bg_c};
+}
+window {
+    background-color: ${bg_c};
+}
+mainbox {
+    background-color: ${bg_c};
 }
 EOF
         fi
     done
-    pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
 
-    # 5. Desktop Notification
+    # 6. Desktop Notification
     notify-send -a "Ahorro de Batería" -i battery-caution "Ahorro de batería activado" "Rendimiento optimizado, ventanas sólidas y bajo consumo" 2>/dev/null || true
     echo "on"
 }
@@ -89,7 +96,7 @@ disable_powersave() {
         hyprctl reload >/dev/null 2>&1 || true
     fi
 
-    # Restore kitty background opacity to 0.85
+    # 4. Restore kitty background opacity to 0.85
     for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
         if [ -f "$kconf" ]; then
             sed -i 's/background_opacity [0-9.]*/background_opacity 0.85/' "$kconf" 2>/dev/null || true
@@ -97,15 +104,14 @@ disable_powersave() {
     done
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
-    # 4. Waybar restore standard palette colors
-    for dir in "$HOME/.config/waybar" "/home/rhythmcreative/.config/waybar"; do
-        if [ -d "$dir" ]; then
-            > "$dir/powersave.css"
+    # 5. Restore Rofi default translucent blur
+    for rdir in "$HOME/.config/rofi" "/home/rhythmcreative/.config/rofi"; do
+        if [ -d "$rdir" ]; then
+            > "$rdir/colors-powersave.rasi"
         fi
     done
-    pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
 
-    # 5. Desktop Notification
+    # 6. Desktop Notification
     notify-send -a "Ahorro de Batería" -i battery-good "Ahorro de batería desactivado" "Rendimiento y efectos visuales normales restaurados" 2>/dev/null || true
     echo "off"
 }

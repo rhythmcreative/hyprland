@@ -71,6 +71,12 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
+if [ -f "/tmp/powersave-active" ]; then
+    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+    [ -n "$bg_c" ] || bg_c="#101516"
+    ROFI_ARGS="$ROFI_ARGS -theme-str '* { bgcolor: ${bg_c}; background-trans: ${bg_c}; background-alt-trans: ${bg_c}; } window { background-color: ${bg_c}; } mainbox { background-color: ${bg_c}; }'"
+fi
+
 _rust_was_visible=false
 _waybar_was_visible=false
 _qs_was_visible=false

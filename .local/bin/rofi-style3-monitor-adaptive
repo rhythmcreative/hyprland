@@ -301,10 +301,19 @@ launch_rofi() {
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
     log_debug "Tema: $ADAPTED_STYLE"
     
+    local extra_args=()
+    if [ -f "/tmp/powersave-active" ]; then
+        local bg_c
+        bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+        [ -n "$bg_c" ] || bg_c="#101516"
+        extra_args+=(-theme-str "* { bgcolor: ${bg_c}; background-trans: ${bg_c}; background-alt-trans: ${bg_c}; } window { background-color: ${bg_c}; } mainbox { background-color: ${bg_c}; }")
+    fi
+
     # Lanzar rofi con el tema adaptado
     rofi -show drun \
          -theme "$ADAPTED_STYLE" \
-         -monitor "$ACTIVE_MONITOR"
+         -monitor "$ACTIVE_MONITOR" \
+         "${extra_args[@]}"
     
     log_debug "Rofi cerrado"
 }

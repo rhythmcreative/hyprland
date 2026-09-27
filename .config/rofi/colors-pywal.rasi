@@ -38,3 +38,6 @@
     background-alt-trans: #101516AA;
     selected-trans:       #60626BDD;
 }
+
+@import "colors-powersave.rasi"
+

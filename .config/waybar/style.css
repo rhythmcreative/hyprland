@@ -261,16 +261,29 @@
   border-radius: 0;
 }
 
+/* Bat0 when followed by Bat1 */
+#battery-bat0 {
+  border-radius: 0;
+  margin-right: 0;
+  padding-right: 0.35rem;
+  border-right: none;
+}
+
 /* Last element - rounded right with separation from screen edge */
 #battery,
-#battery-bat0,
 #battery-bat1,
 #battery-bat2,
+#custom-desktop-power,
 #custom-dual-battery {
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
   border-right: none;
   margin-right: 7px;
+}
+
+#battery-bat1 {
+  padding-left: 0.35rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 /* --- Module Colors - USING PYWAL COLORS --- */

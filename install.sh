@@ -1115,6 +1115,12 @@ MONCONF
     systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
 
+    # Configure Waybar battery modules for target machine (0, 1, or 2+ batteries)
+    if [ -x "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then
+        step_item "Configuring Waybar battery detection..."
+        "$HOME/.config/waybar/scripts/auto-battery-setup.sh" >> "$LOG_FILE" 2>&1 || true
+    fi
+
     # GTK defaults
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true

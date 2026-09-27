@@ -18,6 +18,11 @@ pkill -f "waybar/scripts" || true
 # Wait for process to fully release resources
 sleep 0.5
 
+# Auto-detect battery count (0 = desktop, 1 = single battery, 2+ = dual battery)
+if [ -x "$WAYBAR_DIR/scripts/auto-battery-setup.sh" ]; then
+    "$WAYBAR_DIR/scripts/auto-battery-setup.sh" >> "$LOG_FILE" 2>&1 || true
+fi
+
 # 2. Handle configuration based on state
 CONFIG="$WAYBAR_DIR/config"
 STYLE="$WAYBAR_DIR/style.css"

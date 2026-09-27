@@ -50,8 +50,8 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("hypridle")
     hl.exec_cmd("sleep 0.5 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 1.0 && ~/.local/bin/modern-pywal-sync")
-    hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher")
-    hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher")
+    hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher &")
+    hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher &")
     hl.exec_cmd("~/.local/bin/quickshell-island &")
 end)
 
@@ -121,9 +121,9 @@ hl.animation({ leaf = "windowsOut",    enabled = true, speed = 1.49, bezier = "l
 hl.animation({ leaf = "fadeIn",        enabled = true, speed = 1.73, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeOut",       enabled = true, speed = 1.46, bezier = "almostLinear" })
 hl.animation({ leaf = "fade",          enabled = true, speed = 3.03, bezier = "quick" })
-hl.animation({ leaf = "layers",        enabled = true, speed = 3.81, bezier = "easeOutQuint" })
-hl.animation({ leaf = "layersIn",      enabled = true, speed = 4,    bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "layersOut",     enabled = true, speed = 1.5,  bezier = "linear",       style = "fade" })
+hl.animation({ leaf = "layers",        enabled = true, speed = 4,    bezier = "quick" })
+hl.animation({ leaf = "layersIn",      enabled = true, speed = 4,    bezier = "quick" })
+hl.animation({ leaf = "layersOut",     enabled = true, speed = 3.5,  bezier = "quick" })
 hl.animation({ leaf = "fadeLayersIn",  enabled = true, speed = 1.79, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 1.39, bezier = "almostLinear" })
 hl.animation({ leaf = "workspaces",    enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
@@ -209,6 +209,18 @@ hl.layer_rule({
     blur = true,
 })
 
+hl.layer_rule({
+    name  = "waybar-slide",
+    match = { namespace = "waybar" },
+    animation = "slide top",
+})
+
+hl.layer_rule({
+    name  = "rust-dock-slide",
+    match = { namespace = "rust-dock" },
+    animation = "slide bottom",
+})
+
 -- Plugins config is in hyprland.conf (hyprbars) and hyprexpo defaults are fine
 
 ---------------------
@@ -219,6 +231,10 @@ hl.layer_rule({
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/toggle-island"))
+hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("~/.local/bin/show-hotkeys"))
+hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("~/.local/bin/settings-menu"))
+hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("~/.local/bin/rofi-wifi-menu"))
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("~/.local/bin/rofi-bluetooth-menu"))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + M", hl.dsp.exit())
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
@@ -231,13 +247,13 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd('grim -g "$(slurp)" - | swappy -f -')
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("hyprpicker -a"))
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))
 hl.bind("ALT + Return", hl.dsp.exec_cmd("hyprctl dispatch fullscreen 0"))
-hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock --immediate-render"))
 hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("~/.config/hypr/scripts/toggle_performance.sh"))
 hl.bind(mainMod .. " + BackSpace", hl.dsp.exec_cmd("~/.local/bin/powermenu-with-monitor-detection"))
 hl.bind(mainMod .. " + XF86Back", hl.dsp.exec_cmd("~/.local/bin/pywal-wallpaper-sync"))
 hl.bind(mainMod .. " + Prior", hl.dsp.exec_cmd("~/.local/bin/pywal-wallpaper-sync"))
-hl.bind(mainMod .. " + SHIFT + BackSpace", hl.dsp.exec_cmd("~/.local/bin/powermenu-with-monitor-detection"))
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-selector"))
+hl.bind(mainMod .. " + CONTROL + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-selector"))
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/wallpaper-change-adaptive"))
 hl.bind(mainMod .. " + ALT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-changer-with-waybar-sync"))
 

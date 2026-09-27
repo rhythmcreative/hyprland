@@ -1,28 +1,30 @@
 #!/bin/bash
+# Ultra-fast network status for hyprlock (<20ms, zero network latency)
 
-# Script para mostrar estado de red en hyprlock
+wifi_ssid=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null | grep ':802-11-wireless' | cut -d: -f1 | head -n1)
 
-# Verificar conectividad
-if ping -c 1 -W 1 8.8.8.8 &>/dev/null; then
-    # Obtener interfaz activa
-    interface=$(ip route | grep '^default' | head -n1 | awk '{print $5}')
-    
-    if [[ -n "$interface" ]]; then
-        if [[ "$interface" =~ ^wl ]]; then
-            # WiFi
-            ssid=$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)
-            if [[ -n "$ssid" ]]; then
-                echo "📶 $ssid"
-            else
-                echo "📶 WiFi"
-            fi
-        else
-            # Ethernet
-            echo "🔌 Ethernet"
-        fi
-    else
-        echo "🌐 Conectado"
-    fi
-else
-    echo "❌ Sin conexión"
+if [ -n "$wifi_ssid" ]; then
+    echo "WiFi: $wifi_ssid"
+    exit 0
 fi
+
+eth_conn=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null | grep ':802-3-ethernet' | cut -d: -f1 | head -n1)
+if [ -n "$eth_conn" ]; then
+    echo "Ethernet"
+    exit 0
+fi
+
+for iface in /sys/class/net/*; do
+    name=$(basename "$iface")
+    [ "$name" = "lo" ] && continue
+    if [ "$(cat "$iface/operstate" 2>/dev/null)" = "up" ]; then
+        if [[ "$name" =~ ^wl ]]; then
+            echo "WiFi"
+        else
+            echo "Conectado"
+        fi
+        exit 0
+    fi
+done
+
+echo "Sin conexion"

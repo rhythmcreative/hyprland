@@ -70,10 +70,10 @@ sleep 2
 # Verificar que esté funcionando
 if pgrep waybar > /dev/null; then
     log "Waybar iniciado correctamente"
-    notify-send "Waybar" "Colores actualizados" -t 2000 2>/dev/null || true
+    notify-send "Waybar" "Colors updated successfully" -t 2000 2>/dev/null || true
 else
     log "Error: Waybar no se inició"
-    notify-send "Error" "No se pudo reiniciar Waybar" -u critical -t 3000 2>/dev/null || true
+    notify-send "Waybar Error" "Failed to restart Waybar" -u critical -t 3000 2>/dev/null || true
     exit 1
 fi
 

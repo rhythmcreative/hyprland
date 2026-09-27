@@ -114,7 +114,7 @@ sleep 2
 # Verificar que está corriendo
 if pgrep -x nm-applet >/dev/null; then
     echo "nm-applet sincronizado con waybar exitosamente"
-    notify-send "Sincronizado" "nm-applet ahora usa colores de waybar" -t 2000 2>/dev/null || true
+    notify-send "Synchronized" "nm-applet now uses Waybar colors" -t 2000 2>/dev/null || true
 else
     echo "nm-applet puede no haberse reiniciado correctamente"
 fi

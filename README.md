@@ -1,4 +1,4 @@
-<h1 align="center">rhythm's hyprland</h1>
+<h1 align="center">Rhythm's hyprland</h1>
 
 <div align="center">
   <p><i>Personal Arch setup, customized for everyday use. </i></p>

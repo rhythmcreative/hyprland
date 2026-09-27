@@ -35,7 +35,7 @@ restart_dock() {
 }
 
 handle_monitor_event() {
-    sleep 0.6
+    sleep 0.8
 
     # 1. Sincronizar Wallpaper en la nueva pantalla
     if [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ]; then
@@ -51,13 +51,19 @@ handle_monitor_event() {
     restart_dock
 }
 
+# Auto-reconciliación inicial tras arranque para monitores con handshake retardado (ej. DisplayPort/HDMI externo)
+(
+    sleep 3
+    handle_monitor_event < /dev/null
+) &
+
 while true; do
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
         socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do
             case "$event" in
                 monitoradded*|monitorremoved*)
-                    handle_monitor_event
+                    handle_monitor_event < /dev/null
                     ;;
             esac
         done

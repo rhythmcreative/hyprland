@@ -73,7 +73,27 @@ ShellRoot {
     property bool islandVisible: true
     property var hiddenScreens: ({})
     property int currentTab: 0 // 0 = Control & Sistema, 1 = Ajustes Hyprland
-    property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output
+    property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output, 4 = System Update (OTA)
+
+    // OTA System Update state
+    property var otaData: ({
+        status: "up_to_date",
+        status_text: "System is up to date",
+        has_updates: false,
+        dotfiles_behind: 0,
+        dotfiles_ahead: 0,
+        dotfiles_hash: "",
+        pacman_updates: 0,
+        pacman_list: [],
+        kernel: "",
+        android_version: "Android 15",
+        build_number: "",
+        security_patch: "",
+        last_checked: ""
+    })
+    property bool otaChecking: false
+    property bool otaUpdating: false
+    property string otaChangelogText: ""
 
     // Hyprland live state
     property bool hyprAnim: true
@@ -119,19 +139,24 @@ ShellRoot {
         caffeineCheckProc.running = true
         powerSaveCheckProc.running = true
         hyprStatusProc.running = true
+        otaStatusProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
         if (root.controlSubView === 2) btStatusProc.running = true
         if (root.controlSubView === 3) audioSinksProc.running = true
+        if (root.controlSubView === 4) {
+            otaStatusProc.running = true
+            otaChangelogProc.running = true
+        }
     }
 
     onCurrentTabChanged: {
-        root.controlSubView = 0
+        if (root.controlSubView !== 4) root.controlSubView = 0
         if (root.currentTab === 1) hyprStatusProc.running = true
     }
 
     onExpandedChanged: {
         if (root.expanded) {
-            root.controlSubView = 0
+            if (root.controlSubView !== 4) root.controlSubView = 0
             root.refreshAllStates()
         } else {
             root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
@@ -146,6 +171,10 @@ ShellRoot {
             }
         } else {
             root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+        }
+        if (root.controlSubView === 4) {
+            otaStatusProc.running = true
+            otaChangelogProc.running = true
         }
     }
 
@@ -250,8 +279,16 @@ ShellRoot {
         function openHyprland(): string {
             root.expanded = true
             root.currentTab = 1
+            root.controlSubView = 0
             root.refreshAllStates()
             return "hyprland"
+        }
+        function openOta(): string {
+            root.controlSubView = 4
+            root.expanded = true
+            otaStatusProc.running = true
+            otaChangelogProc.running = true
+            return "ota"
         }
         function collapse(): string {
             root.expanded = false
@@ -646,6 +683,53 @@ ShellRoot {
         onTriggered: hyprStatusProc.running = true
     }
 
+    Process {
+        id: otaStatusProc
+        command: ["bash", "-c", "$HOME/.local/bin/system-ota status --json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.otaChecking = false
+                try {
+                    const data = JSON.parse(text.trim())
+                    root.otaData = data
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
+        id: otaCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/system-ota check --json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.otaChecking = false
+                try {
+                    const data = JSON.parse(text.trim())
+                    root.otaData = data
+                } catch(e) {}
+            }
+        }
+    }
+
+    Process {
+        id: otaChangelogProc
+        command: ["bash", "-c", "$HOME/.local/bin/system-ota changelog"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.otaChangelogText = text.trim()
+            }
+        }
+    }
+
+    Process {
+        id: otaUpdateProc
+        command: ["bash", "-c", "$HOME/.local/bin/system-ota update"]
+        onExited: {
+            root.otaUpdating = false
+            otaStatusProc.running = true
+        }
+    }
+
     Timer {
         id: statsTimer
         interval: 3000
@@ -731,7 +815,7 @@ ShellRoot {
 
             readonly property real ala: 16
             width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? (root.currentTab === 1 ? 485 : (root.controlSubView !== 0 ? 550 : 645)) : (root.notifActive ? 56 : 36)
+            height: root.expanded ? (root.controlSubView !== 0 ? 560 : (root.currentTab === 1 ? 580 : 645)) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation {
@@ -1093,7 +1177,7 @@ ShellRoot {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 12
-                        visible: root.currentTab === 1 || root.controlSubView === 0
+                        visible: root.controlSubView === 0
 
                         // Tab 0: Control & Sistema
                         Rectangle {
@@ -2259,7 +2343,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.currentTab === 0 && root.controlSubView === 1
+                        visible: root.controlSubView === 1
 
                         // Sub-header with back button
                         RowLayout {
@@ -2634,7 +2718,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.currentTab === 0 && root.controlSubView === 2
+                        visible: root.controlSubView === 2
 
                         // Sub-header with back button
                         RowLayout {
@@ -3144,7 +3228,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.currentTab === 0 && root.controlSubView === 3
+                        visible: root.controlSubView === 3
 
                         // Sub-header with back button
                         RowLayout {
@@ -3344,7 +3428,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        visible: root.currentTab === 1
+                        visible: root.currentTab === 1 && root.controlSubView === 0
 
                         // Subtitle
                         Text {
@@ -3644,6 +3728,92 @@ ShellRoot {
                             }
                         }
 
+                        // Android-Style System Update (OTA) Card
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 56
+                            radius: 14
+                            color: otaCardHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                            border.color: root.otaData.has_updates ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: root.otaData.has_updates ? 1.5 : 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 12
+
+                                // Android OTA Icon Badge
+                                Rectangle {
+                                    width: 36; height: 36; radius: 18
+                                    color: root.otaData.has_updates ? root.colAccent : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "󰚰"
+                                        color: root.otaData.has_updates ? root.colBg : root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 18
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    RowLayout {
+                                        spacing: 6
+                                        Text {
+                                            text: "System Update (OTA)"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                            font.weight: Font.Bold
+                                        }
+                                        Rectangle {
+                                            visible: root.otaData.has_updates
+                                            width: 82; height: 18; radius: 9
+                                            color: root.colAccent
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "New Update"
+                                                color: root.colBg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                                font.weight: Font.Bold
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        text: root.otaData.has_updates ? root.otaData.status_text : ("Android 15 · " + (root.otaData.build_number || "Up to date"))
+                                        color: root.otaData.has_updates ? root.colAccent : root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 9
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                // Chevron
+                                Text {
+                                    text: "󰅂"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                            }
+
+                            MouseArea {
+                                id: otaCardHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.controlSubView = 4
+                                    otaStatusProc.running = true
+                                    otaChangelogProc.running = true
+                                }
+                            }
+                        }
+
                         // Herramientas Hyprland
                         RowLayout {
                             Layout.fillWidth: true
@@ -3677,6 +3847,248 @@ ShellRoot {
                             }
                         }
                     }
+
+                    // ── 6. SUBSECCIÓN: SYSTEM UPDATE (OTA - ANDROID STYLE) ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: root.controlSubView === 4
+
+                        // Sub-header with back button
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Rectangle {
+                                width: 100; height: 32; radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder; border.width: 1
+
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 6
+                                    Text { text: "󰓍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.controlSubView = 0
+                                }
+                            }
+
+                            Text {
+                                text: "System Update"
+                                color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13; font.weight: Font.Bold
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                width: 32; height: 32; radius: 16
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                Text {
+                                    anchors.centerIn: parent; text: "󰑐"
+                                    color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                                    RotationAnimation on rotation {
+                                        running: root.otaChecking; loops: Animation.Infinite
+                                        from: 0; to: 360; duration: 800
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { if (!root.otaChecking) { root.otaChecking = true; otaCheckProc.running = true } }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 32; height: 32; radius: 16
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                Text { anchors.centerIn: parent; text: "󰓓"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.expanded = false; root.runCmd("kitty -e system-ota gui") }
+                                }
+                            }
+                        }
+
+                        // Android 15 Status Hero Card
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 118
+                            radius: 16
+                            color: root.colSurface
+                            border.color: root.otaData.has_updates ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+
+                            ColumnLayout {
+                                anchors.centerIn: parent; spacing: 6
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    width: 48; height: 48; radius: 24
+                                    color: root.otaData.has_updates ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2) : Qt.rgba(76/255, 175/255, 80/255, 0.2)
+                                    border.color: root.otaData.has_updates ? root.colAccent : "#4CAF50"
+                                    border.width: 2
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.otaData.has_updates ? "󰚰" : "󰄬"
+                                        color: root.otaData.has_updates ? root.colAccent : "#4CAF50"
+                                        font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 22
+                                    }
+                                }
+
+                                Text {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: root.otaData.has_updates ? "System Update Available" : "Your system is up to date"
+                                    color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 13; font.weight: Font.Bold
+                                }
+
+                                Text {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: root.otaData.has_updates ? root.otaData.status_text : ("Last checked: " + (root.otaData.last_checked || "Recently"))
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10
+                                }
+                            }
+                        }
+
+                        // Android Specs Grid
+                        GridLayout {
+                            Layout.fillWidth: true; columns: 2; rowSpacing: 6; columnSpacing: 6
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
+                                RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                    Text { text: "󰀲"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    ColumnLayout { spacing: 1
+                                        Text { text: "Android Version"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: root.otaData.android_version || "Android 15"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
+                                RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                    Text { text: "󰓓"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    ColumnLayout { spacing: 1
+                                        Text { text: "Security Patch"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: root.otaData.security_patch || "September 2026"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
+                                RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                    Text { text: "󰌽"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    ColumnLayout { spacing: 1
+                                        Text { text: "Linux Kernel"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: root.otaData.kernel || "Arch Linux"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
+                                RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                    Text { text: "󰏗"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    ColumnLayout { spacing: 1
+                                        Text { text: "Packages & Dotfiles"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.pacman_updates || 0) + " updates | " + (root.otaData.dotfiles_hash || "git"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Changelog Preview Card
+                        Rectangle {
+                            Layout.fillWidth: true; Layout.preferredHeight: 110
+                            radius: 12; color: root.colSurface; clip: true
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
+
+                            ColumnLayout {
+                                anchors.fill: parent; anchors.margins: 10; spacing: 4
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Changelog"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                    Item { Layout.fillWidth: true }
+                                    Text { text: root.otaData.build_number || "Current"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                }
+
+                                Flickable {
+                                    Layout.fillWidth: true; Layout.fillHeight: true
+                                    contentWidth: width; contentHeight: changelogDisplayText.implicitHeight; clip: true
+
+                                    Text {
+                                        id: changelogDisplayText
+                                        width: parent.width
+                                        text: root.otaChangelogText || "Loading changelog..."
+                                        color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9; wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+                        }
+
+                        // OTA Action Footer
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 10
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 40; radius: 20
+                                color: checkOtaHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                                border.color: root.colBorder; border.width: 1
+
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text {
+                                        text: "󰑐"; color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                                        RotationAnimation on rotation {
+                                            running: root.otaChecking; loops: Animation.Infinite; from: 0; to: 360; duration: 800
+                                        }
+                                    }
+                                    Text {
+                                        text: root.otaChecking ? "Checking..." : "Check for update"
+                                        color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: checkOtaHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { if (!root.otaChecking) { root.otaChecking = true; otaCheckProc.running = true } }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; height: 40; radius: 20
+                                color: root.otaUpdating ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.6) : root.colAccent
+                                Behavior on color { ColorAnimation { duration: 200 } }
+
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text {
+                                        text: root.otaUpdating ? "󱑑" : "󰀚"
+                                        color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
+                                    }
+                                    Text {
+                                        text: root.otaUpdating ? "Installing..." : "Download & Install"
+                                        color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    enabled: !root.otaUpdating
+                                    onClicked: { root.otaUpdating = true; otaUpdateProc.running = true }
+                                }
+                            }
+                        }
+                    }
+
                 }
             }
         }
@@ -3684,4 +4096,3 @@ ShellRoot {
 }
 }
 }
-

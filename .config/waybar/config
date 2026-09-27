@@ -31,7 +31,7 @@
     "on-click": "hyprctl switchxkblayout all next"
   },
   "custom/desktop-power": {
-    "format": "\uf1e6",
+    "format": "\udb81\udea5",
     "tooltip": true,
     "tooltip-format": "Alimentación CA (Sin batería)"
   },

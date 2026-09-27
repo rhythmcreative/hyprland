@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# rhythm-ota-checker: Background service to check for system dotfiles updates
+# Standard: Zero emojis, English notifications.
+
+set -euo pipefail
+
+# Ensure user runtime
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+
+# Quick internet connectivity test
+if ! ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1 && ! ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+    exit 0
+fi
+
+OTA_BIN="$HOME/.local/bin/system-ota"
+if [ ! -x "$OTA_BIN" ]; then
+    exit 0
+fi
+
+# Run silent check
+STATUS_JSON=$("$OTA_BIN" check --silent --json 2>/dev/null || true)
+if [ -z "$STATUS_JSON" ]; then
+    exit 0
+fi
+
+HAS_UPDATES=$(echo "$STATUS_JSON" | jq -r '.has_updates // false' 2>/dev/null || echo false)
+if [ "$HAS_UPDATES" = "true" ]; then
+    STATUS_TEXT=$(echo "$STATUS_JSON" | jq -r '.status_text // "New update available"' 2>/dev/null)
+    NEW_VER=$(echo "$STATUS_JSON" | jq -r '.latest_version // "new version"' 2>/dev/null)
+
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -u normal -a "System Update" -i "system-software-update" \
+            "Rhythm Hyprland Update Available" \
+            "$STATUS_TEXT. Click or open Dynamic Island to review and install."
+    fi
+fi

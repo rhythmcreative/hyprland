@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# notch-audio-helper: Audio sink selector & per-app volume mixer for Hyprland Dynamic Island
+# Standard: Zero emojis, English messages.
+
 import sys
 import subprocess
 import re
@@ -26,7 +29,7 @@ def get_sinks():
                 sink_id = int(m.group(2))
                 name = m.group(3).strip()
                 vol = float(m.group(4))
-                
+
                 icon = "󰓃"
                 name_l = name.lower()
                 if "headphone" in name_l or "headset" in name_l:
@@ -37,7 +40,7 @@ def get_sinks():
                     icon = "󰍹"
                 elif "usb" in name_l:
                     icon = "󰓃"
-                
+
                 sinks.append({
                     'id': sink_id,
                     'name': name,
@@ -47,10 +50,67 @@ def get_sinks():
                 })
     return sinks
 
+def get_apps():
+    try:
+        out = subprocess.check_output(['pactl', 'list', 'sink-inputs'], text=True, stderr=subprocess.DEVNULL)
+    except Exception:
+        return []
+
+    apps = []
+    current_app = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith("Sink Input #"):
+            if current_app and "id" in current_app:
+                apps.append(current_app)
+            current_app = {"id": int(line.split("#")[1].strip())}
+        elif "Volume:" in line and "id" in current_app and "volume" not in current_app:
+            m = re.search(r'/ (\d+)% /', line)
+            if m:
+                current_app["volume"] = int(m.group(1))
+        elif "application.name =" in line and "id" in current_app:
+            name = line.split("=", 1)[1].strip().strip('"')
+            current_app["name"] = name
+        elif "media.name =" in line and "id" in current_app and "media" not in current_app:
+            current_app["media"] = line.split("=", 1)[1].strip().strip('"')
+        elif "Mute:" in line and "id" in current_app:
+            current_app["muted"] = "yes" in line.lower()
+
+    if current_app and "id" in current_app:
+        apps.append(current_app)
+
+    for a in apps:
+        name = a.get("name", "Audio App")
+        name_l = name.lower()
+        icon = "󰓃"
+        if "spotify" in name_l:
+            icon = "󰓇"
+        elif "firefox" in name_l:
+            icon = "󰈹"
+        elif "chrome" in name_l or "chromium" in name_l or "brave" in name_l:
+            icon = "󰊯"
+        elif "discord" in name_l or "vesktop" in name_l:
+            icon = "󰙯"
+        elif "telegram" in name_l:
+            icon = "󰏲"
+        elif "mpv" in name_l or "vlc" in name_l:
+            icon = "󰕼"
+        elif "game" in name_l or "steam" in name_l:
+            icon = "󰊴"
+        a["icon"] = icon
+        if "volume" not in a:
+            a["volume"] = 100
+        if "muted" not in a:
+            a["muted"] = False
+
+    return apps
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'list'
     if cmd == 'list':
         print(json.dumps(get_sinks()))
+    elif cmd == 'apps':
+        print(json.dumps(get_apps()))
     elif cmd == 'set':
         if len(sys.argv) > 2:
             sink_id = sys.argv[2]
@@ -58,6 +118,17 @@ def main():
             print(json.dumps({'status': 'ok', 'selected': sink_id}))
         else:
             print(json.dumps({'status': 'error', 'message': 'missing sink id'}))
+    elif cmd == 'set-app-vol' and len(sys.argv) > 3:
+        app_id = sys.argv[2]
+        vol = sys.argv[3]
+        subprocess.run(['pactl', 'set-sink-input-volume', str(app_id), f"{vol}%"], check=True)
+        print(json.dumps({'status': 'ok'}))
+    elif cmd == 'toggle-app-mute' and len(sys.argv) > 2:
+        app_id = sys.argv[2]
+        subprocess.run(['pactl', 'set-sink-input-mute', str(app_id), 'toggle'], check=True)
+        print(json.dumps({'status': 'ok'}))
+    else:
+        print(json.dumps(get_sinks()))
 
 if __name__ == '__main__':
     main()

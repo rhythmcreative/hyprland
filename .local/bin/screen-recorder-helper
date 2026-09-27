@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+# screen-recorder-helper: Screen recording & region capture utility with state tracking
+# Integrates with Hyprland and Dynamic Island.
+# Standard: Zero emojis, English notifications.
+
+set -euo pipefail
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    WL_DISP=$(ls "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1 || true)
+    if [ -n "$WL_DISP" ]; then
+        export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+    else
+        export WAYLAND_DISPLAY="wayland-1"
+    fi
+fi
+
+REC_DIR="$HOME/Videos/Recordings"
+SNIP_DIR="$HOME/Pictures/Screenshots"
+PID_FILE="$XDG_RUNTIME_DIR/wf-recorder.pid"
+STATE_FILE="$XDG_RUNTIME_DIR/wf-recorder.json"
+
+mkdir -p "$REC_DIR" "$SNIP_DIR"
+
+send_notif() {
+    local title="$1"
+    local msg="$2"
+    local icon="${3:-video-display}"
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -u normal -a "Screen Recorder" -i "$icon" "$title" "$msg" 2>/dev/null || true
+    fi
+}
+
+get_status() {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null || true)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            local start_time=0
+            local file_path=""
+            if [ -f "$STATE_FILE" ]; then
+                start_time=$(jq -r '.start_time // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+                file_path=$(jq -r '.file // ""' "$STATE_FILE" 2>/dev/null || echo "")
+            fi
+            local now
+            now=$(date +%s)
+            local elapsed=$((now - start_time))
+            if [ "$elapsed" -lt 0 ]; then elapsed=0; fi
+            local mins=$((elapsed / 60))
+            local secs=$((elapsed % 60))
+            local elapsed_str
+            printf -v elapsed_str "%02d:%02d" "$mins" "$secs"
+
+            cat <<EOF
+{
+  "recording": true,
+  "pid": $pid,
+  "elapsed": $elapsed,
+  "elapsed_str": "$elapsed_str",
+  "file": "$file_path"
+}
+EOF
+            return 0
+        fi
+    fi
+
+    # Clean up stale files
+    rm -f "$PID_FILE" "$STATE_FILE" 2>/dev/null || true
+    cat <<EOF
+{
+  "recording": false,
+  "pid": 0,
+  "elapsed": 0,
+  "elapsed_str": "00:00",
+  "file": ""
+}
+EOF
+}
+
+start_recording() {
+    local mode="${1:-fullscreen}"
+    
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null || true)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            echo "Recording is already active (PID $pid)."
+            return 0
+        fi
+    fi
+
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$REC_DIR/recording_${timestamp}.mp4"
+    local now
+    now=$(date +%s)
+
+    local geometry=""
+    if [ "$mode" = "region" ]; then
+        if ! command -v slurp >/dev/null 2>&1; then
+            send_notif "Recording Error" "slurp is required for region recording." "dialog-error"
+            return 1
+        fi
+        geometry=$(slurp)
+        if [ -z "$geometry" ]; then
+            echo "Region selection cancelled."
+            return 0
+        fi
+    fi
+
+    echo "Starting screen recording to $output_file..."
+
+    if [ -n "$geometry" ]; then
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder -g "$geometry" -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+    else
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+    fi
+
+    local rec_pid=$!
+    disown "$rec_pid" 2>/dev/null || true
+    echo "$rec_pid" > "$PID_FILE"
+
+    cat <<EOF > "$STATE_FILE"
+{
+  "recording": true,
+  "pid": $rec_pid,
+  "start_time": $now,
+  "file": "$output_file"
+}
+EOF
+
+    send_notif "Recording Started" "Recording screen with audio. Tap notch to stop." "media-record"
+}
+
+stop_recording() {
+    if [ ! -f "$PID_FILE" ]; then
+        echo "No active recording found."
+        return 0
+    fi
+
+    local pid
+    pid=$(cat "$PID_FILE" 2>/dev/null || true)
+    local output_file=""
+    if [ -f "$STATE_FILE" ]; then
+        output_file=$(jq -r '.file // ""' "$STATE_FILE" 2>/dev/null || true)
+    fi
+
+    rm -f "$PID_FILE" "$STATE_FILE" 2>/dev/null || true
+
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -INT "$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+        # Wait briefly for MP4 container to write trailer cleanly
+        sleep 0.8
+    fi
+
+    local base=""
+    if [ -n "$output_file" ]; then
+        base=$(basename "$output_file")
+    fi
+
+    send_notif "Recording Saved" "Saved to ~/Videos/Recordings/${base}" "video-x-generic"
+    echo "Recording stopped: $output_file"
+}
+
+toggle_recording() {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null || true)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            stop_recording
+            return 0
+        fi
+    fi
+    start_recording "fullscreen"
+}
+
+snip_region() {
+    if ! command -v grim >/dev/null 2>&1 || ! command -v slurp >/dev/null 2>&1; then
+        send_notif "Screenshot Error" "grim and slurp are required." "dialog-error"
+        return 1
+    fi
+
+    local geom
+    geom=$(slurp)
+    if [ -z "$geom" ]; then
+        return 0
+    fi
+
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local snip_file="$SNIP_DIR/snip_${timestamp}.png"
+
+    grim -g "$geom" "$snip_file"
+    if command -v wl-copy >/dev/null 2>&1; then
+        wl-copy < "$snip_file"
+    fi
+
+    send_notif "Screenshot Captured" "Saved to Screenshots and copied to clipboard." "camera-photo"
+}
+
+case "${1:-status}" in
+    start)
+        shift
+        start_recording "${1:-fullscreen}"
+        ;;
+    stop)
+        stop_recording
+        ;;
+    toggle)
+        toggle_recording
+        ;;
+    status)
+        get_status
+        ;;
+    snip)
+        snip_region
+        ;;
+    *)
+        get_status
+        ;;
+esac

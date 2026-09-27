@@ -1122,6 +1122,8 @@ MONCONF
     step_item "Enabling Dynamic Island user service..."
     systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
 
     # Configure Waybar battery modules for target machine (0, 1, or 2+ batteries)
     if [ -f "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then

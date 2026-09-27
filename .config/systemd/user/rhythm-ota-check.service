@@ -1,0 +1,11 @@
+[Unit]
+Description=Rhythm Hyprland Background OTA Update Check
+Documentation=https://github.com/rhythmcreative/hyprland
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/rhythm-ota-checker
+StandardOutput=journal
+StandardError=journal

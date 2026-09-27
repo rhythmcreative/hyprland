@@ -3867,7 +3867,7 @@ ShellRoot {
 
                                 RowLayout {
                                     anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰓍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "󰁍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
                                     Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
                                 }
 

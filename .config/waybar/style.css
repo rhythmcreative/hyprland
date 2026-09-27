@@ -351,8 +351,8 @@
 }
 
 #custom-desktop-power {
-  font-size: 15px;
-  padding: 0.3rem 0.85rem;
+  font-size: 13px;
+  padding: 0.3rem 0.75rem 0.3rem 0.65rem;
 }
 
 #battery.charging,

@@ -130,11 +130,11 @@ else
     "$HOME/.config/waybar/launch.sh"
 fi
 
-# 6b. Reiniciar rust-dock para que recargue el tema GTK y colores actualizados
+# 6b. Asegurar rust-dock activo (recarga colores automáticamente vía inotify)
 echo "  • rust-dock..."
-pkill -x rust-dock 2>/dev/null || true
-sleep 0.2
-"$HOME/.local/bin/rust-dock-launcher" &
+if ! pgrep -x rust-dock >/dev/null 2>&1; then
+    "$HOME/.local/bin/rust-dock-launcher" &
+fi
 
 # 6c. Sincronizar daemon de auto-ocultación para Waybar y rust-dock
 echo "  • Auto-Hide Daemon..."

@@ -17,21 +17,7 @@ detect_socket() {
 }
 
 restart_dock() {
-    local prev_state
-    prev_state=$(cat "$STATE_FILE" 2>/dev/null)
-    [ -z "$prev_state" ] && prev_state="visible"
-
-    pkill -x rust-dock 2>/dev/null
-    sleep 0.3
-
     "$LAUNCHER" >/dev/null 2>&1 &
-
-    # Restore hidden state if the dock was hidden before
-    if [ "$prev_state" = "hidden" ]; then
-        sleep 0.3
-        pkill -SIGUSR1 rust-dock 2>/dev/null || true
-        echo "hidden" > "$STATE_FILE"
-    fi
 }
 
 handle_monitor_event() {

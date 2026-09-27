@@ -41,18 +41,19 @@ hl.monitor({
 
 -- Autostart
 hl.on("hyprland.start", function ()
-    hl.exec_cmd("hyprpm reload")
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-    hl.exec_cmd("awww-daemon --format xrgb --no-cache")
-    hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("nm-applet")
-    hl.exec_cmd("hypridle")
-    hl.exec_cmd("sleep 0.5 && ~/.local/bin/load-last-wallpaper-fast")
-    hl.exec_cmd("sleep 1.0 && ~/.local/bin/modern-pywal-sync")
+    hl.exec_cmd("awww-daemon --format xrgb --no-cache &")
+    hl.exec_cmd("gnome-keyring-daemon --start --components=secrets &")
+    hl.exec_cmd("nm-applet --indicator &")
+    hl.exec_cmd("hypridle &")
+    hl.exec_cmd("~/.config/waybar/launch.sh &")
+    hl.exec_cmd("~/.local/bin/rust-dock-launcher &")
+    hl.exec_cmd("~/.local/bin/quickshell-island &")
     hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher &")
     hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher &")
-    hl.exec_cmd("~/.local/bin/quickshell-island &")
+    hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
+    hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
 end)
 
 -- Environment variables

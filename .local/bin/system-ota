@@ -125,22 +125,20 @@ generate_status_json() {
 
     local has_updates=false
     local status="up_to_date"
-    local status_text="System is up to date"
+    local status_text="Rhythm Hyprland is up to date"
 
     if [ "$local_ver" != "$remote_ver" ]; then
         has_updates=true
         status="update_available"
         status_text="New release v$remote_ver available ($dotfiles_behind commits behind)"
-    elif [ "$dotfiles_behind" -gt 0 ] || [ "$pacman_updates" -gt 0 ]; then
+    elif [ "$dotfiles_behind" -gt 0 ]; then
         has_updates=true
         status="update_available"
-        if [ "$dotfiles_behind" -gt 0 ] && [ "$pacman_updates" -gt 0 ]; then
-            status_text="$dotfiles_behind dotfile update(s) and $pacman_updates package update(s) available"
-        elif [ "$dotfiles_behind" -gt 0 ]; then
-            status_text="$dotfiles_behind dotfile update(s) available"
-        else
-            status_text="$pacman_updates system package update(s) available"
-        fi
+        status_text="$dotfiles_behind new system update(s) available"
+    else
+        has_updates=false
+        status="up_to_date"
+        status_text="Rhythm Hyprland is up to date"
     fi
 
     local pkgs_json="[]"

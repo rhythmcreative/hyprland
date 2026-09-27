@@ -135,7 +135,6 @@ hide_all_bars() {
         _QUICKSHELL_WAS_VISIBLE=true
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
     fi
-    wait
 }
 
 # Restaurar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
@@ -144,7 +143,6 @@ show_all_bars() {
     [ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
     [ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
     [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
-    wait
 }
 
 # Función de cleanup al salir

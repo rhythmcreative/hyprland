@@ -109,6 +109,8 @@ When changing the wallpaper, Pywal automatically calculates the dominant colors 
   </tr>
 </table>
 
+> Over 3,000 wallpapers organized in 49 themed packs are available via `./install.sh --wallpapers [all|random]`. Switch anytime directly from the desktop with `Super + Shift + W` (Visual Selector) or `Super + Shift + B` (Random fade). Curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
+
 ---
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=RUST-DOCK)](https://git.io/typing-svg)
@@ -154,9 +156,8 @@ cd ~/.config/hyprland-repo
 > [!IMPORTANT]
 > Run the installer as your regular user, not as root or with `sudo`. Root privileges are asked via `sudo` when required.
 
-### CLI Flags
-
-The installer supports flags for headless or automated runs:
+<details>
+  <summary><b>Installer Flags & Headless Options</b></summary>
 
 | Flag | Description |
 |---|---|
@@ -172,58 +173,33 @@ The installer supports flags for headless or automated runs:
 | `--replace-configs-all` | Overwrite existing configurations directly without backups |
 | `-h`, `--help` | Show available options |
 
-#### Example unattended run
-
 ```bash
+# Example unattended run
 curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --no-reboot --skip-wallpapers
 ```
 
----
-
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS)](https://git.io/typing-svg)
-
-A collection of over 3,000 wallpapers organized into 49 themed packs. You can install them during setup or anytime with the installer flags:
-
-```bash
-# Download 3 random packs (quick start)
-./install.sh --wallpapers random
-
-# Or download the full collection (4GB+)
-./install.sh --wallpapers all
-```
-
-Once installed, switch wallpapers anytime directly from the desktop:
-
-- **Super + Shift + W**: Visual wallpaper gallery picker
-- **Super + Shift + B**: Instant random wallpaper with smooth fade
-
-> [!NOTE]
-> Wallpapers are curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
-
----
-
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=COMPONENTS)](https://git.io/typing-svg)
-
-| Component | Tool |
-|---|---|
-| Compositor | Hyprland with official plugins |
-| Dynamic Island | Quickshell (Qt6 QML with IPC) |
-| Dock | Rust-Dock (GTK4 + gtk4-layer-shell) |
-| Status Bar | Waybar with Pywal colors |
-| Terminal | Kitty |
-| Shell | Zsh with syntax highlighting and autosuggestions |
-| Launcher | Rofi with Pywal themes |
-| Lockscreen | Hyprlock + Hypridle |
-| File Manager | Thunar + Plugins & Tumbler |
-| Theming | Pywal (System-wide dynamic color synchronization) |
-| Wallpaper Engine | awww with smooth synchronized fade transitions |
-| Audio | Pipewire + Wireplumber |
-| Display Manager | SDDM Astronaut Theme with Pywal hook |
-| AUR Helper | yay |
+</details>
 
 ---
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=KEYBINDINGS)](https://git.io/typing-svg)
+
+Press **`Super + F`** anytime on your desktop to search all shortcuts interactively.
+
+| Shortcut | Action |
+|---|---|
+| `Super + Return` | Launch Terminal (Kitty) |
+| `Super + Space` | Toggle Rust-Dock |
+| `Super + I` | Toggle Dynamic Island (Notch) |
+| `Super + F` | Interactive Keybindings Cheatsheet |
+| `Super + X` | Quick Compositor Settings |
+| `Super + A` | Application Launcher |
+| `Super + E` | File Manager (Thunar) |
+| `Super + Q` | Close Focused Window |
+| `Super + BackSpace` | Power Menu (Reboot / Shutdown / Sleep) |
+
+<details>
+  <summary><b>View complete keybindings list (30+ shortcuts)</b></summary>
 
 | Shortcut | Action | Description |
 |---|---|---|
@@ -256,3 +232,29 @@ Once installed, switch wallpapers anytime directly from the desktop:
 | `Super + Shift + 1 .. 0` | Move to Workspace | Move active window to workspace 1 to 10 |
 | `F10` | Toggle Bluetooth | Hardware toggle |
 | `F11 / F12` | Volume Down / Up | Fine audio tuning |
+
+</details>
+
+---
+
+<details>
+  <summary><b>Installed Components & Tools</b></summary>
+
+| Component | Tool |
+|---|---|
+| Compositor | Hyprland with official plugins |
+| Dynamic Island | Quickshell (Qt6 QML with IPC) |
+| Dock | Rust-Dock (GTK4 + gtk4-layer-shell) |
+| Status Bar | Waybar with Pywal colors |
+| Terminal | Kitty |
+| Shell | Zsh with syntax highlighting and autosuggestions |
+| Launcher | Rofi with Pywal themes |
+| Lockscreen | Hyprlock + Hypridle |
+| File Manager | Thunar + Plugins & Tumbler |
+| Theming | Pywal (System-wide dynamic color synchronization) |
+| Wallpaper Engine | awww with smooth synchronized fade transitions |
+| Audio | Pipewire + Wireplumber |
+| Display Manager | SDDM Astronaut Theme with Pywal hook |
+| AUR Helper | yay |
+
+</details>

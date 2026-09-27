@@ -42,7 +42,7 @@ if [ -z "$monitors" ] || [ "$monitors" = "null" ]; then
 fi
 
 while IFS= read -r monitor; do
-    [ -n "$monitor" ] && "$RUST_DOCK" -o "$monitor" &
+    [ -n "$monitor" ] && "$RUST_DOCK" -o "$monitor" >/dev/null 2>&1 &
 done <<< "$monitors"
 
 echo "visible" > "$STATE_FILE" 2>/dev/null || true

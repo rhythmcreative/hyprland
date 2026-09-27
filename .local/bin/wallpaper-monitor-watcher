@@ -1,0 +1,29 @@
+#!/bin/bash
+# Wallpaper monitor watcher - ensures wallpaper applies to all monitors on connection
+
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+detect_socket() {
+    local sig="${HYPRLAND_INSTANCE_SIGNATURE}"
+    if [ -z "$sig" ]; then
+        sig=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
+    fi
+    echo "$RUNTIME/hypr/$sig/.socket2.sock"
+}
+
+while true; do
+    SOCKET=$(detect_socket)
+    if [ -S "$SOCKET" ]; then
+        socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do
+            case "$event" in
+                monitoradded*)
+                    sleep 0.6
+                    if [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ]; then
+                        "$HOME/.local/bin/load-last-wallpaper-fast" >/dev/null 2>&1 &
+                    fi
+                    ;;
+            esac
+        done
+    fi
+    sleep 2
+done

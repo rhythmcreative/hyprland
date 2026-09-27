@@ -1,7 +1,6 @@
 [Unit]
 Description=Monitor watcher for Rust-Dock, Waybar and Wallpaper auto-synchronization
-PartOf=graphical-session.target
-After=graphical-session.target
+After=default.target
 
 [Service]
 Type=simple
@@ -10,4 +9,4 @@ Restart=always
 RestartSec=2s
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target

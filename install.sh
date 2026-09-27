@@ -202,13 +202,21 @@ export GUM_CONFIRM_PADDING="$PADDING"
 clear_logo() {
     printf "\033[H\033[2J"
     if [[ -f "$LOGO_PATH" ]]; then
-        gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+        if command -v gum >/dev/null 2>&1; then
+            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+        else
+            cat "$LOGO_PATH"
+        fi
     fi
 }
 
 section() {
     echo ""
-    gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
+    else
+        printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    fi
 }
 
 step_item() {

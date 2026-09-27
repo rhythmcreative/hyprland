@@ -152,17 +152,23 @@ curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/instal
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS)](https://git.io/typing-svg)
 
-Over 3,000 wallpapers are organized in downloadable packs. You can download all packs, a random selection, or grab specific packs individually:
+A collection of over 3,000 wallpapers organized into 49 themed packs. You can install them during setup or anytime with the installer flags:
 
 ```bash
-curl -L "https://raw.githubusercontent.com/rhythmcreative/wallpapers/main/pack_1.zip" -o "/tmp/pack_1.zip"
-unzip -q -o "/tmp/pack_1.zip" -d "/tmp/wallpaper_install"
-cp -r "/tmp/wallpaper_install/pack_1"/* ~/Pictures/Wallpapers/
-rm -rf "/tmp/wallpaper_install" "/tmp/pack_1.zip"
+# Download 3 random packs (quick start)
+./install.sh --wallpapers random
+
+# Or download the full collection (4GB+)
+./install.sh --wallpapers all
 ```
 
+Once installed, switch wallpapers anytime directly from the desktop:
+
+- **Super + Shift + W**: Visual wallpaper gallery picker
+- **Super + Shift + B**: Instant random wallpaper with smooth fade
+
 > [!NOTE]
-> Curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
+> Wallpapers are curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
 
 ---
 

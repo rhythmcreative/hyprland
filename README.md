@@ -14,7 +14,7 @@
 [![Hyprlock](https://img.shields.io/badge/Hyprlock-89dceb?style=for-the-badge "Hyprlock")](https://github.com/hyprwm/hyprlock)
 [![Rofi](https://img.shields.io/badge/Rofi-fab387?style=for-the-badge "Rofi")](https://github.com/lbonn/rofi)
 [![Pywal](https://img.shields.io/badge/Pywal-cba6f7?style=for-the-badge "Pywal")](https://github.com/dylanaraps/pywal)
-[![SDDM](https://img.shields.io/badge/SDDM_Astronaut-a6e3a1?style=for-the-badge "SDDM Astronaut")](https://github.com/sddm/sddm)
+[![SDDM](https://img.shields.io/badge/SDDM-a6e3a1?style=for-the-badge "SDDM Astronaut")](https://github.com/sddm/sddm)
 
 </div>
 

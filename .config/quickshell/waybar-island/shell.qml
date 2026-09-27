@@ -114,10 +114,12 @@ ShellRoot {
     property var wifiList: []
     property var btDevices: []
     property var audioSinks: []
+    property var audioApps: []
     property string activeSinkName: "Default Output"
     property bool nightLightEnabled: false
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
+    property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
     property bool wifiScanning: false
     property bool btScanning: false
@@ -135,6 +137,8 @@ ShellRoot {
         kbProc.running = true
         muteProc.running = true
         audioSinksProc.running = true
+        audioAppsProc.running = true
+        recStatusProc.running = true
         sysStatsProc.running = true
         nightLightCheckProc.running = true
         caffeineCheckProc.running = true
@@ -143,7 +147,10 @@ ShellRoot {
         otaStatusProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
         if (root.controlSubView === 2) btStatusProc.running = true
-        if (root.controlSubView === 3) audioSinksProc.running = true
+        if (root.controlSubView === 3) {
+            audioSinksProc.running = true
+            audioAppsProc.running = true
+        }
         if (root.controlSubView === 4) {
             otaStatusProc.running = true
             otaChangelogProc.running = true
@@ -618,6 +625,42 @@ ShellRoot {
     }
 
     Process {
+        id: audioAppsProc
+        command: ["bash", "-c", "$HOME/.local/bin/notch-audio-helper apps"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.audioApps = JSON.parse(text.trim())
+                } catch(e) {
+                    root.audioApps = []
+                }
+            }
+        }
+    }
+
+    Process {
+        id: recStatusProc
+        command: ["bash", "-c", "$HOME/.local/bin/screen-recorder-helper status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.recState = JSON.parse(text.trim())
+                } catch(e) {}
+            }
+        }
+    }
+
+    Timer {
+        id: recPollTimer
+        interval: 1000
+        running: true
+        repeat: true
+        onTriggered: {
+            recStatusProc.running = true
+        }
+    }
+
+    Process {
         id: sysStatsProc
         command: ["bash", "-c", "$HOME/.local/bin/notch-sys-stats"]
         stdout: StdioCollector {
@@ -917,6 +960,42 @@ ShellRoot {
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                             maximumLineCount: 1
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // Recording indicator in collapsed pill
+                    Row {
+                        visible: root.recState.recording
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#EF5350"
+                            anchors.verticalCenter: parent.verticalCenter
+                            SequentialAnimation on opacity {
+                                running: root.recState.recording
+                                loops: Animation.Infinite
+                                NumberAnimation { to: 0.2; duration: 500 }
+                                NumberAnimation { to: 1.0; duration: 500 }
+                            }
+                        }
+
+                        Text {
+                            text: "REC " + (root.recState.elapsed_str || "00:00")
+                            color: "#EF5350"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -2319,6 +2398,32 @@ ShellRoot {
                             }
 
                             Rectangle {
+                                Layout.fillWidth: true; height: 36; radius: 18
+                                color: root.recState.recording ? Qt.rgba(239/255, 83/255, 80/255, 0.25) : root.colSurface
+                                border.color: root.recState.recording ? "#EF5350" : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: root.recState.recording ? 1.5 : 1
+                                RowLayout { anchors.centerIn: parent; spacing: 5
+                                    Text {
+                                        text: root.recState.recording ? "󰓛" : "󰕧"
+                                        color: root.recState.recording ? "#EF5350" : root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13
+                                    }
+                                    Text {
+                                        text: root.recState.recording ? root.recState.elapsed_str : "Record"
+                                        color: root.recState.recording ? "#EF5350" : root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.runCmd("$HOME/.local/bin/screen-recorder-helper toggle")
+                                        recStatusProc.running = true
+                                    }
+                                }
+                            }
+
+                            Rectangle {
                                 Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 5
@@ -3420,6 +3525,138 @@ ShellRoot {
                                     font.pixelSize: 11
                                     Layout.alignment: Qt.AlignHCenter
                                     Layout.topMargin: 20
+                                }
+
+                                // ── Application Volume Mixer ──
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 10
+                                    Text {
+                                        text: "Application Volume Mixer"
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 12
+                                        font.weight: Font.Bold
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    Text {
+                                        text: root.audioApps.length + " active app(s)"
+                                        color: root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 9
+                                    }
+                                }
+
+                                Repeater {
+                                    model: root.audioApps
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 56
+                                        radius: 12
+                                        color: root.colSurface
+                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                        border.width: 1
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 6
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+
+                                                Text {
+                                                    text: modelData.icon || "󰓃"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 14
+                                                }
+
+                                                Text {
+                                                    text: modelData.name || ("App #" + modelData.id)
+                                                    color: root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Text {
+                                                    text: (modelData.muted ? "Muted" : (modelData.volume + "%"))
+                                                    color: modelData.muted ? "#EF5350" : root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                }
+
+                                                Rectangle {
+                                                    width: 24; height: 24; radius: 12
+                                                    color: modelData.muted ? Qt.rgba(239/255, 83/255, 80/255, 0.2) : Qt.rgba(255, 255, 255, 0.08)
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: modelData.muted ? "󰝟" : "󰕾"
+                                                        color: modelData.muted ? "#EF5350" : root.colFg
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 11
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            root.runCmd("$HOME/.local/bin/notch-audio-helper toggle-app-mute " + modelData.id)
+                                                            audioAppsProc.running = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                id: appSliderTrack
+                                                Layout.fillWidth: true
+                                                height: 8
+                                                radius: 4
+                                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+
+                                                Rectangle {
+                                                    anchors.left: parent.left
+                                                    anchors.top: parent.top
+                                                    anchors.bottom: parent.bottom
+                                                    width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.volume || 0) / 100.0)))
+                                                    radius: 4
+                                                    color: modelData.muted ? root.colMuted : root.colAccent
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onPositionChanged: mouse => {
+                                                        if (pressed) {
+                                                            let pct = Math.max(0, Math.min(100, Math.round((mouse.x / width) * 100)))
+                                                            root.runCmd("$HOME/.local/bin/notch-audio-helper set-app-vol " + modelData.id + " " + pct)
+                                                            modelData.volume = pct
+                                                        }
+                                                    }
+                                                    onClicked: mouse => {
+                                                        let pct = Math.max(0, Math.min(100, Math.round((mouse.x / width) * 100)))
+                                                        root.runCmd("$HOME/.local/bin/notch-audio-helper set-app-vol " + modelData.id + " " + pct)
+                                                        audioAppsProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.audioApps.length === 0
+                                    text: "No active application audio streams."
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.topMargin: 4
+                                    Layout.bottomMargin: 8
                                 }
                             }
                         }

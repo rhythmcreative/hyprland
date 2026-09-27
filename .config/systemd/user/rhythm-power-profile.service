@@ -1,0 +1,15 @@
+[Unit]
+Description=Rhythm Hyprland Automatic Power Profile Daemon
+Documentation=https://github.com/rhythmcreative/hyprland
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/auto-power-profile
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

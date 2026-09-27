@@ -105,6 +105,11 @@ def main():
             run_hyprctl(["reload"])
             subprocess.run(["notify-send", "Performance", "Balanced mode restored"], stderr=subprocess.DEVNULL)
         else:
+            if os.path.exists("/tmp/powersave-active"):
+                try:
+                    os.remove("/tmp/powersave-active")
+                except OSError:
+                    pass
             try:
                 with open(PERF_FILE, "w") as f:
                     f.write("perf\n")

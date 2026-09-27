@@ -96,6 +96,7 @@ ShellRoot {
     property string activeSinkName: "Default Output"
     property bool nightLightEnabled: false
     property bool caffeineEnabled: false
+    property bool powerSaverEnabled: false
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
     property bool wifiScanning: false
     property bool btScanning: false
@@ -116,6 +117,7 @@ ShellRoot {
         sysStatsProc.running = true
         nightLightCheckProc.running = true
         caffeineCheckProc.running = true
+        powerSaveCheckProc.running = true
         hyprStatusProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
         if (root.controlSubView === 2) btStatusProc.running = true
@@ -605,6 +607,16 @@ ShellRoot {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.caffeineEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Process {
+        id: powerSaveCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/toggle-powersave status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.powerSaverEnabled = text.trim() === "on"
             }
         }
     }
@@ -1781,6 +1793,135 @@ ShellRoot {
                                     onClicked: {
                                         root.caffeineEnabled = !root.caffeineEnabled
                                         root.runCmd("~/.local/bin/toggle-caffeine")
+                                    }
+                                }
+                            }
+
+                            // Power Saver Tile (Material 3 Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.powerSaverEnabled ? root.colAccent : (powerHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.powerSaverEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: root.powerSaverEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰌪"
+                                            color: root.powerSaverEnabled ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Power Saver"
+                                            color: root.powerSaverEnabled ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.powerSaverEnabled ? "Eco Active" : "Disabled"
+                                            color: root.powerSaverEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: powerHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.powerSaverEnabled = !root.powerSaverEnabled
+                                        root.runCmd("~/.local/bin/toggle-powersave")
+                                    }
+                                }
+                            }
+
+                            // Performance Tile (Material 3 Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.perfMode ? root.colAccent : (perfHoverTab0.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.perfMode ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: root.perfMode ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰓅"
+                                            color: root.perfMode ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Performance"
+                                            color: root.perfMode ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.perfMode ? "Max Boost" : "Balanced"
+                                            color: root.perfMode ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: perfHoverTab0
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.perfMode = !root.perfMode
+                                        root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-perf")
+                                        hyprRefreshTimer.restart()
                                     }
                                 }
                             }
@@ -3335,6 +3476,63 @@ ShellRoot {
                                         root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-perf")
                                         hyprRefreshTimer.restart()
                                     }
+                                }
+                            }
+
+                            // Modo Ahorro de Energía
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 54
+                                radius: 14
+                                color: root.powerSaverEnabled ? root.colAccent : root.colSurface
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    Text { text: "󰌪"; color: root.powerSaverEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 20 }
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Text { text: "Power Saver"; color: root.powerSaverEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                        Text { text: root.powerSaverEnabled ? "Eco Active" : "Disabled"; color: root.powerSaverEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.powerSaverEnabled = !root.powerSaverEnabled
+                                        root.runCmd("~/.local/bin/toggle-powersave")
+                                    }
+                                }
+                            }
+
+                            // Config Pantallas
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 54
+                                radius: 14
+                                color: monitorsHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    Text { text: "󰍹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 20 }
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Text { text: "Monitors"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                        Text { text: "Display Manager"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                    }
+                                }
+                                MouseArea {
+                                    id: monitorsHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.runCmd("$HOME/.local/bin/notch-hypr-helper monitors")
                                 }
                             }
                         }

@@ -34,6 +34,10 @@ DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo ""
 if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
     CLONE_DIR="/tmp/rhythm-hyprland"
     echo "Cloning rhythmcreative/hyprland repository to $CLONE_DIR..."
+    if ! command -v git >/dev/null 2>&1; then
+        echo "Installing git..."
+        sudo pacman -S --needed --noconfirm git
+    fi
     rm -rf "$CLONE_DIR"
     git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$CLONE_DIR"
     exec bash "$CLONE_DIR/install.sh" "$@"
@@ -530,6 +534,7 @@ step_software() {
         zsh
         zsh-autosuggestions
         zsh-syntax-highlighting
+        starship
 
         # File Management & Media Thumbnails
         thunar
@@ -552,7 +557,6 @@ step_software() {
         bluez-utils
         blueman
         bluez-obex
-        rfkill
 
         # Audio Architecture
         pipewire
@@ -578,6 +582,7 @@ step_software() {
         qt5-svg
         qt5-declarative
         qt6-declarative
+        qt6-5compat
         qt6-svg
         qt6-wayland
         qt5ct

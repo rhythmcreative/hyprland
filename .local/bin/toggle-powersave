@@ -1,0 +1,93 @@
+#!/bin/bash
+# toggle-powersave - Power saving manager for Dynamic Island and Hyprland
+# Optimizes CPU frequency/EPP, display brightness, and GPU/Hyprland effects.
+
+STATE_FILE="/tmp/powersave-active"
+BRIGHTNESS_BACKUP="/tmp/powersave_brightness_backup"
+ACTION="${1:-toggle}"
+
+is_active() {
+    [ -f "$STATE_FILE" ]
+}
+
+enable_powersave() {
+    touch "$STATE_FILE"
+
+    # 1. CPU Energy Performance Preference (EPP) to power-saving
+    if [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
+        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "power" >/dev/null 2>&1 || true
+        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor <<< "powersave" >/dev/null 2>&1 || true
+    fi
+
+    # 2. Dim brightness gently to eco level (35%) if currently higher
+    if command -v brightnessctl >/dev/null 2>&1; then
+        current_b=$(brightnessctl get 2>/dev/null)
+        max_b=$(brightnessctl max 2>/dev/null)
+        if [ -n "$current_b" ] && [ -n "$max_b" ] && [ "$max_b" -gt 0 ]; then
+            pct=$(( current_b * 100 / max_b ))
+            if [ "$pct" -gt 40 ]; then
+                echo "$current_b" > "$BRIGHTNESS_BACKUP"
+                brightnessctl set 35% >/dev/null 2>&1 || true
+            fi
+        fi
+    fi
+
+    # 3. Disable heavy Hyprland visual effects (blur, shadows, animations)
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl eval "hl.config({ decoration = { blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })" >/dev/null 2>&1 || true
+    fi
+
+    # 4. Desktop Notification
+    notify-send -a "Power Manager" -i battery-low "Ahorro de Energía" "Activado (CPU Eco • Efectos reducidos)" 2>/dev/null || true
+    echo "on"
+}
+
+disable_powersave() {
+    rm -f "$STATE_FILE"
+
+    # 1. Restore CPU to performance / balanced
+    if [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
+        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "performance" >/dev/null 2>&1 || true
+    fi
+
+    # 2. Restore previous brightness if saved
+    if [ -f "$BRIGHTNESS_BACKUP" ] && command -v brightnessctl >/dev/null 2>&1; then
+        saved_b=$(cat "$BRIGHTNESS_BACKUP")
+        if [ -n "$saved_b" ]; then
+            brightnessctl set "$saved_b" >/dev/null 2>&1 || true
+        fi
+        rm -f "$BRIGHTNESS_BACKUP"
+    fi
+
+    # 3. Reload Hyprland config to restore animations, blur, and shadows
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 || true
+    fi
+
+    # 4. Desktop Notification
+    notify-send -a "Power Manager" -i battery-full "Ahorro de Energía" "Desactivado (Rendimiento normal)" 2>/dev/null || true
+    echo "off"
+}
+
+case "$ACTION" in
+    status)
+        if is_active; then
+            echo "on"
+        else
+            echo "off"
+        fi
+        ;;
+    on)
+        enable_powersave
+        ;;
+    off)
+        disable_powersave
+        ;;
+    toggle|*)
+        if is_active; then
+            disable_powersave
+        else
+            enable_powersave
+        fi
+        ;;
+esac

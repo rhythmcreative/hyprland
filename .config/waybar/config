@@ -40,9 +40,9 @@
       "warning": 30,
       "critical": 15
     },
-    "format": "{icon} {capacity}%",
-    "format-charging": "\udb80\udc84 {capacity}%",
-    "format-plugged": "\udb80\udc84 {capacity}%",
+    "format": "{icon} {capacity}% <span foreground='#9a9ea3'>│</span>",
+    "format-charging": "\udb80\udc84 {capacity}% <span foreground='#9a9ea3'>│</span>",
+    "format-plugged": "\udb80\udc84 {capacity}% <span foreground='#9a9ea3'>│</span>",
     "format-icons": [
       "\udb80\udc7a",
       "\udb80\udc7b",

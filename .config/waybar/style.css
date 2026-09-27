@@ -273,14 +273,14 @@
   margin-right: 7px;
 }
 
-/* First battery when dual (seamlessly joined to Bat1) */
+/* First battery when dual (seamlessly joined to Bat1 with subtle mini line) */
 #battery.bat0,
 #battery-bat0 {
   border-top-right-radius: 0px;
   border-bottom-right-radius: 0px;
   margin-right: 0px;
-  border-right: 1px solid @color8;
-  padding-right: 0.45rem;
+  border-right: none;
+  padding-right: 0.2rem;
 }
 
 /* Second battery when dual (ends the unified right pill) */
@@ -292,7 +292,7 @@
   border-bottom-right-radius: 6px;
   margin-left: 0px;
   margin-right: 7px;
-  padding-left: 0.45rem;
+  padding-left: 0.2rem;
   border-left: none;
   border-right: none;
 }

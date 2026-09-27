@@ -3995,10 +3995,10 @@ ShellRoot {
                             Rectangle {
                                 Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
-                                    Text { text: "󰏗"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    Text { text: "󰘬"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: "System Packages"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: (root.otaData.pacman_updates || 0) + " updates available"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: "Release Channel"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.dotfiles_branch || "main") + " · " + (root.otaData.has_updates ? (root.otaData.dotfiles_behind + " behind") : "Up to date"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }

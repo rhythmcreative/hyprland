@@ -31,8 +31,9 @@
     "on-click": "hyprctl switchxkblayout all next"
   },
   "custom/desktop-power": {
-    "format": "\udb81\udea5",
-    "tooltip-format": "Equipo de Escritorio - Conectado a CA"
+    "format": "\uf1e6",
+    "tooltip": true,
+    "tooltip-format": "Alimentación CA (Sin batería)"
   },
   "battery#bat0": {
     "bat": "BAT0",

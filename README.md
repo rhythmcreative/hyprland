@@ -258,3 +258,9 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | AUR Helper | yay |
 
 </details>
+
+---
+
+<p align="center">
+  Creado con amor ❤️ por <b>rhythmcreative</b>
+</p>

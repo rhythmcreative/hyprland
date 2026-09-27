@@ -23,13 +23,130 @@ handle_error() {
 }
 trap 'handle_error $LINENO' ERR
 
-DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Reattach tty if running via pipe (e.g. curl ... | bash)
+if [ ! -t 0 ] && [ -e /dev/tty ]; then
+    exec < /dev/tty
+fi
+
+DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
+
+# If running outside the cloned repository (e.g. standalone curl pipe), clone first
+if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
+    CLONE_DIR="/tmp/rhythm-hyprland"
+    echo "Cloning rhythmcreative/hyprland repository to $CLONE_DIR..."
+    rm -rf "$CLONE_DIR"
+    git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$CLONE_DIR"
+    exec bash "$CLONE_DIR/install.sh" "$@"
+fi
+
 LOG_FILE="/tmp/hyprland-install-${USER:-$(id -un)}.log"
 if ! touch "$LOG_FILE" 2>/dev/null; then
     LOG_FILE=$(mktemp /tmp/hyprland-install-XXXXXX.log 2>/dev/null || echo "$HOME/.cache/hyprland-install.log")
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 fi
 : > "$LOG_FILE" 2>/dev/null || true
+
+# --- CLI ARGUMENT PARSING & CONFIGURATION ---
+AUTO_YES=false
+DRY_RUN=false
+NO_REBOOT=false
+WALLPAPER_MODE=""
+GPU_OVERRIDE="auto"
+SKIP_RUST_DOCK=false
+SKIP_FLATPAKS=false
+REPLACE_CONFIGS_ALL=false
+
+show_help() {
+    cat << 'EOF'
+Rhythm Hyprland Installer (Omarchy Style)
+
+Usage:
+  ./install.sh [OPTIONS]
+
+Options:
+  -y, --yes                  Assume yes to all prompts (unattended mode)
+  --preview, --dry-run       Simulate installation workflow without system changes
+  --no-reboot                Do not prompt or execute reboot upon completion
+  --wallpapers <mode>        Wallpaper download mode: all, random, none
+  --skip-wallpapers          Skip downloading wallpaper packs
+  --gpu <type>               GPU driver stack: nvidia, amd, intel, auto, none
+  --skip-gpu                 Skip GPU driver detection and setup
+  --skip-rust-dock           Skip building rust-dock from source
+  --skip-flatpaks            Skip Flatpak package installation
+  --replace-configs-all      Directly overwrite existing configs without .bak backups
+  -h, --help                 Show this help message and exit
+
+One-line installation:
+  curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
+
+Examples:
+  ./install.sh --preview
+  ./install.sh -y --no-reboot --skip-wallpapers
+  ./install.sh --gpu nvidia --wallpapers random
+EOF
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes)
+            AUTO_YES=true
+            shift
+            ;;
+        --preview|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --no-reboot)
+            NO_REBOOT=true
+            shift
+            ;;
+        --wallpapers)
+            WALLPAPER_MODE="$2"
+            shift 2
+            ;;
+        --wallpapers=*)
+            WALLPAPER_MODE="${1#*=}"
+            shift
+            ;;
+        --skip-wallpapers)
+            WALLPAPER_MODE="none"
+            shift
+            ;;
+        --gpu)
+            GPU_OVERRIDE="$2"
+            shift 2
+            ;;
+        --gpu=*)
+            GPU_OVERRIDE="${1#*=}"
+            shift
+            ;;
+        --skip-gpu)
+            GPU_OVERRIDE="none"
+            shift
+            ;;
+        --skip-rust-dock)
+            SKIP_RUST_DOCK=true
+            shift
+            ;;
+        --skip-flatpaks)
+            SKIP_FLATPAKS=true
+            shift
+            ;;
+        --replace-configs-all)
+            REPLACE_CONFIGS_ALL=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run ./install.sh --help for available options."
+            exit 1
+            ;;
+    esac
+done
 
 # --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
 if [[ -e /dev/tty ]]; then
@@ -85,11 +202,19 @@ step_item() {
 }
 
 step_ok() {
-    printf "%s\033[32m  ✓ %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    printf "%s\033[32m  [OK] %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
 }
 
 step_warn() {
     printf "%s\033[33m  ! %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+}
+
+confirm_prompt() {
+    local prompt_msg="$1"
+    if [ "$AUTO_YES" = true ]; then
+        return 0
+    fi
+    gum confirm "$prompt_msg"
 }
 
 # --- PREFLIGHT CHECKS ---
@@ -157,11 +282,24 @@ install_yay() {
 # --- HARDWARE DRIVERS DETECTION ---
 auto_detect_drivers() {
     section "Hardware Drivers & GPU Detection"
+    if [ "$GPU_OVERRIDE" = "none" ]; then
+        step_ok "GPU driver installation skipped via flag."
+        return 0
+    fi
+
     local EXTRA_PKGS=()
     local IS_NVIDIA=false
-    
-    local GPU_INFO
-    GPU_INFO=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
+    local GPU_INFO=""
+
+    if [ "$GPU_OVERRIDE" = "nvidia" ]; then
+        GPU_INFO="NVIDIA"
+    elif [ "$GPU_OVERRIDE" = "amd" ]; then
+        GPU_INFO="Advanced Micro Devices"
+    elif [ "$GPU_OVERRIDE" = "intel" ]; then
+        GPU_INFO="Intel"
+    else
+        GPU_INFO=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
+    fi
 
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
         IS_NVIDIA=true
@@ -309,6 +447,10 @@ EOF
 # --- RUST-DOCK COMPILATION & SETUP ---
 install_rust_dock() {
     section "Rust-Dock Component"
+    if [ "$SKIP_RUST_DOCK" = true ]; then
+        step_ok "Rust-dock build skipped via flag."
+        return 0
+    fi
 
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
     yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
@@ -509,8 +651,8 @@ step_software() {
     auto_detect_drivers
 
     # Flatpak packages
-    if [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
-        if gum confirm "Install applications from flatpaks.txt?"; then
+    if [ "$SKIP_FLATPAKS" = false ] && [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
+        if confirm_prompt "Install applications from flatpaks.txt?"; then
             section "Flatpak Applications"
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1
             while read -r app; do
@@ -538,8 +680,12 @@ step_dotfiles() {
         local target="$HOME/.config/$name"
         
         if [ -e "$target" ]; then
-            rm -rf "$target.bak"
-            mv "$target" "$target.bak"
+            if [ "$REPLACE_CONFIGS_ALL" = true ]; then
+                rm -rf "$target"
+            else
+                rm -rf "$target.bak"
+                mv "$target" "$target.bak"
+            fi
         fi
         
         cp -r "$DOTFILES_DIR/.config/$name" "$target"
@@ -567,8 +713,12 @@ MONCONF
         local target="$HOME/.local/bin/$name"
         
         if [ -e "$target" ]; then
-            rm -rf "$target.bak"
-            mv "$target" "$target.bak"
+            if [ "$REPLACE_CONFIGS_ALL" = true ]; then
+                rm -rf "$target"
+            else
+                rm -rf "$target.bak"
+                mv "$target" "$target.bak"
+            fi
         fi
         
         cp -f "$DOTFILES_DIR/$file" "$target"
@@ -585,8 +735,12 @@ MONCONF
                 name=$(basename "$file")
                 local target="$HOME/$name"
                 if [ -e "$target" ]; then
-                    rm -rf "$target.bak"
-                    mv "$target" "$target.bak"
+                    if [ "$REPLACE_CONFIGS_ALL" = true ]; then
+                        rm -rf "$target"
+                    else
+                        rm -rf "$target.bak"
+                        mv "$target" "$target.bak"
+                    fi
                 fi
                 cp -r "$DOTFILES_DIR/$file" "$target"
             done
@@ -614,7 +768,24 @@ MONCONF
 
 # --- OPTIONAL WALLPAPERS DOWNLOAD ---
 step_wallpapers() {
-    if gum confirm "Download additional wallpaper packs?"; then
+    if [ "$WALLPAPER_MODE" = "none" ]; then
+        step_ok "Wallpaper packs skipped via flag."
+        return 0
+    fi
+
+    local SHOULD_DOWNLOAD=false
+    local MODE="$WALLPAPER_MODE"
+
+    if [ -n "$MODE" ]; then
+        SHOULD_DOWNLOAD=true
+    elif [ "$AUTO_YES" = true ]; then
+        step_ok "Wallpaper downloads skipped in unattended mode (use --wallpapers all|random to enable)."
+        return 0
+    elif gum confirm "Download additional wallpaper packs?"; then
+        SHOULD_DOWNLOAD=true
+    fi
+
+    if [ "$SHOULD_DOWNLOAD" = true ]; then
         section "Wallpaper Packs"
         local WALL_DIR="$HOME/Pictures/Wallpapers"
         mkdir -p "$WALL_DIR"
@@ -623,14 +794,16 @@ step_wallpapers() {
         
         local REPO_URL="https://raw.githubusercontent.com/rhythmcreative/wallpapers/main"
 
-        local CHOICE
-        CHOICE=$(gum choose --header "Select download mode" \
-            "Download All Packs (4GB+)" \
-            "Select Specific Packs" \
-            "Random Selection (3 Packs)" \
-            "Skip")
+        local CHOICE="$MODE"
+        if [ -z "$CHOICE" ]; then
+            CHOICE=$(gum choose --header "Select download mode" \
+                "Download All Packs (4GB+)" \
+                "Select Specific Packs" \
+                "Random Selection (3 Packs)" \
+                "Skip")
+        fi
         
-        if [ "$CHOICE" == "Download All Packs (4GB+)" ]; then
+        if [ "$CHOICE" == "Download All Packs (4GB+)" ] || [ "$CHOICE" == "all" ]; then
             for i in {1..49}; do
                 step_item "Downloading pack $i/49..."
                 curl -L "$REPO_URL/pack_$i.zip" -o "$TEMP_WALL/pack_$i.zip" >> "$LOG_FILE" 2>&1
@@ -648,7 +821,7 @@ step_wallpapers() {
                 [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
                 rm -f "$TEMP_WALL/pack_$p.zip"
             done
-        elif [ "$CHOICE" == "Random Selection (3 Packs)" ]; then
+        elif [ "$CHOICE" == "Random Selection (3 Packs)" ] || [ "$CHOICE" == "random" ]; then
             step_item "Downloading 3 random packs..."
             for i in {1..3}; do
                 local p
@@ -669,7 +842,7 @@ step_wallpapers() {
 step_system() {
     section "System Services & Finalization"
     
-    if gum confirm "Set Zsh as your default shell?"; then
+    if confirm_prompt "Set Zsh as your default shell?"; then
         if [ "$SHELL" != "$(which zsh)" ]; then
             sudo chsh -s "$(which zsh)" "$USER"
             step_ok "Default shell set to Zsh."
@@ -740,7 +913,7 @@ EOF
 }
 
 # --- MAIN EXECUTION ---
-if [[ "$1" == "--preview" || "$1" == "--dry-run" ]]; then
+if [ "$DRY_RUN" = true ]; then
     clear_logo
     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
     step_item "Verifying preflight environment..."
@@ -808,7 +981,16 @@ clear_logo
 echo ""
 gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished installing"
 
-if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
+if [ "$NO_REBOOT" = true ]; then
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Installation complete. System reboot skipped via flag."
+elif [ "$AUTO_YES" = true ]; then
+    if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
+        gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
+        sudo reboot
+    else
+        sudo systemctl start sddm
+    fi
+elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start SDDM cleanly."
     if gum confirm "Reboot into Hyprland now?"; then

@@ -71,6 +71,7 @@ ShellRoot {
     }
 
     property bool islandVisible: true
+    property var hiddenScreens: ({})
     property int currentTab: 0 // 0 = Control & Sistema, 1 = Ajustes Hyprland
     property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output
 
@@ -254,13 +255,27 @@ ShellRoot {
             root.expanded = false
             return "collapsed"
         }
-        function hide(): string {
+        function hide(screenName: string): string {
             root.expanded = false
-            root.islandVisible = false
+            if (!screenName || screenName === "" || screenName === "all") {
+                root.islandVisible = false
+                root.hiddenScreens = {}
+            } else {
+                let hs = Object.assign({}, root.hiddenScreens)
+                hs[screenName] = true
+                root.hiddenScreens = hs
+            }
             return "hidden"
         }
-        function reveal(): string {
-            root.islandVisible = true
+        function reveal(screenName: string): string {
+            if (!screenName || screenName === "" || screenName === "all") {
+                root.islandVisible = true
+                root.hiddenScreens = {}
+            } else {
+                let hs = Object.assign({}, root.hiddenScreens)
+                delete hs[screenName]
+                root.hiddenScreens = hs
+            }
             return "revealed"
         }
     }
@@ -638,7 +653,7 @@ ShellRoot {
             id: islandWin
             required property var modelData
             screen: modelData
-            visible: root.islandVisible
+            visible: root.islandVisible && !root.hiddenScreens[modelData.name]
 
         anchors {
             top: true

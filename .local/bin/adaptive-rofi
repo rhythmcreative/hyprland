@@ -75,21 +75,28 @@ _rust_was_visible=false
 _waybar_was_visible=false
 _qs_was_visible=false
 
-if pgrep -x rust-dock >/dev/null 2>&1; then
-    _rust_was_visible=true
-    pkill -SIGUSR1 rust-dock 2>/dev/null &
-fi
-if pgrep -x waybar >/dev/null 2>&1; then
-    _waybar_was_visible=true
-    pkill -SIGUSR1 waybar 2>/dev/null &
-fi
-if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-    _qs_was_visible=true
-    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
+if [ -n "$ACTIVE_MONITOR" ]; then
+    if pgrep -f "rust-dock.*-o +$ACTIVE_MONITOR" >/dev/null 2>&1; then
+        _rust_was_visible=true
+        pkill -SIGUSR1 -f "rust-dock.*-o +$ACTIVE_MONITOR" 2>/dev/null &
+    fi
+    if pgrep -f "waybar.*config-$ACTIVE_MONITOR" >/dev/null 2>&1; then
+        _waybar_was_visible=true
+        pkill -SIGUSR1 -f "waybar.*config-$ACTIVE_MONITOR" 2>/dev/null &
+    elif pgrep -x waybar >/dev/null 2>&1; then
+        _waybar_was_visible=true
+        pkill -SIGUSR1 waybar 2>/dev/null &
+    fi
+    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+        _qs_was_visible=true
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$ACTIVE_MONITOR" >/dev/null 2>&1 &
+    fi
 fi
 
 rofi $ROFI_ARGS
 
-[ "$_rust_was_visible" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
-[ "$_waybar_was_visible" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-[ "$_qs_was_visible" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
+if [ -n "$ACTIVE_MONITOR" ]; then
+    [ "$_rust_was_visible" = true ] && pkill -SIGUSR2 -f "rust-dock.*-o +$ACTIVE_MONITOR" 2>/dev/null &
+    [ "$_waybar_was_visible" = true ] && { pkill -SIGUSR2 -f "waybar.*config-$ACTIVE_MONITOR" 2>/dev/null & pkill -SIGUSR2 -x waybar 2>/dev/null & }
+    [ "$_qs_was_visible" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$ACTIVE_MONITOR" >/dev/null 2>&1 &
+fi

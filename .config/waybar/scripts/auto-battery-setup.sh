@@ -25,18 +25,22 @@ for cfg in "$CONFIG" "$WAYBAR_DIR"/config-*; do
     [ -f "$cfg" ] || continue
     
     # Clean existing power/battery modules from modules-right
-    CLEAN_CONFIG=$(jq '.["modules-right"] |= map(select(. != "battery" and . != "battery#bat0" and . != "battery#bat1" and . != "custom/desktop-power" and . != "custom/dual-battery"))' "$cfg")
+    CLEAN_CONFIG=$(jq '.["modules-right"] |= map(select(. != "battery" and . != "battery#bat0" and . != "battery#bat1" and . != "custom/desktop-power" and . != "custom/dual-battery"))' "$cfg" 2>/dev/null)
     
-    if [ "$NUM_BATS" -ge 2 ]; then
-        # Dual battery mode (ThinkPad / Asus)
-        FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["battery#bat0", "battery#bat1"]')
-    elif [ "$NUM_BATS" -eq 1 ]; then
-        # Single battery mode (standard laptop)
-        FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["battery"]')
-    else
-        # Desktop PC mode (no battery)
-        FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["custom/desktop-power"]')
+    if [ -n "$CLEAN_CONFIG" ] && echo "$CLEAN_CONFIG" | jq . >/dev/null 2>&1; then
+        if [ "$NUM_BATS" -ge 2 ]; then
+            # Dual battery mode (ThinkPad / Asus)
+            FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["battery#bat0", "battery#bat1"]')
+        elif [ "$NUM_BATS" -eq 1 ]; then
+            # Single battery mode (standard laptop)
+            FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["battery"]')
+        else
+            # Desktop PC mode (no battery)
+            FINAL_CONFIG=$(echo "$CLEAN_CONFIG" | jq '.["modules-right"] += ["custom/desktop-power"]')
+        fi
+        
+        if [ -n "$FINAL_CONFIG" ] && echo "$FINAL_CONFIG" | jq . >/dev/null 2>&1; then
+            echo "$FINAL_CONFIG" > "$cfg"
+        fi
     fi
-    
-    echo "$FINAL_CONFIG" > "$cfg"
 done

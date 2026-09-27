@@ -1116,7 +1116,8 @@ MONCONF
     systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
 
     # Configure Waybar battery modules for target machine (0, 1, or 2+ batteries)
-    if [ -x "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then
+    if [ -f "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then
+        chmod +x "$HOME/.config/waybar/scripts/auto-battery-setup.sh" 2>/dev/null || true
         step_item "Configuring Waybar battery detection..."
         "$HOME/.config/waybar/scripts/auto-battery-setup.sh" >> "$LOG_FILE" 2>&1 || true
     fi

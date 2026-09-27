@@ -80,15 +80,16 @@ ShellRoot {
         status: "up_to_date",
         status_text: "System is up to date",
         has_updates: false,
+        current_version: "v1.0.0",
+        latest_version: "v1.0.0",
+        dotfiles_branch: "main",
         dotfiles_behind: 0,
         dotfiles_ahead: 0,
         dotfiles_hash: "",
+        remote_hash: "",
         pacman_updates: 0,
         pacman_list: [],
         kernel: "",
-        android_version: "Android 15",
-        build_number: "",
-        security_patch: "",
         last_checked: ""
     })
     property bool otaChecking: false
@@ -3783,7 +3784,7 @@ ShellRoot {
                                         }
                                     }
                                     Text {
-                                        text: root.otaData.has_updates ? root.otaData.status_text : ("Android 15 · " + (root.otaData.build_number || "Up to date"))
+                                        text: root.otaData.has_updates ? root.otaData.status_text : ("Rhythm Hyprland " + (root.otaData.current_version || "v1.0.0") + " · Up to date")
                                         color: root.otaData.has_updates ? root.colAccent : root.colMuted
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 9
@@ -3941,30 +3942,30 @@ ShellRoot {
 
                                 Text {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: root.otaData.has_updates ? "System Update Available" : "Your system is up to date"
+                                    text: root.otaData.has_updates ? "System Update Available" : "System is Up to Date"
                                     color: root.colFg; font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 13; font.weight: Font.Bold
                                 }
 
                                 Text {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: root.otaData.has_updates ? root.otaData.status_text : ("Last checked: " + (root.otaData.last_checked || "Recently"))
+                                    text: root.otaData.has_updates ? root.otaData.status_text : ("Rhythm Hyprland " + (root.otaData.current_version || "v1.0.0") + " · Last checked: " + (root.otaData.last_checked || "Recently"))
                                     color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10
                                 }
                             }
                         }
 
-                        // Android Specs Grid
+                        // System Release & Specs Grid
                         GridLayout {
                             Layout.fillWidth: true; columns: 2; rowSpacing: 6; columnSpacing: 6
 
                             Rectangle {
                                 Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
-                                    Text { text: "󰀲"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    Text { text: "󰓅"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: "Android Version"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: root.otaData.android_version || "Android 15"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: "Current Version"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.current_version || "v1.0.0") + " (" + (root.otaData.dotfiles_hash || "git") + ")"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }
@@ -3972,10 +3973,10 @@ ShellRoot {
                             Rectangle {
                                 Layout.fillWidth: true; height: 42; radius: 10; color: root.colSurface
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
-                                    Text { text: "󰓓"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                    Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: "Security Patch"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: root.otaData.security_patch || "September 2026"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: "Target Release"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.latest_version && root.otaData.latest_version !== root.otaData.current_version) ? (root.otaData.latest_version + " (New)") : (root.otaData.current_version + " (Latest)"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }
@@ -3996,8 +3997,8 @@ ShellRoot {
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                                     Text { text: "󰏗"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: "Packages & Dotfiles"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: (root.otaData.pacman_updates || 0) + " updates | " + (root.otaData.dotfiles_hash || "git"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: "System Packages"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.pacman_updates || 0) + " updates available"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }
@@ -4014,9 +4015,9 @@ ShellRoot {
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Text { text: "Changelog"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                    Text { text: "Changelog & History"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
                                     Item { Layout.fillWidth: true }
-                                    Text { text: root.otaData.build_number || "Current"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                    Text { text: root.otaData.current_version || "Current"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                 }
 
                                 Flickable {

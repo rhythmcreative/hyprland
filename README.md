@@ -140,7 +140,7 @@ Press `Super + F` to open an interactive search cheatsheet of every shortcut con
 Run directly from the terminal with curl:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
 ```
 
 ### Manual install
@@ -175,7 +175,7 @@ cd ~/.config/hyprland-repo
 
 ```bash
 # Example unattended run
-curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --no-reboot --skip-wallpapers
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)" -- -y --no-reboot --skip-wallpapers
 ```
 
 </details>

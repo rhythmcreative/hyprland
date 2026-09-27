@@ -671,47 +671,157 @@ step_applications() {
         return 0
     fi
 
-    if ! confirm_prompt "Would you like to select additional applications to install?"; then
+    echo ""
+    step_item "Select software deployment method:"
+    echo ""
+
+    local MODE_CHOICE
+    MODE_CHOICE=$(gum choose \
+        --header="Choose installation mode (ENTER to confirm):" \
+        --cursor-prefix="> " \
+        "Interactive Categorized Menus (Browsers, Chat, Dev, Media, Gaming, Utilities)" \
+        "Full Package Stack (Install all 125 packages from packages.txt)" \
+        "Skip Additional Applications" || true)
+
+    if [ -z "$MODE_CHOICE" ] || [ "$MODE_CHOICE" = "Skip Additional Applications" ]; then
         step_ok "Optional software selection skipped."
         return 0
     fi
 
-    local APP_OPTIONS=(
-        "Chromium (Fast open-source browser) [Arch/AUR]"
-        "Brave (Privacy-focused browser) [AUR]"
-        "Zen Browser (Modern optimized Firefox fork) [AUR]"
-        "Firefox (Standard Web Browser) [Arch]"
-        "Vesktop (Discord with Wayland screenshare) [AUR]"
-        "Telegram Desktop (Messaging app) [Arch]"
-        "Spotify (Music streaming) [AUR]"
-        "Visual Studio Code (Code editor) [AUR]"
-        "Obsidian (Knowledge base & Markdown notes) [AUR]"
-        "LibreOffice (Complete office suite) [Arch]"
-        "LocalSend (Local network file sharing) [AUR]"
-        "VLC Media Player (Universal media playback) [Arch]"
-        "OBS Studio (Screen recording & streaming) [Arch]"
-        "GIMP (Image editor) [Arch]"
-        "Steam (Gaming platform) [Arch/Multilib]"
-        "Mission Center (Task manager & hardware monitor) [Flatpak]"
-        "Clapper (Modern video player with hardware accel) [Flatpak]"
-        "Eye of GNOME (Lightweight image viewer) [Flatpak]"
-        "Sober (Roblox engine player) [Flatpak]"
+    if [ "$MODE_CHOICE" = "Full Package Stack (Install all 125 packages from packages.txt)" ]; then
+        if [ -f "$DOTFILES_DIR/packages.txt" ]; then
+            step_item "Reading package list from packages.txt..."
+            local FULL_PKGS=()
+            while IFS= read -r pkg || [ -n "$pkg" ]; do
+                pkg=$(echo "$pkg" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                [ -z "$pkg" ] && continue
+                [[ "$pkg" =~ ^# ]] && continue
+                [[ "$pkg" == *-debug ]] && continue
+                FULL_PKGS+=("$pkg")
+            done < "$DOTFILES_DIR/packages.txt"
+
+            if [ ${#FULL_PKGS[@]} -gt 0 ]; then
+                step_item "Deploying full package stack (${#FULL_PKGS[@]} packages via yay)..."
+                yay -S --needed --noconfirm "${FULL_PKGS[@]}" >> "$LOG_FILE" 2>&1 || step_warn "Some packages from packages.txt encountered errors during installation."
+            fi
+        fi
+
+        if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+            step_item "Configuring Flathub and deploying default Flatpaks..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            while IFS= read -r fapp || [ -n "$fapp" ]; do
+                fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                [ -z "$fapp" ] && continue
+                [[ "$fapp" =~ ^# ]] && continue
+                step_item "Installing flatpak: $fapp"
+                sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+            done < "$DOTFILES_DIR/flatpaks.txt"
+        fi
+
+        step_ok "Full package stack successfully deployed."
+        return 0
+    fi
+
+    # Interactive Categorized Selection
+    local BROWSERS_LIST=(
+        "Brave Browser (brave-bin) [AUR]"
+        "Brave Origin Nightly (brave-origin-nightly-bin) [AUR]"
+        "Chromium (chromium) [Arch]"
+        "Firefox (firefox) [Arch]"
+        "Firefox Developer Edition (firefox-developer-edition) [AUR]"
+        "Google Chrome (google-chrome) [AUR]"
+        "Microsoft Edge (microsoft-edge-stable-bin) [AUR]"
+        "Zen Browser (zen-browser-bin) [AUR]"
+    )
+
+    local COMM_LIST=(
+        "Discord / Vesktop (vesktop) [AUR]"
+        "Telegram Desktop (telegram-desktop) [Arch]"
+        "Slack Desktop (slack-desktop) [AUR]"
+        "WhatsApp / ZapZap (zapzap) [AUR]"
+        "Spotify (spotify) [AUR]"
+    )
+
+    local DEV_LIST=(
+        "Visual Studio Code (visual-studio-code-bin) [AUR]"
+        "Neovim (neovim) [Arch]"
+        "Obsidian (obsidian) [AUR]"
+        "LibreOffice Fresh (libreoffice-fresh) [Arch]"
+        "LocalSend (localsend-bin) [AUR]"
+        "Docker & Docker Compose (docker docker-compose) [Arch]"
+        "Node.js & NPM (nodejs npm) [Arch]"
+        "Python Suite (python-pip python-black ruff) [Arch]"
+        "GitKraken (gitkraken) [AUR]"
+        "Ollama (ollama) [Arch/AUR]"
+    )
+
+    local MEDIA_LIST=(
+        "Steam (steam) [Arch/Multilib]"
+        "Lutris (lutris) [Arch]"
+        "Heroic Games Launcher (heroic-games-launcher-bin) [AUR]"
+        "OBS Studio (obs-studio) [Arch]"
+        "VLC Media Player (vlc) [Arch]"
+        "MPV Media Player (mpv) [Arch]"
+        "GIMP (gimp) [Arch]"
+        "Inkscape (inkscape) [Arch]"
+        "Kdenlive (kdenlive) [Arch]"
+        "Blender (blender) [Arch]"
+        "Audacity (audacity) [Arch]"
+    )
+
+    local UTILS_LIST=(
+        "VirtualBox (virtualbox virtualbox-host-modules-arch virtualbox-guest-iso) [Arch]"
+        "Timeshift (timeshift) [Arch]"
+        "Thunar File Manager (thunar thunar-archive-plugin thunar-volman) [Arch]"
+        "Dolphin File Manager (dolphin ark) [Arch]"
+        "Btop (btop) [Arch]"
+        "Fastfetch (fastfetch) [Arch]"
+        "Mission Center (io.missioncenter.MissionCenter) [Flatpak]"
+        "Clapper (com.github.rafostar.Clapper) [Flatpak]"
+        "Eye of GNOME (org.gnome.eog) [Flatpak]"
+        "Sober (org.vinegarhq.Sober) [Flatpak]"
     )
 
     echo ""
-    step_item "Select applications with SPACE (press ENTER to confirm):"
-    echo ""
-
-    local SELECTED_APPS
-    SELECTED_APPS=$(printf "%s\n" "${APP_OPTIONS[@]}" | gum choose --no-limit \
-        --selected="Chromium (Fast open-source browser) [Arch/AUR],Vesktop (Discord with Wayland screenshare) [AUR],Mission Center (Task manager & hardware monitor) [Flatpak]" \
-        --header="Space = Toggle, Enter = Install selected" \
+    step_item "Category 1/5: Web Browsers"
+    local SEL_BROWSERS
+    SEL_BROWSERS=$(printf "%s\n" "${BROWSERS_LIST[@]}" | gum choose --no-limit \
+        --selected="Chromium (chromium) [Arch]" \
+        --header="Space = Toggle, Enter = Confirm Category" \
         --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
 
-    if [ -z "$SELECTED_APPS" ]; then
-        step_ok "No optional applications selected."
-        return 0
-    fi
+    echo ""
+    step_item "Category 2/5: Communication & Social"
+    local SEL_COMM
+    SEL_COMM=$(printf "%s\n" "${COMM_LIST[@]}" | gum choose --no-limit \
+        --selected="Discord / Vesktop (vesktop) [AUR]" \
+        --header="Space = Toggle, Enter = Confirm Category" \
+        --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
+
+    echo ""
+    step_item "Category 3/5: Productivity & Development"
+    local SEL_DEV
+    SEL_DEV=$(printf "%s\n" "${DEV_LIST[@]}" | gum choose --no-limit \
+        --selected="Visual Studio Code (visual-studio-code-bin) [AUR]" \
+        --header="Space = Toggle, Enter = Confirm Category" \
+        --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
+
+    echo ""
+    step_item "Category 4/5: Media, Creativity & Gaming"
+    local SEL_MEDIA
+    SEL_MEDIA=$(printf "%s\n" "${MEDIA_LIST[@]}" | gum choose --no-limit \
+        --header="Space = Toggle, Enter = Confirm Category" \
+        --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
+
+    echo ""
+    step_item "Category 5/5: System Utilities, Virtualization & Flatpaks"
+    local SEL_UTILS
+    SEL_UTILS=$(printf "%s\n" "${UTILS_LIST[@]}" | gum choose --no-limit \
+        --selected="Mission Center (io.missioncenter.MissionCenter) [Flatpak]" \
+        --header="Space = Toggle, Enter = Confirm Category" \
+        --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
+
+    local ALL_SELECTED="${SEL_BROWSERS}"$'\n'"${SEL_COMM}"$'\n'"${SEL_DEV}"$'\n'"${SEL_MEDIA}"$'\n'"${SEL_UTILS}"
 
     local PACMAN_INSTALL=()
     local FLATPAK_INSTALL=()
@@ -719,36 +829,66 @@ step_applications() {
     while IFS= read -r line; do
         [ -z "$line" ] && continue
         case "$line" in
-            *"Chromium"*)       PACMAN_INSTALL+=("chromium") ;;
-            *"Brave"*)          PACMAN_INSTALL+=("brave-bin") ;;
-            *"Zen Browser"*)    PACMAN_INSTALL+=("zen-browser-bin") ;;
-            *"Firefox"*)        PACMAN_INSTALL+=("firefox") ;;
-            *"Vesktop"*)        PACMAN_INSTALL+=("vesktop") ;;
-            *"Telegram"*)       PACMAN_INSTALL+=("telegram-desktop") ;;
-            *"Spotify"*)        PACMAN_INSTALL+=("spotify") ;;
-            *"Visual Studio"*)  PACMAN_INSTALL+=("visual-studio-code-bin") ;;
-            *"Obsidian"*)       PACMAN_INSTALL+=("obsidian") ;;
-            *"LibreOffice"*)    PACMAN_INSTALL+=("libreoffice-fresh") ;;
-            *"LocalSend"*)      PACMAN_INSTALL+=("localsend-bin") ;;
-            *"VLC"*)            PACMAN_INSTALL+=("vlc") ;;
-            *"OBS Studio"*)     PACMAN_INSTALL+=("obs-studio") ;;
-            *"GIMP"*)           PACMAN_INSTALL+=("gimp") ;;
-            *"Steam"*)          PACMAN_INSTALL+=("steam") ;;
-            *"Mission Center"*) FLATPAK_INSTALL+=("io.missioncenter.MissionCenter") ;;
-            *"Clapper"*)        FLATPAK_INSTALL+=("com.github.rafostar.Clapper") ;;
-            *"Eye of GNOME"*)   FLATPAK_INSTALL+=("org.gnome.eog") ;;
-            *"Sober"*)          FLATPAK_INSTALL+=("org.vinegarhq.Sober") ;;
+            *"(brave-bin)"*)                    PACMAN_INSTALL+=("brave-bin") ;;
+            *"(brave-origin-nightly-bin)"*)     PACMAN_INSTALL+=("brave-origin-nightly-bin") ;;
+            *"(chromium)"*)                     PACMAN_INSTALL+=("chromium") ;;
+            *"(firefox)"*)                      PACMAN_INSTALL+=("firefox") ;;
+            *"(firefox-developer-edition)"*)    PACMAN_INSTALL+=("firefox-developer-edition") ;;
+            *"(google-chrome)"*)                PACMAN_INSTALL+=("google-chrome") ;;
+            *"(microsoft-edge-stable-bin)"*)    PACMAN_INSTALL+=("microsoft-edge-stable-bin") ;;
+            *"(zen-browser-bin)"*)              PACMAN_INSTALL+=("zen-browser-bin") ;;
+            *"(vesktop)"*)                      PACMAN_INSTALL+=("vesktop") ;;
+            *"(telegram-desktop)"*)             PACMAN_INSTALL+=("telegram-desktop") ;;
+            *"(slack-desktop)"*)                PACMAN_INSTALL+=("slack-desktop") ;;
+            *"(zapzap)"*)                       PACMAN_INSTALL+=("zapzap") ;;
+            *"(spotify)"*)                      PACMAN_INSTALL+=("spotify") ;;
+            *"(visual-studio-code-bin)"*)       PACMAN_INSTALL+=("visual-studio-code-bin") ;;
+            *"(neovim)"*)                       PACMAN_INSTALL+=("neovim") ;;
+            *"(obsidian)"*)                     PACMAN_INSTALL+=("obsidian") ;;
+            *"(libreoffice-fresh)"*)            PACMAN_INSTALL+=("libreoffice-fresh") ;;
+            *"(localsend-bin)"*)                PACMAN_INSTALL+=("localsend-bin") ;;
+            *"(docker docker-compose)"*)        PACMAN_INSTALL+=("docker" "docker-compose") ;;
+            *"(nodejs npm)"*)                   PACMAN_INSTALL+=("nodejs" "npm") ;;
+            *"(python-pip python-black ruff)"*) PACMAN_INSTALL+=("python-pip" "python-black" "ruff") ;;
+            *"(gitkraken)"*)                    PACMAN_INSTALL+=("gitkraken") ;;
+            *"(ollama)"*)                       PACMAN_INSTALL+=("ollama") ;;
+            *"(steam)"*)                        PACMAN_INSTALL+=("steam") ;;
+            *"(lutris)"*)                       PACMAN_INSTALL+=("lutris") ;;
+            *"(heroic-games-launcher-bin)"*)    PACMAN_INSTALL+=("heroic-games-launcher-bin") ;;
+            *"(obs-studio)"*)                   PACMAN_INSTALL+=("obs-studio") ;;
+            *"(vlc)"*)                          PACMAN_INSTALL+=("vlc") ;;
+            *"(mpv)"*)                          PACMAN_INSTALL+=("mpv") ;;
+            *"(gimp)"*)                         PACMAN_INSTALL+=("gimp") ;;
+            *"(inkscape)"*)                     PACMAN_INSTALL+=("inkscape") ;;
+            *"(kdenlive)"*)                     PACMAN_INSTALL+=("kdenlive") ;;
+            *"(blender)"*)                      PACMAN_INSTALL+=("blender") ;;
+            *"(audacity)"*)                     PACMAN_INSTALL+=("audacity") ;;
+            *"(virtualbox virtualbox-host-modules-arch virtualbox-guest-iso)"*) PACMAN_INSTALL+=("virtualbox" "virtualbox-host-modules-arch" "virtualbox-guest-iso") ;;
+            *"(timeshift)"*)                    PACMAN_INSTALL+=("timeshift") ;;
+            *"(thunar thunar-archive-plugin thunar-volman)"*) PACMAN_INSTALL+=("thunar" "thunar-archive-plugin" "thunar-volman") ;;
+            *"(dolphin ark)"*)                  PACMAN_INSTALL+=("dolphin" "ark") ;;
+            *"(btop)"*)                         PACMAN_INSTALL+=("btop") ;;
+            *"(fastfetch)"*)                    PACMAN_INSTALL+=("fastfetch") ;;
+            *"(io.missioncenter.MissionCenter)"*) FLATPAK_INSTALL+=("io.missioncenter.MissionCenter") ;;
+            *"(com.github.rafostar.Clapper)"*)    FLATPAK_INSTALL+=("com.github.rafostar.Clapper") ;;
+            *"(org.gnome.eog)"*)                  FLATPAK_INSTALL+=("org.gnome.eog") ;;
+            *"(org.vinegarhq.Sober)"*)            FLATPAK_INSTALL+=("org.vinegarhq.Sober") ;;
         esac
-    done <<< "$SELECTED_APPS"
+    done <<< "$ALL_SELECTED"
+
+    if [ ${#PACMAN_INSTALL[@]} -eq 0 ] && [ ${#FLATPAK_INSTALL[@]} -eq 0 ]; then
+        step_ok "No optional applications selected."
+        return 0
+    fi
 
     if [ ${#PACMAN_INSTALL[@]} -gt 0 ]; then
-        step_item "Installing selected native/AUR packages: ${PACMAN_INSTALL[*]}"
+        step_item "Installing selected native/AUR packages (${#PACMAN_INSTALL[@]} items): ${PACMAN_INSTALL[*]}"
         gum spin --spinner dot --title "Installing applications via yay..." --padding "0 0 0 $PADDING_LEFT" -- \
             bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
     fi
 
     if [ ${#FLATPAK_INSTALL[@]} -gt 0 ] && [ "$SKIP_FLATPAKS" = false ]; then
-        step_item "Configuring Flathub and installing selected Flatpaks..."
+        step_item "Configuring Flathub and installing selected Flatpaks (${#FLATPAK_INSTALL[@]} items)..."
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
         for app in "${FLATPAK_INSTALL[@]}"; do
             step_item "Installing flatpak: $app"

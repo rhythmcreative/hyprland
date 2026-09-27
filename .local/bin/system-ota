@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# system-ota: Android-style OTA System Updater for Arch Linux & Hyprland
-# Provides check, status, update, changelog, rollback, and interactive GUI.
+# system-ota: OTA System Updater for Arch Linux & Hyprland
+# Provides check, status, update, release, changelog, rollback, and interactive GUI.
 # Standard: Zero emojis, English notifications and output.
 
 set -euo pipefail
@@ -10,10 +10,6 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
 STATUS_FILE="/tmp/ota-status.json"
 BACKUP_BASE="$HOME/.config.backup"
 LOG_FILE="/tmp/system-ota.log"
-
-ANDROID_VERSION="Android 15 (VanillaIceCream)"
-BUILD_NUMBER="RHYTHM-ARCH-HYPRLAND-2026.09"
-SECURITY_PATCH="September 5, 2026"
 
 mkdir -p "$CACHE_DIR" "$BACKUP_BASE"
 
@@ -27,6 +23,56 @@ send_notif() {
     fi
 }
 
+get_local_version() {
+    if [ -f "$REPO_DIR/.version" ]; then
+        local raw
+        raw=$(cat "$REPO_DIR/.version" | tr -d '[:space:]')
+        if [ -n "$raw" ]; then
+            echo "${raw#v}"
+            return
+        fi
+    fi
+    if [ -f "$HOME/.version" ]; then
+        local raw
+        raw=$(cat "$HOME/.version" | tr -d '[:space:]')
+        if [ -n "$raw" ]; then
+            echo "${raw#v}"
+            return
+        fi
+    fi
+    if [ -d "$REPO_DIR/.git" ]; then
+        local desc
+        desc=$(git -C "$REPO_DIR" describe --tags --always 2>/dev/null || true)
+        if [ -n "$desc" ]; then
+            echo "${desc#v}"
+            return
+        fi
+    fi
+    echo "1.0.0"
+}
+
+get_remote_version() {
+    if [ -d "$REPO_DIR/.git" ]; then
+        local remote_v
+        remote_v=$(git -C "$REPO_DIR" show origin/main:.version 2>/dev/null | tr -d '[:space:]' || true)
+        if [ -n "$remote_v" ]; then
+            echo "${remote_v#v}"
+            return
+        fi
+        local behind
+        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+        if [ "$behind" -gt 0 ]; then
+            local remote_tag
+            remote_tag=$(git -C "$REPO_DIR" describe --tags origin/main 2>/dev/null || true)
+            if [ -n "$remote_tag" ]; then
+                echo "${remote_tag#v}"
+                return
+            fi
+        fi
+    fi
+    get_local_version
+}
+
 # Generate OTA status JSON
 generate_status_json() {
     local fetch_remote="${1:-false}"
@@ -35,12 +81,21 @@ generate_status_json() {
         git -C "$REPO_DIR" fetch origin main --quiet 2>/dev/null || true
     fi
 
+    local local_ver
+    local_ver=$(get_local_version)
+    local remote_ver
+    remote_ver=$(get_remote_version)
+
     local dotfiles_behind=0
     local dotfiles_ahead=0
     local dotfiles_hash="unknown"
+    local remote_hash="unknown"
+    local dotfiles_branch="main"
 
     if [ -d "$REPO_DIR/.git" ]; then
         dotfiles_hash=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        remote_hash=$(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo "$dotfiles_hash")
+        dotfiles_branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
         dotfiles_behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
         dotfiles_ahead=$(git -C "$REPO_DIR" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
     fi
@@ -72,7 +127,11 @@ generate_status_json() {
     local status="up_to_date"
     local status_text="System is up to date"
 
-    if [ "$dotfiles_behind" -gt 0 ] || [ "$pacman_updates" -gt 0 ]; then
+    if [ "$local_ver" != "$remote_ver" ]; then
+        has_updates=true
+        status="update_available"
+        status_text="New release v$remote_ver available ($dotfiles_behind commits behind)"
+    elif [ "$dotfiles_behind" -gt 0 ] || [ "$pacman_updates" -gt 0 ]; then
         has_updates=true
         status="update_available"
         if [ "$dotfiles_behind" -gt 0 ] && [ "$pacman_updates" -gt 0 ]; then
@@ -95,15 +154,16 @@ generate_status_json() {
   "status": "$status",
   "status_text": "$status_text",
   "has_updates": $has_updates,
+  "current_version": "v$local_ver",
+  "latest_version": "v$remote_ver",
+  "dotfiles_branch": "$dotfiles_branch",
   "dotfiles_behind": $dotfiles_behind,
   "dotfiles_ahead": $dotfiles_ahead,
   "dotfiles_hash": "$dotfiles_hash",
+  "remote_hash": "$remote_hash",
   "pacman_updates": $pacman_updates,
   "pacman_list": $pkgs_json,
   "kernel": "$kernel_ver",
-  "android_version": "$ANDROID_VERSION",
-  "build_number": "$BUILD_NUMBER",
-  "security_patch": "$SECURITY_PATCH",
   "last_checked": "$last_checked"
 }
 EOF
@@ -136,6 +196,10 @@ cmd_check() {
     pacman_count=$(echo "$data" | jq -r '.pacman_updates')
     local dotfiles_count
     dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind')
+    local cur_ver
+    cur_ver=$(echo "$data" | jq -r '.current_version')
+    local lat_ver
+    lat_ver=$(echo "$data" | jq -r '.latest_version')
 
     if [ "$has_updates" = "true" ] && [ "$silent" != "true" ]; then
         send_notif "System Update Available" "$status_text" "normal"
@@ -148,11 +212,10 @@ cmd_check() {
         echo "          SYSTEM UPDATE CHECK             "
         echo "=========================================="
         echo "Status:          $status_text"
+        echo "Current Version: $cur_ver"
+        echo "Latest Version:  $lat_ver"
         echo "Dotfiles Behind: $dotfiles_count"
         echo "Pacman Updates:  $pacman_count"
-        echo "Android Version: $ANDROID_VERSION"
-        echo "Build Number:    $BUILD_NUMBER"
-        echo "Security Patch:  $SECURITY_PATCH"
         echo "=========================================="
     fi
 }
@@ -179,6 +242,10 @@ cmd_status() {
     else
         local status_text
         status_text=$(echo "$data" | jq -r '.status_text // "Unknown"')
+        local cur_ver
+        cur_ver=$(echo "$data" | jq -r '.current_version // "v1.0.0"')
+        local lat_ver
+        lat_ver=$(echo "$data" | jq -r '.latest_version // "v1.0.0"')
         local dotfiles_count
         dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind // 0')
         local pacman_count
@@ -187,20 +254,43 @@ cmd_status() {
         last_checked=$(echo "$data" | jq -r '.last_checked // "Never"')
         local dotfiles_hash
         dotfiles_hash=$(echo "$data" | jq -r '.dotfiles_hash // "unknown"')
+        local kernel
+        kernel=$(echo "$data" | jq -r '.kernel // "Linux"')
 
         echo "=========================================="
-        echo "       ANDROID SYSTEM UPDATE STATUS       "
+        echo "           SYSTEM UPDATE STATUS           "
         echo "=========================================="
         echo "Status:          $status_text"
-        echo "Current Hash:    $dotfiles_hash"
+        echo "Current Version: $cur_ver ($dotfiles_hash)"
+        echo "Latest Version:  $lat_ver"
         echo "Dotfiles Behind: $dotfiles_count"
         echo "Pacman Updates:  $pacman_count"
-        echo "Android Version: $ANDROID_VERSION"
-        echo "Build Number:    $BUILD_NUMBER"
-        echo "Security Patch:  $SECURITY_PATCH"
+        echo "Linux Kernel:    $kernel"
         echo "Last Checked:    $last_checked"
         echo "=========================================="
     fi
+}
+
+cmd_release() {
+    local new_ver="${1:-}"
+    if [ -z "$new_ver" ]; then
+        echo "Current version: $(get_local_version)"
+        echo "Usage: system-ota release <version> (e.g. 1.0.1 or v1.0.1)"
+        return 1
+    fi
+    new_ver="${new_ver#v}"
+    echo "$new_ver" > "$REPO_DIR/.version"
+    echo "$new_ver" > "$HOME/.version"
+
+    if [ -d "$REPO_DIR/.git" ]; then
+        git -C "$REPO_DIR" add "$REPO_DIR/.version" 2>/dev/null || true
+        git -C "$REPO_DIR" commit -m "chore(release): bump version to v$new_ver" 2>/dev/null || true
+        git -C "$REPO_DIR" tag -f "v$new_ver" -m "Release v$new_ver" 2>/dev/null || true
+    fi
+
+    generate_status_json "false" >/dev/null
+    send_notif "System Release" "Rhythm Hyprland version updated to v$new_ver" "normal"
+    echo "Release v$new_ver tagged and recorded successfully."
 }
 
 cmd_changelog() {
@@ -248,6 +338,7 @@ cmd_backup() {
 {
   "id": "$snap_id",
   "created_at": "$(date -Iseconds)",
+  "version": "$(get_local_version)",
   "commit": "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
 }
 EOF
@@ -303,6 +394,10 @@ cmd_update() {
 
     # Deploy configs & scripts
     echo "Deploying configs and scripts..."
+    if [ -f "$REPO_DIR/.version" ]; then
+        cp -f "$REPO_DIR/.version" "$HOME/.version" 2>/dev/null || true
+    fi
+
     if [ -d "$REPO_DIR/.local/bin" ]; then
         mkdir -p "$HOME/.local/bin"
         cp -f "$REPO_DIR"/.local/bin/* "$HOME/.local/bin/" 2>/dev/null || true
@@ -413,8 +508,10 @@ cmd_gui() {
         status_data=$(generate_status_json "false")
         local status_text
         status_text=$(echo "$status_data" | jq -r '.status_text')
-        local has_updates
-        has_updates=$(echo "$status_data" | jq -r '.has_updates')
+        local cur_ver
+        cur_ver=$(echo "$status_data" | jq -r '.current_version')
+        local lat_ver
+        lat_ver=$(echo "$status_data" | jq -r '.latest_version')
         local dotfiles_count
         dotfiles_count=$(echo "$status_data" | jq -r '.dotfiles_behind')
         local pacman_count
@@ -430,13 +527,12 @@ cmd_gui() {
             --padding "1 2" \
             --margin "1 1" \
             --align center \
-            "ANDROID SYSTEM UPDATE" \
-            "Device: Arch Linux Hyprland Rice" \
-            "Version: $ANDROID_VERSION" \
-            "Build: $BUILD_NUMBER" \
-            "Security Patch: $SECURITY_PATCH" \
-            "Kernel: $kernel" \
-            "Commit: $hash | Pending: $dotfiles_count dotfiles, $pacman_count packages" \
+            "SYSTEM UPDATE (OTA)" \
+            "Rhythm Hyprland System" \
+            "Current Version: $cur_ver ($hash)" \
+            "Latest Available: $lat_ver" \
+            "Linux Kernel: $kernel" \
+            "Pending: $dotfiles_count dotfiles, $pacman_count packages" \
             "" \
             "Status: $status_text"
 
@@ -447,8 +543,9 @@ cmd_gui() {
             "2. Download & Install update (Seamless)" \
             "3. Update system packages (pacman -Syu)" \
             "4. View Changelog & Release Notes" \
-            "5. Rollback to previous checkpoint" \
-            "6. Exit")
+            "5. Tag new release version" \
+            "6. Rollback to previous checkpoint" \
+            "7. Exit")
 
         case "$choice" in
             "1."*)
@@ -457,7 +554,7 @@ cmd_gui() {
                 gum confirm "Press enter to return" || true
                 ;;
             "2."*)
-                if gum confirm "Start Android OTA update now?"; then
+                if gum confirm "Start OTA update now?"; then
                     gum spin --spinner line --title "Applying update..." -- bash -c "$HOME/.local/bin/system-ota update"
                     gum confirm "Update completed. Press enter to continue" || true
                 fi
@@ -474,10 +571,18 @@ cmd_gui() {
                 gum confirm "Press enter to return" || true
                 ;;
             "5."*)
+                local target_v
+                target_v=$(gum input --placeholder "e.g. 1.0.1 or 1.1.0")
+                if [ -n "$target_v" ]; then
+                    cmd_release "$target_v"
+                    gum confirm "Press enter to continue" || true
+                fi
+                ;;
+            "6."*)
                 cmd_rollback
                 gum confirm "Press enter to return" || true
                 ;;
-            "6."*)
+            "7."*)
                 break
                 ;;
         esac
@@ -497,6 +602,10 @@ case "${1:-status}" in
         shift
         cmd_changelog "$@"
         ;;
+    release)
+        shift
+        cmd_release "$@"
+        ;;
     backup)
         shift
         cmd_backup "$@"
@@ -514,18 +623,19 @@ case "${1:-status}" in
         cmd_gui "$@"
         ;;
     -h|--help|help)
-        echo "Android-style OTA System Updater"
+        echo "OTA System Updater"
         echo ""
         echo "Usage: system-ota <command> [options]"
         echo ""
         echo "Commands:"
         echo "  status [--json]       Show current update status"
         echo "  check [--json]        Check for remote updates and notify"
+        echo "  release <version>     Tag and release a new system version"
         echo "  update [--system]     Install OTA update (dotfiles & optional pacman)"
         echo "  changelog [--json]    View recent changes and commit history"
         echo "  backup                Create a manual safety checkpoint"
         echo "  rollback              Restore from a previous checkpoint"
-        echo "  gui                   Launch interactive Android-style terminal UI"
+        echo "  gui                   Launch interactive terminal UI"
         ;;
     *)
         cmd_status "$@"

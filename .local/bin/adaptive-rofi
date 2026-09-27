@@ -71,27 +71,5 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-_rust_was_visible=false
-_waybar_was_visible=false
-_qs_was_visible=false
-
-if pgrep -x rust-dock >/dev/null 2>&1; then
-    _rust_was_visible=true
-    pkill -SIGUSR1 rust-dock 2>/dev/null &
-fi
-if pgrep -x waybar >/dev/null 2>&1; then
-    _waybar_was_visible=true
-    pkill -SIGUSR1 waybar 2>/dev/null &
-fi
-if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-    _qs_was_visible=true
-    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
-fi
-wait
-
+# Las pantallas funcionan de forma independiente: no ocultar barras globalmente
 rofi $ROFI_ARGS
-
-[ "$_rust_was_visible" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
-[ "$_waybar_was_visible" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-[ "$_qs_was_visible" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
-wait

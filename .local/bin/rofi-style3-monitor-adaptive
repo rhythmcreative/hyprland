@@ -120,37 +120,17 @@ _RUST_DOCK_WAS_VISIBLE=false
 _QUICKSHELL_WAS_VISIBLE=false
 _WAYBAR_WAS_VISIBLE=false
 
-# Ocultar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
+# Las pantallas funcionan de forma independiente: no ocultar barras globalmente
 hide_all_bars() {
-    log_debug "Ocultando barras simultáneamente..."
-    if pgrep -x waybar >/dev/null 2>&1; then
-        _WAYBAR_WAS_VISIBLE=true
-        pkill -SIGUSR1 waybar 2>/dev/null &
-    fi
-    if pgrep -x rust-dock >/dev/null 2>&1; then
-        _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 rust-dock 2>/dev/null &
-    fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        _QUICKSHELL_WAS_VISIBLE=true
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
-    fi
-    wait
+    :
 }
 
-# Restaurar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
 show_all_bars() {
-    log_debug "Restaurando barras simultáneamente..."
-    [ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-    [ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
-    [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
-    wait
+    :
 }
 
 # Función de cleanup al salir
 cleanup() {
-    log_debug "Ejecutando cleanup..."
-    show_all_bars
     exit 0
 }
 

@@ -120,35 +120,55 @@ _RUST_DOCK_WAS_VISIBLE=false
 _QUICKSHELL_WAS_VISIBLE=false
 _WAYBAR_WAS_VISIBLE=false
 
-# Ocultar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
-hide_all_bars() {
-    log_debug "Ocultando barras simultáneamente..."
-    if pgrep -x waybar >/dev/null 2>&1; then
-        _WAYBAR_WAS_VISIBLE=true
-        pkill -SIGUSR1 waybar 2>/dev/null &
-    fi
-    if pgrep -x rust-dock >/dev/null 2>&1; then
-        _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 rust-dock 2>/dev/null &
-    fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        _QUICKSHELL_WAS_VISIBLE=true
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
+# Ocultar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
+hide_active_bars() {
+    local mon="$ACTIVE_MONITOR"
+    log_debug "Ocultando barras en monitor activo: $mon..."
+    if [ -n "$mon" ]; then
+        if pgrep -f "waybar.*config-$mon" >/dev/null 2>&1; then
+            _WAYBAR_WAS_VISIBLE=true
+            pkill -SIGUSR1 -f "waybar.*config-$mon" 2>/dev/null &
+        elif pgrep -x waybar >/dev/null 2>&1; then
+            _WAYBAR_WAS_VISIBLE=true
+            pkill -SIGUSR1 waybar 2>/dev/null &
+        fi
+        if pgrep -f "rust-dock.*-o +$mon" >/dev/null 2>&1; then
+            _RUST_DOCK_WAS_VISIBLE=true
+            pkill -SIGUSR1 -f "rust-dock.*-o +$mon" 2>/dev/null &
+        elif pgrep -x rust-dock >/dev/null 2>&1; then
+            _RUST_DOCK_WAS_VISIBLE=true
+            pkill -SIGUSR1 rust-dock 2>/dev/null &
+        fi
+        if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+            _QUICKSHELL_WAS_VISIBLE=true
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$mon" >/dev/null 2>&1 &
+        fi
     fi
 }
 
-# Restaurar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
-show_all_bars() {
-    log_debug "Restaurando barras simultáneamente..."
-    [ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-    [ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
-    [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
+# Restaurar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
+show_active_bars() {
+    local mon="$ACTIVE_MONITOR"
+    log_debug "Restaurando barras en monitor activo: $mon..."
+    if [ -n "$mon" ]; then
+        if [ "$_WAYBAR_WAS_VISIBLE" = true ]; then
+            pkill -SIGUSR2 -f "waybar.*config-$mon" 2>/dev/null &
+            pkill -SIGUSR2 -x waybar 2>/dev/null &
+        fi
+        if [ "$_RUST_DOCK_WAS_VISIBLE" = true ]; then
+            pkill -SIGUSR2 -f "rust-dock.*-o +$mon" 2>/dev/null &
+            pkill -SIGUSR2 -x rust-dock 2>/dev/null &
+        fi
+        if [ "$_QUICKSHELL_WAS_VISIBLE" = true ]; then
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &
+        fi
+    fi
 }
 
 # Función de cleanup al salir
 cleanup() {
     log_debug "Ejecutando cleanup..."
-    show_all_bars
+    show_active_bars
     exit 0
 }
 
@@ -276,7 +296,7 @@ launch_rofi() {
     # NUEVO: Sincronizar colores de rofi con pywal antes de mostrar rofi
     sync_rofi_colors
     
-    hide_all_bars
+    hide_active_bars
     
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
     log_debug "Tema: $ADAPTED_STYLE"

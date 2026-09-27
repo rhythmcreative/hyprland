@@ -120,37 +120,49 @@ _RUST_DOCK_WAS_VISIBLE=false
 _QUICKSHELL_WAS_VISIBLE=false
 _WAYBAR_WAS_VISIBLE=false
 
-# Ocultar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
+# Ocultar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
 hide_all_bars() {
-    log_debug "Ocultando barras simultáneamente..."
-    if pgrep -x waybar >/dev/null 2>&1; then
-        _WAYBAR_WAS_VISIBLE=true
-        pkill -SIGUSR1 waybar 2>/dev/null &
+    local mon="$ACTIVE_MONITOR"
+    log_debug "Ocultando barras en monitor activo: $mon..."
+    if [ -n "$mon" ]; then
+        if pgrep -f "waybar.*config-$mon" >/dev/null 2>&1; then
+            _WAYBAR_WAS_VISIBLE=true
+            pkill -SIGUSR1 -f "waybar.*config-$mon" 2>/dev/null &
+        elif pgrep -x waybar >/dev/null 2>&1; then
+            _WAYBAR_WAS_VISIBLE=true
+            pkill -SIGUSR1 waybar 2>/dev/null &
+        fi
+        if pgrep -f "rust-dock.*-o +$mon" >/dev/null 2>&1; then
+            _RUST_DOCK_WAS_VISIBLE=true
+            pkill -SIGUSR1 -f "rust-dock.*-o +$mon" 2>/dev/null &
+        elif pgrep -x rust-dock >/dev/null 2>&1; then
+            _RUST_DOCK_WAS_VISIBLE=true
+            pkill -SIGUSR1 rust-dock 2>/dev/null &
+        fi
+        if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+            _QUICKSHELL_WAS_VISIBLE=true
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$mon" >/dev/null 2>&1 &
+        fi
     fi
-    if pgrep -x rust-dock >/dev/null 2>&1; then
-        _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 rust-dock 2>/dev/null &
-    fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        _QUICKSHELL_WAS_VISIBLE=true
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
-    fi
-    wait
 }
 
-# Restaurar Waybar, Rust-dock y Quickshell simultáneamente en paralelo
+# Restaurar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
 show_all_bars() {
-    log_debug "Restaurando barras simultáneamente..."
-    if [ "$_WAYBAR_WAS_VISIBLE" = true ] || pgrep -x waybar >/dev/null 2>&1; then
-        pkill -SIGUSR2 waybar 2>/dev/null &
+    local mon="$ACTIVE_MONITOR"
+    log_debug "Restaurando barras en monitor activo: $mon..."
+    if [ -n "$mon" ]; then
+        if [ "$_WAYBAR_WAS_VISIBLE" = true ] || pgrep -x waybar >/dev/null 2>&1; then
+            pkill -SIGUSR2 -f "waybar.*config-$mon" 2>/dev/null &
+            pkill -SIGUSR2 -x waybar 2>/dev/null &
+        fi
+        if [ "$_RUST_DOCK_WAS_VISIBLE" = true ] || pgrep -x rust-dock >/dev/null 2>&1; then
+            pkill -SIGUSR2 -f "rust-dock.*-o +$mon" 2>/dev/null &
+            pkill -SIGUSR2 -x rust-dock 2>/dev/null &
+        fi
+        if [ "$_QUICKSHELL_WAS_VISIBLE" = true ] || pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &
+        fi
     fi
-    if [ "$_RUST_DOCK_WAS_VISIBLE" = true ] || pgrep -x rust-dock >/dev/null 2>&1; then
-        pkill -SIGUSR2 rust-dock 2>/dev/null &
-    fi
-    if [ "$_QUICKSHELL_WAS_VISIBLE" = true ] || pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
-    fi
-    wait
 }
 
 # Función de cleanup al salir

@@ -1,5 +1,5 @@
 @import "colors-pywal.css";
-@import "powersave.css";
+
 
 /* --- Global Styles --- */
 * {
@@ -363,13 +363,7 @@
 #battery.warning:not(.charging),
 #battery.bat0.warning:not(.charging),
 #battery.bat1.warning:not(.charging) {
-  color: #f1c40f;
-}
-
-#battery.critical:not(.charging),
-#battery.bat0.critical:not(.charging),
-#battery.bat1.critical:not(.charging) {
-  color: #e06c75;
+  color: @color1;
 }
 
 

@@ -1,4 +1,5 @@
 @import "colors-pywal.rasi"
+@import "colors-powersave.rasi"
 
 /**
  *

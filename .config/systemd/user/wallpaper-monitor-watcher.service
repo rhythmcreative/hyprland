@@ -1,0 +1,13 @@
+[Unit]
+Description=Monitor watcher for Wallpaper auto-synchronization
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/wallpaper-monitor-watcher
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=graphical-session.target

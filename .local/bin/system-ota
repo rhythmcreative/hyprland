@@ -1,0 +1,533 @@
+#!/usr/bin/env bash
+# system-ota: Android-style OTA System Updater for Arch Linux & Hyprland
+# Provides check, status, update, changelog, rollback, and interactive GUI.
+# Standard: Zero emojis, English notifications and output.
+
+set -euo pipefail
+
+REPO_DIR="/home/rhythmcreative/hyprland"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
+STATUS_FILE="/tmp/ota-status.json"
+BACKUP_BASE="$HOME/.config.backup"
+LOG_FILE="/tmp/system-ota.log"
+
+ANDROID_VERSION="Android 15 (VanillaIceCream)"
+BUILD_NUMBER="RHYTHM-ARCH-HYPRLAND-2026.09"
+SECURITY_PATCH="September 5, 2026"
+
+mkdir -p "$CACHE_DIR" "$BACKUP_BASE"
+
+# Helper for notifications
+send_notif() {
+    local title="$1"
+    local msg="$2"
+    local urgency="${3:-normal}"
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -u "$urgency" -a "System Update" -i "system-software-update" "$title" "$msg" 2>/dev/null || true
+    fi
+}
+
+# Generate OTA status JSON
+generate_status_json() {
+    local fetch_remote="${1:-false}"
+
+    if [ "$fetch_remote" = "true" ] && [ -d "$REPO_DIR/.git" ]; then
+        git -C "$REPO_DIR" fetch origin main --quiet 2>/dev/null || true
+    fi
+
+    local dotfiles_behind=0
+    local dotfiles_ahead=0
+    local dotfiles_hash="unknown"
+
+    if [ -d "$REPO_DIR/.git" ]; then
+        dotfiles_hash=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        dotfiles_behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+        dotfiles_ahead=$(git -C "$REPO_DIR" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+    fi
+
+    local pacman_updates=0
+    local pacman_pkgs=()
+    if command -v pacman >/dev/null 2>&1; then
+        local raw_pacman
+        raw_pacman=$(pacman -Qu 2>/dev/null || true)
+        if [ -n "$raw_pacman" ]; then
+            pacman_updates=$(echo "$raw_pacman" | wc -l)
+            while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                    local pkg
+                    pkg=$(echo "$line" | awk '{print $1}')
+                    pacman_pkgs+=("\"$pkg\"")
+                fi
+            done <<< "$raw_pacman"
+        fi
+    fi
+
+    local kernel_ver
+    kernel_ver=$(uname -r 2>/dev/null || echo "Linux")
+
+    local last_checked
+    last_checked=$(date "+%Y-%m-%d %H:%M")
+
+    local has_updates=false
+    local status="up_to_date"
+    local status_text="System is up to date"
+
+    if [ "$dotfiles_behind" -gt 0 ] || [ "$pacman_updates" -gt 0 ]; then
+        has_updates=true
+        status="update_available"
+        if [ "$dotfiles_behind" -gt 0 ] && [ "$pacman_updates" -gt 0 ]; then
+            status_text="$dotfiles_behind dotfile update(s) and $pacman_updates package update(s) available"
+        elif [ "$dotfiles_behind" -gt 0 ]; then
+            status_text="$dotfiles_behind dotfile update(s) available"
+        else
+            status_text="$pacman_updates system package update(s) available"
+        fi
+    fi
+
+    local pkgs_json="[]"
+    if [ ${#pacman_pkgs[@]} -gt 0 ]; then
+        pkgs_json="[$(IFS=,; echo "${pacman_pkgs[*]}")]"
+    fi
+
+    local json_output
+    json_output=$(cat <<EOF
+{
+  "status": "$status",
+  "status_text": "$status_text",
+  "has_updates": $has_updates,
+  "dotfiles_behind": $dotfiles_behind,
+  "dotfiles_ahead": $dotfiles_ahead,
+  "dotfiles_hash": "$dotfiles_hash",
+  "pacman_updates": $pacman_updates,
+  "pacman_list": $pkgs_json,
+  "kernel": "$kernel_ver",
+  "android_version": "$ANDROID_VERSION",
+  "build_number": "$BUILD_NUMBER",
+  "security_patch": "$SECURITY_PATCH",
+  "last_checked": "$last_checked"
+}
+EOF
+)
+
+    echo "$json_output" > "$STATUS_FILE"
+    echo "$json_output" > "$CACHE_DIR/ota-status.json"
+    echo "$json_output"
+}
+
+cmd_check() {
+    local json_mode=false
+    local silent=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json_mode=true ;;
+            --silent|-s) silent=true ;;
+        esac
+    done
+
+    local data
+    data=$(generate_status_json "true")
+
+    local has_updates
+    has_updates=$(echo "$data" | jq -r '.has_updates')
+    local status_text
+    status_text=$(echo "$data" | jq -r '.status_text')
+    local pacman_count
+    pacman_count=$(echo "$data" | jq -r '.pacman_updates')
+    local dotfiles_count
+    dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind')
+
+    if [ "$has_updates" = "true" ] && [ "$silent" != "true" ]; then
+        send_notif "System Update Available" "$status_text" "normal"
+    fi
+
+    if [ "$json_mode" = "true" ]; then
+        echo "$data"
+    else
+        echo "=========================================="
+        echo "          SYSTEM UPDATE CHECK             "
+        echo "=========================================="
+        echo "Status:          $status_text"
+        echo "Dotfiles Behind: $dotfiles_count"
+        echo "Pacman Updates:  $pacman_count"
+        echo "Android Version: $ANDROID_VERSION"
+        echo "Build Number:    $BUILD_NUMBER"
+        echo "Security Patch:  $SECURITY_PATCH"
+        echo "=========================================="
+    fi
+}
+
+cmd_status() {
+    local json_mode=false
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json_mode=true ;;
+        esac
+    done
+
+    local data
+    if [ -f "$STATUS_FILE" ]; then
+        data=$(cat "$STATUS_FILE")
+    elif [ -f "$CACHE_DIR/ota-status.json" ]; then
+        data=$(cat "$CACHE_DIR/ota-status.json")
+    else
+        data=$(generate_status_json "false")
+    fi
+
+    if [ "$json_mode" = "true" ]; then
+        echo "$data"
+    else
+        local status_text
+        status_text=$(echo "$data" | jq -r '.status_text // "Unknown"')
+        local dotfiles_count
+        dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind // 0')
+        local pacman_count
+        pacman_count=$(echo "$data" | jq -r '.pacman_updates // 0')
+        local last_checked
+        last_checked=$(echo "$data" | jq -r '.last_checked // "Never"')
+        local dotfiles_hash
+        dotfiles_hash=$(echo "$data" | jq -r '.dotfiles_hash // "unknown"')
+
+        echo "=========================================="
+        echo "       ANDROID SYSTEM UPDATE STATUS       "
+        echo "=========================================="
+        echo "Status:          $status_text"
+        echo "Current Hash:    $dotfiles_hash"
+        echo "Dotfiles Behind: $dotfiles_count"
+        echo "Pacman Updates:  $pacman_count"
+        echo "Android Version: $ANDROID_VERSION"
+        echo "Build Number:    $BUILD_NUMBER"
+        echo "Security Patch:  $SECURITY_PATCH"
+        echo "Last Checked:    $last_checked"
+        echo "=========================================="
+    fi
+}
+
+cmd_changelog() {
+    local json_mode=false
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json_mode=true ;;
+        esac
+    done
+
+    if [ ! -d "$REPO_DIR/.git" ]; then
+        echo "Git repository not found at $REPO_DIR"
+        return 1
+    fi
+
+    if [ "$json_mode" = "true" ]; then
+        git -C "$REPO_DIR" log -n 10 --pretty=format:'{"hash":"%h","date":"%cr","subject":"%s"}' | jq -s .
+    else
+        echo "=== Recent Commits & Changes ==="
+        git -C "$REPO_DIR" log -n 8 --pretty=format:"* [%h] %s (%cr)"
+        echo ""
+        local behind
+        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+        if [ "$behind" -gt 0 ]; then
+            echo ""
+            echo "=== Pending Remote Updates ($behind commits) ==="
+            git -C "$REPO_DIR" log HEAD..origin/main --pretty=format:"* [%h] %s (%cr)"
+            echo ""
+        fi
+    fi
+}
+
+cmd_backup() {
+    local snap_id="ota-$(date +%Y%m%d_%H%M%S)"
+    local target="$BACKUP_BASE/$snap_id"
+    mkdir -p "$target"
+
+    echo "Creating safety checkpoint at $target..."
+    if [ -d "$HOME/.config/hypr" ]; then cp -r "$HOME/.config/hypr" "$target/"; fi
+    if [ -d "$HOME/.config/waybar" ]; then cp -r "$HOME/.config/waybar" "$target/"; fi
+    if [ -d "$HOME/.config/quickshell" ]; then cp -r "$HOME/.config/quickshell" "$target/"; fi
+    if [ -d "$HOME/.local/bin" ]; then cp -r "$HOME/.local/bin" "$target/"; fi
+
+    cat <<EOF > "$target/checkpoint.json"
+{
+  "id": "$snap_id",
+  "created_at": "$(date -Iseconds)",
+  "commit": "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
+}
+EOF
+    echo "Checkpoint $snap_id created successfully."
+    echo "$target"
+}
+
+cmd_update() {
+    local dotfiles_only=false
+    local system_packages=false
+    local skip_backup=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            --dotfiles-only) dotfiles_only=true ;;
+            --system|--all) system_packages=true ;;
+            --no-backup) skip_backup=true ;;
+        esac
+    done
+
+    send_notif "System Update" "Starting OTA update process..." "normal"
+
+    # Step 1: Backup
+    if [ "$skip_backup" != "true" ]; then
+        echo "[1/4] Creating system backup checkpoint..."
+        cmd_backup >/dev/null
+    fi
+
+    # Step 2: Dotfiles sync
+    echo "[2/4] Updating dotfiles from repository..."
+    if [ -d "$REPO_DIR/.git" ]; then
+        local stash_needed=false
+        if ! git -C "$REPO_DIR" diff --quiet 2>/dev/null || ! git -C "$REPO_DIR" diff --cached --quiet 2>/dev/null; then
+            echo "Stashing local changes..."
+            git -C "$REPO_DIR" stash push -u -m "ota-pre-update-$(date +%s)" >/dev/null 2>&1 || true
+            stash_needed=true
+        fi
+
+        # Pull if behind
+        local behind
+        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+        if [ "$behind" -gt 0 ]; then
+            echo "Pulling $behind new commit(s) from remote..."
+            git -C "$REPO_DIR" pull --rebase origin main >> "$LOG_FILE" 2>&1 || {
+                echo "Warning: Rebase failed or had conflicts. Preserving local state."
+            }
+        fi
+
+        if [ "$stash_needed" = "true" ]; then
+            git -C "$REPO_DIR" stash pop >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Deploy configs & scripts
+    echo "Deploying configs and scripts..."
+    if [ -d "$REPO_DIR/.local/bin" ]; then
+        mkdir -p "$HOME/.local/bin"
+        cp -f "$REPO_DIR"/.local/bin/* "$HOME/.local/bin/" 2>/dev/null || true
+        chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
+    fi
+
+    if [ -d "$REPO_DIR/.config" ]; then
+        mkdir -p "$HOME/.config"
+        for item in "$REPO_DIR"/.config/*; do
+            local base
+            base=$(basename "$item")
+            if [ -d "$item" ]; then
+                mkdir -p "$HOME/.config/$base"
+                cp -rf "$item"/* "$HOME/.config/$base/" 2>/dev/null || true
+            else
+                cp -f "$item" "$HOME/.config/$base" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    # Step 3: Pacman packages if requested
+    if [ "$system_packages" = "true" ]; then
+        echo "[3/4] Updating system packages with pacman..."
+        if command -v sudo >/dev/null 2>&1; then
+            sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1 || echo "Warning: pacman update had warnings or errors."
+        else
+            echo "Sudo not available, skipping pacman system packages."
+        fi
+    else
+        echo "[3/4] Skipping pacman packages (run with --system to update packages)."
+    fi
+
+    # Step 4: Reload desktop services
+    echo "[4/4] Reloading desktop services..."
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 || true
+    fi
+
+    if command -v pkill >/dev/null 2>&1; then
+        pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+    fi
+
+    # Restart quickshell if running
+    if pgrep -f "quickshell" >/dev/null 2>&1; then
+        if [ -x "$HOME/.local/bin/quickshell-island" ]; then
+            nohup "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 &
+        fi
+    fi
+
+    # Re-generate clean status
+    generate_status_json "false" >/dev/null 2>&1 || true
+
+    send_notif "System Update Complete" "OTA update applied successfully. Desktop services reloaded." "normal"
+    echo "OTA update finished successfully!"
+}
+
+cmd_rollback() {
+    local snapshots=()
+    for d in "$BACKUP_BASE"/ota-*; do
+        if [ -d "$d" ]; then
+            snapshots+=("$(basename "$d")")
+        fi
+    done
+
+    if [ ${#snapshots[@]} -eq 0 ]; then
+        echo "No backup checkpoints found in $BACKUP_BASE."
+        return 0
+    fi
+
+    echo "Available Checkpoints:"
+    for idx in "${!snapshots[@]}"; do
+        echo "  [$((idx + 1))] ${snapshots[$idx]}"
+    done
+
+    local choice
+    if command -v gum >/dev/null 2>&1; then
+        choice=$(gum choose "${snapshots[@]}")
+    else
+        read -r -p "Select checkpoint number: " num
+        choice="${snapshots[$((num - 1))]}"
+    fi
+
+    if [ -n "$choice" ] && [ -d "$BACKUP_BASE/$choice" ]; then
+        echo "Restoring checkpoint $choice..."
+        local src="$BACKUP_BASE/$choice"
+        if [ -d "$src/hypr" ]; then cp -rf "$src/hypr" "$HOME/.config/"; fi
+        if [ -d "$src/waybar" ]; then cp -rf "$src/waybar" "$HOME/.config/"; fi
+        if [ -d "$src/quickshell" ]; then cp -rf "$src/quickshell" "$HOME/.config/"; fi
+        if [ -d "$src/bin" ]; then cp -rf "$src/bin"/* "$HOME/.local/bin/"; fi
+
+        hyprctl reload >/dev/null 2>&1 || true
+        pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+        send_notif "System Update" "Checkpoint $choice restored successfully." "normal"
+        echo "Rollback completed."
+    fi
+}
+
+cmd_gui() {
+    if ! command -v gum >/dev/null 2>&1; then
+        echo "gum is required for the interactive GUI."
+        cmd_status
+        return 0
+    fi
+
+    while true; do
+        clear
+        local status_data
+        status_data=$(generate_status_json "false")
+        local status_text
+        status_text=$(echo "$status_data" | jq -r '.status_text')
+        local has_updates
+        has_updates=$(echo "$status_data" | jq -r '.has_updates')
+        local dotfiles_count
+        dotfiles_count=$(echo "$status_data" | jq -r '.dotfiles_behind')
+        local pacman_count
+        pacman_count=$(echo "$status_data" | jq -r '.pacman_updates')
+        local hash
+        hash=$(echo "$status_data" | jq -r '.dotfiles_hash')
+        local kernel
+        kernel=$(echo "$status_data" | jq -r '.kernel')
+
+        gum style \
+            --border double \
+            --border-foreground 212 \
+            --padding "1 2" \
+            --margin "1 1" \
+            --align center \
+            "ANDROID SYSTEM UPDATE" \
+            "Device: Arch Linux Hyprland Rice" \
+            "Version: $ANDROID_VERSION" \
+            "Build: $BUILD_NUMBER" \
+            "Security Patch: $SECURITY_PATCH" \
+            "Kernel: $kernel" \
+            "Commit: $hash | Pending: $dotfiles_count dotfiles, $pacman_count packages" \
+            "" \
+            "Status: $status_text"
+
+        echo ""
+        local choice
+        choice=$(gum choose \
+            "1. Check for updates" \
+            "2. Download & Install update (Seamless)" \
+            "3. Update system packages (pacman -Syu)" \
+            "4. View Changelog & Release Notes" \
+            "5. Rollback to previous checkpoint" \
+            "6. Exit")
+
+        case "$choice" in
+            "1."*)
+                gum spin --spinner dot --title "Checking for remote updates..." -- sleep 1
+                cmd_check
+                gum confirm "Press enter to return" || true
+                ;;
+            "2."*)
+                if gum confirm "Start Android OTA update now?"; then
+                    gum spin --spinner line --title "Applying update..." -- bash -c "$HOME/.local/bin/system-ota update"
+                    gum confirm "Update completed. Press enter to continue" || true
+                fi
+                ;;
+            "3."*)
+                if gum confirm "Run full system package update via pacman?"; then
+                    sudo pacman -Syu
+                    generate_status_json "false" >/dev/null 2>&1 || true
+                    gum confirm "Package update completed. Press enter to continue" || true
+                fi
+                ;;
+            "4."*)
+                cmd_changelog
+                gum confirm "Press enter to return" || true
+                ;;
+            "5."*)
+                cmd_rollback
+                gum confirm "Press enter to return" || true
+                ;;
+            "6."*)
+                break
+                ;;
+        esac
+    done
+}
+
+case "${1:-status}" in
+    check)
+        shift
+        cmd_check "$@"
+        ;;
+    status)
+        shift
+        cmd_status "$@"
+        ;;
+    changelog)
+        shift
+        cmd_changelog "$@"
+        ;;
+    backup)
+        shift
+        cmd_backup "$@"
+        ;;
+    update|install)
+        shift
+        cmd_update "$@"
+        ;;
+    rollback)
+        shift
+        cmd_rollback "$@"
+        ;;
+    gui)
+        shift
+        cmd_gui "$@"
+        ;;
+    -h|--help|help)
+        echo "Android-style OTA System Updater"
+        echo ""
+        echo "Usage: system-ota <command> [options]"
+        echo ""
+        echo "Commands:"
+        echo "  status [--json]       Show current update status"
+        echo "  check [--json]        Check for remote updates and notify"
+        echo "  update [--system]     Install OTA update (dotfiles & optional pacman)"
+        echo "  changelog [--json]    View recent changes and commit history"
+        echo "  backup                Create a manual safety checkpoint"
+        echo "  rollback              Restore from a previous checkpoint"
+        echo "  gui                   Launch interactive Android-style terminal UI"
+        ;;
+    *)
+        cmd_status "$@"
+        ;;
+esac

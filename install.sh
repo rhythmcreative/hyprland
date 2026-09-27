@@ -1082,6 +1082,7 @@ MONCONF
         chmod +x "$target"
     done
     chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
+    [ -f "$HOME/.local/bin/system-ota" ] && ln -sf "$HOME/.local/bin/system-ota" "$HOME/.local/bin/ota-updater" 2>/dev/null || true
     step_ok "Executables deployed."
 
     # Shell and GTK dotfiles

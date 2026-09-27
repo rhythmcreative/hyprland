@@ -4065,6 +4065,7 @@ ShellRoot {
                             }
 
                             Rectangle {
+                                visible: root.otaData.has_updates || root.otaUpdating
                                 Layout.fillWidth: true; height: 40; radius: 20
                                 color: root.otaUpdating ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.6) : root.colAccent
                                 Behavior on color { ColorAnimation { duration: 200 } }

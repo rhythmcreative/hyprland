@@ -479,6 +479,8 @@ step_software() {
         htop
         btop
         fastfetch
+        inotify-tools
+        psmisc
     )
 
     gum spin --spinner dot --title "Installing core packages and dependencies..." --padding "0 0 0 $PADDING_LEFT" -- \

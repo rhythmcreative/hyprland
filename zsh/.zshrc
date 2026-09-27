@@ -1,5 +1,8 @@
 # --- Rhythm Arch Zsh Configuration ---
 
+# Ensure ~/.local/bin is in PATH
+[[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
+
 # Set name of the theme to load
 # We use Starship so this is secondary
 ZSH_THEME="robbyrussell"

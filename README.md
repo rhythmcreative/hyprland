@@ -18,11 +18,67 @@
 
 </div>
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=PREVIEW)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=DESKTOP+PREVIEW)](https://git.io/typing-svg)
 
 <p align="center">
   <img alt="Desktop Preview" src="assets/desktop.png" width="100%" />
 </p>
+
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=DYNAMIC+ISLAND+%28QUICKSHELL%29)](https://git.io/typing-svg)
+
+The top notch expands smoothly on hover or via shortcut (`Super + I`), providing quick toggles, volume and brightness controls, media playback, and live compositor adjustments.
+
+<p align="center">
+  <img alt="Dynamic Island Animation" src="assets/dynamic_island.gif" width="90%" />
+</p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3 align="center">Control & System Center</h3>
+      <img alt="Control Center Full" src="assets/dynamic_island_full.png" width="100%" />
+      <p align="center"><i>Quick toggles for Wi-Fi, Bluetooth, Audio sinks, Rust-Dock, Night Light, Caffeine, volume/brightness sliders, and MPRIS media player.</i></p>
+    </td>
+    <td width="50%">
+      <h3 align="center">Hyprland Compositor Settings (Super + X)</h3>
+      <img alt="Hyprland Settings Full" src="assets/dynamic_island_settings_full.png" width="100%" />
+      <p align="center"><i>Live controls for corner rounding, window gaps, shadows, blur effects, animations, and monitor profiles without restarting.</i></p>
+    </td>
+  </tr>
+</table>
+
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=SYSTEM+INTERFACES)](https://git.io/typing-svg)
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3 align="center">App Launcher (Super + A)</h3>
+      <img alt="Application Launcher Full" src="assets/rofi_launcher.png" width="100%" />
+      <p align="center"><i>Fullscreen adaptive icon grid with fuzzy search.</i></p>
+    </td>
+    <td width="50%">
+      <h3 align="center">Power Menu (Super + BackSpace)</h3>
+      <img alt="Power Menu Full" src="assets/powermenu.png" width="100%" />
+      <p align="center"><i>Quick session controls: Lock, Sleep, Logout, Reboot, and Shutdown.</i></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3 align="center">Lock Screen (Super + L)</h3>
+      <img alt="Hyprlock Full" src="assets/lockscreen.png" width="100%" />
+      <p align="center"><i>Hyprlock with dynamic blur, date, time, and session greeting.</i></p>
+    </td>
+    <td width="50%">
+      <h3 align="center">SDDM Astronaut Login</h3>
+      <img alt="SDDM Full" src="assets/sddm_login.png" width="100%" />
+      <p align="center"><i>Astronaut display manager theme synced with current colors.</i></p>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -55,49 +111,23 @@ When changing the wallpaper, Pywal automatically calculates the dominant colors 
 
 ---
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=DYNAMIC+ISLAND+%26+SETTINGS)](https://git.io/typing-svg)
-
-<table>
-  <tr>
-    <td width="50%">
-      <h3 align="center">Control Center</h3>
-      <img alt="Control Center" src="assets/control_center_crop.png" width="100%" />
-      <p align="center"><i>Quick toggles for Wi-Fi, Bluetooth, Audio sinks, Rust-Dock, Night Light, Caffeine, volume/brightness sliders, and MPRIS media player.</i></p>
-    </td>
-    <td width="50%">
-      <h3 align="center">Compositor Settings</h3>
-      <img alt="Hyprland Settings" src="assets/hyprland_settings_crop.png" width="100%" />
-      <p align="center"><i>Live controls for corner rounding, window gaps, shadows, blur effects, animations, and monitor profiles without restarting.</i></p>
-    </td>
-  </tr>
-</table>
-
----
-
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=RUST-DOCK)](https://git.io/typing-svg)
 
 <p align="center">
   <img alt="Rust-Dock" src="assets/rust_dock_crop.png" width="80%" />
 </p>
 
-Custom native dock built in Rust with GTK4 and `gtk4-layer-shell`. Features multi-monitor support, dynamic Pywal color palette adaptation, pinned applications, and active window indicators. Toggle visibility with `Super + Space`.
+Custom native dock built in Rust with GTK4 and `gtk4-layer-shell`. Features multi-monitor support, dynamic Pywal color palette adaptation, pinned applications, and active window indicators. Toggle visibility anytime with `Super + Space`.
 
 ---
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=LAUNCHER+%26+CHEATSHEET)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=HOTKEYS+CHEATSHEET)](https://git.io/typing-svg)
 
-<table>
-  <tr>
-    <td width="50%">
-      <h3 align="center">App Launcher (Super + A)</h3>
-      <img alt="Application Launcher" src="assets/rofi_launcher_crop.png" width="100%" />
-    </td>
-    <td width="50%">
-      <h3 align="center">Hotkeys Cheatsheet (Super + F)</h3>
-      <img alt="Keybindings Cheatsheet" src="assets/rofi_hotkeys_crop.png" width="100%" />
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img alt="Keybindings Cheatsheet" src="assets/rofi_hotkeys_crop.png" width="70%" />
+</p>
+
+Press `Super + F` to open an interactive search cheatsheet of every shortcut configured in the system.
 
 ---
 

@@ -64,6 +64,7 @@ INSTALL_MODE="custom"
 PACMAN_INSTALL=()
 FLATPAK_INSTALL=()
 SET_ZSH=true
+UPDATE_MODE=false
 
 show_help() {
     cat << 'EOF'
@@ -73,6 +74,7 @@ Usage:
   ./install.sh [OPTIONS]
 
 Options:
+  -u, --update               Update existing installation (sync configs, helpers, & packages)
   -y, --yes                  Assume yes to all prompts (unattended mode)
   --preview, --dry-run       Simulate installation workflow without system changes
   --no-reboot                Do not prompt or execute reboot upon completion
@@ -90,6 +92,7 @@ One-line installation:
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
 
 Examples:
+  ./install.sh --update
   ./install.sh --preview
   ./install.sh -y --no-reboot --skip-wallpapers
   ./install.sh --gpu nvidia --wallpapers random
@@ -99,6 +102,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -u|--update|update)
+            UPDATE_MODE=true
+            shift
+            ;;
         -y|--yes)
             AUTO_YES=true
             shift
@@ -1277,7 +1284,70 @@ EOF
     step_ok "System services and permissions configured."
 }
 
+# --- UPDATE WORKFLOW ---
+step_update() {
+    clear_logo
+    echo ""
+    gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland System Updater"
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Updating dotfiles, helper executables, and desktop configurations..."
+
+    if [ -x "$DOTFILES_DIR/.local/bin/system-ota" ]; then
+        if [ "$AUTO_YES" = true ]; then
+            bash "$DOTFILES_DIR/.local/bin/system-ota" update
+        else
+            echo ""
+            if gum confirm "Would you also like to update system packages with pacman?"; then
+                bash "$DOTFILES_DIR/.local/bin/system-ota" update --system
+            else
+                bash "$DOTFILES_DIR/.local/bin/system-ota" update
+            fi
+        fi
+    else
+        step_dotfiles
+        if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+            bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
+        fi
+    fi
+
+    clear_logo
+    echo ""
+    gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Update completed successfully"
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "All configurations, helpers, and services have been updated."
+    exit 0
+}
+
+check_existing_installation() {
+    if [ "$UPDATE_MODE" = true ]; then
+        step_update
+    fi
+
+    if [ "$AUTO_YES" = true ] || [ "$DRY_RUN" = true ]; then
+        return 0
+    fi
+
+    if [ -d "$HOME/.config/hypr" ] && [ -f "$HOME/.local/bin/system-ota" ]; then
+        clear_logo
+        echo ""
+        gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" "Existing Rhythm Hyprland installation detected."
+        local ACTION
+        ACTION=$(gum choose \
+            --header="Select installation action:" \
+            --cursor-prefix="> " \
+            "1. Update Existing Installation (Sync dotfiles, scripts, and updates)" \
+            "2. Full Re-installation (Reinstall packages, themes, and configs)" || true)
+
+        if [[ "$ACTION" == *"1. Update Existing Installation"* ]]; then
+            UPDATE_MODE=true
+            step_update
+        fi
+    fi
+}
+
 # --- MAIN EXECUTION ---
+if [ "$UPDATE_MODE" = true ]; then
+    step_update
+fi
+
 if [ "$DRY_RUN" = true ]; then
     clear_logo
     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
@@ -1331,6 +1401,7 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 preflight_checks
+check_existing_installation
 install_yay
 first_run_choices
 

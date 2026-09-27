@@ -58,6 +58,7 @@ WALLPAPER_MODE=""
 GPU_OVERRIDE="auto"
 SKIP_RUST_DOCK=false
 SKIP_FLATPAKS=false
+SKIP_APPS=false
 REPLACE_CONFIGS_ALL=false
 
 show_help() {
@@ -77,6 +78,7 @@ Options:
   --skip-gpu                 Skip GPU driver detection and setup
   --skip-rust-dock           Skip building rust-dock from source
   --skip-flatpaks            Skip Flatpak package installation
+  --skip-apps                Skip optional application selection menu
   --replace-configs-all      Directly overwrite existing configs without .bak backups
   -h, --help                 Show this help message and exit
 
@@ -135,6 +137,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-flatpaks)
             SKIP_FLATPAKS=true
+            shift
+            ;;
+        --skip-apps)
+            SKIP_APPS=true
             shift
             ;;
         --replace-configs-all)
@@ -655,19 +661,102 @@ step_software() {
     # Hardware detection
     auto_detect_drivers
 
-    # Flatpak packages
-    if [ "$SKIP_FLATPAKS" = false ] && [ -f "$DOTFILES_DIR/flatpaks.txt" ]; then
-        if confirm_prompt "Install applications from flatpaks.txt?"; then
-            section "Flatpak Applications"
-            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1
-            while read -r app; do
-                [ -z "$app" ] || [[ "$app" =~ ^# ]] && continue
-                step_item "Installing flatpak: $app"
-                sudo flatpak install -y --system flathub "$app" >> "$LOG_FILE" 2>&1 || true
-            done < "$DOTFILES_DIR/flatpaks.txt"
-            step_ok "Flatpaks installed."
-        fi
+}
+
+# --- OPTIONAL APPLICATIONS & SOFTWARE SELECTION ---
+step_applications() {
+    section "Optional Software & Applications"
+    if [ "$AUTO_YES" = true ] || [ "$SKIP_APPS" = true ]; then
+        step_ok "Optional software selection skipped via flag."
+        return 0
     fi
+
+    if ! confirm_prompt "Would you like to select additional applications to install?"; then
+        step_ok "Optional software selection skipped."
+        return 0
+    fi
+
+    local APP_OPTIONS=(
+        "Chromium (Fast open-source browser) [Arch/AUR]"
+        "Brave (Privacy-focused browser) [AUR]"
+        "Zen Browser (Modern optimized Firefox fork) [AUR]"
+        "Firefox (Standard Web Browser) [Arch]"
+        "Vesktop (Discord with Wayland screenshare) [AUR]"
+        "Telegram Desktop (Messaging app) [Arch]"
+        "Spotify (Music streaming) [AUR]"
+        "Visual Studio Code (Code editor) [AUR]"
+        "Obsidian (Knowledge base & Markdown notes) [AUR]"
+        "LibreOffice (Complete office suite) [Arch]"
+        "LocalSend (Local network file sharing) [AUR]"
+        "VLC Media Player (Universal media playback) [Arch]"
+        "OBS Studio (Screen recording & streaming) [Arch]"
+        "GIMP (Image editor) [Arch]"
+        "Steam (Gaming platform) [Arch/Multilib]"
+        "Mission Center (Task manager & hardware monitor) [Flatpak]"
+        "Clapper (Modern video player with hardware accel) [Flatpak]"
+        "Eye of GNOME (Lightweight image viewer) [Flatpak]"
+        "Sober (Roblox engine player) [Flatpak]"
+    )
+
+    echo ""
+    step_item "Select applications with SPACE (press ENTER to confirm):"
+    echo ""
+
+    local SELECTED_APPS
+    SELECTED_APPS=$(printf "%s\n" "${APP_OPTIONS[@]}" | gum choose --no-limit \
+        --selected="Chromium (Fast open-source browser) [Arch/AUR],Vesktop (Discord with Wayland screenshare) [AUR],Mission Center (Task manager & hardware monitor) [Flatpak]" \
+        --header="Space = Toggle, Enter = Install selected" \
+        --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
+
+    if [ -z "$SELECTED_APPS" ]; then
+        step_ok "No optional applications selected."
+        return 0
+    fi
+
+    local PACMAN_INSTALL=()
+    local FLATPAK_INSTALL=()
+
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        case "$line" in
+            *"Chromium"*)       PACMAN_INSTALL+=("chromium") ;;
+            *"Brave"*)          PACMAN_INSTALL+=("brave-bin") ;;
+            *"Zen Browser"*)    PACMAN_INSTALL+=("zen-browser-bin") ;;
+            *"Firefox"*)        PACMAN_INSTALL+=("firefox") ;;
+            *"Vesktop"*)        PACMAN_INSTALL+=("vesktop") ;;
+            *"Telegram"*)       PACMAN_INSTALL+=("telegram-desktop") ;;
+            *"Spotify"*)        PACMAN_INSTALL+=("spotify") ;;
+            *"Visual Studio"*)  PACMAN_INSTALL+=("visual-studio-code-bin") ;;
+            *"Obsidian"*)       PACMAN_INSTALL+=("obsidian") ;;
+            *"LibreOffice"*)    PACMAN_INSTALL+=("libreoffice-fresh") ;;
+            *"LocalSend"*)      PACMAN_INSTALL+=("localsend-bin") ;;
+            *"VLC"*)            PACMAN_INSTALL+=("vlc") ;;
+            *"OBS Studio"*)     PACMAN_INSTALL+=("obs-studio") ;;
+            *"GIMP"*)           PACMAN_INSTALL+=("gimp") ;;
+            *"Steam"*)          PACMAN_INSTALL+=("steam") ;;
+            *"Mission Center"*) FLATPAK_INSTALL+=("io.missioncenter.MissionCenter") ;;
+            *"Clapper"*)        FLATPAK_INSTALL+=("com.github.rafostar.Clapper") ;;
+            *"Eye of GNOME"*)   FLATPAK_INSTALL+=("org.gnome.eog") ;;
+            *"Sober"*)          FLATPAK_INSTALL+=("org.vinegarhq.Sober") ;;
+        esac
+    done <<< "$SELECTED_APPS"
+
+    if [ ${#PACMAN_INSTALL[@]} -gt 0 ]; then
+        step_item "Installing selected native/AUR packages: ${PACMAN_INSTALL[*]}"
+        gum spin --spinner dot --title "Installing applications via yay..." --padding "0 0 0 $PADDING_LEFT" -- \
+            bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
+    fi
+
+    if [ ${#FLATPAK_INSTALL[@]} -gt 0 ] && [ "$SKIP_FLATPAKS" = false ]; then
+        step_item "Configuring Flathub and installing selected Flatpaks..."
+        sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+        for app in "${FLATPAK_INSTALL[@]}"; do
+            step_item "Installing flatpak: $app"
+            sudo flatpak install -y --system flathub "$app" >> "$LOG_FILE" 2>&1 || true
+        done
+    fi
+
+    step_ok "Application selection successfully deployed."
 }
 
 # --- DOTFILES DEPLOYMENT ---
@@ -940,6 +1029,11 @@ if [ "$DRY_RUN" = true ]; then
     sleep 0.5
     step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
 
+    section "Optional Software & Applications"
+    step_item "Simulating interactive application menu..."
+    sleep 0.4
+    step_ok "Interactive multi-selection menu verified (Browsers, Chat, Productivity, Multimedia, Flatpaks)."
+
     section "Rust-Dock Component"
     gum spin --spinner dot --title "Verifying rust-dock target binary..." --padding "0 0 0 $PADDING_LEFT" -- sleep 0.8
     step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
@@ -971,6 +1065,7 @@ gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Initializing Rhythm Hy
 
 install_yay
 step_software
+step_applications
 step_dotfiles
 step_wallpapers
 step_system

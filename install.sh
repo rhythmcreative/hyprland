@@ -23,10 +23,6 @@ handle_error() {
 }
 trap 'handle_error $LINENO' ERR
 
-# Reattach tty if running via pipe (e.g. curl ... | bash)
-if [ ! -t 0 ] && [ -e /dev/tty ]; then
-    exec < /dev/tty
-fi
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
@@ -40,7 +36,11 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
     fi
     rm -rf "$CLONE_DIR"
     git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$CLONE_DIR"
-    exec bash "$CLONE_DIR/install.sh" "$@"
+    if [ -e /dev/tty ]; then
+        exec bash "$CLONE_DIR/install.sh" "$@" < /dev/tty
+    else
+        exec bash "$CLONE_DIR/install.sh" "$@"
+    fi
 fi
 
 LOG_FILE="/tmp/hyprland-install-${USER:-$(id -un)}.log"
@@ -87,7 +87,7 @@ Options:
   -h, --help                 Show this help message and exit
 
 One-line installation:
-  curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
 
 Examples:
   ./install.sh --preview

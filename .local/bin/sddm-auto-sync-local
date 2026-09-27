@@ -80,9 +80,9 @@ if [ -f "$PYWAL_SH" ]; then
             sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$config_file"
             sed -i "s|^PlaceholderColor=.*|PlaceholderColor=\"$color8\"|" "$config_file"
             sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$color1\"|" "$config_file"
-            sed -i "s|^DimBackground=.*|DimBackground=\"0.15\"|" "$config_file"
+            sed -i "s|^DimBackground=.*|DimBackground=\"0.20\"|" "$config_file"
             sed -i "s|^FullBlur=.*|FullBlur=\"false\"|" "$config_file"
-            sed -i "s|^PartialBlur=.*|PartialBlur=\"true\"|" "$config_file"
+            sed -i "s|^PartialBlur=.*|PartialBlur=\"false\"|" "$config_file"
             sed -i "s|^BlurMax=.*|BlurMax=\"64\"|" "$config_file"
             sed -i "s|^Blur=.*|Blur=\"1.0\"|" "$config_file"
         fi
@@ -94,9 +94,9 @@ else
     for config_file in "$THEME_CONFIG" "$SDDM_THEME_DIR/Themes/theme1.conf"; do
         if [ -f "$config_file" ]; then
             sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$config_file"
-            sed -i "s|^DimBackground=.*|DimBackground=\"0.15\"|" "$config_file"
+            sed -i "s|^DimBackground=.*|DimBackground=\"0.20\"|" "$config_file"
             sed -i "s|^FullBlur=.*|FullBlur=\"false\"|" "$config_file"
-            sed -i "s|^PartialBlur=.*|PartialBlur=\"true\"|" "$config_file"
+            sed -i "s|^PartialBlur=.*|PartialBlur=\"false\"|" "$config_file"
             sed -i "s|^BlurMax=.*|BlurMax=\"64\"|" "$config_file"
             sed -i "s|^Blur=.*|Blur=\"1.0\"|" "$config_file"
         fi

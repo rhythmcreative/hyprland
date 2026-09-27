@@ -1,0 +1,7 @@
+/* Modo ahorro de bateria activado (estilo Android) */
+window#waybar #battery:not(.charging),
+window#waybar #battery.bat0:not(.charging),
+window#waybar #battery.bat1:not(.charging),
+window#waybar #custom-desktop-power {
+    color: #f1c40f;
+}

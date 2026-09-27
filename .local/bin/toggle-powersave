@@ -1,6 +1,6 @@
 #!/bin/bash
-# toggle-powersave - Power saving manager for Dynamic Island and Hyprland
-# Optimizes CPU frequency/EPP, display brightness, and GPU/Hyprland effects.
+# toggle-powersave - Power saving manager for Dynamic Island, Waybar and Hyprland
+# Optimizes CPU frequency/EPP, display brightness, GPU/Hyprland effects and window opacity.
 
 STATE_FILE="/tmp/powersave-active"
 BRIGHTNESS_BACKUP="/tmp/powersave_brightness_backup"
@@ -32,13 +32,38 @@ enable_powersave() {
         fi
     fi
 
-    # 3. Disable heavy Hyprland visual effects (blur, shadows, animations)
+    # 3. Disable heavy Hyprland visual effects and ensure solid/opaque windows (no background bleed-through)
     if command -v hyprctl >/dev/null 2>&1; then
-        hyprctl eval "hl.config({ decoration = { blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })" >/dev/null 2>&1 || true
+        hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })' >/dev/null 2>&1 || true
+        hyprctl eval 'hl.window_rule({ name = "powersave-opaque", match = { class = ".*" }, opaque = true })' >/dev/null 2>&1 || true
     fi
 
-    # 4. Desktop Notification
-    notify-send -a "Power Manager" -i battery-low "Ahorro de Energía" "Activado (CPU Eco • Efectos reducidos)" 2>/dev/null || true
+    # Set kitty background opacity to 1.0 for solid dark terminal
+    for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
+        if [ -f "$kconf" ]; then
+            sed -i 's/background_opacity [0-9.]*/background_opacity 1.0/' "$kconf" 2>/dev/null || true
+        fi
+    done
+    pkill -SIGUSR1 kitty 2>/dev/null || true
+
+    # 4. Waybar dynamic battery color (Android Yellow #f1c40f)
+    for dir in "$HOME/.config/waybar" "/home/rhythmcreative/.config/waybar"; do
+        if [ -d "$dir" ]; then
+            cat > "$dir/powersave.css" << 'EOF'
+/* Modo ahorro de bateria activado (estilo Android) */
+window#waybar #battery:not(.charging),
+window#waybar #battery.bat0:not(.charging),
+window#waybar #battery.bat1:not(.charging),
+window#waybar #custom-desktop-power {
+    color: #f1c40f;
+}
+EOF
+        fi
+    done
+    pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+
+    # 5. Desktop Notification
+    notify-send -a "Ahorro de Batería" -i battery-caution "Ahorro de batería activado" "Rendimiento optimizado, ventanas sólidas y bajo consumo" 2>/dev/null || true
     echo "on"
 }
 
@@ -59,13 +84,29 @@ disable_powersave() {
         rm -f "$BRIGHTNESS_BACKUP"
     fi
 
-    # 3. Reload Hyprland config to restore animations, blur, and shadows
+    # 3. Reload Hyprland config to restore animations, blur, shadows, and default window transparency
     if command -v hyprctl >/dev/null 2>&1; then
         hyprctl reload >/dev/null 2>&1 || true
     fi
 
-    # 4. Desktop Notification
-    notify-send -a "Power Manager" -i battery-full "Ahorro de Energía" "Desactivado (Rendimiento normal)" 2>/dev/null || true
+    # Restore kitty background opacity to 0.85
+    for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
+        if [ -f "$kconf" ]; then
+            sed -i 's/background_opacity [0-9.]*/background_opacity 0.85/' "$kconf" 2>/dev/null || true
+        fi
+    done
+    pkill -SIGUSR1 kitty 2>/dev/null || true
+
+    # 4. Waybar restore standard palette colors
+    for dir in "$HOME/.config/waybar" "/home/rhythmcreative/.config/waybar"; do
+        if [ -d "$dir" ]; then
+            > "$dir/powersave.css"
+        fi
+    done
+    pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+
+    # 5. Desktop Notification
+    notify-send -a "Ahorro de Batería" -i battery-good "Ahorro de batería desactivado" "Rendimiento y efectos visuales normales restaurados" 2>/dev/null || true
     echo "off"
 }
 

@@ -8,7 +8,7 @@
   "spacing": 0,
   "exclusive": true,
   "on-sigusr1": "hide",
-  "on-sigusr2": "show",
+  "on-sigusr2": "reload",
   "modules-left": [
     "hyprland/workspaces",
     "group/system-info",
@@ -38,8 +38,8 @@
   "battery#bat0": {
     "bat": "BAT0",
     "states": {
-      "warning": 30,
-      "critical": 15
+      "warning": 15,
+      "critical": 10
     },
     "format": "{icon} {capacity}% <span foreground='#9a9ea3'>│</span>",
     "format-charging": "\udb80\udc84 {capacity}% <span foreground='#9a9ea3'>│</span>",
@@ -61,8 +61,8 @@
   "battery#bat1": {
     "bat": "BAT1",
     "states": {
-      "warning": 30,
-      "critical": 15
+      "warning": 15,
+      "critical": 10
     },
     "format": "{icon} {capacity}%",
     "format-charging": "\udb80\udc84 {capacity}%",
@@ -83,8 +83,8 @@
   },
   "battery": {
     "states": {
-      "warning": 30,
-      "critical": 15
+      "warning": 15,
+      "critical": 10
     },
     "format": "{icon} {capacity}%",
     "format-charging": "\udb80\udc84 {capacity}%",

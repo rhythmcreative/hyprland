@@ -24,14 +24,14 @@
     "battery"
   ],
   "hyprland/language": {
-    "format": "\udb80\udf0c {}",
+    "format": "󰌌 {}",
     "format-en": "US",
     "format-es": "ES",
     "tooltip-format": "Teclado: {long}",
     "on-click": "hyprctl switchxkblayout all next"
   },
   "custom/desktop-power": {
-    "format": "\udb81\udea5",
+    "format": "",
     "tooltip": true,
     "tooltip-format": "Alimentación CA (Sin batería)"
   },
@@ -42,19 +42,19 @@
       "critical": 15
     },
     "format": "{icon} {capacity}% <span foreground='#9a9ea3'>│</span>",
-    "format-charging": "\udb80\udc84 {capacity}% <span foreground='#9a9ea3'>│</span>",
-    "format-plugged": "\udb80\udc84 {capacity}% <span foreground='#9a9ea3'>│</span>",
+    "format-charging": "󰂄 {capacity}% <span foreground='#9a9ea3'>│</span>",
+    "format-plugged": "󰂄 {capacity}% <span foreground='#9a9ea3'>│</span>",
     "format-icons": [
-      "\udb80\udc7a",
-      "\udb80\udc7b",
-      "\udb80\udc7c",
-      "\udb80\udc7d",
-      "\udb80\udc7e",
-      "\udb80\udc7f",
-      "\udb80\udc80",
-      "\udb80\udc81",
-      "\udb80\udc82",
-      "\udb80\udc79"
+      "󰁺",
+      "󰁻",
+      "󰁼",
+      "󰁽",
+      "󰁾",
+      "󰁿",
+      "󰂀",
+      "󰂁",
+      "󰂂",
+      "󰁹"
     ],
     "tooltip-format": "{timeTo}, {capacity}%"
   },
@@ -65,19 +65,19 @@
       "critical": 15
     },
     "format": "{icon} {capacity}%",
-    "format-charging": "\udb80\udc84 {capacity}%",
-    "format-plugged": "\udb80\udc84 {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": "󰂄 {capacity}%",
     "format-icons": [
-      "\udb80\udc7a",
-      "\udb80\udc7b",
-      "\udb80\udc7c",
-      "\udb80\udc7d",
-      "\udb80\udc7e",
-      "\udb80\udc7f",
-      "\udb80\udc80",
-      "\udb80\udc81",
-      "\udb80\udc82",
-      "\udb80\udc79"
+      "󰁺",
+      "󰁻",
+      "󰁼",
+      "󰁽",
+      "󰁾",
+      "󰁿",
+      "󰂀",
+      "󰂁",
+      "󰂂",
+      "󰁹"
     ],
     "tooltip-format": "{timeTo}, {capacity}%"
   },
@@ -87,25 +87,25 @@
       "critical": 15
     },
     "format": "{icon} {capacity}%",
-    "format-charging": "\udb80\udc84 {capacity}%",
-    "format-plugged": "\udb80\udc84 {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": "󰂄 {capacity}%",
     "format-icons": [
-      "\udb80\udc7a",
-      "\udb80\udc7b",
-      "\udb80\udc7c",
-      "\udb80\udc7d",
-      "\udb80\udc7e",
-      "\udb80\udc7f",
-      "\udb80\udc80",
-      "\udb80\udc81",
-      "\udb80\udc82",
-      "\udb80\udc79"
+      "󰁺",
+      "󰁻",
+      "󰁼",
+      "󰁽",
+      "󰁾",
+      "󰁿",
+      "󰂀",
+      "󰂁",
+      "󰂂",
+      "󰁹"
     ],
     "tooltip-format": "{timeTo}, {capacity}%"
   },
   "custom/battery-mode": {
-    "format": "\udb80\udc84",
-    "tooltip-format": "Modo de bater\u00eda",
+    "format": "󰂄",
+    "tooltip-format": "Modo de batería",
     "on-click": "true"
   },
   "hyprland/workspaces": {
@@ -131,11 +131,11 @@
     "format-connected": "{icon} {num_connections}",
     "format-disabled": "{icon}",
     "format-icons": {
-      "enabled": "\udb80\udcaf",
-      "disabled": "\udb80\udcb2",
-      "off": "\udb80\udcb2",
-      "on": "\udb80\udcaf",
-      "connected": "\udb80\udcb1"
+      "enabled": "󰂯",
+      "disabled": "󰂲",
+      "off": "󰂲",
+      "on": "󰂯",
+      "connected": "󰂱"
     },
     "on-click": "blueman-manager",
     "tooltip-format": "{status}",
@@ -143,7 +143,7 @@
     "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}"
   },
   "custom/music": {
-    "format": "\uf001  {}",
+    "format": "  {}",
     "escape": true,
     "interval": 5,
     "tooltip": false,
@@ -168,10 +168,10 @@
     "restart-interval": 30
   },
   "network": {
-    "format-wifi": "\udb82\udd22 {signalStrength}%",
-    "format-ethernet": "\udb80\ude00 Connected",
-    "format-disconnected": "\udb82\udd20 Disconnected",
-    "format-linked": "\udb80\ude01 {ifname}",
+    "format-wifi": "󰤢 {signalStrength}%",
+    "format-ethernet": "󰈀 Connected",
+    "format-disconnected": "󰤠 Disconnected",
+    "format-linked": "󰈁 {ifname}",
     "interval": 5,
     "tooltip-format": "Network: {ifname}\nIP: {ipaddr}\nGateway: {gwaddr}",
     "tooltip-format-wifi": "WiFi: {essid} ({signalStrength}%)\nIP: {ipaddr}\nFrequency: {frequency}MHz",
@@ -182,28 +182,28 @@
   },
   "cpu": {
     "interval": 2,
-    "format": "\udb80\udf5b {icon0}{icon1}{icon2}{icon3} {usage:>2}%",
+    "format": "󰍛 {icon0}{icon1}{icon2}{icon3} {usage:>2}%",
     "format-icons": [
-      "\u2581",
-      "\u2582",
-      "\u2583",
-      "\u2584",
-      "\u2585",
-      "\u2586",
-      "\u2587",
-      "\u2588"
+      "▁",
+      "▂",
+      "▃",
+      "▄",
+      "▅",
+      "▆",
+      "▇",
+      "█"
     ],
     "on-click": "blueman-manager"
   },
   "memory": {
     "interval": 5,
-    "format": "\udb81\ude1a {used:0.1f}G/{total:0.1f}G",
+    "format": "󰘚 {used:0.1f}G/{total:0.1f}G",
     "tooltip-format": "Memory"
   },
   "custom/uptime": {
     "format": "{}",
     "format-icon": [
-      "\uf062"
+      ""
     ],
     "tooltip": false,
     "interval": 1600,
@@ -212,54 +212,54 @@
   "backlight": {
     "format": "{icon}  {percent}%",
     "format-icons": [
-      "\ue38d",
-      "\udb80\udcdc",
-      "\udb80\udcdb",
-      "\udb80\udcde",
-      "\udb80\udcdd",
-      "\udb80\udcdf",
-      "\udb80\udce0"
+      "",
+      "󰃜",
+      "󰃛",
+      "󰃞",
+      "󰃝",
+      "󰃟",
+      "󰃠"
     ],
     "tooltip": false
   },
   "pulseaudio": {
     "format": "{icon}  {volume}%",
-    "format-muted": "\udb81\udf5f",
+    "format-muted": "󰝟",
     "format-icons": {
       "headphone": [
-        "\udb80\udecb",
-        "\udb80\udecb",
-        "\udb80\udecb"
+        "󰋋",
+        "󰋋",
+        "󰋋"
       ],
       "hands-free": [
-        "\udb80\udecb",
-        "\udb80\udecb",
-        "\udb80\udecb"
+        "󰋋",
+        "󰋋",
+        "󰋋"
       ],
       "headset": [
-        "\udb80\udecb",
-        "\udb80\udecb",
-        "\udb80\udecb"
+        "󰋋",
+        "󰋋",
+        "󰋋"
       ],
       "phone": [
-        "\udb80\udff2",
-        "\udb80\udff2",
-        "\udb80\udff2"
+        "󰏲",
+        "󰏲",
+        "󰏲"
       ],
       "portable": [
-        "\udb82\udda2",
-        "\udb82\udda2",
-        "\udb82\udda2"
+        "󰦢",
+        "󰦢",
+        "󰦢"
       ],
       "car": [
-        "\udb80\udd0b",
-        "\udb80\udd0b",
-        "\udb80\udd0b"
+        "󰄋",
+        "󰄋",
+        "󰄋"
       ],
       "default": [
-        "\udb81\udd7f",
-        "\udb81\udd80",
-        "\udb81\udd7e"
+        "󰕿",
+        "󰖀",
+        "󰕾"
       ]
     },
     "on-click": "pavucontrol",
@@ -280,7 +280,7 @@
   "custom/lock": {
     "tooltip": false,
     "on-click": "sh -c '(sleep 0s; hyprlock)' & disown",
-    "format": "\uf023"
+    "format": ""
   },
   "custom/pomodoro": {
     "format": "{}",
@@ -292,10 +292,10 @@
   "temperature#cpu": {
     "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
     "critical-threshold": 85,
-    "format": "\udb81\udd0f {temperatureC}\u00b0C",
-    "format-critical": "\udb83\ude01 {temperatureC}\u00b0C",
+    "format": "󰔏 {temperatureC}°C",
+    "format-critical": "󰸁 {temperatureC}°C",
     "tooltip": true,
-    "tooltip-format": "CPU Temperature: {temperatureC}\u00b0C",
+    "tooltip-format": "CPU Temperature: {temperatureC}°C",
     "interval": 10
   },
   "custom/nvidia-temp": {

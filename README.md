@@ -73,7 +73,7 @@ The top notch expands smoothly on hover or via shortcut (`Super + I`), providing
       <p align="center"><i>Hyprlock with dynamic blur, date, time, and session greeting.</i></p>
     </td>
     <td width="50%">
-      <h3 align="center">SDDM astronaut Login</h3>
+      <h3 align="center">SDDM astronaut login</h3>
       <img alt="SDDM Full" src="assets/sddm_login.png" width="100%" />
       <p align="center"><i>Astronaut display manager theme synced with current colors.</i></p>
     </td>
@@ -157,7 +157,7 @@ cd ~/.config/hyprland-repo
 > Run the installer as your regular user, not as root or with `sudo`. Root privileges are asked via `sudo` when required.
 
 <details>
-  <summary><b>Installer flags & Headless options</b></summary>
+  <summary><b>Installer flags & headless options</b></summary>
 
 | Flag | Description |
 |---|---|
@@ -188,50 +188,50 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 
 | Shortcut | Action |
 |---|---|
-| `Super + Return` | Launch Terminal (Kitty) |
+| `Super + Return` | Launch terminal (Kitty) |
 | `Super + Space` | Toggle Rust-Dock |
-| `Super + I` | Toggle Dynamic Island (Notch) |
-| `Super + F` | Interactive Keybindings Cheatsheet |
-| `Super + X` | Quick Compositor Settings |
-| `Super + A` | Application Launcher |
-| `Super + E` | File Manager (Thunar) |
-| `Super + Q` | Close Focused Window |
-| `Super + BackSpace` | Power Menu (Reboot / Shutdown / Sleep) |
+| `Super + I` | Toggle dynamic island (notch) |
+| `Super + F` | Interactive keybindings cheatsheet |
+| `Super + X` | Quick compositor settings |
+| `Super + A` | Application launcher |
+| `Super + E` | File manager (Thunar) |
+| `Super + Q` | Close focused window |
+| `Super + BackSpace` | Power menu (reboot / shutdown / sleep) |
 
 <details>
   <summary><b>View complete keybindings list (30+ shortcuts)</b></summary>
 
 | Shortcut | Action | Description |
 |---|---|---|
-| `Super + Return` | Launch Terminal | Opens Kitty terminal |
+| `Super + Return` | Launch terminal | Opens Kitty terminal |
 | `Super + Space` | Toggle Rust-Dock | Shows or hides the bottom dock |
-| `Super + I` | Toggle Dynamic Island | Expands or collapses the notch |
-| `Super + F` | Hotkeys Cheatsheet | Interactive keybinding search |
-| `Super + X` | Quick Settings | Fast Hyprland compositor controls |
-| `Super + N` | Wi-Fi Menu | Select and connect to networks |
-| `Super + B` | Bluetooth Menu | Pair and connect devices |
-| `Super + A` | Application Launcher | Rofi grid launcher |
-| `Super + R` | Run Command | Rofi command runner |
-| `Super + E` | File Manager | Opens Thunar |
-| `Super + Q` | Close Window | Closes focused window |
-| `Super + W` | Toggle Floating | Switches between tiled and floating |
-| `Super + J` | Toggle Split | Toggles horizontal / vertical split |
+| `Super + I` | Toggle dynamic island | Expands or collapses the notch |
+| `Super + F` | Hotkeys cheatsheet | Interactive keybinding search |
+| `Super + X` | Quick settings | Fast Hyprland compositor controls |
+| `Super + N` | Wi-Fi menu | Select and connect to networks |
+| `Super + B` | Bluetooth menu | Pair and connect devices |
+| `Super + A` | Application launcher | Rofi grid launcher |
+| `Super + R` | Run command | Rofi command runner |
+| `Super + E` | File manager | Opens Thunar |
+| `Super + Q` | Close window | Closes focused window |
+| `Super + W` | Toggle floating | Switches between tiled and floating |
+| `Super + J` | Toggle split | Toggles horizontal / vertical split |
 | `Alt + Return` | Fullscreen | Toggles window fullscreen |
-| `Super + Tab` | Workspace Overview | Visual overview of workspaces |
-| `Super + M` | Exit Session | Exits Hyprland |
-| `Super + L` | Lock Screen | Hyprlock |
-| `Super + BackSpace` | Power Menu | Shutdown, reboot, sleep options |
+| `Super + Tab` | Workspace overview | Visual overview of workspaces |
+| `Super + M` | Exit session | Exits Hyprland |
+| `Super + L` | Lock screen | Hyprlock |
+| `Super + BackSpace` | Power menu | Shutdown, reboot, sleep options |
 | `Super + P` | Screenshot | Slurp selection into Swappy editor |
-| `Super + Shift + P` | Color Picker | Hyprpicker hex copy |
-| `Super + Shift + Print` | Full Screenshot | Instant capture |
-| `Super + Shift + W` | Wallpaper Selector | Visual wallpaper picker |
-| `Super + Shift + B` | Random Wallpaper | Sets a random wallpaper |
-| `Super + Alt + W` | Change Wallpaper | Changes wallpaper and resyncs Waybar |
-| `Super + Shift + G` | Performance Mode | Toggles animations and blur for gaming |
-| `Super + 1 .. 0` | Switch Workspace | Move to workspace 1 through 10 |
-| `Super + Shift + 1 .. 0` | Move to Workspace | Move active window to workspace 1 to 10 |
-| `F10` | Toggle Bluetooth | Hardware toggle |
-| `F11 / F12` | Volume Down / Up | Fine audio tuning |
+| `Super + Shift + P` | Color picker | Hyprpicker hex copy |
+| `Super + Shift + Print` | Full screenshot | Instant capture |
+| `Super + Shift + W` | Wallpaper selector | Visual wallpaper picker |
+| `Super + Shift + B` | Random wallpaper | Sets a random wallpaper |
+| `Super + Alt + W` | Change wallpaper | Changes wallpaper and resyncs Waybar |
+| `Super + Shift + G` | Performance mode | Toggles animations and blur for gaming |
+| `Super + 1 .. 0` | Switch workspace | Move to workspace 1 through 10 |
+| `Super + Shift + 1 .. 0` | Move to workspace | Move active window to workspace 1 to 10 |
+| `F10` | Toggle bluetooth | Hardware toggle |
+| `F11 / F12` | Volume down / up | Fine audio tuning |
 
 </details>
 
@@ -243,19 +243,19 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | Component | Tool |
 |---|---|
 | Compositor | Hyprland with official plugins |
-| Dynamic Island | Quickshell (Qt6 QML with IPC) |
+| Dynamic island | Quickshell (Qt6 QML with IPC) |
 | Dock | Rust-Dock (GTK4 + gtk4-layer-shell) |
-| Status Bar | Waybar with Pywal colors |
+| Status bar | Waybar with Pywal colors |
 | Terminal | Kitty |
 | Shell | Zsh with syntax highlighting and autosuggestions |
 | Launcher | Rofi with Pywal themes |
 | Lockscreen | Hyprlock + Hypridle |
-| File Manager | Thunar + Plugins & Tumbler |
+| File manager | Thunar + Plugins & Tumbler |
 | Theming | Pywal (System-wide dynamic color synchronization) |
-| Wallpaper Engine | awww with smooth synchronized fade transitions |
+| Wallpaper engine | awww with smooth synchronized fade transitions |
 | Audio | Pipewire + Wireplumber |
-| Display Manager | SDDM Astronaut Theme with Pywal hook |
-| AUR Helper | yay |
+| Display manager | SDDM Astronaut Theme with Pywal hook |
+| AUR helper | yay |
 
 </details>
 

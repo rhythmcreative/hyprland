@@ -55,6 +55,15 @@ if pgrep -x rust-dock >/dev/null 2>&1 && ! pgrep -f "rust-dock -o" >/dev/null 2>
     sleep 0.2
 fi
 
+# Cerrar instancias asociadas a monitores desconectados
+for pid in $(pgrep -f "rust-dock.*-o" 2>/dev/null); do
+    cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null)
+    out=$(echo "$cmd" | grep -oP -- '-o\s+\K\S+')
+    if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
+        kill "$pid" 2>/dev/null
+    fi
+done
+
 while IFS= read -r monitor; do
     [ -z "$monitor" ] && continue
     if ! pgrep -f "rust-dock.*-o +$monitor(\$| )" >/dev/null 2>&1; then

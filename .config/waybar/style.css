@@ -220,9 +220,9 @@
 #pulseaudio,
 #backlight,
 #battery,
-#battery-bat0,
-#battery-bat1,
-#battery-bat2,
+#battery.bat0,
+#battery.bat1,
+#custom-desktop-power,
 #custom-dual-battery {
   background-color: @background;
   padding: 0.3rem 0.7rem;
@@ -240,9 +240,9 @@
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover,
-#battery-bat0:hover,
-#battery-bat1:hover,
-#battery-bat2:hover,
+#battery.bat0:hover,
+#battery.bat1:hover,
+#custom-desktop-power:hover,
 #custom-dual-battery:hover {
   background-color: @color8;
 }
@@ -348,6 +348,11 @@
 #battery.bat1,
 #custom-desktop-power {
   color: @color4;
+}
+
+#custom-desktop-power {
+  font-size: 15px;
+  padding: 0.3rem 0.85rem;
 }
 
 #battery.charging,

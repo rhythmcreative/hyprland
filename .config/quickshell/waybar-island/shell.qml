@@ -629,11 +629,16 @@ ShellRoot {
         }
     }
 
-    // Main Dynamic Island Window
-    PanelWindow {
-        id: islandWin
-        screen: Quickshell.screens[0]
-        visible: root.islandVisible
+    // Main Dynamic Island Windows (Multi-monitor support via Variants)
+    Variants {
+        id: islandVariants
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: islandWin
+            required property var modelData
+            screen: modelData
+            visible: root.islandVisible
 
         anchors {
             top: true
@@ -3463,6 +3468,7 @@ ShellRoot {
             }
         }
     }
+}
 }
 }
 

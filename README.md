@@ -1,7 +1,7 @@
 <h1 align="center">rhythm's hyprland</h1>
 
 <div align="center">
-  <p><i>Personal Arch Linux setup, customized for everyday use. </i></p>
+  <p><i>Personal Arch linux setup, customized for everyday use. </i></p>
 </div>
 
 <div align="center">
@@ -31,7 +31,7 @@
 The top notch expands smoothly on hover or via shortcut (`Super + I`), providing quick toggles, volume and brightness controls, media playback, and live compositor adjustments.
 
 <p align="center">
-  <img alt="Dynamic Island Animation" src="assets/dynamic_island.gif" width="90%" />
+  <img alt="Dynamic island animation" src="assets/dynamic_island.gif" width="90%" />
 </p>
 
 <table>
@@ -56,24 +56,24 @@ The top notch expands smoothly on hover or via shortcut (`Super + I`), providing
 <table>
   <tr>
     <td width="50%">
-      <h3 align="center">App Launcher (Super + A)</h3>
+      <h3 align="center">App launcher (Super + A)</h3>
       <img alt="Application Launcher Full" src="assets/rofi_launcher.png" width="100%" />
       <p align="center"><i>Fullscreen adaptive icon grid with fuzzy search.</i></p>
     </td>
     <td width="50%">
-      <h3 align="center">Power Menu (Super + BackSpace)</h3>
+      <h3 align="center">Power menu (Super + BackSpace)</h3>
       <img alt="Power Menu Full" src="assets/powermenu.png" width="100%" />
-      <p align="center"><i>Quick session controls: Lock, Sleep, Logout, Reboot, and Shutdown.</i></p>
+      <p align="center"><i>Quick session controls: lock, sleep, logout, reboot, and shutdown.</i></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <h3 align="center">Lock Screen (Super + L)</h3>
+      <h3 align="center">Lock screen (Super + L)</h3>
       <img alt="Hyprlock Full" src="assets/lockscreen.png" width="100%" />
       <p align="center"><i>Hyprlock with dynamic blur, date, time, and session greeting.</i></p>
     </td>
     <td width="50%">
-      <h3 align="center">SDDM Astronaut Login</h3>
+      <h3 align="center">SDDM astronaut Login</h3>
       <img alt="SDDM Full" src="assets/sddm_login.png" width="100%" />
       <p align="center"><i>Astronaut display manager theme synced with current colors.</i></p>
     </td>
@@ -84,26 +84,26 @@ The top notch expands smoothly on hover or via shortcut (`Super + I`), providing
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=WALLPAPERS+%26+PYWAL+SYNC)](https://git.io/typing-svg)
 
-When changing the wallpaper, Pywal automatically calculates the dominant colors and synchronizes Waybar, Quickshell, Rust-Dock, Rofi, GTK, and SDDM in real time with smooth transitions.
+When changing the wallpaper, Pywal automatically calculates the dominant colors and synchronizes waybar, quickshell, rust-Dock, rofi, GTK, and SDDM in real time with smooth transitions.
 
 <table>
   <tr>
     <td width="50%">
-      <p align="center"><b>Ice Blue</b></p>
+      <p align="center"><b>Ice blue</b></p>
       <img alt="Ice Blue Theme" src="assets/desktop.png" width="100%" />
     </td>
     <td width="50%">
-      <p align="center"><b>Autumn Forest</b></p>
+      <p align="center"><b>Autumn forest</b></p>
       <img alt="Autumn Forest Theme" src="assets/desktop_autumn.png" width="100%" />
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <p align="center"><b>Sakura Blossom</b></p>
+      <p align="center"><b>Sakura blossom</b></p>
       <img alt="Sakura Theme" src="assets/desktop_cherry.png" width="100%" />
     </td>
     <td width="50%">
-      <p align="center"><b>Cyberpunk Neon</b></p>
+      <p align="center"><b>Cyberpunk neon</b></p>
       <img alt="Cyberpunk Theme" src="assets/desktop_neon.png" width="100%" />
     </td>
   </tr>
@@ -116,7 +116,7 @@ When changing the wallpaper, Pywal automatically calculates the dominant colors 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=RUST-DOCK)](https://git.io/typing-svg)
 
 <p align="center">
-  <img alt="Rust-Dock" src="assets/rust_dock_crop.png" width="80%" />
+  <img alt="Rust-dock" src="assets/rust_dock_crop.png" width="80%" />
 </p>
 
 Custom native dock built in Rust with GTK4 and `gtk4-layer-shell`. Features multi-monitor support, dynamic Pywal color palette adaptation, pinned applications, and active window indicators. Toggle visibility anytime with `Super + Space`.
@@ -126,7 +126,7 @@ Custom native dock built in Rust with GTK4 and `gtk4-layer-shell`. Features mult
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=HOTKEYS+CHEATSHEET)](https://git.io/typing-svg)
 
 <p align="center">
-  <img alt="Keybindings Cheatsheet" src="assets/rofi_hotkeys_crop.png" width="70%" />
+  <img alt="Keybindings cheatsheet" src="assets/rofi_hotkeys_crop.png" width="70%" />
 </p>
 
 Press `Super + F` to open an interactive search cheatsheet of every shortcut configured in the system.
@@ -135,7 +135,7 @@ Press `Super + F` to open an interactive search cheatsheet of every shortcut con
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=INSTALLATION)](https://git.io/typing-svg)
 
-### Quick Install
+### Quick install
 
 Run directly from the terminal with curl:
 
@@ -143,7 +143,7 @@ Run directly from the terminal with curl:
 curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 ```
 
-### Manual Install
+### Manual install
 
 Clone the repository and run the script:
 
@@ -157,7 +157,7 @@ cd ~/.config/hyprland-repo
 > Run the installer as your regular user, not as root or with `sudo`. Root privileges are asked via `sudo` when required.
 
 <details>
-  <summary><b>Installer Flags & Headless Options</b></summary>
+  <summary><b>Installer flags & Headless options</b></summary>
 
 | Flag | Description |
 |---|---|
@@ -238,7 +238,7 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 ---
 
 <details>
-  <summary><b>Installed Components & Tools</b></summary>
+  <summary><b>Installed components & tools</b></summary>
 
 | Component | Tool |
 |---|---|
@@ -262,5 +262,5 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 ---
 
 <p align="center">
-  Creado con amor ❤️ por <b>rhythmcreative</b>
+ Made with ❤️ from rhythmcreative
 </p>

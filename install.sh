@@ -667,6 +667,42 @@ step_software() {
 
 }
 
+# --- UNIVERSAL APPLICATION DISCOVERY (PACMAN + AUR SEARCH WITH FZF) ---
+unified_app_search() {
+    clear_logo
+    echo ""
+    gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Universal Application Discovery (Pacman + AUR)"
+    step_item "Launching fzf search... [TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+    sleep 0.8
+
+    local fzf_args=(
+        --multi
+        --ansi
+        --prompt="Search Packages > "
+        --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
+        --preview 'yay -Si {1} 2>/dev/null || pacman -Si {1} 2>/dev/null || echo "Loading info..."'
+        --preview-window 'right:55%:wrap'
+        --bind 'change:top'
+    )
+
+    local SELECTED_SEARCH
+    SELECTED_SEARCH=$(yay -Slqa 2>/dev/null | fzf "${fzf_args[@]}" || true)
+
+    if [[ -n "$SELECTED_SEARCH" ]]; then
+        local count=0
+        while IFS= read -r app; do
+            [ -z "$app" ] && continue
+            PACMAN_INSTALL+=("$app")
+            ((count++))
+        done <<< "$SELECTED_SEARCH"
+        step_ok "Added $count packages from universal search."
+        sleep 1
+    else
+        step_item "No packages selected from search."
+        sleep 0.5
+    fi
+}
+
 # --- FIRST RUN SETUP CHOICES (OMARCHY TUI WIZARD) ---
 first_run_choices() {
     if [ "$AUTO_YES" = true ]; then
@@ -687,10 +723,11 @@ first_run_choices() {
     else
         local MODE_RAW
         MODE_RAW=$(gum choose \
-            --height 7 \
+            --height 8 \
             --header="Select software installation mode:" \
             --cursor-prefix="> " \
-            "Custom Application Selection (Browsers, Chat, Dev, Media, Gaming)" \
+            "Custom Categorized Menus (Browsers, Chat, Dev, Media, Gaming, Utilities)" \
+            "Universal Package Search with fzf (Search & install ANY package from Pacman + AUR)" \
             "Full Package Stack (Install all 125 packages from packages.txt)" \
             "Minimal Desktop Core (Essential Hyprland stack only)" || true)
 
@@ -698,6 +735,9 @@ first_run_choices() {
             INSTALL_MODE="full"
         elif [[ "$MODE_RAW" == *"Minimal"* ]] || [ -z "$MODE_RAW" ]; then
             INSTALL_MODE="minimal"
+        elif [[ "$MODE_RAW" == *"Universal Package Search"* ]]; then
+            INSTALL_MODE="custom"
+            unified_app_search
         else
             INSTALL_MODE="custom"
 
@@ -855,6 +895,14 @@ first_run_choices() {
                     *"(org.vinegarhq.Sober)"*)            FLATPAK_INSTALL+=("org.vinegarhq.Sober") ;;
                 esac
             done <<< "$ALL_SELECTED"
+
+            # Optional fzf search after categories
+            clear_logo
+            echo ""
+            gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Additional Custom Software"
+            if confirm_prompt "Would you like to search and add any extra packages with fzf?"; then
+                unified_app_search
+            fi
         fi
     fi
 
@@ -943,6 +991,8 @@ step_applications() {
     fi
 
     if [ ${#PACMAN_INSTALL[@]} -gt 0 ]; then
+        local unique_pkgs=($(printf "%s\n" "${PACMAN_INSTALL[@]}" | sort -u))
+        PACMAN_INSTALL=("${unique_pkgs[@]}")
         step_item "Installing selected native/AUR packages (${#PACMAN_INSTALL[@]} items): ${PACMAN_INSTALL[*]}"
         gum spin --spinner dot --title "Installing applications via yay..." --padding "0 0 0 $PADDING_LEFT" -- \
             bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
@@ -1233,7 +1283,7 @@ if [ "$DRY_RUN" = true ]; then
     section "Optional Software & Applications"
     step_item "Simulating interactive application menu..."
     sleep 0.4
-    step_ok "Interactive multi-selection menu verified (Browsers, Chat, Productivity, Multimedia, Flatpaks)."
+    step_ok "Interactive multi-selection menu and universal fzf package search verified."
 
     section "Rust-Dock Component"
     gum spin --spinner dot --title "Verifying rust-dock target binary..." --padding "0 0 0 $PADDING_LEFT" -- sleep 0.8

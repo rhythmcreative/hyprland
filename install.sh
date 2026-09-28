@@ -1151,6 +1151,7 @@ MONCONF
     systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-bluetooth-agent.service >> "$LOG_FILE" 2>&1 || true
 
     # Enable system-level power-profiles-daemon (required by auto-power-profile)
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
@@ -1349,6 +1350,7 @@ step_update() {
     systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-bluetooth-agent.service >> "$LOG_FILE" 2>&1 || true
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
 
     # rust-dock: relanzar para que tome el binario recien desplegado

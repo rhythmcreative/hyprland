@@ -223,6 +223,56 @@ ShellRoot {
     property bool powerSaverEnabled: false
     property bool dndEnabled: false
     property bool dockEnabled: true
+    // Active BlueZ pairing request. BlueZ asks the registered agent, never the
+    // notification server, so bluetooth-pair-agent forwards it here.
+    property var pairRequest: ({ active: false, id: "", kind: "", name: "", device: "", passkey: "", hint: "", state: "pending", pin: "" })
+
+    function showPairingRequest(screenName, requestId, payload) {
+        let data
+        try {
+            data = JSON.parse(payload)
+        } catch (e) {
+            return "invalid"
+        }
+        // Only one request can be answered at a time: close the previous one so
+        // BlueZ is not left waiting for a reply that will never come.
+        if (root.pairRequest.active && root.pairRequest.state === "pending" && root.pairRequest.id !== requestId) {
+            root.runCmd("$HOME/.local/bin/bluetooth-pair-agent respond " + root.pairRequest.id + " reject")
+        }
+        root.pairRequest = {
+            active: true,
+            id: requestId,
+            kind: data.kind || "confirm",
+            name: data.name || data.device || "Bluetooth device",
+            device: data.device || "",
+            passkey: data.passkey || "",
+            hint: data.hint || "",
+            state: "pending",
+            pin: ""
+        }
+        let panel = root.setPanelState(screenName, true, 0, 6)
+        if (!panel) {
+            // Unknown or missing monitor: open it everywhere so the request is
+            // never invisible.
+            Object.keys(root.islandPanels).forEach(name => {
+                root.islandPanels[name].expanded = true
+                root.islandPanels[name].currentTab = 0
+                root.islandPanels[name].controlSubView = 6
+            })
+        }
+        return "pairing"
+    }
+
+    function answerPairing(action) {
+        if (!root.pairRequest.active || root.pairRequest.state !== "pending") return
+        let cmd = "$HOME/.local/bin/bluetooth-pair-agent respond " + root.pairRequest.id + " " + action
+        if (action === "accept" && root.pairRequest.kind === "pin" && root.pairRequest.pin.length > 0) {
+            cmd += " '" + root.pairRequest.pin + "'"
+        }
+        root.runCmd(cmd)
+        root.pairRequest = Object.assign({}, root.pairRequest, { state: action === "accept" ? "accepted" : "rejected" })
+        pairRequestResetTimer.restart()
+    }
     property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
     property var privacyState: ({ mic: false, cam: false })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
@@ -352,6 +402,9 @@ ShellRoot {
             if (!panel) return "unavailable"
             root.refreshAllStates()
             return "control"
+        }
+        function showPairingRequest(screenName: string, requestId: string, payload: string): string {
+            return root.showPairingRequest(screenName, requestId, payload)
         }
         function openHyprland(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 1, 0)
@@ -888,6 +941,20 @@ ShellRoot {
         onTriggered: dockStatusProc.running = true
     }
 
+    // Pairing request answered: keep the result visible for a moment, then let
+    // the panels return to the regular control view.
+    Timer {
+        id: pairRequestResetTimer
+        interval: 1800
+        repeat: false
+        onTriggered: {
+            root.pairRequest = Object.assign({}, root.pairRequest, { active: false, state: "pending", pin: "" })
+            Object.keys(root.islandPanels).forEach(name => {
+                if (root.islandPanels[name].controlSubView === 6) root.islandPanels[name].controlSubView = 0
+            })
+        }
+    }
+
     Process {
         id: powerSaveCheckProc
         command: ["bash", "-c", "$HOME/.local/bin/toggle-powersave status"]
@@ -1078,7 +1145,7 @@ ShellRoot {
                 }
             }
             Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (islandWin.expanded && !root.notifActive) islandWin.expanded = false } }
-            Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; islandWin.controlSubView = 0; root.refreshAllStates() } } }
+            Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; if (!root.pairRequest.active) islandWin.controlSubView = 0; root.refreshAllStates() } } }
 
             screen: modelData
             visible: root.islandVisible && !root.hiddenScreens[modelData.name]
@@ -5300,7 +5367,224 @@ ShellRoot {
                         }
                     }
 
-                    // ── 6. SUBSECCIÓN: SYSTEM UPDATE (OTA - ANDROID STYLE) ──
+                    // ── SUBSECCIÓN: BLUETOOTH PAIRING REQUEST ──
+                    // BlueZ entrega la solicitud al agente registrado, no al
+                    // servidor de notificaciones: bluetooth-pair-agent la
+                    // reenvia aqui para que la confirme el usuario.
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: islandWin.controlSubView === 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Rectangle {
+                                width: 100; height: 32; radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder; border.width: 1
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 6
+                                    Text { text: "󰁍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (root.pairRequest.active && root.pairRequest.state === "pending") root.answerPairing("reject")
+                                        islandWin.controlSubView = 0
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "Pairing Request"
+                                color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13; font.weight: Font.Bold
+                            }
+                            Item { Layout.fillWidth: true }
+                            Rectangle {
+                                width: 68; height: 32; radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder; border.width: 1
+                                visible: root.pairRequest.active
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.pairRequest.state === "pending" ? "Waiting" : (root.pairRequest.state === "accepted" ? "Done" : "Closed")
+                                    color: root.pairRequest.state === "accepted" ? root.colAccent : root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9; font.weight: Font.Bold
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 232
+                            radius: 14
+                            color: root.colSurface
+                            border.color: root.pairRequest.active ? root.colAccent : root.colBorder
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 180 } }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+                                    Rectangle {
+                                        width: 38; height: 38; radius: 19
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.18)
+                                        Text { anchors.centerIn: parent; text: "󰂯"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: root.pairRequest.name
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12; font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.pairRequest.device
+                                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: root.colBorder
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.pairRequest.kind === "pin" ? "Enter the PIN" : (root.pairRequest.kind === "authorize" ? "Authorization" : "Confirmation code")
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9; font.weight: Font.Bold
+                                }
+
+                                // Numeric comparison: the code is split in pairs
+                                // so it can be read digit by digit.
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    visible: root.pairRequest.kind !== "pin" && root.pairRequest.passkey !== ""
+                                    Repeater {
+                                        model: {
+                                            let digits = (root.pairRequest.passkey || "").split("")
+                                            let grouped = []
+                                            for (let i = 0; i < digits.length; i += 2) grouped.push(digits[i] + (digits[i + 1] || ""))
+                                            return grouped
+                                        }
+                                        delegate: Rectangle {
+                                            required property int index
+                                            required property string modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 40
+                                            radius: 10
+                                            color: root.colBg
+                                            border.color: root.colBorder; border.width: 1
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData
+                                                color: root.colAccent; font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 18; font.weight: Font.Bold
+                                            }
+                                        }
+                                    }
+                                }
+
+                                TextField {
+                                    id: pairPinInput
+                                    Layout.fillWidth: true
+                                    visible: root.pairRequest.kind === "pin"
+                                    implicitHeight: 34
+                                    maximumLength: 8
+                                    echoMode: TextInput.PasswordEchoOnEdit
+                                    placeholderText: "PIN"
+                                    text: root.pairRequest.pin
+                                    color: root.colFg
+                                    placeholderTextColor: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    horizontalAlignment: TextInput.AlignHCenter
+                                    onTextEdited: root.pairRequest = Object.assign({}, root.pairRequest, { pin: text })
+                                    background: Rectangle { radius: 10; color: root.colBg; border.color: root.colBorder; border.width: 1 }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.pairRequest.hint
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Item { Layout.fillWidth: true; Layout.preferredHeight: 1 }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 32; radius: 16
+                                        color: root.colSurface
+                                        border.color: root.colBorder; border.width: 1
+                                        opacity: root.pairRequest.state === "pending" ? 1 : 0.45
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Reject"
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10; font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            enabled: root.pairRequest.state === "pending"
+                                            onClicked: root.answerPairing("reject")
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 32; radius: 16
+                                        color: root.colAccent
+                                        opacity: root.pairRequest.state === "pending"
+                                                && (root.pairRequest.kind !== "pin" || root.pairRequest.pin.length > 0) ? 1 : 0.45
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Confirm"
+                                            color: root.colBg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10; font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            enabled: root.pairRequest.state === "pending"
+                                                    && (root.pairRequest.kind !== "pin" || root.pairRequest.pin.length > 0)
+                                            onClicked: root.answerPairing("accept")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: !root.pairRequest.active
+                            text: "No pending pairing request."
+                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                        }
+                    }
+
+                    // ── SUBSECCIÓN: SYSTEM UPDATE (OTA - ANDROID STYLE) ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10

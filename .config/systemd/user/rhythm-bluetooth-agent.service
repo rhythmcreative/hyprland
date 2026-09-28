@@ -1,0 +1,13 @@
+[Unit]
+Description=BlueZ pairing agent that asks for confirmation in the dynamic island
+After=graphical-session.target bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/bluetooth-pair-agent serve
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=default.target

@@ -2419,13 +2419,27 @@ ShellRoot {
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
-                                        Text {
-                                            text: root.nightLightEnabled ? (root.nightLightTemperature + "K · " + root.nightLightGamma + "%") : (root.nightLightTemperature + "K · Inactive")
+                                Text {
+                                    text: root.nightLightEnabled ? (root.nightLightTemperature + "K · " + root.nightLightGamma + "%") : (root.nightLightTemperature + "K · Inactive")
                                             color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        width: 58; height: 23; radius: 12
+                                        color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.16) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.13)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Settings  ›"
+                                            color: root.nightLightEnabled ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 8
+                                            font.weight: Font.Bold
                                         }
                                     }
                                 }
@@ -4965,11 +4979,12 @@ ShellRoot {
                                     Text { text: root.nightLightEnabled ? "Enabled" : "Disabled"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
                                     Text { text: root.nightLightEnabled ? "Blue-light filter is active" : "Blue-light filter is off"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                 }
+                                Item { Layout.fillWidth: true }
                                 Rectangle {
-                                    width: 78; height: 32; radius: 16
-                                    color: root.nightLightEnabled ? root.colAccent : root.colBg
-                                    border.color: root.colBorder; border.width: 1
-                                    Text { anchors.centerIn: parent; text: root.nightLightEnabled ? "ON" : "OFF"; color: root.nightLightEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                    width: 68; height: 32; radius: 16
+                                    color: root.nightLightEnabled ? root.colAccent : root.colSurface
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    Text { anchors.centerIn: parent; text: root.nightLightEnabled ? "ON" : "OFF"; color: root.nightLightEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
                                     MouseArea {
                                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                         onClicked: {

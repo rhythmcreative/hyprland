@@ -658,6 +658,8 @@ step_software() {
         jq
         bc
         imagemagick
+        mpv
+        mpvpaper
         htop
         btop
         fastfetch
@@ -1199,46 +1201,38 @@ step_wallpapers() {
         local TEMP_WALL="/tmp/wallpaper_install"
         mkdir -p "$TEMP_WALL"
         
-        local REPO_URL="https://raw.githubusercontent.com/rhythmcreative/wallpapers/main"
+        local FW_REPO="https://github.com/deadduck-09/FireWalls.git"
+        local FW_DIR="$TEMP_WALL/firewalls"
 
         local CHOICE="$MODE"
         if [ -z "$CHOICE" ]; then
             CHOICE=$(gum choose --header "Select download mode" \
-                "Download All Packs (4GB+)" \
-                "Select Specific Packs" \
-                "Random Selection (3 Packs)" \
+                "Download All Wallpapers (~600MB)" \
+                "Random Selection (50 Wallpapers)" \
                 "Skip")
         fi
-        
-        if [ "$CHOICE" == "Download All Packs (4GB+)" ] || [ "$CHOICE" == "all" ]; then
-            for i in {1..49}; do
-                step_item "Downloading pack $i/49..."
-                curl -L "$REPO_URL/pack_$i.zip" -o "$TEMP_WALL/pack_$i.zip" >> "$LOG_FILE" 2>&1
-                unzip -q -o "$TEMP_WALL/pack_$i.zip" -d "$TEMP_WALL"
-                [ -d "$TEMP_WALL/pack_$i" ] && cp -r "$TEMP_WALL/pack_$i"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$i"
-                rm -f "$TEMP_WALL/pack_$i.zip"
-            done
-        elif [ "$CHOICE" == "Select Specific Packs" ]; then
-            local PACKS
-            PACKS=$(gum input --placeholder "Numbers separated by space (e.g. 1 5 12)")
-            for p in $PACKS; do
-                step_item "Downloading pack $p..."
-                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip" >> "$LOG_FILE" 2>&1
-                unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
-                [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
-                rm -f "$TEMP_WALL/pack_$p.zip"
-            done
-        elif [ "$CHOICE" == "Random Selection (3 Packs)" ] || [ "$CHOICE" == "random" ]; then
-            step_item "Downloading 3 random packs..."
-            for i in {1..3}; do
-                local p
-                p=$(shuf -i 1-49 -n 1)
-                step_item "Downloading pack $p..."
-                curl -L "$REPO_URL/pack_$p.zip" -o "$TEMP_WALL/pack_$p.zip" >> "$LOG_FILE" 2>&1
-                unzip -q -o "$TEMP_WALL/pack_$p.zip" -d "$TEMP_WALL"
-                [ -d "$TEMP_WALL/pack_$p" ] && cp -r "$TEMP_WALL/pack_$p"/* "$WALL_DIR/" && rm -rf "$TEMP_WALL/pack_$p"
-                rm -f "$TEMP_WALL/pack_$p.zip"
-            done
+
+        if [ "$CHOICE" == "Download All Wallpapers (~600MB)" ] || [ "$CHOICE" == "all" ]; then
+            step_item "Cloning FireWalls collection (sparse, wallpapers only)..."
+            rm -rf "$FW_DIR"
+            git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1
+            (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1)
+            cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/"
+        elif [ "$CHOICE" == "Random Selection (50 Wallpapers)" ] || [ "$CHOICE" == "random" ]; then
+            step_item "Downloading 50 random wallpapers..."
+            local LIST_JSON
+            LIST_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/contents/Desktop/Wallpapers" 2>/dev/null || true)
+            if [ -n "$LIST_JSON" ] && command -v jq >/dev/null 2>&1; then
+                echo "$LIST_JSON" | jq -r '.[].download_url' 2>/dev/null | grep -E '\\.(jpg|jpeg|png|webp|gif)$' | shuf -n 50 | while read -r url; do
+                    curl -fsSL "$url" -o "$WALL_DIR/$(basename "$url")" >> "$LOG_FILE" 2>&1 || true
+                done
+            else
+                step_warn "Could not fetch list, cloning full collection instead."
+                rm -rf "$FW_DIR"
+                git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1
+                (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1)
+                cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/"
+            fi
         fi
         rm -rf "$TEMP_WALL"
         step_ok "Wallpapers installed."

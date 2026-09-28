@@ -122,3 +122,5 @@ xorg-xrandr
 yay
 yay-debug
 zapzap
+mpv
+mpvpaper

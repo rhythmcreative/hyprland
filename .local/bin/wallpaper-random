@@ -15,7 +15,7 @@ if [ ! -d "$WALLPAPER_DIR" ]; then
 fi
 
 # Pick a random image file (png, jpg, jpeg, webp)
-SELECTED=$(find "$WALLPAPER_DIR" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) 2>/dev/null | shuf -n 1)
+SELECTED=$(find "$WALLPAPER_DIR" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) 2>/dev/null | shuf -n 1)
 
 if [ -z "$SELECTED" ]; then
     notify-send -u low "Wallpaper" "No wallpaper images found in $WALLPAPER_DIR" 2>/dev/null || true
@@ -33,21 +33,22 @@ if ! pgrep -x "awww-daemon" > /dev/null 2>&1; then
     sleep 0.5
 fi
 
-# Apply wallpaper
-if awww img "$SELECTED" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
+# Apply wallpaper (backend picks awww or mpvpaper)
+if "$HOME/.local/bin/wallpaper-backend" apply "$SELECTED"; then
     log "Wallpaper applied: $SELECTED"
-    echo "$SELECTED" > "$HOME/.cache/current-wallpaper"
     notify-send -u low "Wallpaper" "$(basename "$SELECTED")" 2>/dev/null || true
 else
-    log "Failed to apply wallpaper with awww"
+    log "Failed to apply wallpaper with backend"
     exit 1
 fi
+PYWAL_SRC=$("$HOME/.local/bin/wallpaper-backend" pywal-src 2>/dev/null || echo "$SELECTED")
 
 # Sync pywal colors if available
 if command -v wal > /dev/null 2>&1; then
     if [ -x "$HOME/.local/bin/pywal-wallpaper-sync" ]; then
         "$HOME/.local/bin/pywal-wallpaper-sync" "$SELECTED" >> "$LOG_FILE" 2>&1 || true
     else
-        wal -i "$SELECTED" -n -q >> "$LOG_FILE" 2>&1 || true
+        [ -f "$PYWAL_SRC" ] || PYWAL_SRC="$SELECTED"
+        wal -i "$PYWAL_SRC" -n -q >> "$LOG_FILE" 2>&1 || true
     fi
 fi

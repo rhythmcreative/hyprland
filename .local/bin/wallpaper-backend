@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# wallpaper-backend: unified wallpaper engine (static + animated).
+# Static (jpg/png/bmp/static webp) -> awww (transitions + effects).
+# Animated (gif / animated webp)   -> mpvpaper + mpv (loop, auto-pause).
+# Usage: wallpaper-backend apply <file> [--no-transition]
+# Prints nothing; writes pywal source to ~/.cache/wallpaper-pywal-src
+# and backend name to ~/.cache/wallpaper-backend.
+set -euo pipefail
+
+LOG_FILE="$HOME/.cache/wallpaper-theme.log"
+BACKEND_FILE="$HOME/.cache/wallpaper-backend"
+PYWAL_SRC="$HOME/.cache/wallpaper-pywal-src"
+FRAME_FILE="/tmp/wallpaper-frame.png"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backend] $1" >> "$LOG_FILE"; }
+
+is_animated() {
+    local f="$1"
+    local ext="${f##*.}"
+    ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
+    case "$ext" in
+        gif|mp4|webm|mkv|mov) return 0 ;;
+    esac
+    if [ "$ext" = "webp" ] && command -v identify >/dev/null 2>&1; then
+        local n
+        n=$(identify -format "%n\n" "$f" 2>/dev/null | head -n1 || echo 1)
+        [ "${n:-1}" -gt 1 ] 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+monitors() {
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null
+    fi
+}
+
+ensure_awww() {
+    if ! pgrep -x "awww-daemon" >/dev/null 2>&1; then
+        setsid awww-daemon --format xrgb --no-cache >/dev/null 2>&1 &
+        for _ in $(seq 1 50); do
+            awww query >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+    fi
+}
+
+stop_mpvpaper() {
+    pkill -x "mpvpaper" 2>/dev/null || true
+    pkill -f ".local/bin/wallpaper-mpvpaper" 2>/dev/null || true
+}
+
+apply_static() {
+    local f="$1" trans="$2"
+    stop_mpvpaper
+    ensure_awww
+    if [ "$trans" = "yes" ]; then
+        awww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
+        awww img "$f" >/dev/null 2>&1 || true
+    else
+        awww img "$f" >/dev/null 2>&1 || true
+    fi
+    echo "awww" > "$BACKEND_FILE"
+    echo "$f" > "$PYWAL_SRC"
+    log "static applied via awww: $(basename "$f")"
+}
+
+apply_animated() {
+    local f="$1"
+    # awww and mpvpaper fight over the background layer: stop awww first
+    if pgrep -x "awww-daemon" >/dev/null 2>&1; then
+        pkill -x "awww-daemon" 2>/dev/null || true
+        sleep 0.3
+    fi
+    stop_mpvpaper
+    local mons
+    mons=$(monitors)
+    [ -z "$mons" ] && mons="eDP-1"
+    # shellcheck disable=SC2086
+    while IFS= read -r mon; do
+        [ -z "$mon" ] && continue
+        setsid mpvpaper -f -p -o "no-audio loop-file=inf" "$mon" "$f" >/dev/null 2>&1 &
+    done <<< "$mons"
+    sleep 0.5
+    echo "mpvpaper" > "$BACKEND_FILE"
+    # first frame for pywal / SDDM / thumbnails
+    if command -v convert >/dev/null 2>&1; then
+        convert "$f[0]" "$FRAME_FILE" 2>/dev/null && echo "$FRAME_FILE" > "$PYWAL_SRC" || echo "$f" > "$PYWAL_SRC"
+    else
+        echo "$f" > "$PYWAL_SRC"
+    fi
+    log "animated applied via mpvpaper: $(basename "$f")"
+}
+
+case "${1:-}" in
+    apply)
+        FILE="${2:-}"
+        [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "Usage: wallpaper-backend apply <file>" >&2; exit 1; }
+        TRANS="yes"
+        [ "${3:-}" = "--no-transition" ] && TRANS="no"
+        echo "$FILE" > "$HOME/.cache/current-wallpaper"
+        if is_animated "$FILE" && command -v mpvpaper >/dev/null 2>&1; then
+            apply_animated "$FILE"
+        else
+            apply_static "$FILE" "$TRANS"
+        fi
+        ;;
+    backend)
+        cat "$BACKEND_FILE" 2>/dev/null || echo "awww"
+        ;;
+    pywal-src)
+        if [ -f "$PYWAL_SRC" ]; then cat "$PYWAL_SRC"; else cat "$HOME/.cache/current-wallpaper" 2>/dev/null || true; fi
+        ;;
+    stop-animated)
+        stop_mpvpaper
+        ;;
+    *)
+        echo "Usage: wallpaper-backend {apply <file> [--no-transition]|backend|pywal-src|stop-animated}" >&2
+        exit 1
+        ;;
+esac

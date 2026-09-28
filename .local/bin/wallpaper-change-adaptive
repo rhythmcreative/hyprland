@@ -877,12 +877,12 @@ fi
 
 log "PASO 1: Aplicando wallpaper: $selected_file"
 
-# Aplicar wallpaper con awww
-if awww img "$selected_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60; then
-    log "Wallpaper aplicado con awww"
+# Aplicar wallpaper (backend: awww o mpvpaper segun formato)
+if "$HOME/.local/bin/wallpaper-backend" apply "$selected_file"; then
+    log "Wallpaper aplicado con backend"
     notify "Wallpaper aplicado: $(basename "$selected_file")"
 else
-    log "Error al aplicar wallpaper con awww"
+    log "Error al aplicar wallpaper con backend"
     exit 1
 fi
 

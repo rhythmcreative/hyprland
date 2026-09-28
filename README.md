@@ -109,7 +109,7 @@ When changing the wallpaper, Pywal automatically calculates the dominant colors 
   </tr>
 </table>
 
-> Over 3,000 wallpapers organized in 49 themed packs are available via `./install.sh --wallpapers [all|random]`. Switch anytime directly from the desktop with `Super + Shift + W` (visual selector) or `Super + Shift + B` (random fade). Curated from [Bjarneo Wallpapers](https://bjarneo.github.io/wallpapers/).
+> 570 wallpapers (jpg, png, webp) with animated gif and webp support via `./install.sh --wallpapers [all|random]`. Switch anytime directly from the desktop with `Super + Shift + W` (visual selector) or `Super + Shift + B` (random fade). Curated from [FireWalls](https://github.com/deadduck-09/FireWalls).
 
 ---
 

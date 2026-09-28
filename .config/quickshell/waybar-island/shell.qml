@@ -25,6 +25,32 @@ ShellRoot {
     property string notifBody: ""
     property string notifIcon: ""
     property var currentNotification: null
+    property var notifHistory: []
+    property int notifUnread: 0
+
+    function notifTime() {
+        var d = new Date()
+        return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2)
+    }
+    function notifPush(app, summary, body) {
+        var h = [{app: app || "System", summary: summary || "", body: body || "", time: root.notifTime()}].concat(root.notifHistory)
+        root.notifHistory = h.slice(0, 30)
+        root.notifUnread = Math.min(99, root.notifUnread + 1)
+    }
+    function notifOpenCenter() {
+        if (root.currentNotification) root.currentNotification.dismiss()
+        root.currentNotification = null
+        root.notifActive = false
+        root.notifUnread = 0
+        root.expanded = true
+        root.currentTab = 0
+        root.controlSubView = 6
+        root.refreshAllStates()
+    }
+    function notifClear() {
+        root.notifHistory = []
+        root.notifUnread = 0
+    }
 
     NotificationServer {
         id: notifServer
@@ -37,6 +63,7 @@ ShellRoot {
             // Do Not Disturb: suppress banner toast, keep server-side history
             if (root.dndEnabled) {
                 n.tracked = true
+                root.notifPush(n.appName, n.summary, n.body)
                 return
             }
             n.tracked = true
@@ -57,6 +84,7 @@ ShellRoot {
                 return
             }
 
+            root.notifPush(n.appName, n.summary, n.body)
             root.currentNotification = n
             root.notifAppName = n.appName || "System"
             root.notifSummary = n.summary || ""
@@ -312,6 +340,10 @@ ShellRoot {
             otaStatusProc.running = true
             otaChangelogProc.running = true
             return "ota"
+        }
+        function openNotifications(): string {
+            root.notifOpenCenter()
+            return "notifications"
         }
         function collapse(): string {
             root.expanded = false
@@ -1216,6 +1248,43 @@ ShellRoot {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
+                    // Unread notifications badge (adaptive count)
+                    Row {
+                        visible: root.notifUnread > 0 && !root.expanded && !root.notifActive
+                        spacing: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            text: "󰂚"
+                            color: root.colAccent
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Rectangle {
+                            height: 16
+                            width: Math.max(16, notifCountLbl.implicitWidth + 10)
+                            radius: 8
+                            color: root.colAccent
+                            Text {
+                                id: notifCountLbl
+                                anchors.centerIn: parent
+                                text: root.notifUnread > 9 ? "9+" : root.notifUnread
+                                color: root.colBg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                            }
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
                     // Indicator icon
                     Text {
                         text: root.expanded ? "󰅃" : "󰅀"
@@ -1246,12 +1315,7 @@ ShellRoot {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.currentNotification) {
-                            root.currentNotification.dismiss()
-                        }
-                        root.notifActive = false
-                    }
+                    onClicked: root.notifOpenCenter()
                 }
 
                 RowLayout {
@@ -4551,6 +4615,177 @@ ShellRoot {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                     enabled: !root.otaUpdating
                                     onClicked: { root.otaUpdating = true; otaUpdateProc.running = true }
+                                }
+                            }
+                        }
+                    }
+                    // ── 7. SUBSECCIÓN: NOTIFICATION CENTER ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: root.controlSubView === 6
+
+                        // Sub-header with back button
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Rectangle {
+                                width: 100
+                                height: 32
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Text {
+                                        text: "󰁍"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+                                    Text {
+                                        text: "Back"
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.controlSubView = 0
+                                }
+                            }
+
+                            Text {
+                                text: "Notifications"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                height: 32
+                                width: 96
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Clear all"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.notifClear()
+                                }
+                            }
+                        }
+
+                        // History list (adapts to amount)
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(430, Math.max(120, notifHistCol.implicitHeight))
+                            contentWidth: width
+                            contentHeight: notifHistCol.implicitHeight
+                            clip: true
+
+                            ColumnLayout {
+                                id: notifHistCol
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: root.notifHistory
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: notifCardCol.implicitHeight + 16
+                                        radius: 12
+                                        color: root.colSurface
+                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                        border.width: 1
+
+                                        ColumnLayout {
+                                            id: notifCardCol
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 8
+                                            spacing: 2
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Text {
+                                                    text: "󰂚"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 12
+                                                }
+                                                Text {
+                                                    text: modelData.app
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    text: modelData.time
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                            }
+
+                                            Text {
+                                                visible: modelData.summary !== ""
+                                                text: modelData.summary
+                                                color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 11
+                                                font.weight: Font.Bold
+                                                wrapMode: Text.Wrap
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                visible: modelData.body !== ""
+                                                text: modelData.body
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 3
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.notifHistory.length === 0
+                                    text: "No notifications yet."
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.topMargin: 20
                                 }
                             }
                         }

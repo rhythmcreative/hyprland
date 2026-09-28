@@ -2378,54 +2378,71 @@ ShellRoot {
                                 }
                             }
 
-                            // Night Light Tile (Material 3 Card)
+                            // Night Light Tile: same split layout as Wi-Fi/Bluetooth.
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 1
                                 height: 54
                                 radius: 16
-                                color: root.nightLightEnabled ? root.colAccent : (nightHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                color: root.nightLightEnabled ? root.colAccent : (nightTileHover.containsMouse ? root.colSurfaceHover : root.colSurface)
                                 border.color: root.nightLightEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
                                 border.width: 1
                                 Behavior on color { ColorAnimation { duration: 180 } }
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 10
+                                    spacing: 0
 
-                                    Rectangle {
-                                        width: 34; height: 34; radius: 17
-                                        color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "󰖔"
-                                            color: root.nightLightEnabled ? root.colBg : root.colAccent
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 17
-                                        }
-                                    }
-
-                                    ColumnLayout {
+                                    Item {
                                         Layout.fillWidth: true
-                                        spacing: 1
-                                        Text {
-                                            text: "Night Light"
-                                            color: root.nightLightEnabled ? root.colBg : root.colFg
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 11
-                                            font.weight: Font.Bold
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 6
+                                            spacing: 10
+                                            Rectangle {
+                                                width: 34; height: 34; radius: 17
+                                                color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "󰖔"
+                                                    color: root.nightLightEnabled ? root.colBg : root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 17
+                                                }
+                                            }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+                                                Text {
+                                                    text: "Night Light"
+                                                    color: root.nightLightEnabled ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: root.nightLightEnabled ? (root.nightLightTemperature + "K · " + root.nightLightGamma + "%") : (root.nightLightTemperature + "K · Inactive")
+                                                    color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
                                         }
-                                Text {
-                                    text: root.nightLightEnabled ? (root.nightLightTemperature + "K · " + root.nightLightGamma + "%") : (root.nightLightTemperature + "K · Inactive")
-                                            color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 9
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
+                                        MouseArea {
+                                            id: nightTileHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                islandWin.controlSubView = 5
+                                                nightLightSettingsProc.running = true
+                                            }
                                         }
                                     }
 
@@ -2435,6 +2452,7 @@ ShellRoot {
                                         Layout.alignment: Qt.AlignVCenter
                                         color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
                                     }
+
                                     Rectangle {
                                         width: 38
                                         Layout.fillHeight: true
@@ -2457,17 +2475,6 @@ ShellRoot {
                                                 nightLightSettingsProc.running = true
                                             }
                                         }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: nightHover
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        islandWin.controlSubView = 5
-                                        nightLightSettingsProc.running = true
                                     }
                                 }
                             }

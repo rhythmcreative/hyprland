@@ -1,13 +1,81 @@
 #!/bin/bash
-# Toggle all rust-dock instances seamlessly
-STATE_FILE="/tmp/rust-dock-visible"
+# Enciende y apaga el dock inferior de forma persistente.
+#
+# El estado se guarda en ~/.config/rhythm/dock.conf, no en /tmp, para que el dock
+# siga apagado despues de reiniciar o de apagar la maquina. rust-dock-launcher y
+# rust-dock-monitor-watcher consultan ese mismo fichero, de modo que ni un cambio
+# de tema ni una pantalla nueva pueden volver a levantar un dock apagado.
 
-# Usar SIGHUP para invocar toggle_visibility() nativamente en rust-dock sin matar este script
-pkill -x -HUP rust-dock 2>/dev/null || true
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+STATE_FILE="$RUNTIME/rust-dock-visible"
+CONFIG_DIR="$HOME/.config/rhythm"
+CONFIG_FILE="$CONFIG_DIR/dock.conf"
+LAUNCHER="$HOME/.local/bin/rust-dock-launcher"
 
-# Alternar el estado registrado
-if [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE" 2>/dev/null)" = "hidden" ]; then
-    echo "visible" > "$STATE_FILE" 2>/dev/null || true
-else
-    echo "hidden" > "$STATE_FILE" 2>/dev/null || true
-fi
+# 'on' por defecto: sin fichero de estado el dock se comporta como siempre.
+dock_state() {
+    local stored="on"
+    if [ -f "$CONFIG_FILE" ]; then
+        stored=$(awk -F= '$1 == "enabled" {print $2; exit}' "$CONFIG_FILE")
+    fi
+    case "$stored" in
+        on|off) printf '%s\n' "$stored" ;;
+        *) printf 'on\n' ;;
+    esac
+}
+
+save_dock_state() {
+    mkdir -p "$CONFIG_DIR"
+    printf 'enabled=%s\n' "$1" > "$CONFIG_FILE.tmp.$$"
+    mv -f "$CONFIG_FILE.tmp.$$" "$CONFIG_FILE"
+}
+
+dock_on() {
+    save_dock_state "on"
+    printf 'visible\n' > "$STATE_FILE" 2>/dev/null || true
+    "$LAUNCHER" >/dev/null 2>&1 &
+}
+
+dock_off() {
+    save_dock_state "off"
+    # Sin SIGHUP: SIGHUP solo ocultaba la ventana y los procesos se quedaban
+    # vivos, reclaimando capas al cambiar de tema o al reconectar monitores.
+    pkill -x rust-dock >/dev/null 2>&1 || true
+    printf 'hidden\n' > "$STATE_FILE" 2>/dev/null || true
+}
+
+set_dock() {
+    local target="$1"
+    if [ "$(dock_state)" = "$target" ]; then
+        # Ya estaba en ese estado: no relanzar nada.
+        :
+    elif [ "$target" = "on" ]; then
+        dock_on
+    else
+        dock_off
+    fi
+    dock_state
+}
+
+case "${1:-toggle}" in
+    status)
+        dock_state
+        ;;
+    on)
+        set_dock on
+        ;;
+    off)
+        set_dock off
+        ;;
+    toggle)
+        if [ "$(dock_state)" = "on" ]; then
+            set_dock off
+        else
+            set_dock on
+        fi
+        ;;
+    *)
+        echo "Usage: rust-dock-toggle-all [toggle|on|off|status]" >&2
+        exit 1
+        ;;
+esac

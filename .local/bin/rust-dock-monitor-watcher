@@ -17,6 +17,12 @@ detect_socket() {
 }
 
 restart_dock() {
+    # El dock apagado por el usuario manda sobre los eventos de monitor y sobre
+    # la reconciliacion periodica: si esta apagado, aqui no se relanza.
+    if [ -f "$HOME/.config/rhythm/dock.conf" ] && \
+       [ "$(awk -F= '$1 == "enabled" {print $2; exit}' "$HOME/.config/rhythm/dock.conf")" = "off" ]; then
+        return 0
+    fi
     "$LAUNCHER" >/dev/null 2>&1 &
 }
 

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# wallpaper-gallery: rofi gallery of the wallpaper collection.
+#
+# Used by the "Picker" tile in the Dynamic Island. The gallery itself is
+# implemented by wallpaper-selector (rofi with generated thumbnails, pywal sync
+# and the animated bar hide/reveal), this wrapper only gives the island a stable
+# entry point.
+
+set -euo pipefail
+
+exec "$HOME/.local/bin/wallpaper-selector" "$@"

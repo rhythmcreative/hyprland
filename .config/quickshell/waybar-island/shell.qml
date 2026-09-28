@@ -2298,10 +2298,10 @@ ShellRoot {
                                 Layout.preferredWidth: 1
                                 height: 54
                                 radius: 16
-                                color: dockHover.containsMouse ? root.colSurfaceHover : root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                color: root.dockEnabled ? root.colAccent : (dockHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.dockEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
                                 border.width: 1
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on color { ColorAnimation { duration: 180 } }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -2311,11 +2311,11 @@ ShellRoot {
 
                                     Rectangle {
                                         width: 34; height: 34; radius: 17
-                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, root.dockEnabled ? 0.15 : 0.06)
+                                        color: root.dockEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
                                         Text {
                                             anchors.centerIn: parent
                                             text: "󰻂"
-                                            color: root.dockEnabled ? root.colAccent : root.colMuted
+                                            color: root.dockEnabled ? root.colBg : root.colAccent
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 17
                                         }
@@ -2326,7 +2326,7 @@ ShellRoot {
                                         spacing: 1
                                         Text {
                                             text: "Rust-Dock"
-                                            color: root.colFg
+                                            color: root.dockEnabled ? root.colBg : root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
                                             font.weight: Font.Bold
@@ -2335,7 +2335,7 @@ ShellRoot {
                                         }
                                         Text {
                                             text: root.dockEnabled ? "Enabled · click to hide" : "Disabled · click to show"
-                                            color: root.dockEnabled ? root.colAccent : root.colMuted
+                                            color: root.dockEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
                                             elide: Text.ElideRight

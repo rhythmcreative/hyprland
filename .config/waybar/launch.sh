@@ -16,7 +16,7 @@ pkill -9 waybar || true
 pkill -f "waybar/scripts" || true
 
 # Wait for process to fully release resources
-sleep 0.5
+sleep 0.2
 
 # Auto-detect battery count (0 = desktop, 1 = single battery, 2+ = dual battery)
 if [ -f "$WAYBAR_DIR/scripts/auto-battery-setup.sh" ]; then
@@ -38,7 +38,7 @@ fi
 echo "Starting Waybar base config: $CONFIG and style: $STYLE" >> "$LOG_FILE"
 
 # Small delay to ensure display and IPC are ready
-sleep 0.2
+sleep 0.1
 
 # Check and auto-detect Wayland and Hyprland environment if missing
 if [ -z "$XDG_RUNTIME_DIR" ]; then

@@ -104,31 +104,15 @@ if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
     ln -sf "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
 fi
 
-if pgrep -x waybar > /dev/null 2>&1; then
-    # Matar nm-applet ANTES de matar waybar para evitar el registro fantasma
-    NM_WAS_RUNNING=false
-    if pgrep -x nm-applet > /dev/null 2>&1; then
-        NM_WAS_RUNNING=true
-        pkill nm-applet 2>/dev/null || true
-        sleep 0.1
-    fi
-
-    "$HOME/.config/waybar/launch.sh"
-
-    # Esperar a que waybar registre StatusNotifierWatcher en D-Bus (máx 3s)
-    for i in $(seq 1 30); do
-        pgrep -x waybar > /dev/null 2>&1 || { sleep 0.1; continue; }
-        busctl --user list 2>/dev/null | grep -q "StatusNotifierWatcher" && break
-        sleep 0.1
-    done
-
-    # Reiniciar nm-applet para que se registre con el nuevo SNW
-    if [ "$NM_WAS_RUNNING" = true ]; then
-        nm-applet --indicator > /dev/null 2>&1 &
-    fi
-else
-    "$HOME/.config/waybar/launch.sh"
-fi
+# Reinicio rapido en segundo plano (SIGHUP mata a waybar: no usar)
+(
+    pkill -x waybar 2>/dev/null || true
+    sleep 0.3
+    "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1
+    sleep 1
+    pkill -x nm-applet 2>/dev/null || true
+    nm-applet --indicator >/dev/null 2>&1 &
+) &
 
 # 6b. Asegurar rust-dock activo (recarga colores automáticamente vía inotify)
 echo "  • rust-dock..."

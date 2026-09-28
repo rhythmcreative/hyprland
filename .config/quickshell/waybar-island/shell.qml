@@ -109,7 +109,7 @@ ShellRoot {
     property real tabFade: 1.0
     Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
     Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: root.tabFade = 1.0 }
-    Timer { id: hoverCollapseGrace; interval: 1200; repeat: false; onTriggered: { if (root.expanded && !root.notifActive) root.expanded = false } }
+    Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (root.expanded && !root.notifActive) root.expanded = false } }
     Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!root.expanded && !root.notifActive) { root.expanded = true; root.controlSubView = 0; root.refreshAllStates() } } }
     property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output, 4 = System Update (OTA)
 

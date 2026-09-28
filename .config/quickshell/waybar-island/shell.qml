@@ -952,13 +952,15 @@ ShellRoot {
             anchors.horizontalCenter: parent.horizontalCenter
             opacity: 1.0
 
-            MouseArea {
+            HoverHandler {
                 id: islandHover
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                onEntered: hoverCollapseGrace.stop()
-                onExited: { if (root.expanded && !root.notifActive) hoverCollapseGrace.restart() }
+                onHoveredChanged: {
+                    if (islandHover.hovered) {
+                        hoverCollapseGrace.stop()
+                    } else if (root.expanded && !root.notifActive) {
+                        hoverCollapseGrace.restart()
+                    }
+                }
             }
 
 

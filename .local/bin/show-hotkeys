@@ -58,6 +58,7 @@ SUPER + F                 │ Keybindings Cheatsheet           │ Help
 SUPER + X                 │ System Settings Menu             │ Settings
 SUPER + N                 │ Wi-Fi Network Menu               │ Network
 SUPER + B                 │ Bluetooth Devices Menu           │ Network
+SUPER + SHIFT + N         │ Notification Center              │ System
 SUPER + A                 │ Application Launcher             │ Rofi
 SUPER + R                 │ Run Command                      │ Rofi
 SUPER + E                 │ File Manager (Thunar)            │ Files
@@ -135,6 +136,9 @@ if [ -n "$selected" ]; then
             ;;
         *"SUPER + B"*)
             "$HOME/.local/bin/rofi-bluetooth-menu" &
+            ;;
+        *"SUPER + SHIFT + N"*)
+            "$HOME/.local/bin/open-notifications" &
             ;;
         *"SUPER + A"*)
             "$HOME/.local/bin/rofi-style3-monitor-adaptive" &

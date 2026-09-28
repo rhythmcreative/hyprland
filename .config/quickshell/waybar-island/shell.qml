@@ -1283,6 +1283,11 @@ ShellRoot {
                             opacity: 0.4
                             anchors.verticalCenter: parent.verticalCenter
                         }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.notifOpenCenter()
+                        }
                     }
 
                     // Indicator icon
@@ -2094,6 +2099,67 @@ ShellRoot {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: root.runCmd("~/.local/bin/rust-dock-toggle-all")
+                                }
+                            }
+
+                            // Notifications Tile (opens center)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: notifTileHover.containsMouse ? root.colSurfaceHover : root.colSurface
+                                border.color: root.notifUnread > 0 ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: root.notifUnread > 0 ? 1.5 : 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰂚"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Notifications"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.notifUnread > 0 ? (root.notifUnread > 9 ? "9+ unread" : root.notifUnread + " unread") : "No unread"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: notifTileHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.notifOpenCenter()
                                 }
                             }
 
@@ -4706,7 +4772,7 @@ ShellRoot {
                             ColumnLayout {
                                 id: notifHistCol
                                 width: parent.width
-                                spacing: 6
+                                spacing: 10
 
                                 Repeater {
                                     model: root.notifHistory
@@ -4723,8 +4789,9 @@ ShellRoot {
                                             anchors.left: parent.left
                                             anchors.right: parent.right
                                             anchors.top: parent.top
-                                            anchors.margins: 8
-                                            spacing: 2
+                                            anchors.margins: 12
+                                            anchors.bottomMargin: 12
+                                            spacing: 4
 
                                             RowLayout {
                                                 Layout.fillWidth: true

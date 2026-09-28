@@ -216,6 +216,9 @@ ShellRoot {
     property bool nightLightEnabled: false
     property int nightLightTemperature: 4500
     property int nightLightGamma: 100
+    property bool nightLightScheduleEnabled: false
+    property string nightLightScheduleStart: ""
+    property string nightLightScheduleEnd: ""
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
     property bool dndEnabled: false
@@ -818,6 +821,15 @@ ShellRoot {
                     root.nightLightEnabled = settings.enabled === true
                     root.nightLightTemperature = Number(settings.temperature) || 4500
                     root.nightLightGamma = Number(settings.gamma) || 100
+                    root.nightLightScheduleEnabled = settings.schedule_enabled === true
+                    root.nightLightScheduleStart = settings.schedule_start || ""
+                    root.nightLightScheduleEnd = settings.schedule_end || ""
+                    Object.keys(root.islandPanels).forEach(name => {
+                        const panel = root.islandPanels[name]
+                        panel.nightScheduleStartText = root.nightLightScheduleStart
+                        panel.nightScheduleEndText = root.nightLightScheduleEnd
+                        panel.nightScheduleValidation = ""
+                    })
                 } catch (e) {}
             }
         }
@@ -968,6 +980,9 @@ ShellRoot {
             property string wifiConnectState: "idle"
             property string wifiConnectMessage: ""
             property bool wifiPasswordVisible: false
+            property string nightScheduleStartText: ""
+            property string nightScheduleEndText: ""
+            property string nightScheduleValidation: ""
             function finishWifiConnection(ssid) {
                 clearWifiPassword()
                 selectedWifiSsid = ""
@@ -5123,6 +5138,123 @@ ShellRoot {
                                     }
                                 }
                                 Text { text: "Lower gamma dims the image; 100% is normal brightness."; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 8 }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 170
+                            radius: 14
+                            color: root.colSurface
+                            border.color: root.nightLightScheduleEnabled ? root.colAccent : root.colBorder
+                            border.width: 1
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 7
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Automatic schedule"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                    Item { Layout.fillWidth: true }
+                                    Text { text: root.nightLightScheduleEnabled ? "Enabled" : "Optional · Off"; color: root.nightLightScheduleEnabled ? root.colAccent : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9; font.weight: Font.Bold }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: "Start"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                    TextField {
+                                        id: nightScheduleStartInput
+                                        Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        maximumLength: 5
+                                        placeholderText: "HH:MM"
+                                        text: islandWin.nightScheduleStartText
+                                        color: root.colFg
+                                        placeholderTextColor: root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 10
+                                        horizontalAlignment: TextInput.AlignHCenter
+                                        onTextEdited: islandWin.nightScheduleStartText = text
+                                        background: Rectangle { radius: 8; color: root.colBg; border.color: root.colBorder; border.width: 1 }
+                                    }
+                                    Text { text: "End"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                    TextField {
+                                        id: nightScheduleEndInput
+                                        Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        maximumLength: 5
+                                        placeholderText: "HH:MM"
+                                        text: islandWin.nightScheduleEndText
+                                        color: root.colFg
+                                        placeholderTextColor: root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 10
+                                        horizontalAlignment: TextInput.AlignHCenter
+                                        onTextEdited: islandWin.nightScheduleEndText = text
+                                        background: Rectangle { radius: 8; color: root.colBg; border.color: root.colBorder; border.width: 1 }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: islandWin.nightScheduleValidation || "Off by default. Set both times (24-hour HH:MM) to enable."
+                                    color: islandWin.nightScheduleValidation ? root.colAccent : root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 8
+                                    elide: Text.ElideRight
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 30; radius: 15
+                                        color: root.colAccent
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: root.nightLightScheduleEnabled ? "Update schedule" : "Enable schedule"
+                                            color: root.colBg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                const start = islandWin.nightScheduleStartText.trim()
+                                                const end = islandWin.nightScheduleEndText.trim()
+                                                const valid = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
+                                                if (!valid.test(start) || !valid.test(end) || start === end) {
+                                                    islandWin.nightScheduleValidation = "Enter different valid start and end times."
+                                                    return
+                                                }
+                                                root.nightLightScheduleStart = start
+                                                root.nightLightScheduleEnd = end
+                                                islandWin.nightScheduleValidation = "Schedule saved. Night Light follows this time window."
+                                                root.runCmd("~/.local/bin/toggle-nightlight schedule on " + start + " " + end)
+                                                nightLightSettingsRefreshTimer.restart()
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 78; height: 30; radius: 15
+                                        color: root.colBg
+                                        border.color: root.colBorder; border.width: 1
+                                        opacity: root.nightLightScheduleEnabled ? 1 : 0.45
+                                        Text { anchors.centerIn: parent; text: "Disable"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9; font.weight: Font.Bold }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: root.nightLightScheduleEnabled
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.nightLightScheduleEnabled = false
+                                                islandWin.nightScheduleValidation = "Automatic schedule disabled."
+                                                root.runCmd("~/.local/bin/toggle-nightlight schedule off")
+                                                nightLightSettingsRefreshTimer.restart()
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 

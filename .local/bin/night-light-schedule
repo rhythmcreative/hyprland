@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Apply an explicitly configured Night Light time window.
+# No schedule is enabled by default; toggle-nightlight starts this only after
+# the user supplies both HH:MM times in the Quickshell submenu.
+
+set -u
+HELPER="$HOME/.local/bin/toggle-nightlight"
+
+while true; do
+    settings=$("$HELPER" settings 2>/dev/null || echo '{}')
+    enabled=$(jq -r '.schedule_enabled // false' <<< "$settings" 2>/dev/null || echo false)
+    [ "$enabled" = true ] || exit 0
+
+    start=$(jq -r '.schedule_start // ""' <<< "$settings" 2>/dev/null || true)
+    end=$(jq -r '.schedule_end // ""' <<< "$settings" 2>/dev/null || true)
+    now=$(date +%H%M)
+    start_num=${start/:/}
+    end_num=${end/:/}
+
+    # Supports same-day windows (20:00-23:30) and overnight windows (21:00-07:00).
+    desired=off
+    if [[ "$start_num" =~ ^[0-9]{4}$ && "$end_num" =~ ^[0-9]{4}$ ]] && [ "$start_num" != "$end_num" ]; then
+        if [ "$start_num" -lt "$end_num" ]; then
+            [ "$now" -ge "$start_num" ] && [ "$now" -lt "$end_num" ] && desired=on
+        else
+            { [ "$now" -ge "$start_num" ] || [ "$now" -lt "$end_num" ]; } && desired=on
+        fi
+    fi
+
+    current=$("$HELPER" status 2>/dev/null || echo off)
+    if [ "$desired" != "$current" ]; then
+        "$HELPER" "$desired" >/dev/null 2>&1 || true
+    fi
+    sleep 30
+done

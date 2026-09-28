@@ -7,17 +7,25 @@ CONFIG_DIR="$HOME/.config/rhythm"
 CONFIG_FILE="$CONFIG_DIR/night-light.conf"
 DEFAULT_TEMPERATURE=4500
 DEFAULT_GAMMA=100
+DEFAULT_SCHEDULE=off
 ACTION="${1:-toggle}"
 
 read_settings() {
     TEMPERATURE="$DEFAULT_TEMPERATURE"
     GAMMA="$DEFAULT_GAMMA"
+    SCHEDULE="$DEFAULT_SCHEDULE"
+    SCHEDULE_START=""
+    SCHEDULE_END=""
     if [ -f "$CONFIG_FILE" ]; then
         local stored
         stored=$(awk -F= '$1 == "temperature" {print $2; exit}' "$CONFIG_FILE")
         [[ "$stored" =~ ^[0-9]+$ ]] && TEMPERATURE="$stored"
         stored=$(awk -F= '$1 == "gamma" {print $2; exit}' "$CONFIG_FILE")
         [[ "$stored" =~ ^[0-9]+$ ]] && GAMMA="$stored"
+        stored=$(awk -F= '$1 == "schedule" {print $2; exit}' "$CONFIG_FILE")
+        [ "$stored" = "on" ] && SCHEDULE="on"
+        SCHEDULE_START=$(awk -F= '$1 == "schedule_start" {print $2; exit}' "$CONFIG_FILE")
+        SCHEDULE_END=$(awk -F= '$1 == "schedule_end" {print $2; exit}' "$CONFIG_FILE")
     fi
 }
 
@@ -27,6 +35,9 @@ save_settings() {
     {
         printf 'temperature=%s\n' "$TEMPERATURE"
         printf 'gamma=%s\n' "$GAMMA"
+        printf 'schedule=%s\n' "$SCHEDULE"
+        printf 'schedule_start=%s\n' "$SCHEDULE_START"
+        printf 'schedule_end=%s\n' "$SCHEDULE_END"
     } > "$tmp"
     mv -f "$tmp" "$CONFIG_FILE"
 }
@@ -80,7 +91,9 @@ case "$ACTION" in
     settings)
         read_settings
         if is_on; then enabled=true; else enabled=false; fi
-        printf '{"enabled":%s,"temperature":%s,"gamma":%s}\n' "$enabled" "$TEMPERATURE" "$GAMMA"
+        if [ "$SCHEDULE" = "on" ]; then schedule_enabled=true; else schedule_enabled=false; fi
+        printf '{"enabled":%s,"temperature":%s,"gamma":%s,"schedule_enabled":%s,"schedule_start":"%s","schedule_end":"%s"}\n' \
+            "$enabled" "$TEMPERATURE" "$GAMMA" "$schedule_enabled" "$SCHEDULE_START" "$SCHEDULE_END"
         ;;
     on)
         start_nightlight
@@ -111,6 +124,41 @@ case "$ACTION" in
         save_settings
         if is_on; then start_nightlight; fi
         echo "reset"
+        ;;
+    schedule)
+        read_settings
+        case "${2:-}" in
+            on)
+                start_time="${3:-}"
+                end_time="${4:-}"
+                time_re='^([01][0-9]|2[0-3]):[0-5][0-9]$'
+                [[ "$start_time" =~ $time_re && "$end_time" =~ $time_re && "$start_time" != "$end_time" ]] || {
+                    echo "Enter different start and end times in HH:MM (24-hour) format." >&2
+                    exit 2
+                }
+                SCHEDULE="on"
+                SCHEDULE_START="$start_time"
+                SCHEDULE_END="$end_time"
+                save_settings
+                if ! systemctl --user start rhythm-nightlight-schedule.service; then
+                    SCHEDULE="off"
+                    save_settings
+                    echo "Could not start the Night Light schedule service." >&2
+                    exit 1
+                fi
+                echo "schedule-on"
+                ;;
+            off)
+                SCHEDULE="off"
+                save_settings
+                systemctl --user stop rhythm-nightlight-schedule.service 2>/dev/null || true
+                echo "schedule-off"
+                ;;
+            *)
+                echo "Usage: toggle-nightlight schedule on HH:MM HH:MM | off" >&2
+                exit 2
+                ;;
+        esac
         ;;
     *)
         echo "Usage: toggle-nightlight status|settings|on|off|toggle|temperature K|gamma PERCENT|reset" >&2

@@ -1,0 +1,12 @@
+[Unit]
+Description=Rhythm Night Light scheduled on/off service
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/night-light-schedule
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

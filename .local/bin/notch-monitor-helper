@@ -34,10 +34,15 @@ cmd_list() {
             x: .x, y: .y, scale: .scale,
             focused: (.focused // false),
             disabled: (.disabled // false),
-            modes: ([.availableModes[]? | select(test("^[0-9]+x[0-9]+@[0-9.]+"))] | unique | .[0:8])
+            transform: (.transform // 0),
+            vrr: (.vrr // false),
+            dpms: (.dpmsStatus // true),
+            mirrorOf: (.mirrorOf // ""),
+            modes: ([.availableModes[]? | select(test("^[0-9]+x[0-9]+@[0-9.]+"))] | unique | .[0:12])
         }] | (map(.x) | min) as $minx | (map(.y) | min) as $miny
           | (map(.x + .width) | max - $minx) as $bw | (map(.y + .height) | max - $miny) as $bh
-          | map(. + {map: {x: (if $bw == 0 then 0 else (.x - $minx) / $bw end),
+          | {minx: $minx, miny: $miny, bw: $bw, bh: $bh} as $b
+          | map(. + {bounds: $b, map: {x: (if $bw == 0 then 0 else (.x - $minx) / $bw end),
                            y: (if $bh == 0 then 0 else (.y - $miny) / $bh end),
                            w: (if $bw == 0 then 1 else .width / $bw end),
                            h: (if $bh == 0 then 1 else .height / $bh end)}})'
@@ -143,6 +148,30 @@ cmd_preset() {
     esac
 }
 
+cmd_configure() {
+    local mon="$1" mode="$2" pos="$3" scale="$4" transform="$5" mirror="${6:-none}"
+    local lua="hl.monitor({ output = \"$mon\", mode = \"$mode\", position = \"$pos\", scale = \"$scale\", transform = $transform"
+    if [ "$mirror" != "none" ] && [ -n "$mirror" ]; then
+        lua="$lua, mirror = \"$mirror\""
+    fi
+    lua="$lua })"
+    hyprctl eval "$lua" >/dev/null 2>&1
+    notify "Display applied" "$mon $mode $pos scale $scale"
+}
+
+cmd_vrr() {
+    local mon="$1" st="$2" v=0
+    [ "$st" = "on" ] && v=1
+    hyprctl eval "hl.monitor({ output = \"$mon\", vrr = $v })" >/dev/null 2>&1
+    notify "Adaptive sync" "$mon ${st}"
+}
+
+cmd_dpms() {
+    local mon="$1" st="$2"
+    hyprctl eval "hl.dsp.dpms(\"$st\", \"$mon\")" >/dev/null 2>&1
+    notify "Display power" "$mon ${st}"
+}
+
 cmd_toggle() {
     local mon="$1" disabled
     local enabled_count
@@ -169,5 +198,8 @@ case "${1:-list}" in
     pos) shift; cmd_pos "$1" "$2" "${3:-}" ;;
     toggle) shift; cmd_toggle "$1" ;;
     preset) shift; cmd_preset "$1" ;;
-    *) echo "Usage: notch-monitor-helper {list|set|scale|pos|toggle}" >&2; exit 1 ;;
+    configure) shift; cmd_configure "$1" "$2" "$3" "$4" "$5" "${6:-none}" ;;
+    vrr) shift; cmd_vrr "$1" "$2" ;;
+    dpms) shift; cmd_dpms "$1" "$2" ;;
+    *) echo "Usage: notch-monitor-helper {list|set|scale|pos|toggle|preset|configure|vrr|dpms}" >&2; exit 1 ;;
 esac

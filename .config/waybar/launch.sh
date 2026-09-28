@@ -5,6 +5,44 @@ WAYBAR_DIR="$HOME/.config/waybar"
 STATE_FILE="$WAYBAR_DIR/vertical_state"
 LOG_FILE="$HOME/.cache/waybar-launch.log"
 
+# Monitor add/remove events can arrive in bursts, and wallpaper/theme sync can
+# launch Waybar at the same time. Serialize the kill-and-spawn sequence so two
+# launchers can never leave duplicate bars on the same output. Use a mkdir lock
+# rather than a flock file descriptor: Waybar modules (notably Cava) inherit
+# open file descriptors and otherwise hold the flock after the launcher exits.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+LOCK_DIR="$RUNTIME_DIR/waybar-launch.lock"
+mkdir -p "$RUNTIME_DIR" 2>/dev/null || true
+# Migrate the temporary regular lock file used by the previous implementation.
+[ -f "$LOCK_DIR" ] && rm -f "$LOCK_DIR"
+lock_wait=0
+while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -z "$owner" ]; then
+        # Give a new lock owner time to publish its PID before treating the
+        # just-created directory as stale.
+        sleep 0.1
+        owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    fi
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+        rm -f "$LOCK_DIR/pid" 2>/dev/null || true
+        rmdir "$LOCK_DIR" 2>/dev/null || true
+        continue
+    fi
+    lock_wait=$((lock_wait + 1))
+    if [ "$lock_wait" -ge 150 ]; then
+        echo "Timed out waiting for Waybar launcher lock held by PID $owner" >> "$LOG_FILE"
+        exit 1
+    fi
+    sleep 0.1
+done
+printf '%s\n' "$$" > "$LOCK_DIR/pid"
+release_waybar_lock() {
+    rm -f "$LOCK_DIR/pid" 2>/dev/null || true
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+trap release_waybar_lock EXIT
+
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
@@ -70,7 +108,7 @@ for _ in {1..5}; do
 done
 
 if [ -z "$monitors" ] || [ "$monitors" = "null" ]; then
-    waybar -c "$CONFIG" -s "$STYLE" >> "$LOG_FILE" 2>&1 &
+    waybar -c "$CONFIG" -s "$STYLE" >> "$LOG_FILE" 2>&1 9>&- &
     NEW_PID=$!
     echo "Waybar single-instance launched with PID: $NEW_PID" >> "$LOG_FILE"
 else
@@ -79,7 +117,9 @@ else
         MON_CONFIG="$WAYBAR_DIR/config-$monitor"
         # Ensure independent per-monitor config with output filter
         jq --arg out "$monitor" '.output = $out' "$CONFIG" > "$MON_CONFIG" 2>/dev/null || cp "$CONFIG" "$MON_CONFIG"
-        waybar -c "$MON_CONFIG" -s "$STYLE" >> "$LOG_FILE" 2>&1 &
+        # Do not pass the launcher's flock descriptor to the long-running bar;
+        # otherwise Waybar itself keeps the lock forever and blocks relaunches.
+        waybar -c "$MON_CONFIG" -s "$STYLE" >> "$LOG_FILE" 2>&1 9>&- &
         NEW_PID=$!
         echo "Waybar instance for $monitor launched (PID: $NEW_PID, config: $MON_CONFIG)" >> "$LOG_FILE"
     done <<< "$monitors"

@@ -20,6 +20,36 @@ restart_dock() {
     "$LAUNCHER" >/dev/null 2>&1 &
 }
 
+# Make sure there is exactly one dock instance per connected monitor.
+# Event driven handling alone is not enough: an event that arrives while the
+# script is restarting, a monitor with a slow handshake, or an instance that
+# dies on its own leaves the dock on the wrong screen until the next event.
+reconcile_docks() {
+    command -v hyprctl >/dev/null 2>&1 || return 0
+
+    local monitors
+    monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
+    [ -z "$monitors" ] && return 0
+
+    local m pid out needs=0
+    while IFS= read -r m; do
+        [ -z "$m" ] && continue
+        pgrep -f "rust-dock.*-o +$m(\$| )" >/dev/null 2>&1 || { needs=1; break; }
+    done <<< "$monitors"
+
+    if [ "$needs" = "0" ]; then
+        for pid in $(pgrep -f "rust-dock.*-o" 2>/dev/null); do
+            out=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -oP -- '-o\s+\K\S+' || true)
+            if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
+                kill "$pid" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    [ "$needs" = "1" ] && restart_dock
+    return 0
+}
+
 handle_monitor_event() {
     sleep 0.8
 
@@ -41,6 +71,15 @@ handle_monitor_event() {
 (
     sleep 3
     handle_monitor_event < /dev/null
+) &
+
+# Reconciliación periódica: el dock siempre queda en la pantalla correcta,
+# aunque se pierda un evento o una instancia muera sola.
+(
+    while true; do
+        sleep 15
+        reconcile_docks < /dev/null
+    done
 ) &
 
 while true; do

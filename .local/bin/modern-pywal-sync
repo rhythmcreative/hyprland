@@ -136,13 +136,9 @@ if ! pgrep -x rust-dock >/dev/null 2>&1; then
     "$HOME/.local/bin/rust-dock-launcher" &
 fi
 
-# 6c. Sincronizar daemon de auto-ocultación para Waybar y rust-dock
-echo "  • Auto-Hide Daemon..."
-pkill -x waybar_auto_hide 2>/dev/null || true
-sleep 0.3
-if [ -x "$HOME/.local/bin/waybar_auto_hide" ]; then
-    "$HOME/.local/bin/waybar_auto_hide" >/dev/null 2>&1 &
-fi
+# 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
+pkill -x waybar_auto_hi 2>/dev/null || true
+pkill -SIGUSR2 -x waybar 2>/dev/null || true
 
 # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
 echo "  • Dynamic Island (Quickshell)..."

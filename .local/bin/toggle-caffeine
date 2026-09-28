@@ -1,6 +1,56 @@
 #!/bin/bash
+# toggle-caffeine: idle inhibitor for the Dynamic Island "Awake mode".
+#
+# The inhibitor is implemented by SIGSTOP/SIGCONT on hypridle. Hyprland spawns a
+# new hypridle every time the config is loaded, and that fresh process is not
+# stopped, so the inhibitor silently dies after a while. A small keeper loop
+# re-applies the stop for as long as the state file exists.
+
 STATE_FILE="/tmp/caffeine-active"
+KEEPER_PID_FILE="/tmp/caffeine-keeper.pid"
 ACTION="${1:-toggle}"
+
+stop_hypridle() {
+    pkill -STOP -x hypridle 2>/dev/null || true
+}
+
+cont_hypridle() {
+    pkill -CONT -x hypridle 2>/dev/null || true
+}
+
+stop_keeper() {
+    if [ -f "$KEEPER_PID_FILE" ]; then
+        local pid
+        pid=$(cat "$KEEPER_PID_FILE" 2>/dev/null)
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+        rm -f "$KEEPER_PID_FILE"
+    fi
+}
+
+start_keeper() {
+    stop_keeper
+    nohup bash -c '
+        while [ -f /tmp/caffeine-active ]; do
+            pkill -STOP -x hypridle 2>/dev/null || true
+            sleep 2
+        done
+    ' >/dev/null 2>&1 &
+    echo $! > "$KEEPER_PID_FILE"
+}
+
+enable() {
+    touch "$STATE_FILE"
+    stop_hypridle
+    start_keeper
+    echo "on"
+}
+
+disable() {
+    rm -f "$STATE_FILE"
+    stop_keeper
+    cont_hypridle
+    echo "off"
+}
 
 case "$ACTION" in
     status)
@@ -11,24 +61,16 @@ case "$ACTION" in
         fi
         ;;
     on)
-        touch "$STATE_FILE"
-        pkill -STOP hypridle 2>/dev/null || true
-        echo "on"
+        enable
         ;;
     off)
-        rm -f "$STATE_FILE"
-        pkill -CONT hypridle 2>/dev/null || true
-        echo "off"
+        disable
         ;;
     toggle|*)
         if [ -f "$STATE_FILE" ]; then
-            rm -f "$STATE_FILE"
-            pkill -CONT hypridle 2>/dev/null || true
-            echo "off"
+            disable
         else
-            touch "$STATE_FILE"
-            pkill -STOP hypridle 2>/dev/null || true
-            echo "on"
+            enable
         fi
         ;;
 esac

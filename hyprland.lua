@@ -204,6 +204,43 @@ hl.window_rule({
     suppress_event = "maximize",
 })
 
+-- GROUP 1: scratchpads (Quake-style dropdown terminal + floating calculator)
+hl.window_rule({
+    name  = "scratchpad-terminal",
+    match = { class = "scratchpad-terminal" },
+    float = true,
+    size = "70% 60%",
+    center = true,
+    workspace = "special:scratchpad",
+})
+
+hl.window_rule({
+    name  = "scratchpad-calc",
+    match = { class = "scratchpad-calc" },
+    float = true,
+    size = "40% 50%",
+    center = true,
+    workspace = "special:scratchpad",
+})
+
+hl.window_rule({
+    name  = "scratchpad-gnome-calc",
+    match = { class = "org.gnome.Calculator" },
+    float = true,
+    size = "40% 50%",
+    center = true,
+    workspace = "special:scratchpad",
+})
+
+hl.window_rule({
+    name  = "scratchpad-qalculate",
+    match = { class = "qalculate-gtk" },
+    float = true,
+    size = "40% 50%",
+    center = true,
+    workspace = "special:scratchpad",
+})
+
 hl.layer_rule({
     name  = "rofi-blur",
     match = { namespace = "rofi" },
@@ -278,6 +315,16 @@ hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd('grim -g "$(slurp)" - | s
 hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("magic"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
 
+-- GROUP 1: scratchpads (Quake-style dropdown terminal + floating calculator)
+hl.bind(mainMod .. " + grave", hl.dsp.exec_cmd("~/.local/bin/toggle-scratchpad terminal"))
+hl.bind(mainMod .. " + T",     hl.dsp.exec_cmd("~/.local/bin/toggle-scratchpad terminal"))
+hl.bind(mainMod .. " + C",     hl.dsp.exec_cmd("~/.local/bin/toggle-scratchpad calc"))
+
+-- GROUP 1: layout presets (SUPER+SHIFT+1..0 are taken by workspaces, use ALT)
+hl.bind(mainMod .. " + ALT + 1", hl.dsp.exec_cmd("~/.local/bin/layout-preset code"))
+hl.bind(mainMod .. " + ALT + 2", hl.dsp.exec_cmd("~/.local/bin/layout-preset read"))
+hl.bind(mainMod .. " + ALT + 3", hl.dsp.exec_cmd("~/.local/bin/layout-preset float"))
+
 -- Scroll workspaces
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
@@ -290,7 +337,9 @@ hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic up"),    { locked = true, repeating = true })
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.local/bin/volume-dynamic down"),  { locked = true, repeating = true })
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("~/.local/bin/volume-dynamic mute"),  { locked = true, repeating = true })
-hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true, repeating = true })
+hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("~/.local/bin/mic-osd-toggle"), { locked = true, repeating = true })
+hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("~/.local/bin/mic-osd-toggle"), { locked = true })
+hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("~/.local/bin/toggle-noise-suppression"), { locked = true })
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic up"),   { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/brightness-dynamic down"), { locked = true, repeating = true })
 
@@ -308,3 +357,6 @@ hl.bind("F12", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"))
 hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
 hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh"))
+
+-- GROUP 6: panic/boss key (instant privacy screen, toggle to restore)
+hl.bind(mainMod .. " + Escape", hl.dsp.exec_cmd("~/.local/bin/panic-mode"))

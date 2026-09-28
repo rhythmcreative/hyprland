@@ -1,0 +1,54 @@
+#!/bin/bash
+# Switch Hyprland layout presets: code | read | float
+# Usage: layout-preset <code|read|float>
+set -u
+
+MODE="${1:-}"
+
+if ! command -v hyprctl >/dev/null 2>&1; then
+    echo "hyprctl not found" >&2
+    exit 1
+fi
+
+notify() {
+    notify-send "Layout Preset" "$1" 2>/dev/null || echo "$1"
+}
+
+case "$MODE" in
+    code)
+        # Split editor + terminal: dwindle with tight gaps
+        hyprctl keyword general:layout dwindle >/dev/null
+        hyprctl keyword dwindle:preserve_split yes >/dev/null
+        hyprctl keyword general:gaps_in 3 >/dev/null
+        hyprctl keyword general:gaps_out 10 >/dev/null
+        hyprctl keyword decoration:rounding 10 >/dev/null
+        hyprctl keyword decoration:blur:enabled yes >/dev/null
+        hyprctl keyword misc:enable_swallow yes >/dev/null
+        notify "Code preset: dwindle, gaps 3/10"
+        ;;
+    read)
+        # Two vertical columns: master layout, roomier gaps
+        hyprctl keyword general:layout master >/dev/null
+        hyprctl keyword master:new_status master >/dev/null
+        hyprctl keyword master:orientation left >/dev/null
+        hyprctl keyword general:gaps_in 6 >/dev/null
+        hyprctl keyword general:gaps_out 12 >/dev/null
+        hyprctl keyword decoration:rounding 10 >/dev/null
+        hyprctl keyword decoration:blur:enabled yes >/dev/null
+        notify "Read preset: master, gaps 6/12"
+        ;;
+    float)
+        # Relaxed floating-friendly: no gaps, rounder corners, stronger blur
+        hyprctl keyword general:gaps_in 0 >/dev/null
+        hyprctl keyword general:gaps_out 0 >/dev/null
+        hyprctl keyword decoration:rounding 16 >/dev/null
+        hyprctl keyword decoration:blur:enabled yes >/dev/null
+        hyprctl keyword decoration:blur:size 18 >/dev/null
+        hyprctl keyword decoration:blur:passes 3 >/dev/null
+        notify "Float preset: gaps 0, rounding 16"
+        ;;
+    *)
+        echo "Usage: $(basename "$0") <code|read|float>" >&2
+        exit 2
+        ;;
+esac

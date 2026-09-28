@@ -111,8 +111,43 @@
   "hyprland/workspaces": {
     "format": "{name} {icon}",
     "format-icons": {
-      "active": "",
-      "default": ""
+      "1": "1:",
+      "2": "2:",
+      "3": "3:",
+      "4": "4:",
+      "5": "5:",
+      "6": "6:",
+      "7": "7:",
+      "8": "8:",
+      "9": "9:",
+      "10": "10:",
+      "active": "",
+      "default": "",
+      "empty": ""
+    },
+    "persistent-workspaces": {},
+    "window-rewrite": {
+      "class<kitty>": "",
+      "class<alacritty>": "",
+      "class<foot>": "",
+      "class<wezterm>": "",
+      "class<gnome-terminal>": "",
+      "class<chromium>": "",
+      "class<google-chrome>": "",
+      "class<firefox>": "",
+      "class<brave-browser>": "",
+      "class<thunar>": "",
+      "class<nautilus>": "",
+      "class<nemo>": "",
+      "class<code>": "",
+      "class<code-oss>": "",
+      "class<vesktop>": "",
+      "class<discord>": "",
+      "class<telegram>": "",
+      "class<org.telegram.desktop>": "",
+      "class<spotify>": "",
+      "class<steam>": "",
+      "default": ""
     }
   },
   "group/system-info": {

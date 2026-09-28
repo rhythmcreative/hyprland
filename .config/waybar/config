@@ -8,7 +8,7 @@
   "spacing": 0,
   "exclusive": true,
   "on-sigusr1": "hide",
-  "on-sigusr2": "reload",
+  "on-sigusr2": "show",
   "modules-left": [
     "hyprland/workspaces",
     "group/system-info",

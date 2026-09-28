@@ -54,15 +54,7 @@ log "CSS de waybar actualizado con colores pywal"
 if pgrep -x waybar > /dev/null; then
     log "Intentando recarga de CSS sin reiniciar waybar..."
     
-    # Intentar SIGUSR2 (recarga de CSS solamente)
-    if pkill -SIGUSR2 waybar 2>/dev/null; then
-        log "CSS recargado exitosamente (método SIGUSR2)"
-        notify-send "Waybar CSS" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
-        exit 0
-    fi
-    
-    # Si SIGUSR2 falla, intentar SIGHUP (recarga completa sin reiniciar)
-    log "SIGUSR2 falló, intentando SIGHUP..."
+    # Recarga de config/CSS con SIGHUP (SIGUSR2 ahora es 'show' para auto-hide)
     if pkill -SIGHUP waybar 2>/dev/null; then
         sleep 0.5
         log "Waybar recargado completamente (método SIGHUP)"

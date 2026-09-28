@@ -65,11 +65,8 @@ fi
 log "PASO 2: Sincronizando Waybar..."
 waybar_pids=$(pgrep -x waybar || true)
 if [[ -n "$waybar_pids" ]]; then
-    # Intentar recarga suave de CSS
-    if kill -USR2 $waybar_pids 2>/dev/null; then
-        log "Waybar CSS recargado (SIGUSR2)"
-        sleep 1
-    elif kill -HUP $waybar_pids 2>/dev/null; then
+    # Recarga suave (SIGHUP; SIGUSR2 ahora es 'show' para auto-hide)
+    if kill -HUP $waybar_pids 2>/dev/null; then
         log "Waybar recargado (SIGHUP)"
         sleep 1
     else

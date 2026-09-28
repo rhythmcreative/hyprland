@@ -66,18 +66,8 @@ reload_waybar_safe() {
     # INSTANCIA ÚNICA: Intentar SOLO recarga de CSS sin reiniciar
     log "Recargando estilos de waybar (sin reinicio)..."
     
-    # Método 1: Recarga de CSS usando SIGUSR2
-    if kill -USR2 $waybar_pids 2>/dev/null; then
-        log "CSS de waybar recargado exitosamente (CERO reinicios)"
-        sleep 1
-        # Verificar que sigue corriendo
-        if kill -0 $waybar_pids 2>/dev/null; then
-            return 0
-        fi
-    fi
-    
-    # Método 2: Si SIGUSR2 falla, usar SIGHUP para recarga completa
-    log "Intentando recarga completa con SIGHUP..."
+    # Método 1: Recarga de config/CSS usando SIGHUP (SIGUSR2 ahora es 'show' para auto-hide)
+    log "Recargando waybar con SIGHUP..."
     if kill -HUP $waybar_pids 2>/dev/null; then
         sleep 1.5
         # Verificar que sigue corriendo después de SIGHUP

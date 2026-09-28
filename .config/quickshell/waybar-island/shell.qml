@@ -78,6 +78,9 @@ ShellRoot {
     property bool islandVisible: true
     property var hiddenScreens: ({})
     property int currentTab: 0 // 0 = Control & Sistema, 1 = Ajustes Hyprland
+    property real tabFade: 1.0
+    Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+    Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: root.tabFade = 1.0 }
     property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output, 4 = System Update (OTA)
 
     // OTA System Update state
@@ -168,6 +171,8 @@ ShellRoot {
     onCurrentTabChanged: {
         if (root.controlSubView !== 4) root.controlSubView = 0
         if (root.currentTab === 1) hyprStatusProc.running = true
+        root.tabFade = 0.0
+        tabFadeReset.restart()
     }
 
     onExpandedChanged: {
@@ -925,7 +930,7 @@ ShellRoot {
             Behavior on height {
                 NumberAnimation {
                     id: capsuleHeightAnim
-                    duration: 320
+                    duration: 220
                     easing.type: Easing.OutCubic
                 }
             }
@@ -1513,6 +1518,7 @@ ShellRoot {
                         Layout.fillWidth: true
                         spacing: 12
                         visible: root.currentTab === 0 && root.controlSubView === 0
+                        opacity: root.tabFade
 
                         // Media Player Card
                         Rectangle {
@@ -3906,6 +3912,7 @@ ShellRoot {
                         Layout.fillWidth: true
                         spacing: 12
                         visible: root.currentTab === 1 && root.controlSubView === 0
+                        opacity: root.tabFade
 
                         // Subtitle
                         Text {

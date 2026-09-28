@@ -28,7 +28,7 @@
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=Dynamic+island+%28Quickshell%29)](https://git.io/typing-svg)
 
-The top notch expands smoothly on hover or via shortcut (`Super + I`), providing quick toggles, volume and brightness controls, media playback, and live compositor adjustments.
+The top notch expands smoothly on hover or via shortcut (`Super + I`), providing quick toggles, volume and brightness controls, media playback, live compositor adjustments, a screen recorder with live REC indicator, mic/camera privacy dots, Do Not Disturb mode and a built-in system updater.
 
 <p align="center">
   <img alt="Dynamic island animation" src="assets/dynamic_island.gif" width="90%" />
@@ -39,7 +39,7 @@ The top notch expands smoothly on hover or via shortcut (`Super + I`), providing
     <td width="50%">
       <h3 align="center">Control & system center</h3>
       <img alt="Control center full" src="assets/dynamic_island_full.png" width="100%" />
-      <p align="center"><i>Quick toggles for Wi-Fi, Bluetooth, audio sinks, Rust-Dock, night light, caffeine, volume/brightness sliders, and MPRIS media player.</i></p>
+      <p align="center"><i>Quick toggles for Wi-Fi, Bluetooth, audio sinks, Rust-Dock, night light, caffeine, Do Not Disturb, volume/brightness sliders, per-app mixer and MPRIS media player.</i></p>
     </td>
     <td width="50%">
       <h3 align="center">Hyprland compositor settings (Super + X)</h3>
@@ -109,7 +109,7 @@ When changing the wallpaper, Pywal automatically calculates the dominant colors 
   </tr>
 </table>
 
-> 570 wallpapers (jpg, png, webp) with animated gif and webp support via `./install.sh --wallpapers [all|random]`. Switch anytime directly from the desktop with `Super + Shift + W` (visual selector) or `Super + Shift + B` (random fade). Curated from [FireWalls](https://github.com/deadduck-09/FireWalls).
+> 570 wallpapers (jpg, png, webp) with animated gif, webp and mp4 support via `./install.sh --wallpapers [all|random]`. Switch anytime directly from the desktop with `Super + Shift + W` (visual selector) or `Super + Shift + B` (random fade). Curated from [FireWalls](https://github.com/deadduck-09/FireWalls).
 
 ---
 
@@ -130,6 +130,23 @@ Custom native dock built in Rust with GTK4 and `gtk4-layer-shell`. Features mult
 </p>
 
 Press `Super + F` to open an interactive search cheatsheet of every shortcut configured in the system.
+
+---
+
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=Rhythm+cli)](https://git.io/typing-svg)
+
+One command groups 80+ helpers with per-group help, safe to use by hand or by AI agents:
+
+```bash
+rhythm commands            # list all groups and commands
+rhythm wallpaper selector  # visual wallpaper picker
+rhythm capture screenshot  # screenshot flows
+rhythm toggle dnd          # flip Do Not Disturb
+rhythm update check        # OTA status (dotfiles version + packages)
+rhythm debug summary       # versions, failed services, layer counts
+```
+
+OTA updates pull the repo, run numbered idempotent migrations from `migrations/`, snapshot the system (btrfs/timeshift) and reload the desktop without logging out.
 
 ---
 
@@ -197,6 +214,11 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + E` | File manager (Thunar) |
 | `Super + Q` | Close focused window |
 | `Super + BackSpace` | Power menu (reboot / shutdown / sleep) |
+| `Super + Ctrl + D` | Do Not Disturb toggle |
+| `Super + grave / T` | Dropdown scratchpad terminal |
+| `Super + C` | Floating calculator scratchpad |
+| `Super + Alt + 1/2/3` | Layout presets (code / reading / float) |
+| `Super + Esc` | Panic mode (hide all + mute) |
 
 <details>
   <summary><b>View complete keybindings list (30+ shortcuts)</b></summary>
@@ -228,6 +250,13 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + Shift + B` | Random wallpaper | Sets a random wallpaper |
 | `Super + Alt + W` | Change wallpaper | Changes wallpaper and resyncs Waybar |
 | `Super + Shift + G` | Performance mode | Toggles animations and blur for gaming |
+| `Super + grave / T` | Scratchpad terminal | Quake-style dropdown terminal |
+| `Super + C` | Scratchpad calculator | Floating calculator |
+| `Super + Alt + 1/2/3` | Layout presets | Code, reading and float window layouts |
+| `Super + Ctrl + D` | Do Not Disturb | Silence notifications, keeps history |
+| `Super + Ctrl + W` | Wallpaper selector | Visual wallpaper picker |
+| `Super + Alt + M` | Noise suppression | RNNoise mic filter toggle |
+| `Super + Esc` | Panic mode | Hide windows and mute instantly |
 | `Super + 1 .. 0` | Switch workspace | Move to workspace 1 through 10 |
 | `Super + Shift + 1 .. 0` | Move to workspace | Move active window to workspace 1 to 10 |
 | `F10` | Toggle bluetooth | Hardware toggle |
@@ -252,7 +281,9 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | Lockscreen | Hyprlock + Hypridle |
 | File manager | Thunar + Plugins & Tumbler |
 | Theming | Pywal (System-wide dynamic color synchronization) |
-| Wallpaper engine | awww with smooth synchronized fade transitions |
+| Wallpaper engine | awww for static plus mpvpaper for animated gif, webp and mp4 |
+| System CLI | rhythm unified command with 11 groups |
+| Updates | OTA updater with migrations and pre-update snapshots |
 | Audio | Pipewire + Wireplumber |
 | Display manager | SDDM astronaut theme with Pywal hook |
 | AUR helper | yay |

@@ -1350,6 +1350,14 @@ step_update() {
     systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
+
+    # rust-dock: relanzar para que tome el binario recien desplegado
+    if pgrep -x rust-dock >/dev/null 2>&1 || [ -x "$HOME/.local/bin/rust-dock-launcher" ]; then
+        pkill -x rust-dock >> "$LOG_FILE" 2>&1 || true
+        sleep 0.3
+        "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1 &
+    fi
+
     step_ok "Services reloaded."
 
     clear_logo

@@ -53,7 +53,7 @@ echo "Sincronizando wallpaper: $(basename "$CURRENT_WP")"
 # 2. Copiar y convertir wallpaper si es necesario
 # SDDM prefiere JPG
 TARGET_WP="$BACKGROUNDS_DIR/current_wallpaper.jpg"
-if [[ "$CURRENT_WP" == *.gif ]]; then
+if [[ "$CURRENT_WP" == *.gif || "$CURRENT_WP" == *.webp ]]; then
     magick "$CURRENT_WP[0]" -quality 90 "$TARGET_WP"
 elif [ "$CURRENT_WP" != "$TARGET_WP" ]; then
     cp -f "$CURRENT_WP" "$TARGET_WP"

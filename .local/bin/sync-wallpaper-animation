@@ -23,16 +23,22 @@ quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-displ
 pkill -SIGUSR1 waybar 2>/dev/null || true
 pkill -SIGUSR1 rust-dock 2>/dev/null || true
 
-# 2. INICIAR TRANSICION DE WALLPAPER CON AWWW (1.5 segundos)
-if command -v awww &>/dev/null; then
+# 2. APLICAR WALLPAPER (awww para estaticos, mpvpaper para gif/webp animados)
+if [ -x "$HOME/.local/bin/wallpaper-backend" ]; then
+    "$HOME/.local/bin/wallpaper-backend" apply "$WALLPAPER_PATH" &
+elif command -v awww &>/dev/null; then
     awww img "$WALLPAPER_PATH" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 &
 fi
 
 # 3. GENERAR PALETA DE COLORES Y ACTUALIZAR COMPONENTES (en segundo plano durante la transicion)
 (
-    # Generar colores con Pywal
+    # Generar colores con Pywal (usa primer frame en animados)
     if command -v wal &>/dev/null; then
-        wal -i "$WALLPAPER_PATH" -n -q
+        PYWAL_SRC="$WALLPAPER_PATH"
+        sleep 2
+        [ -x "$HOME/.local/bin/wallpaper-backend" ] && PYWAL_SRC=$("$HOME/.local/bin/wallpaper-backend" pywal-src 2>/dev/null || echo "$WALLPAPER_PATH")
+        [ -f "$PYWAL_SRC" ] || PYWAL_SRC="$WALLPAPER_PATH"
+        wal -i "$PYWAL_SRC" -n -q
     fi
 
     # Actualizar GTK, Qt, Rofi, Mako y preparar Waybar/Rust-dock

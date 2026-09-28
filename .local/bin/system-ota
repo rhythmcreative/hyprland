@@ -51,12 +51,29 @@ get_local_version() {
     echo "1.0.0"
 }
 
+ver_greater() {
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ] && [ "$1" != "$2" ]
+}
+
 get_remote_version() {
     if [ -d "$REPO_DIR/.git" ]; then
+        local best=""
         local remote_v
         remote_v=$(git -C "$REPO_DIR" show origin/main:.version 2>/dev/null | tr -d '[:space:]' || true)
-        if [ -n "$remote_v" ]; then
-            echo "${remote_v#v}"
+        remote_v="${remote_v#v}"
+        [ -n "$remote_v" ] && best="$remote_v"
+        local tag
+        tag=$(git -C "$REPO_DIR" tag --list 'v*' 2>/dev/null | sed 's/^v//' | sort -V | tail -n1 || true)
+        if [ -n "$tag" ] && { [ -z "$best" ] || ver_greater "$tag" "$best"; }; then
+            best="$tag"
+        fi
+        local rtag
+        rtag=$(git -C "$REPO_DIR" ls-remote --tags --refs origin 2>/dev/null | awk -F/ '{print $NF}' | sed 's/^v//;s/\^{}$//' | sort -Vu | sort -V | tail -n1 || true)
+        if [ -n "$rtag" ] && { [ -z "$best" ] || ver_greater "$rtag" "$best"; }; then
+            best="$rtag"
+        fi
+        if [ -n "$best" ]; then
+            echo "$best"
             return
         fi
         local behind
@@ -78,7 +95,7 @@ generate_status_json() {
     local fetch_remote="${1:-false}"
 
     if [ "$fetch_remote" = "true" ] && [ -d "$REPO_DIR/.git" ]; then
-        git -C "$REPO_DIR" fetch origin main --quiet 2>/dev/null || true
+        git -C "$REPO_DIR" fetch origin main --tags --quiet 2>/dev/null || true
     fi
 
     local local_ver

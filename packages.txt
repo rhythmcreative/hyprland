@@ -124,4 +124,4 @@ yay-debug
 zapzap
 mpv
 mpvpaper
-gnome-network-displays
+gnome-network-displays socat hyprsunset libnotify inotify-tools psmisc

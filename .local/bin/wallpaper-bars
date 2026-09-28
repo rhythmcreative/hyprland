@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# wallpaper-bars: hide or reveal the bars around a wallpaper change.
+#
+#   wallpaper-bars hide    before the wallpaper is swapped
+#   wallpaper-bars show    once the new wallpaper and palette are in place
+#
+# Shared by every wallpaper entry point so all of them animate the same way:
+# the island and the dock slide away, the wallpaper changes, they come back.
+
+case "${1:-}" in
+    hide)
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+            --any-display call island hide all >/dev/null 2>&1 || true
+        pkill -SIGUSR1 waybar >/dev/null 2>&1 || true
+        pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
+        ;;
+    show)
+        pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+        pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+            --any-display call island reveal all >/dev/null 2>&1 || true
+        ;;
+    *)
+        echo "Usage: wallpaper-bars hide|show" >&2
+        exit 1
+        ;;
+esac

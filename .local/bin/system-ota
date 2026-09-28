@@ -373,6 +373,16 @@ cmd_update() {
     local system_packages=false
     local skip_backup=false
 
+    # The update is normally started from the Dynamic Island, and it stops the
+    # island on purpose before replacing the island's own config files. Quickshell
+    # kills its child processes on shutdown, so without detaching first the
+    # update would kill itself at that stop and never bring the panel back.
+    if [ "${OTA_DETACHED:-0}" != "1" ]; then
+        OTA_DETACHED=1 setsid --fork bash "$0" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
+        echo "OTA update started in the background (detached)."
+        return 0
+    fi
+
     for arg in "$@"; do
         case "$arg" in
             --dotfiles-only) dotfiles_only=true ;;
@@ -487,22 +497,21 @@ cmd_update() {
         pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
     fi
 
-    # Restart the island detached from this process tree. The OTA is normally
-    # launched BY the island, so a plain background restart is killed together
-    # with its own parent and never brings the panel back. setsid detaches it,
-    # reset-failed clears the start limit, and the pgrep fallback launches the
-    # island directly if systemd still cannot keep it up.
+    # Bring the island back before anything else: it is the notification server,
+    # so the completion notification below needs it already running.
     if [ "$island_was_active" = true ] || pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        setsid bash -c '
-            sleep 2
+        echo "Restarting Dynamic Island..."
+        systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+        systemctl --user restart waybar-island.service >/dev/null 2>&1 || true
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1 && break
+            sleep 1
+        done
+        if ! pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+            echo "Island did not come back, launching it directly..."
             systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-            systemctl --user restart waybar-island.service >/dev/null 2>&1 || true
-            sleep 4
-            if ! pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-                systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-                "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 &
-            fi
-        ' >/dev/null 2>&1 &
+            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null
+        fi
     fi
 
     # Re-generate clean status

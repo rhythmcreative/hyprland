@@ -41,11 +41,11 @@ if pgrep -x waybar >/dev/null 2>&1; then
 fi
 if pgrep -x rust-dock >/dev/null 2>&1; then
     _RUST_DOCK_WAS_VISIBLE=true
-    pkill -SIGUSR1 rust-dock 2>/dev/null &
+    pkill -SIGUSR1 -x rust-dock 2>/dev/null &
 fi
 if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
     _QUICKSHELL_WAS_VISIBLE=true
-    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide >/dev/null 2>&1 &
+    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide all >/dev/null 2>&1 &
 fi
 wait
 
@@ -113,8 +113,8 @@ selected=$(printf "%s\n" "$HOTKEYS_DATA" | rofi -dmenu -i -p "Hotkeys" -theme "$
 
 # Restore bars simultaneously in parallel
 [ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 rust-dock 2>/dev/null &
-[ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal >/dev/null 2>&1 &
+[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 -x rust-dock 2>/dev/null &
+[ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal all >/dev/null 2>&1 &
 wait
 
 # Accion opcional al pulsar Enter en un atajo

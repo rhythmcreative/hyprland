@@ -137,7 +137,7 @@ hide_active_bars() {
             pkill -SIGUSR1 -f "rust-dock.*-o +$mon" 2>/dev/null &
         elif pgrep -x rust-dock >/dev/null 2>&1; then
             _RUST_DOCK_WAS_VISIBLE=true
-            pkill -SIGUSR1 rust-dock 2>/dev/null &
+            pkill -SIGUSR1 -x rust-dock 2>/dev/null &
         fi
         if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
             _QUICKSHELL_WAS_VISIBLE=true

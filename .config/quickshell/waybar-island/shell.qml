@@ -222,6 +222,7 @@ ShellRoot {
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
     property bool dndEnabled: false
+    property bool dockEnabled: true
     property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
     property var privacyState: ({ mic: false, cam: false })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
@@ -866,7 +867,25 @@ ShellRoot {
             caffeineCheckProc.running = true
             powerSaveCheckProc.running = true
             dndCheckProc.running = true
+            dockStatusProc.running = true
             }
+    }
+
+    Process {
+        id: dockStatusProc
+        command: ["bash", "-c", "$HOME/.local/bin/rust-dock-toggle-all status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.dockEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Timer {
+        id: dockStatusRefreshTimer
+        interval: 500
+        repeat: false
+        onTriggered: dockStatusProc.running = true
     }
 
     Process {
@@ -2292,11 +2311,11 @@ ShellRoot {
 
                                     Rectangle {
                                         width: 34; height: 34; radius: 17
-                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, root.dockEnabled ? 0.15 : 0.06)
                                         Text {
                                             anchors.centerIn: parent
                                             text: "󰻂"
-                                            color: root.colAccent
+                                            color: root.dockEnabled ? root.colAccent : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 17
                                         }
@@ -2315,8 +2334,8 @@ ShellRoot {
                                             Layout.fillWidth: true
                                         }
                                         Text {
-                                            text: "Toggle bottom dock"
-                                            color: root.colMuted
+                                            text: root.dockEnabled ? "Enabled · click to hide" : "Disabled · click to show"
+                                            color: root.dockEnabled ? root.colAccent : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
                                             elide: Text.ElideRight
@@ -2330,7 +2349,10 @@ ShellRoot {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.runCmd("~/.local/bin/rust-dock-toggle-all")
+                                    onClicked: {
+                                        root.runCmd("~/.local/bin/rust-dock-toggle-all toggle")
+                                        dockStatusRefreshTimer.restart()
+                                    }
                                 }
                             }
 

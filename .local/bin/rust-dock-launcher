@@ -3,6 +3,15 @@
 
 RUST_DOCK="$HOME/.local/bin/rust-dock"
 STATE_FILE="/tmp/rust-dock-visible"
+DOCK_CONF="$HOME/.config/rhythm/dock.conf"
+
+# Estado persistente: si el usuario apago el dock, aqui no se relanza nunca.
+# 'on' cuando no hay fichero, para que una instalacion nueva muestre el dock.
+if [ -f "$DOCK_CONF" ] && [ "$(awk -F= '$1 == "enabled" {print $2; exit}' "$DOCK_CONF")" = "off" ]; then
+    pkill -x rust-dock >/dev/null 2>&1 || true
+    echo "hidden" > "$STATE_FILE" 2>/dev/null || true
+    exit 0
+fi
 
 if [ -z "$XDG_RUNTIME_DIR" ]; then
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"

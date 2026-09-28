@@ -1078,7 +1078,9 @@ ShellRoot {
 
         aboveWindows: true
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: islandWin.expanded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        // OnDemand keeps text inputs usable when focused without the expanded
+        // island swallowing Hyprland's global Super shortcuts.
+        WlrLayershell.keyboardFocus: islandWin.expanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         mask: Region {
             item: capsule

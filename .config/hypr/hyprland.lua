@@ -54,7 +54,6 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher &")
     hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
-    hl.exec_cmd("~/.local/bin/toggle-touchpad --restore")
 end)
 
 -- Environment variables
@@ -310,7 +309,5 @@ hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backligh
 hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh"))
 
--- Omarchy-style toggles (Do Not Disturb + touchpad)
+-- Omarchy-style toggle (Do Not Disturb)
 hl.bind(mainMod .. " + CONTROL + D", hl.dsp.exec_cmd("~/.local/bin/toggle-dnd"), { locked = true })
-hl.bind(mainMod .. " + CONTROL + T", hl.dsp.exec_cmd("~/.local/bin/toggle-touchpad"), { locked = true })
-hl.bind("XF86TouchpadToggle", hl.dsp.exec_cmd("~/.local/bin/toggle-touchpad"), { locked = true })

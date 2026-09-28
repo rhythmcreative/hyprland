@@ -185,8 +185,9 @@ ShellRoot {
     property string wifiConnectSsid: ""
     property string wifiConnectPassword: ""
     property bool wifiConnectRunning: false
+    property bool wifiConnectPromptOnError: false
 
-    function startWifiConnect(screenName, ssid, password) {
+    function startWifiConnect(screenName, ssid, password, promptOnError) {
         let panel = root.panelForScreen(screenName)
         if (!panel) return
         if (root.wifiConnectRunning) {
@@ -197,6 +198,11 @@ ShellRoot {
         root.wifiConnectScreen = screenName
         root.wifiConnectSsid = ssid
         root.wifiConnectPassword = password || ""
+        root.wifiConnectPromptOnError = promptOnError === true
+        if (root.wifiConnectPromptOnError) {
+            panel.clearWifiPassword()
+            panel.selectedWifiSsid = ""
+        }
         panel.wifiConnectState = "connecting"
         panel.wifiConnectMessage = "Connecting to " + ssid + "…"
         root.wifiConnectRunning = true
@@ -621,6 +627,8 @@ ShellRoot {
                     if (result && result.status === "ok") {
                         panel.finishWifiConnection(root.wifiConnectSsid)
                     } else {
+                        if (root.wifiConnectPromptOnError)
+                            panel.selectedWifiSsid = root.wifiConnectSsid
                         panel.wifiConnectState = "error"
                         panel.wifiConnectMessage = result && result.message
                             ? "Connection failed: " + result.message
@@ -632,6 +640,7 @@ ShellRoot {
         onExited: {
             root.wifiConnectRunning = false
             root.wifiConnectPassword = ""
+            root.wifiConnectPromptOnError = false
             wifiListProc.running = true
             wifiProc.running = true
         }
@@ -3187,7 +3196,7 @@ ShellRoot {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 34
                             radius: 10
-                            visible: islandWin.wifiConnectState === "connected"
+                            visible: islandWin.selectedWifiSsid === "" && islandWin.wifiConnectState !== "idle"
                             color: Qt.rgba(76/255, 175/255, 80/255, 0.18)
                             border.color: "#4caf50"
                             border.width: 1
@@ -3297,7 +3306,7 @@ ShellRoot {
                                                     islandWin.wifiConnectMessage = "Enter the Wi-Fi password. Use Show to check it before connecting."
                                                     return
                                                 }
-                                                root.startWifiConnect(islandWin.modelData.name, islandWin.selectedWifiSsid, pass)
+                                                root.startWifiConnect(islandWin.modelData.name, islandWin.selectedWifiSsid, pass, false)
                                             }
                                         }
                                     }
@@ -3389,7 +3398,7 @@ ShellRoot {
                                                     Layout.fillWidth: true
                                                 }
                                                 Text {
-                                                    text: modelData.signal + "%  •  " + modelData.security
+                                                    text: (modelData.saved ? "Saved  •  " : "") + modelData.signal + "%  •  " + modelData.security
                                                     color: root.colMuted
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 9
@@ -3417,11 +3426,15 @@ ShellRoot {
                                                             root.runCmd("~/.local/bin/notch-wifi-helper disconnect")
                                                             wifiListProc.running = true
                                                         } else {
-                                                            if (modelData.security === "Open" || modelData.security === "Abierta" || modelData.security === "--") {
-                                                                islandWin.selectedWifiSsid = modelData.ssid
+                                                            if (modelData.saved) {
+                                                                // Reuse NetworkManager's saved credentials; only show the password
+                                                                // form if bringing the saved profile up fails.
+                                                                root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", true)
+                                                            } else if (modelData.security === "Open" || modelData.security === "Abierta" || modelData.security === "--") {
+                                                                islandWin.selectedWifiSsid = ""
                                                                 islandWin.wifiConnectState = "idle"
                                                                 islandWin.wifiConnectMessage = ""
-                                                                root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "")
+                                                                root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", false)
                                                             } else {
                                                                 islandWin.selectedWifiSsid = modelData.ssid
                                                                 islandWin.wifiConnectState = "idle"

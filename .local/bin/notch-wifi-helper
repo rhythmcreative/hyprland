@@ -3,7 +3,34 @@ import sys
 import subprocess
 import json
 
+def get_saved_wifi_profiles():
+# Return saved Wi-Fi SSID -> UUID mappings from NetworkManager.
+    profiles = {}
+    try:
+        out = subprocess.check_output(
+            ['nmcli', '-t', '-f', 'UUID,TYPE', 'connection', 'show'],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        for line in out.splitlines():
+            uuid, sep, kind = line.partition(':')
+            if not sep or kind != '802-11-wireless' or not uuid:
+                continue
+            try:
+                ssid = subprocess.check_output(
+                    ['nmcli', '-g', '802-11-wireless.ssid', 'connection', 'show', 'uuid', uuid],
+                    text=True, stderr=subprocess.DEVNULL, timeout=3
+                ).strip()
+                if ssid:
+                    profiles.setdefault(ssid, uuid)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return profiles
+
+
 def get_wifi_list(rescan=False):
+    saved_profiles = get_saved_wifi_profiles()
     try:
         args = ['nmcli', '-t', '-f', 'IN-USE,SSID,SECURITY,BARS,SIGNAL', 'device', 'wifi', 'list']
         if not rescan:
@@ -37,7 +64,8 @@ def get_wifi_list(rescan=False):
                 'connected': in_use,
                 'security': sec,
                 'bars': bars,
-                'signal': signal
+                'signal': signal,
+                'saved': ssid in saved_profiles
             })
         # Sort connected first, then by signal descending
         networks.sort(key=lambda x: (not x['connected'], -x['signal']))
@@ -71,10 +99,16 @@ def main():
         ssid = sys.argv[2]
         password = sys.argv[3] if len(sys.argv) > 3 else None
         try:
-            call_args = ['nmcli', 'dev', 'wifi', 'connect', ssid]
-            if password:
-                call_args.extend(['password', password])
-            res = subprocess.run(call_args, capture_output=True, text=True, timeout=15)
+            saved_uuid = get_saved_wifi_profiles().get(ssid)
+            if saved_uuid and not password:
+                # Reuse NetworkManager's saved profile and secret; don't ask for
+                # the password again unless that profile is missing or invalid.
+                call_args = ['nmcli', 'connection', 'up', 'uuid', saved_uuid]
+            else:
+                call_args = ['nmcli', 'dev', 'wifi', 'connect', ssid]
+                if password:
+                    call_args.extend(['password', password])
+            res = subprocess.run(call_args, capture_output=True, text=True, timeout=20)
             if res.returncode == 0:
                 print(json.dumps({'status': 'ok', 'message': res.stdout.strip()}))
             else:

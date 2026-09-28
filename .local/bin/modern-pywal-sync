@@ -114,11 +114,18 @@ fi
     nm-applet --indicator >/dev/null 2>&1 &
 ) &
 
-# 6b. Asegurar rust-dock activo
+# 6b. rust-dock: relanzar para que recoja la paleta nueva
+# El panel del dock lo pinta el gtk.css global (window_bg_color) y GTK4 solo lee
+# ese fichero al arrancar la aplicacion, nunca en caliente: sin relanzarlo, el
+# dock se queda con la paleta anterior. Se hace en segundo plano y con retardo
+# para no cortar la animacion del cambio de wallpaper.
 echo "  • rust-dock..."
-if ! pgrep -x rust-dock >/dev/null 2>&1; then
-    "$HOME/.local/bin/rust-dock-launcher" &
-fi
+(
+    sleep 3
+    pkill -x rust-dock >/dev/null 2>&1 || true
+    sleep 0.15
+    "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
+) &
 
 # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
 pkill -x waybar_auto_hi 2>/dev/null || true

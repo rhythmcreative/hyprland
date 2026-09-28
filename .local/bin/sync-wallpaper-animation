@@ -44,9 +44,13 @@ fi
         "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1
     fi
 ) &
+PYWAL_PID=$!
 
-# 4. ESPERAR A QUE LA TRANSICION DEL WALLPAPER CASI COMPLETE (1.3s)
+# 4. TRANSICION DEL WALLPAPER + PALETA: las barras siguen ocultas hasta que la
+# paleta esta lista, para que vuelvan una sola vez y ya con los colores nuevos.
 sleep 1.3
+wait $PYWAL_PID 2>/dev/null || true
+sleep 0.5
 
 # 5. ANIMACION DE ENTRADA SINCRONIZADA: Revelar Waybar, Dynamic Island y Rust-Dock al unisono
 "$HOME/.local/bin/wallpaper-bars" show

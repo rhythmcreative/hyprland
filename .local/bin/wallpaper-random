@@ -43,9 +43,9 @@ else
     exit 1
 fi
 
-# Keep the bars hidden while the wallpaper transition plays out.
+# Keep the bars hidden while the wallpaper transitions and the palette is built,
+# so they come back once and already with the new colours.
 sleep 1.3
-"$HOME/.local/bin/wallpaper-bars" show
 PYWAL_SRC=$("$HOME/.local/bin/wallpaper-backend" pywal-src 2>/dev/null || echo "$SELECTED")
 
 # Sync pywal colors if available
@@ -57,3 +57,6 @@ if command -v wal > /dev/null 2>&1; then
         wal -i "$PYWAL_SRC" -n -q >> "$LOG_FILE" 2>&1 || true
     fi
 fi
+
+sleep 0.4
+"$HOME/.local/bin/wallpaper-bars" show

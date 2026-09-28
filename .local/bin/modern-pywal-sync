@@ -120,12 +120,14 @@ fi
 # dock se queda con la paleta anterior. Se hace en segundo plano y con retardo
 # para no cortar la animacion del cambio de wallpaper.
 echo "  • rust-dock..."
-(
-    sleep 3
+# setsid: el reinicio no debe bloquear a quien llama a este script (el flujo de
+# wallpaper espera a que termine para volver a mostrar las barras).
+setsid bash -c '
+    sleep 0.8
     pkill -x rust-dock >/dev/null 2>&1 || true
     sleep 0.15
     "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
-) &
+' >/dev/null 2>&1 </dev/null &
 
 # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
 pkill -x waybar_auto_hi 2>/dev/null || true

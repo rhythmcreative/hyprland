@@ -1151,6 +1151,12 @@ MONCONF
     # Enable system-level power-profiles-daemon (required by auto-power-profile)
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
 
+    # Run pending dotfiles migrations (idempotent, Omarchy-style)
+    if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
+        step_item "Running dotfiles migrations..."
+        RHYTHM_REPO="$DOTFILES_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1 || step_warn "Some migrations reported issues."
+    fi
+
     # Configure Waybar battery modules for target machine (0, 1, or 2+ batteries)
     if [ -f "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then
         chmod +x "$HOME/.config/waybar/scripts/auto-battery-setup.sh" 2>/dev/null || true

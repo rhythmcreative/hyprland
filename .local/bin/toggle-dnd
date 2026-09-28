@@ -1,0 +1,59 @@
+#!/bin/bash
+# Do Not Disturb switch (Omarchy-style).
+# Uses mako / swaync when present, otherwise falls back to a flag file
+# honored by the quickshell island notification banner.
+STATE_FILE="/tmp/dnd-active"
+ACTION="${1:-toggle}"
+
+dnd_on() {
+    if pgrep -x mako >/dev/null 2>&1 && command -v makoctl >/dev/null 2>&1; then
+        makoctl mode -a do-not-disturb 2>/dev/null || true
+    fi
+    if pgrep -x swaync >/dev/null 2>&1 && command -v swaync-client >/dev/null 2>&1; then
+        swaync-client -d 2>/dev/null || true
+    fi
+    touch "$STATE_FILE"
+    echo "on"
+}
+
+dnd_off() {
+    if pgrep -x mako >/dev/null 2>&1 && command -v makoctl >/dev/null 2>&1; then
+        makoctl mode -r do-not-disturb 2>/dev/null || true
+    fi
+    if pgrep -x swaync >/dev/null 2>&1 && command -v swaync-client >/dev/null 2>&1; then
+        swaync-client -D 2>/dev/null || true
+    fi
+    rm -f "$STATE_FILE"
+    echo "off"
+}
+
+dnd_notify() {
+    notify-send "Do Not Disturb" "$1" 2>/dev/null || true
+}
+
+case "$ACTION" in
+    status)
+        if [ -f "$STATE_FILE" ]; then
+            echo "on"
+        else
+            echo "off"
+        fi
+        ;;
+    on)
+        dnd_on
+        dnd_notify "Enabled - notifications silenced"
+        ;;
+    off)
+        dnd_off
+        dnd_notify "Disabled - notifications allowed"
+        ;;
+    toggle|*)
+        if [ -f "$STATE_FILE" ]; then
+            dnd_off
+            dnd_notify "Disabled - notifications allowed"
+        else
+            dnd_on
+            dnd_notify "Enabled - notifications silenced"
+        fi
+        ;;
+esac

@@ -34,6 +34,11 @@ ShellRoot {
         actionsSupported: true
 
         onNotification: function(n) {
+            // Do Not Disturb: suppress banner toast, keep server-side history
+            if (root.dndEnabled) {
+                n.tracked = true
+                return
+            }
             n.tracked = true
             const app = (n.appName || "").toLowerCase()
             const summary = (n.summary || "").toLowerCase()
@@ -119,6 +124,8 @@ ShellRoot {
     property bool nightLightEnabled: false
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
+    property bool dndEnabled: false
+    property bool touchpadEnabled: true
     property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
     property var privacyState: ({ mic: false, cam: false })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
@@ -144,6 +151,8 @@ ShellRoot {
         nightLightCheckProc.running = true
         caffeineCheckProc.running = true
         powerSaveCheckProc.running = true
+        dndCheckProc.running = true
+        touchpadCheckProc.running = true
         hyprStatusProc.running = true
         otaStatusProc.running = true
         if (root.controlSubView === 1) wifiListProc.running = true
@@ -716,6 +725,41 @@ ShellRoot {
     }
 
     Process {
+        id: dndCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/toggle-dnd status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.dndEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Process {
+        id: touchpadCheckProc
+        command: ["bash", "-c", "$HOME/.local/bin/toggle-touchpad status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.touchpadEnabled = text.trim() === "on"
+            }
+        }
+    }
+
+    Timer {
+        id: togglesPollTimer
+        interval: 2000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            nightLightCheckProc.running = true
+            caffeineCheckProc.running = true
+            powerSaveCheckProc.running = true
+            dndCheckProc.running = true
+            touchpadCheckProc.running = true
+        }
+    }
+
+    Process {
         id: powerSaveCheckProc
         command: ["bash", "-c", "$HOME/.local/bin/toggle-powersave status"]
         stdout: StdioCollector {
@@ -1054,6 +1098,122 @@ ShellRoot {
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
                             font.weight: Font.Bold
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // DND indicator in collapsed pill
+                    Row {
+                        visible: root.dndEnabled
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#E57373"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "󰂛"
+                            color: "#E57373"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // Night Light indicator in collapsed pill
+                    Row {
+                        visible: root.nightLightEnabled
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#FFCA28"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "󰖔"
+                            color: "#FFCA28"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // Caffeine indicator in collapsed pill
+                    Row {
+                        visible: root.caffeineEnabled
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#D9A05B"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "󰅶"
+                            color: "#D9A05B"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // Touchpad-off indicator in collapsed pill
+                    Row {
+                        visible: !root.touchpadEnabled
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: "#90A4AE"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "󰟸"
+                            color: "#90A4AE"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -2147,6 +2307,134 @@ ShellRoot {
                                     }
                                 }
                             }
+                            // Do Not Disturb Tile (Material 3 Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.dndEnabled ? root.colAccent : (dndHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.dndEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: root.dndEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰂛"
+                                            color: root.dndEnabled ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Do Not Disturb"
+                                            color: root.dndEnabled ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.dndEnabled ? "Silenced" : "Sounds On"
+                                            color: root.dndEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: dndHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.dndEnabled = !root.dndEnabled
+                                        root.runCmd("~/.local/bin/toggle-dnd")
+                                    }
+                                }
+                            }
+
+                            // Touchpad Tile (Material 3 Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                height: 54
+                                radius: 16
+                                color: root.touchpadEnabled ? root.colAccent : (touchpadHover.containsMouse ? root.colSurfaceHover : root.colSurface)
+                                border.color: root.touchpadEnabled ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 180 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    Rectangle {
+                                        width: 34; height: 34; radius: 17
+                                        color: root.touchpadEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰟸"
+                                            color: root.touchpadEnabled ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 17
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            text: "Touchpad"
+                                            color: root.touchpadEnabled ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: root.touchpadEnabled ? "Enabled" : "Disabled"
+                                            color: root.touchpadEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: touchpadHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.touchpadEnabled = !root.touchpadEnabled
+                                        root.runCmd("~/.local/bin/toggle-touchpad")
+                                    }
+                                }
+                            }
+
                         }
 
                         // Sliders Card (Material 3 Pill Sliders: Volume & Brightness)

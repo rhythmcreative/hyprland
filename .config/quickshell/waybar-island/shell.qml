@@ -619,9 +619,7 @@ ShellRoot {
                 const panel = root.panelForScreen(root.wifiConnectScreen)
                 if (panel) {
                     if (result && result.status === "ok") {
-                        panel.clearWifiPassword()
-                        panel.wifiConnectState = "connected"
-                        panel.wifiConnectMessage = "Connected to " + root.wifiConnectSsid + "."
+                        panel.finishWifiConnection(root.wifiConnectSsid)
                     } else {
                         panel.wifiConnectState = "error"
                         panel.wifiConnectMessage = result && result.message
@@ -937,6 +935,13 @@ ShellRoot {
             property string wifiConnectState: "idle"
             property string wifiConnectMessage: ""
             property bool wifiPasswordVisible: false
+            function finishWifiConnection(ssid) {
+                clearWifiPassword()
+                selectedWifiSsid = ""
+                wifiConnectState = "connected"
+                wifiConnectMessage = "Connected to " + ssid + "."
+                wifiConnectStatusTimer.restart()
+            }
             function clearWifiPassword() {
                 wifiPasswordVisible = false
                 wifiPassInput.text = ""
@@ -975,6 +980,17 @@ ShellRoot {
             }
 
             Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: islandWin.tabFade = 1.0 }
+            Timer {
+                id: wifiConnectStatusTimer
+                interval: 4000
+                repeat: false
+                onTriggered: {
+                    if (islandWin.wifiConnectState === "connected") {
+                        islandWin.wifiConnectState = "idle"
+                        islandWin.wifiConnectMessage = ""
+                    }
+                }
+            }
             Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (islandWin.expanded && !root.notifActive) islandWin.expanded = false } }
             Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; islandWin.controlSubView = 0; root.refreshAllStates() } } }
 
@@ -3167,10 +3183,31 @@ ShellRoot {
                             }
                         }
 
-                        // Inline Wi-Fi password and connection status card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: islandWin.wifiConnectState === "idle" ? 48 : 84
+                            Layout.preferredHeight: 34
+                            radius: 10
+                            visible: islandWin.wifiConnectState === "connected"
+                            color: Qt.rgba(76/255, 175/255, 80/255, 0.18)
+                            border.color: "#4caf50"
+                            border.width: 1
+                            Text {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 8
+                                verticalAlignment: Text.AlignVCenter
+                                text: islandWin.wifiConnectMessage
+                                color: "#80d890"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // Inline Wi-Fi password card; errors stay here for retry.
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: islandWin.wifiConnectState === "idle" ? 48 : 96
                             radius: 12
                             color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
                             border.color: islandWin.wifiConnectState === "error" ? "#ef5350" : root.colAccent

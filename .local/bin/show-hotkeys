@@ -99,6 +99,7 @@ Brightness Up / Down      │ Screen Brightness with Notch     │ Hardware
 F10                       │ Toggle Bluetooth                 │ Hardware
 F11 / F12                 │ Fine Volume Tuning (- / +)       │ Hardware
 XF86AudioPlay / Pause     │ Play / Pause Media               │ Media
+SUPER + SHIFT + Y         │ Watch Party (Syncplay + mpv)     │ Media
 XF86AudioNext / Prev      │ Next / Previous Track            │ Media
 XF86KbdBrightnessUp/Down  │ Asus Keyboard Backlight          │ Hardware
 XF86AudioMicMute        │ Mic Mute Toggle                  │ Audio

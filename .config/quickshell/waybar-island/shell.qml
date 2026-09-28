@@ -135,6 +135,7 @@ ShellRoot {
     property bool btScanning: false
     property string selectedWifiSsid: ""
     property bool showUnnamedBtDevices: false
+    property var monitorList: []
     readonly property var namedBtDevices: (root.btDevices || []).filter(d => d.has_name || d.paired || d.connected)
     readonly property var unnamedBtDevices: (root.btDevices || []).filter(d => !d.has_name && !d.paired && !d.connected)
 
@@ -166,6 +167,7 @@ ShellRoot {
             otaStatusProc.running = true
             otaChangelogProc.running = true
         }
+        if (root.controlSubView === 5) monListProc.running = true
     }
 
     onCurrentTabChanged: {
@@ -197,6 +199,7 @@ ShellRoot {
             otaStatusProc.running = true
             otaChangelogProc.running = true
         }
+        if (root.controlSubView === 5) monListProc.running = true
     }
 
     IpcHandler {
@@ -247,6 +250,14 @@ ShellRoot {
             root.currentTab = 0
             root.controlSubView = 3
             audioSinksProc.running = true
+            root.refreshAllStates()
+            return "expanded"
+        }
+        function open_monitors(): string {
+            root.expanded = true
+            root.currentTab = 1
+            root.controlSubView = 5
+            monListProc.running = true
             root.refreshAllStates()
             return "expanded"
         }
@@ -310,6 +321,13 @@ ShellRoot {
             otaStatusProc.running = true
             otaChangelogProc.running = true
             return "ota"
+        }
+        function openMonitors(): string {
+            root.expanded = true
+            root.currentTab = 1
+            root.controlSubView = 5
+            monListProc.running = true
+            return "monitors"
         }
         function collapse(): string {
             root.expanded = false
@@ -759,6 +777,27 @@ ShellRoot {
                 root.powerSaverEnabled = text.trim() === "on"
             }
         }
+    }
+
+    Process {
+        id: monListProc
+        command: ["bash", "-c", "$HOME/.local/bin/notch-monitor-helper list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.monitorList = JSON.parse(text.trim())
+                } catch(e) {
+                    root.monitorList = []
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: monRefreshTimer
+        interval: 900
+        repeat: false
+        onTriggered: monListProc.running = true
     }
 
     Process {
@@ -4100,7 +4139,7 @@ ShellRoot {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.runCmd("$HOME/.local/bin/notch-hypr-helper monitors")
+                                    onClicked: { root.controlSubView = 5; monListProc.running = true }
                                 }
                             }
                         }
@@ -4309,7 +4348,7 @@ ShellRoot {
                                     Text { text: "󰍹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Monitors"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("$HOME/.local/bin/notch-hypr-helper monitors"); } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.controlSubView = 5; monListProc.running = true } }
                             }
 
                             Rectangle {
@@ -4573,6 +4612,354 @@ ShellRoot {
                             }
                         }
                     }
+
+                    // ── 7. SUBSECCIÓN: DISPLAYS / MONITORS ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: root.controlSubView === 5
+
+                        // Sub-header with back button
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Rectangle {
+                                width: 100
+                                height: 32
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Text {
+                                        text: "󰁍"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+                                    Text {
+                                        text: "Back"
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.controlSubView = 0
+                                }
+                            }
+
+                            Text {
+                                text: "Displays"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                width: 36; height: 32; radius: 10
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰑐"
+                                    color: root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: monListProc.running = true
+                                }
+                            }
+                        }
+
+                        // Layout presets: one tap, no technical fiddling
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Repeater {
+                                model: [
+                                    { "key": "extend", "label": "Extend", "icon": "󰍹" },
+                                    { "key": "mirror", "label": "Mirror", "icon": "󰕹" },
+                                    { "key": "laptop", "label": "Laptop", "icon": "󰌢" },
+                                    { "key": "external", "label": "External", "icon": "󰍹" }
+                                ]
+                                delegate: Rectangle {
+                                    property var preset: modelData
+                                    Layout.fillWidth: true
+                                    height: 44
+                                    radius: 12
+                                    color: root.colSurface
+                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                    border.width: 1
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 1
+                                        Text {
+                                            text: preset.icon
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 15
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                        Text {
+                                            text: preset.label
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.runCmd("$HOME/.local/bin/notch-monitor-helper preset " + preset.key)
+                                            monRefreshTimer.restart()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Visual map of the desktop
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 110
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+                            clip: true
+
+                            Repeater {
+                                model: root.monitorList
+                                delegate: Rectangle {
+                                    property var mon: modelData
+                                    x: 10 + mon.map.x * (parent.width - 20)
+                                    y: 10 + mon.map.y * (parent.height - 20)
+                                    width: Math.max(46, mon.map.w * (parent.width - 20))
+                                    height: Math.max(30, mon.map.h * (parent.height - 20))
+                                    radius: 6
+                                    color: mon.focused ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                    border.color: mon.focused ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.2)
+                                    border.width: mon.focused ? 2 : 1
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: mon.name
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 9
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                            }
+
+                            Text {
+                                visible: root.monitorList.length === 0
+                                anchors.centerIn: parent
+                                text: "No displays detected."
+                                color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        // Monitor cards
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 250
+                            contentWidth: width
+                            contentHeight: monColumn.implicitHeight
+                            clip: true
+
+                            ColumnLayout {
+                                id: monColumn
+                                width: parent.width
+                                spacing: 8
+
+                                Repeater {
+                                    model: root.monitorList
+                                    delegate: Rectangle {
+                                        property var mon: modelData
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: monCardCol.implicitHeight + 20
+                                        radius: 14
+                                        color: mon.focused ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.12) : root.colSurface
+                                        border.color: mon.focused ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                        border.width: 1
+
+                                        ColumnLayout {
+                                            id: monCardCol
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+                                                Text {
+                                                    text: "󰍹"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 16
+                                                }
+                                                ColumnLayout {
+                                                    spacing: 0
+                                                    Layout.fillWidth: true
+                                                    Text {
+                                                        text: mon.name + (mon.focused ? "  •  Focused" : "")
+                                                        color: root.colFg
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 12
+                                                        font.weight: Font.Bold
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+                                                    Text {
+                                                        text: mon.desc + "  •  " + mon.width + "x" + mon.height + "@" + mon.refresh + "Hz  •  scale " + mon.scale
+                                                        color: root.colMuted
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 9
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    height: 26; width: 72; radius: 8
+                                                    color: mon.disabled ? root.colAccent : Qt.rgba(255, 85, 85, 0.2)
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: mon.disabled ? "Enable" : "Disable"
+                                                        color: mon.disabled ? root.colBg : "#ff5555"
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 10
+                                                        font.weight: Font.Bold
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            root.runCmd("$HOME/.local/bin/notch-monitor-helper toggle " + mon.name)
+                                                            monRefreshTimer.restart()
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Flow {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Repeater {
+                                                    model: mon.modes
+                                                    delegate: Rectangle {
+                                                        property string modeStr: modelData
+                                                        property bool modeActive: (mon.width + "x" + mon.height + "@" + mon.refresh) === (modeStr.split("@")[0] + "@" + parseInt(modeStr.split("@")[1]))
+                                                        height: 28
+                                                        width: modeLabel.implicitWidth + 18
+                                                        radius: 8
+                                                        color: modeActive ? root.colAccent : root.colSurface
+                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                        border.width: 1
+                                                        Text {
+                                                            id: modeLabel
+                                                            anchors.centerIn: parent
+                                                            text: modeStr.split("@")[0] + "  @" + parseInt(modeStr.split("@")[1])
+                                                            color: modeActive ? root.colBg : root.colFg
+                                                            font.family: "JetBrainsMono Nerd Font"
+                                                            font.pixelSize: 9
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper set '" + mon.name + "' '" + modeStr + "'")
+                                                                monRefreshTimer.restart()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Repeater {
+                                                    model: ["1", "1.25", "1.5", "2"]
+                                                    delegate: Rectangle {
+                                                        property string scaleStr: modelData
+                                                        height: 26; width: 48; radius: 8
+                                                        color: String(mon.scale) === scaleStr ? root.colAccent : root.colSurface
+                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                        border.width: 1
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: scaleStr + "x"
+                                                            color: String(mon.scale) === scaleStr ? root.colBg : root.colFg
+                                                            font.family: "JetBrainsMono Nerd Font"
+                                                            font.pixelSize: 9
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper scale '" + mon.name + "' " + scaleStr)
+                                                                monRefreshTimer.restart()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Item { Layout.fillWidth: true }
+                                                Repeater {
+                                                    model: ["left", "right", "above", "below"]
+                                                    delegate: Rectangle {
+                                                        property string dirStr: modelData
+                                                        height: 26; width: 62; radius: 8
+                                                        color: root.colSurface
+                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                        border.width: 1
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: dirStr.charAt(0).toUpperCase() + dirStr.slice(1)
+                                                            color: root.colFg
+                                                            font.family: "JetBrainsMono Nerd Font"
+                                                            font.pixelSize: 9
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper pos '" + mon.name + "' " + dirStr)
+                                                                monRefreshTimer.restart()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
 
                 }
             }

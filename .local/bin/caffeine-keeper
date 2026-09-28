@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Kept alive by rhythm-caffeine.service while Awake Mode is enabled.
+# systemd-inhibit blocks logind idle/sleep; this loop additionally pauses
+# hypridle because its configured lock/suspend actions are explicit commands.
+
+STATE_FILE="/tmp/caffeine-active"
+
+while [ -f "$STATE_FILE" ]; do
+    pkill -STOP -x hypridle 2>/dev/null || true
+    sleep 1
+done

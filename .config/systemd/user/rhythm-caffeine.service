@@ -1,0 +1,13 @@
+[Unit]
+Description=Rhythm Caffeine Mode idle and sleep inhibitor
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/systemd-inhibit --what=idle:sleep --mode=block --who=Rhythm-Caffeine --why=Awake-mode-is-enabled %h/.local/bin/caffeine-keeper
+Restart=always
+RestartSec=2s
+ExecStopPost=/usr/bin/pkill -CONT -x hypridle
+
+[Install]
+WantedBy=default.target

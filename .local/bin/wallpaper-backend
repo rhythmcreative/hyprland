@@ -54,7 +54,10 @@ apply_static() {
     local f="$1" trans="$2"
     stop_mpvpaper
     ensure_awww
-    if [ "$trans" = "yes" ]; then
+    if [ "$trans" = "login" ]; then
+        awww img "$f" --transition-type wave --transition-angle 120 --transition-duration 2.2 --transition-fps 60 >/dev/null 2>&1 || \
+        awww img "$f" >/dev/null 2>&1 || true
+    elif [ "$trans" = "yes" ]; then
         awww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
         awww img "$f" >/dev/null 2>&1 || true
     else
@@ -98,6 +101,7 @@ case "${1:-}" in
         [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "Usage: wallpaper-backend apply <file>" >&2; exit 1; }
         TRANS="yes"
         [ "${3:-}" = "--no-transition" ] && TRANS="no"
+        [ "${3:-}" = "--login" ] && TRANS="login"
         echo "$FILE" > "$HOME/.cache/current-wallpaper"
         if is_animated "$FILE" && command -v mpvpaper >/dev/null 2>&1; then
             apply_animated "$FILE"
@@ -115,7 +119,7 @@ case "${1:-}" in
         stop_mpvpaper
         ;;
     *)
-        echo "Usage: wallpaper-backend {apply <file> [--no-transition]|backend|pywal-src|stop-animated}" >&2
+        echo "Usage: wallpaper-backend {apply <file> [--no-transition|--login]|backend|pywal-src|stop-animated}" >&2
         exit 1
         ;;
 esac

@@ -1,0 +1,66 @@
+#!/bin/bash
+# open-notification-app: launch the app matching a notification source name.
+# Usage: open-notification-app <AppName>
+set -uo pipefail
+
+APP="${1:-}"
+[ -z "$APP" ] && exit 0
+LOW=$(printf '%s' "$APP" | tr '[:upper:]' '[:lower:]')
+
+# Known mappings first (fast path)
+declare -A KNOWN=(
+    [telegram]="org.telegram.desktop telegramdesktop telegram"
+    [spotify]="spotify"
+    [discord]="vesktop discord"
+    [vesktop]="vesktop"
+    [firefox]="firefox"
+    [chromium]="chromium"
+    [brave]="brave-browser brave"
+    [code]="code visual-studio-code"
+    [thunar]="thunar"
+    [pavucontrol]="pavucontrol"
+    [blueman]="blueman-manager"
+    [nm-applet]="nm-connection-editor"
+)
+CANDIDATES="${KNOWN[$LOW]:-}"
+
+find_desktop() {
+    local id="$1" d
+    for base in "$HOME/.local/share/applications" "/usr/share/applications" "/var/lib/flatpak/exports/share/applications"; do
+        [ -d "$base" ] || continue
+        for d in "$base/$id.desktop" "$base/"*.desktop; do
+            [ -f "$d" ] || continue
+            if [ "$(basename "$d" .desktop)" = "$id" ]; then
+                printf '%s' "$d"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+DESK=""
+for id in $CANDIDATES; do
+    DESK=$(find_desktop "$id") && break
+done
+
+# Generic fuzzy match on Name= when no direct hit
+if [ -z "$DESK" ]; then
+    while IFS= read -r d; do
+        [ -f "$d" ] || continue
+        if grep -qiE "^Name.*=.*$LOW" "$d" 2>/dev/null; then
+            DESK="$d"
+            break
+        fi
+    done < <(find "$HOME/.local/share/applications" /usr/share/applications -maxdepth 1 -name '*.desktop' 2>/dev/null | sort)
+fi
+
+if [ -z "$DESK" ]; then
+    notify-send -a "Notifications" "No launcher found" "No installed app matches '$APP'." 2>/dev/null || true
+    exit 1
+fi
+
+EXEC=$(grep -m1 '^Exec=' "$DESK" | cut -d= -f2- | sed -E 's/ %[a-zA-Z]//g; s/^"//; s/"$//')
+[ -z "$EXEC" ] && exit 1
+setsid bash -c "$EXEC" >/dev/null 2>&1 < /dev/null &
+notify-send -a "Notifications" "Opening $APP" 2>/dev/null || true

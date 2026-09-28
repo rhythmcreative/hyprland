@@ -43,8 +43,8 @@ ShellRoot {
         root.notifActive = false
         root.notifUnread = 0
         root.expanded = true
-        root.currentTab = 0
-        root.controlSubView = 6
+        root.currentTab = 2
+        root.controlSubView = 0
         root.refreshAllStates()
     }
     function notifClear() {
@@ -1521,7 +1521,7 @@ ShellRoot {
                         }
                     }
 
-                    // ── 2. SEGMENTED TABS (2 TABS: CONTROL & HYPRLAND) ──
+                    // ── 2. SEGMENTED TABS (CONTROL, HYPRLAND & ALERTS) ──
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 12
@@ -1598,6 +1598,60 @@ ShellRoot {
                                 }
                             }
                         }
+
+                        // Tab 2: Alerts
+                        Rectangle {
+                            width: 150
+                            height: 34
+                            radius: 17
+                            color: root.currentTab === 2 ? root.colAccent : root.colSurface
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                Text {
+                                    text: "󰂚"
+                                    color: root.currentTab === 2 ? root.colBg : root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                Text {
+                                    text: "Alerts"
+                                    color: root.currentTab === 2 ? root.colBg : root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Bold
+                                }
+                                Rectangle {
+                                    visible: root.notifUnread > 0
+                                    height: 18
+                                    width: Math.max(18, tabPillCount.implicitWidth + 10)
+                                    radius: 9
+                                    color: root.currentTab === 2 ? root.colBg : root.colAccent
+                                    Text {
+                                        id: tabPillCount
+                                        anchors.centerIn: parent
+                                        text: root.notifUnread > 9 ? "9+" : root.notifUnread
+                                        color: root.currentTab === 2 ? root.colAccent : root.colBg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.currentTab = 2
+                                    root.controlSubView = 0
+                                    root.notifUnread = 0
+                                }
+                            }
+                        }
+
                     }
 
                     // ── 3. TAB 0: CONTROL & SISTEMA ──
@@ -4443,6 +4497,175 @@ ShellRoot {
                             }
                         }
                     }
+                    // ── TAB 2: ALERTS CENTER ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        visible: root.currentTab === 2
+                        opacity: root.tabFade
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Text {
+                                text: "Notifications"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+                            Rectangle {
+                                height: 20
+                                width: Math.max(20, tabUnreadLbl.implicitWidth + 12)
+                                radius: 10
+                                color: root.notifUnread > 0 ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                Text {
+                                    id: tabUnreadLbl
+                                    anchors.centerIn: parent
+                                    text: root.notifUnread > 9 ? "9+" : root.notifUnread
+                                    color: root.notifUnread > 0 ? root.colBg : root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Rectangle {
+                                height: 32
+                                width: 96
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Clear all"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.notifClear()
+                                }
+                            }
+                        }
+
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(470, Math.max(140, tabNotifCol.implicitHeight))
+                            contentWidth: width
+                            contentHeight: tabNotifCol.implicitHeight
+                            clip: true
+
+                            ColumnLayout {
+                                id: tabNotifCol
+                                width: parent.width
+                                spacing: 10
+
+                                Repeater {
+                                    model: root.notifHistory
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: tabNotifCardCol.implicitHeight + 24
+                                        radius: 12
+                                        color: root.colSurface
+                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                        border.width: 1
+
+                                        ColumnLayout {
+                                            id: tabNotifCardCol
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 12
+                                            anchors.bottomMargin: 12
+                                            spacing: 4
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Text {
+                                                    text: "󰂚"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 12
+                                                }
+                                                Text {
+                                                    text: modelData.app
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    text: modelData.time
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                            }
+
+                                            Text {
+                                                visible: modelData.summary !== ""
+                                                text: modelData.summary
+                                                color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 11
+                                                font.weight: Font.Bold
+                                                wrapMode: Text.Wrap
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                visible: modelData.body !== ""
+                                                text: modelData.body
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 3
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                text: "Tap to open app"
+                                                color: root.colMuted
+                                                opacity: 0.6
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 8
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.expanded = false
+                                                root.runCmd("$HOME/.local/bin/open-notification-app '" + modelData.app + "'")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.notifHistory.length === 0
+                                    text: "No notifications yet."
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.topMargin: 20
+                                }
+                            }
+                        }
+                    }
+
+
 
                     // ── 6. SUBSECCIÓN: SYSTEM UPDATE (OTA - ANDROID STYLE) ──
                     ColumnLayout {
@@ -4681,178 +4904,6 @@ ShellRoot {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                     enabled: !root.otaUpdating
                                     onClicked: { root.otaUpdating = true; otaUpdateProc.running = true }
-                                }
-                            }
-                        }
-                    }
-                    // ── 7. SUBSECCIÓN: NOTIFICATION CENTER ──
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-                        visible: root.controlSubView === 6
-
-                        // Sub-header with back button
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Rectangle {
-                                width: 100
-                                height: 32
-                                radius: 16
-                                color: root.colSurface
-                                border.color: root.colBorder
-                                border.width: 1
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    Text {
-                                        text: "󰁍"
-                                        color: root.colAccent
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 14
-                                    }
-                                    Text {
-                                        text: "Back"
-                                        color: root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                    }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.controlSubView = 0
-                                }
-                            }
-
-                            Text {
-                                text: "Notifications"
-                                color: root.colFg
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 13
-                                font.weight: Font.Bold
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            Rectangle {
-                                height: 32
-                                width: 96
-                                radius: 16
-                                color: root.colSurface
-                                border.color: root.colBorder
-                                border.width: 1
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Clear all"
-                                    color: root.colFg
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.notifClear()
-                                }
-                            }
-                        }
-
-                        // History list (adapts to amount)
-                        Flickable {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(430, Math.max(120, notifHistCol.implicitHeight))
-                            contentWidth: width
-                            contentHeight: notifHistCol.implicitHeight
-                            clip: true
-
-                            ColumnLayout {
-                                id: notifHistCol
-                                width: parent.width
-                                spacing: 10
-
-                                Repeater {
-                                    model: root.notifHistory
-                                    delegate: Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: notifCardCol.implicitHeight + 16
-                                        radius: 12
-                                        color: root.colSurface
-                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                                        border.width: 1
-
-                                        ColumnLayout {
-                                            id: notifCardCol
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            anchors.margins: 12
-                                            anchors.bottomMargin: 12
-                                            spacing: 4
-
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 6
-                                                Text {
-                                                    text: "󰂚"
-                                                    color: root.colAccent
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 12
-                                                }
-                                                Text {
-                                                    text: modelData.app
-                                                    color: root.colAccent
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 10
-                                                    font.weight: Font.Bold
-                                                    Layout.fillWidth: true
-                                                    elide: Text.ElideRight
-                                                }
-                                                Text {
-                                                    text: modelData.time
-                                                    color: root.colMuted
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 9
-                                                }
-                                            }
-
-                                            Text {
-                                                visible: modelData.summary !== ""
-                                                text: modelData.summary
-                                                color: root.colFg
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 11
-                                                font.weight: Font.Bold
-                                                wrapMode: Text.Wrap
-                                                Layout.fillWidth: true
-                                            }
-
-                                            Text {
-                                                visible: modelData.body !== ""
-                                                text: modelData.body
-                                                color: root.colMuted
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 10
-                                                wrapMode: Text.Wrap
-                                                maximumLineCount: 3
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    visible: root.notifHistory.length === 0
-                                    text: "No notifications yet."
-                                    color: root.colMuted
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.topMargin: 20
                                 }
                             }
                         }

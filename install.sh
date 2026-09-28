@@ -660,7 +660,7 @@ step_software() {
         imagemagick
         mpv
         mpvpaper
-        syncplay
+        gnome-network-displays
         htop
         btop
         fastfetch

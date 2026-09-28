@@ -2430,16 +2430,32 @@ ShellRoot {
                                     }
 
                                     Rectangle {
+                                        width: 1
+                                        height: 24
                                         Layout.alignment: Qt.AlignVCenter
-                                        width: 58; height: 23; radius: 12
-                                        color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.16) : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.13)
+                                        color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                    }
+                                    Rectangle {
+                                        width: 38
+                                        Layout.fillHeight: true
+                                        radius: 16
+                                        color: nightSettingsChevronHover.containsMouse ? (root.nightLightEnabled ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(255, 255, 255, 0.08)) : "transparent"
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "Settings  ›"
-                                            color: root.nightLightEnabled ? root.colBg : root.colAccent
+                                            text: "󰅂"
+                                            color: root.nightLightEnabled ? root.colBg : root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 8
-                                            font.weight: Font.Bold
+                                            font.pixelSize: 14
+                                        }
+                                        MouseArea {
+                                            id: nightSettingsChevronHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                islandWin.controlSubView = 5
+                                                nightLightSettingsProc.running = true
+                                            }
                                         }
                                     }
                                 }

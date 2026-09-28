@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Shapes
 import QtQuick.Layouts
 import Quickshell
@@ -213,6 +214,8 @@ ShellRoot {
     property var audioApps: []
     property string activeSinkName: "Default Output"
     property bool nightLightEnabled: false
+    property int nightLightTemperature: 4500
+    property int nightLightGamma: 100
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
     property bool dndEnabled: false
@@ -333,6 +336,12 @@ ShellRoot {
             if (!panel) return "unavailable"
             audioSinksProc.running = true
             return "audio"
+        }
+        function openNightLight(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 5)
+            if (!panel) return "unavailable"
+            nightLightSettingsProc.running = true
+            return "night-light"
         }
         function openControl(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 0, 0)
@@ -800,6 +809,21 @@ ShellRoot {
     }
 
     Process {
+        id: nightLightSettingsProc
+        command: [Quickshell.env("HOME") + "/.local/bin/toggle-nightlight", "settings"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const settings = JSON.parse(text.trim())
+                    root.nightLightEnabled = settings.enabled === true
+                    root.nightLightTemperature = Number(settings.temperature) || 4500
+                    root.nightLightGamma = Number(settings.gamma) || 100
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
         id: caffeineCheckProc
         command: ["bash", "-c", "$HOME/.local/bin/toggle-caffeine status"]
         stdout: StdioCollector {
@@ -986,9 +1010,28 @@ ShellRoot {
                     otaStatusProc.running = true
                     otaChangelogProc.running = true
                 }
+                if (islandWin.controlSubView === 5) nightLightSettingsProc.running = true
             }
 
             Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: islandWin.tabFade = 1.0 }
+            Timer {
+                id: nightTemperatureApplyTimer
+                interval: 180
+                repeat: false
+                onTriggered: root.runCmd("~/.local/bin/toggle-nightlight temperature " + root.nightLightTemperature)
+            }
+            Timer {
+                id: nightGammaApplyTimer
+                interval: 180
+                repeat: false
+                onTriggered: root.runCmd("~/.local/bin/toggle-nightlight gamma " + root.nightLightGamma)
+            }
+            Timer {
+                id: nightLightSettingsRefreshTimer
+                interval: 500
+                repeat: false
+                onTriggered: nightLightSettingsProc.running = true
+            }
             Timer {
                 id: wifiConnectStatusTimer
                 interval: 4000
@@ -2377,7 +2420,7 @@ ShellRoot {
                                             Layout.fillWidth: true
                                         }
                                         Text {
-                                            text: root.nightLightEnabled ? "4500K Active" : "Inactive"
+                                            text: root.nightLightEnabled ? (root.nightLightTemperature + "K · " + root.nightLightGamma + "%") : (root.nightLightTemperature + "K · Inactive")
                                             color: root.nightLightEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
@@ -2393,8 +2436,8 @@ ShellRoot {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        root.nightLightEnabled = !root.nightLightEnabled
-                                        root.runCmd("~/.local/bin/toggle-nightlight")
+                                        islandWin.controlSubView = 5
+                                        nightLightSettingsProc.running = true
                                     }
                                 }
                             }
@@ -4863,6 +4906,205 @@ ShellRoot {
                     }
 
 
+
+                    // ── 5. SUBSECCIÓN: NIGHT LIGHT ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: islandWin.controlSubView === 5
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Rectangle {
+                                width: 100; height: 32; radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder; border.width: 1
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 6
+                                    Text { text: "󰁍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: islandWin.controlSubView = 0 }
+                            }
+                            Text {
+                                text: "Night Light"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+                            Item { Layout.fillWidth: true }
+                            Rectangle {
+                                width: 32; height: 32; radius: 16
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                Text { anchors.centerIn: parent; text: "󰑐"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: nightLightSettingsProc.running = true }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 64
+                            radius: 14
+                            color: root.colSurface
+                            border.color: root.nightLightEnabled ? root.colAccent : root.colBorder
+                            border.width: 1
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+                                Rectangle {
+                                    width: 38; height: 38; radius: 19
+                                    color: root.nightLightEnabled ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.22) : root.colBg
+                                    Text { anchors.centerIn: parent; text: "󰖔"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { text: root.nightLightEnabled ? "Enabled" : "Disabled"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                    Text { text: root.nightLightEnabled ? "Blue-light filter is active" : "Blue-light filter is off"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                }
+                                Rectangle {
+                                    width: 78; height: 32; radius: 16
+                                    color: root.nightLightEnabled ? root.colAccent : root.colBg
+                                    border.color: root.colBorder; border.width: 1
+                                    Text { anchors.centerIn: parent; text: root.nightLightEnabled ? "ON" : "OFF"; color: root.nightLightEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                    MouseArea {
+                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.nightLightEnabled = !root.nightLightEnabled
+                                            root.runCmd("~/.local/bin/toggle-nightlight " + (root.nightLightEnabled ? "on" : "off"))
+                                            nightLightSettingsRefreshTimer.restart()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 132
+                            radius: 14
+                            color: root.colSurface
+                            border.color: root.colBorder; border.width: 1
+                            ColumnLayout {
+                                anchors.fill: parent; anchors.margins: 12; spacing: 7
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Color temperature"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                    Item { Layout.fillWidth: true }
+                                    Text { text: root.nightLightTemperature + " K"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                Slider {
+                                    id: nightTemperatureSlider
+                                    Layout.fillWidth: true
+                                    from: 1800; to: 6500; stepSize: 100
+                                    value: root.nightLightTemperature
+                                    onMoved: {
+                                        root.nightLightTemperature = Math.round(value / 100) * 100
+                                        nightTemperatureApplyTimer.restart()
+                                    }
+                                    background: Rectangle {
+                                        x: nightTemperatureSlider.leftPadding
+                                        y: nightTemperatureSlider.topPadding + nightTemperatureSlider.availableHeight / 2 - height / 2
+                                        width: nightTemperatureSlider.availableWidth; height: 5; radius: 3
+                                        color: root.colBg
+                                        Rectangle { width: nightTemperatureSlider.visualPosition * parent.width; height: parent.height; radius: 3; color: root.colAccent }
+                                    }
+                                    handle: Rectangle {
+                                        x: nightTemperatureSlider.leftPadding + nightTemperatureSlider.visualPosition * (nightTemperatureSlider.availableWidth - width)
+                                        y: nightTemperatureSlider.topPadding + nightTemperatureSlider.availableHeight / 2 - height / 2
+                                        width: 18; height: 18; radius: 9
+                                        color: root.colAccent; border.color: root.colFg; border.width: 1
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Repeater {
+                                        model: [
+                                            { label: "Candle", value: 2200 },
+                                            { label: "Warm", value: 3000 },
+                                            { label: "Balanced", value: 4500 },
+                                            { label: "Daylight", value: 6000 }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.fillWidth: true; height: 25; radius: 12
+                                            color: root.nightLightTemperature === modelData.value ? root.colAccent : root.colBg
+                                            Text { anchors.centerIn: parent; text: modelData.label; color: root.nightLightTemperature === modelData.value ? root.colBg : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 8; font.weight: Font.Bold }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.nightLightTemperature = modelData.value
+                                                    root.runCmd("~/.local/bin/toggle-nightlight temperature " + modelData.value)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Text { text: "Lower values are warmer; higher values look more neutral."; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 8 }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 118
+                            radius: 14
+                            color: root.colSurface
+                            border.color: root.colBorder; border.width: 1
+                            ColumnLayout {
+                                anchors.fill: parent; anchors.margins: 12; spacing: 6
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Display gamma"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                    Item { Layout.fillWidth: true }
+                                    Text { text: root.nightLightGamma + "%"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                Slider {
+                                    id: nightGammaSlider
+                                    Layout.fillWidth: true
+                                    from: 20; to: 100; stepSize: 5
+                                    value: root.nightLightGamma
+                                    onMoved: {
+                                        root.nightLightGamma = Math.round(value / 5) * 5
+                                        nightGammaApplyTimer.restart()
+                                    }
+                                    background: Rectangle {
+                                        x: nightGammaSlider.leftPadding
+                                        y: nightGammaSlider.topPadding + nightGammaSlider.availableHeight / 2 - height / 2
+                                        width: nightGammaSlider.availableWidth; height: 5; radius: 3
+                                        color: root.colBg
+                                        Rectangle { width: nightGammaSlider.visualPosition * parent.width; height: parent.height; radius: 3; color: root.colAccent }
+                                    }
+                                    handle: Rectangle {
+                                        x: nightGammaSlider.leftPadding + nightGammaSlider.visualPosition * (nightGammaSlider.availableWidth - width)
+                                        y: nightGammaSlider.topPadding + nightGammaSlider.availableHeight / 2 - height / 2
+                                        width: 18; height: 18; radius: 9
+                                        color: root.colAccent; border.color: root.colFg; border.width: 1
+                                    }
+                                }
+                                Text { text: "Lower gamma dims the image; 100% is normal brightness."; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 8 }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Rectangle {
+                                Layout.fillWidth: true; height: 34; radius: 17
+                                color: root.colSurface; border.color: root.colBorder; border.width: 1
+                                Text { anchors.centerIn: parent; text: "Reset defaults · 4500 K · 100%"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.nightLightTemperature = 4500
+                                        root.nightLightGamma = 100
+                                        root.runCmd("~/.local/bin/toggle-nightlight reset")
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // ── 6. SUBSECCIÓN: SYSTEM UPDATE (OTA - ANDROID STYLE) ──
                     ColumnLayout {

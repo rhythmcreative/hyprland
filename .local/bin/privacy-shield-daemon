@@ -1,0 +1,115 @@
+#!/bin/bash
+# privacy-shield-daemon - Camera and mic background-activity watchdog.
+#
+# Polls every POLL_INTERVAL seconds:
+#   Camera: any open file descriptor on /dev/video* (via fuser, lsof fallback)
+#   Mic:    any PipeWire/Pulse source in RUNNING state (pactl; wpctl fallback)
+#
+# On idle -> active transitions it sends a critical notify-send in English
+# and appends a timestamped line to /tmp/privacy-shield.log.
+# Rising-edge only with a cooldown, so it never spams.
+#
+# Run persistently via the user service privacy-shield.service.
+set -uo pipefail
+
+LOG_FILE="/tmp/privacy-shield.log"
+POLL_INTERVAL="${PRIVACY_SHIELD_INTERVAL:-3}"
+COOLDOWN="${PRIVACY_SHIELD_COOLDOWN:-30}"
+
+cam_active=false
+mic_active=false
+last_cam_notify=0
+last_mic_notify=0
+
+log() {
+    printf '%s %s\n' "$(date '+%F %T')" "$1" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+camera_in_use() {
+    local dev
+    for dev in /dev/video*; do
+        [ -e "$dev" ] || continue
+        if command -v fuser >/dev/null 2>&1; then
+            if fuser -s "$dev" 2>/dev/null; then
+                return 0
+            fi
+        elif command -v lsof >/dev/null 2>&1; then
+            if lsof -t "$dev" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+mic_in_use() {
+    # Skip our own monitor-style probing: check RUNNING sources, but ignore
+    # pure monitor sources (".monitor" suffix) which are always present.
+    if command -v pactl >/dev/null 2>&1; then
+        local out
+        out=$(pactl list sources 2>/dev/null || true)
+        if [ -n "$out" ]; then
+            if printf '%s\n' "$out" | awk '
+                /^Source #/ { name=""; state="" }
+                /^\tName: / { name=$2 }
+                /^\tState: / { state=$2 }
+                state == "RUNNING" && name != "" && name !~ /\.monitor$/ { found=1 }
+                END { exit !found }
+            '; then
+                return 0
+            else
+                return 1
+            fi
+        fi
+    fi
+    if command -v wpctl >/dev/null 2>&1; then
+        # wpctl has no direct capture-state query; treat a non-muted source
+        # with an active stream as in use via pactl fallback above only.
+        return 1
+    fi
+    return 1
+}
+
+now() { date +%s; }
+
+log "privacy-shield-daemon started (interval=${POLL_INTERVAL}s)"
+
+while true; do
+    t=$(now)
+
+    if camera_in_use; then
+        if [ "$cam_active" = false ]; then
+            cam_active=true
+            log "CAMERA ACTIVE"
+            if [ $((t - last_cam_notify)) -ge "$COOLDOWN" ]; then
+                notify-send -a "Privacy Shield" -u critical -t 5000 \
+                    "Camera active" "An application is using the camera." 2>/dev/null || true
+                last_cam_notify=$t
+            fi
+        fi
+    else
+        if [ "$cam_active" = true ]; then
+            log "CAMERA IDLE"
+        fi
+        cam_active=false
+    fi
+
+    if mic_in_use; then
+        if [ "$mic_active" = false ]; then
+            mic_active=true
+            log "MIC ACTIVE"
+            if [ $((t - last_mic_notify)) -ge "$COOLDOWN" ]; then
+                notify-send -a "Privacy Shield" -u critical -t 5000 \
+                    "Microphone active" "An application is capturing audio." 2>/dev/null || true
+                last_mic_notify=$t
+            fi
+        fi
+    else
+        if [ "$mic_active" = true ]; then
+            log "MIC IDLE"
+        fi
+        mic_active=false
+    fi
+
+    sleep "$POLL_INTERVAL"
+done

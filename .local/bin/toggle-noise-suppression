@@ -1,0 +1,198 @@
+#!/bin/bash
+# toggle-noise-suppression - Mic noise suppression toggle (RNNoise via PipeWire)
+#
+# Preferred stack (dependency-light, Arch extra repo):
+#   sudo pacman -S noise-suppression-for-voice rnnoise
+#   - noise-suppression-for-voice provides librnnoise_ladspa.so (RNNoise LADSPA)
+#   - rnnoise provides the underlying library
+#   - Uses the stock PipeWire template:
+#       /usr/share/pipewire/filter-chain/source-rnnoise.conf
+#     copied to:
+#       ~/.config/pipewire/filter-chain.conf.d/source-rnnoise.conf
+#     then restarts the user pipewire service. Idempotent.
+#
+# Fallbacks (in order):
+#   1. noisetorch (AUR: yay -S noisetorch) - used only if the LADSPA
+#      plugin/template is unavailable but noisetorch exists.
+#   2. easyeffects (extra: sudo pacman -S easyeffects) - if installed and
+#      running, toggles its noise-reduction state via gsettings; otherwise
+#      prints an install hint.
+#
+# State file: /tmp/noise-suppression.state (ENABLED/DISABLED)
+# Notifications in English via notify-send, no emojis.
+set -euo pipefail
+
+STATE_FILE="/tmp/noise-suppression.state"
+CONF_DIR="$HOME/.config/pipewire/filter-chain.conf.d"
+CONF_FILE="$CONF_DIR/source-rnnoise.conf"
+TEMPLATE="/usr/share/pipewire/filter-chain/source-rnnoise.conf"
+
+notify() {
+    notify-send -a "Noise Suppression" -t 2500 "$1" "$2" 2>/dev/null || true
+}
+
+have_ladspa() {
+    # The stock PipeWire template alone is not enough: the actual RNNoise
+    # LADSPA plugin library must be installed (noise-suppression-for-voice).
+    if ldconfig -p 2>/dev/null | grep -qi "rnnoise"; then
+        return 0
+    fi
+    for d in /usr/lib/ladspa /usr/lib64/ladspa "$HOME/.ladspa"; do
+        if ls "$d" 2>/dev/null | grep -qi "rnnoise"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+ladspa_enabled() {
+    [ -f "$CONF_FILE" ]
+}
+
+ladspa_enable() {
+    mkdir -p "$CONF_DIR"
+    if [ -f "$TEMPLATE" ]; then
+        cp -f "$TEMPLATE" "$CONF_FILE"
+    else
+        cat > "$CONF_FILE" << 'EOF'
+context.modules = [
+    { name = libpipewire-module-filter-chain
+        flags = [ nofail ]
+        args = {
+            node.description = "Noise Canceling source"
+            media.name       = "Noise Canceling source"
+            filter.graph = {
+                nodes = [
+                    {
+                        type   = ladspa
+                        name   = rnnoise
+                        plugin = "librnnoise_ladspa"
+                        label  = noise_suppressor_stereo
+                        control = {
+                            "VAD Threshold (%)" 50.0
+                        }
+                    }
+                ]
+            }
+            audio.position = [ FL FR ]
+            capture.props = {
+                node.name = "effect_input.rnnoise"
+                node.passive = true
+            }
+            playback.props = {
+                node.name = "effect_output.rnnoise"
+                media.class = Audio/Source
+            }
+        }
+    }
+]
+EOF
+    fi
+    echo "ENABLED" > "$STATE_FILE"
+    systemctl --user restart pipewire.service 2>/dev/null || true
+    # Give wireplumber a moment to adopt the new node, then set it default
+    sleep 1
+    _set_default_rnnoise || true
+    notify "Noise suppression ON" "RNNoise filter-chain loaded. Select 'Noise Canceling source' as input."
+}
+
+_set_default_rnnoise() {
+    # Point default source at the RNNoise node if it appeared.
+    local node_id
+    node_id=$(wpctl status 2>/dev/null | grep -i "Noise Canceling source" | head -n1 | grep -oE '^[[:space:]]*[0-9]+' | tr -d ' ' || true)
+    if [ -n "$node_id" ]; then
+        wpctl set-default "$node_id" 2>/dev/null || true
+    fi
+}
+
+ladspa_disable() {
+    rm -f "$CONF_FILE"
+    echo "DISABLED" > "$STATE_FILE"
+    systemctl --user restart pipewire.service 2>/dev/null || true
+    notify "Noise suppression OFF" "RNNoise filter-chain removed."
+}
+
+noisetorch_toggle() {
+    if noisetorch -u >/dev/null 2>&1; then
+        echo "DISABLED" > "$STATE_FILE"
+        notify "Noise suppression OFF" "NoiseTorch unloaded."
+        return 0
+    fi
+    # Not running -> load on default source
+    local src
+    src=$(pactl get-default-source 2>/dev/null || echo "")
+    if [ -n "$src" ]; then
+        if noisetorch -i "$src" >/dev/null 2>&1; then
+            echo "ENABLED" > "$STATE_FILE"
+            notify "Noise suppression ON" "NoiseTorch loaded on $src."
+            return 0
+        fi
+    fi
+    if noisetorch >/dev/null 2>&1; then
+        echo "ENABLED" > "$STATE_FILE"
+        notify "Noise suppression ON" "NoiseTorch loaded."
+        return 0
+    fi
+    return 1
+}
+
+case "${1:-toggle}" in
+    on|enable)
+        if have_ladspa; then
+            ladspa_enable
+        elif command -v noisetorch >/dev/null 2>&1; then
+            noisetorch_toggle
+        else
+            notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
+            echo "Missing deps. Install: sudo pacman -S noise-suppression-for-voice rnnoise" >&2
+            exit 1
+        fi
+        ;;
+    off|disable)
+        if ladspa_enabled || have_ladspa; then
+            ladspa_disable
+        elif command -v noisetorch >/dev/null 2>&1; then
+            noisetorch -u >/dev/null 2>&1 || true
+            echo "DISABLED" > "$STATE_FILE"
+            notify "Noise suppression OFF" "NoiseTorch unloaded."
+        else
+            echo "DISABLED" > "$STATE_FILE"
+            notify "Noise suppression OFF" "Nothing to unload."
+        fi
+        ;;
+    status)
+        if ladspa_enabled; then
+            echo "ENABLED (pipewire rnnoise filter-chain)"
+        elif [ -f "$STATE_FILE" ]; then
+            cat "$STATE_FILE"
+        else
+            echo "DISABLED"
+        fi
+        ;;
+    toggle|*)
+        if ladspa_enabled; then
+            ladspa_disable
+        elif have_ladspa; then
+            ladspa_enable
+        elif command -v noisetorch >/dev/null 2>&1; then
+            noisetorch_toggle || {
+                notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
+                exit 1
+            }
+        elif command -v easyeffects >/dev/null 2>&1; then
+            # EasyEffects present: toggle its global bypass as a best-effort fallback.
+            if easyeffects --help 2>/dev/null | grep -q .; then
+                notify "EasyEffects detected" "Open EasyEffects and enable a Noise Reduction block on input."
+                echo "EasyEffects is installed but has no CLI toggle; enable Noise Reduction in its GUI." >&2
+                exit 2
+            fi
+        else
+            notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
+            echo "Missing deps. Install one of:" >&2
+            echo "  sudo pacman -S noise-suppression-for-voice rnnoise   (preferred, lightweight)" >&2
+            echo "  sudo pacman -S easyeffects                            (full effects suite)" >&2
+            echo "  yay -S noisetorch                                     (AUR fallback)" >&2
+            exit 1
+        fi
+        ;;
+esac

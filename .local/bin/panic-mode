@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# panic-mode: Instant privacy screen (boss key).
+# First press: hides all windows, mutes audio, pauses media, enables
+# do-not-disturb. Second press: restores audio, notifications and shows
+# the hidden workspace so windows can be pulled back. No auto-lock.
+# English output, no emojis. Must complete in under 1 second.
+
+set -u
+
+STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/panic-mode.active"
+if [ "${XDG_RUNTIME_DIR:-}" = "" ]; then
+    STATE_FILE="/tmp/panic-mode-$UID.active"
+fi
+
+usage() {
+    cat << 'EOF'
+panic-mode: Instant privacy screen (boss key)
+
+Usage: panic-mode [options]
+
+Options:
+  --dry-run     Print the actions that would run, without executing them
+  -h, --help    Show this help and exit
+
+Behavior:
+  First run:  moves all windows to the hidden special workspace,
+              mutes all audio sinks/sources, pauses all media players,
+              clears notifications and enables do-not-disturb.
+  Second run: unmutes audio, disables do-not-disturb and reveals the
+              hidden workspace so windows can be moved back.
+  The screen is never locked automatically.
+EOF
+}
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "Panic Mode" -i "security-high" "$1" "$2" 2>/dev/null || true
+    fi
+}
+
+mute_all() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: mute default sink/source via wpctl, mute all sinks/sources via pactl"
+        return 0
+    fi
+    if command -v wpctl >/dev/null 2>&1; then
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 1 >/dev/null 2>&1 || true
+        wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 1 >/dev/null 2>&1 || true
+    fi
+    if command -v pactl >/dev/null 2>&1; then
+        for sink in $(pactl list short sinks 2>/dev/null | awk '{print $1}'); do
+            pactl set-sink-mute "$sink" 1 >/dev/null 2>&1 || true
+        done
+        for src in $(pactl list short sources 2>/dev/null | awk '{print $1}'); do
+            pactl set-source-mute "$src" 1 >/dev/null 2>&1 || true
+        done
+    fi
+}
+
+unmute_all() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: unmute default sink/source via wpctl, unmute all sinks/sources via pactl"
+        return 0
+    fi
+    if command -v wpctl >/dev/null 2>&1; then
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 >/dev/null 2>&1 || true
+        wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0 >/dev/null 2>&1 || true
+    fi
+    if command -v pactl >/dev/null 2>&1; then
+        for sink in $(pactl list short sinks 2>/dev/null | awk '{print $1}'); do
+            pactl set-sink-mute "$sink" 0 >/dev/null 2>&1 || true
+        done
+        for src in $(pactl list short sources 2>/dev/null | awk '{print $1}'); do
+            pactl set-source-mute "$src" 0 >/dev/null 2>&1 || true
+        done
+    fi
+}
+
+pause_media() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: pause all media players via playerctl"
+        return 0
+    fi
+    if command -v playerctl >/dev/null 2>&1; then
+        playerctl --all-players pause >/dev/null 2>&1 || playerctl pause >/dev/null 2>&1 || true
+    fi
+}
+
+dnd_on() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: clear notifications and enable do-not-disturb (mako/swaync/dunst)"
+        return 0
+    fi
+    if command -v makoctl >/dev/null 2>&1; then
+        makoctl dismiss -a >/dev/null 2>&1 || true
+        makoctl mode -a do-not-disturb >/dev/null 2>&1 || true
+    fi
+    if command -v swaync-client >/dev/null 2>&1; then
+        swaync-client --close-all >/dev/null 2>&1 || true
+        swaync-client -d >/dev/null 2>&1 || true
+    fi
+    if command -v dunstctl >/dev/null 2>&1; then
+        dunstctl close-all >/dev/null 2>&1 || true
+        dunstctl set-paused true >/dev/null 2>&1 || true
+    fi
+}
+
+dnd_off() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: disable do-not-disturb (mako/swaync/dunst)"
+        return 0
+    fi
+    if command -v makoctl >/dev/null 2>&1; then
+        makoctl mode -r do-not-disturb >/dev/null 2>&1 || true
+    fi
+    if command -v swaync-client >/dev/null 2>&1; then
+        swaync-client -e >/dev/null 2>&1 || true
+    fi
+    if command -v dunstctl >/dev/null 2>&1; then
+        dunstctl set-paused false >/dev/null 2>&1 || true
+    fi
+}
+
+hide_windows() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: move all windows to special:hidden via hyprctl"
+        return 0
+    fi
+    if ! command -v hyprctl >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v jq >/dev/null 2>&1; then
+        hyprctl clients -j 2>/dev/null \
+            | jq -r '.[] | select(.workspace.name != "special:hidden") | .address' 2>/dev/null \
+            | while IFS= read -r addr; do
+                [ -z "$addr" ] && continue
+                hyprctl dispatch movetoworkspace "special:hidden,address:$addr" >/dev/null 2>&1 || true
+            done
+        # Make sure the special workspace itself is not left visible.
+        if hyprctl activeworkspace -j 2>/dev/null | jq -e 'select(.name == "special:hidden")' >/dev/null 2>&1; then
+            hyprctl dispatch togglespecialworkspace hidden >/dev/null 2>&1 || true
+        fi
+    else
+        hyprctl dispatch movetoworkspacespecial >/dev/null 2>&1 || true
+    fi
+}
+
+reveal_workspace() {
+    local dry="${1:-false}"
+    if [ "$dry" = "true" ]; then
+        echo "would: reveal special:hidden via hyprctl togglespecialworkspace"
+        return 0
+    fi
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl dispatch togglespecialworkspace hidden >/dev/null 2>&1 || true
+    fi
+}
+
+activate() {
+    local dry="${1:-false}"
+    pause_media "$dry"
+    mute_all "$dry"
+    dnd_on "$dry"
+    hide_windows "$dry"
+    if [ "$dry" = "true" ]; then
+        echo "would: create state file $STATE_FILE and send 'Privacy screen on' notification"
+        return 0
+    fi
+    touch "$STATE_FILE"
+    notify "Privacy screen on" "Windows hidden, audio muted, notifications silenced."
+}
+
+deactivate() {
+    local dry="${1:-false}"
+    reveal_workspace "$dry"
+    unmute_all "$dry"
+    dnd_off "$dry"
+    if [ "$dry" = "true" ]; then
+        echo "would: remove state file $STATE_FILE and send 'Privacy screen off' notification"
+        return 0
+    fi
+    rm -f "$STATE_FILE"
+    notify "Privacy screen off" "Audio restored, hidden workspace revealed."
+}
+
+DRY_RUN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $arg"; usage; exit 1 ;;
+    esac
+done
+
+if [ -f "$STATE_FILE" ]; then
+    deactivate "$DRY_RUN"
+else
+    activate "$DRY_RUN"
+fi

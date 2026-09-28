@@ -322,6 +322,13 @@ cmd_changelog() {
 }
 
 cmd_backup() {
+    # Pre-OTA filesystem snapshot (best effort, never fatal).
+    if command -v ota-snapshot >/dev/null 2>&1; then
+        ota-snapshot --fs-only >/dev/null 2>&1 || true
+    elif [ -x "$HOME/.local/bin/ota-snapshot" ]; then
+        "$HOME/.local/bin/ota-snapshot" --fs-only >/dev/null 2>&1 || true
+    fi
+
     local snap_id="ota-$(date +%Y%m%d_%H%M%S)"
     local target="$BACKUP_BASE/$snap_id"
     mkdir -p "$target"
@@ -358,6 +365,13 @@ cmd_update() {
     done
 
     send_notif "System Update" "Starting OTA update process..." "normal"
+
+    # Pre-OTA filesystem snapshot before dotfiles pull (best effort, never fatal).
+    if command -v ota-snapshot >/dev/null 2>&1; then
+        ota-snapshot --fs-only >/dev/null 2>&1 || true
+    elif [ -x "$HOME/.local/bin/ota-snapshot" ]; then
+        "$HOME/.local/bin/ota-snapshot" --fs-only >/dev/null 2>&1 || true
+    fi
 
     # Step 1: Backup
     if [ "$skip_backup" != "true" ]; then

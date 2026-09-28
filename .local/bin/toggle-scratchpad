@@ -1,0 +1,86 @@
+#!/bin/bash
+# Toggle Quake-style scratchpads on special workspace `special:scratchpad`
+# Usage: toggle-scratchpad <terminal|calc>
+#
+# NOTE: This Hyprland build uses a Lua config API: window rules in
+# hyprland.lua already pin the scratchpad classes to
+# `special:scratchpad`, and toggling goes through
+# `hyprctl eval 'hl.dsp.workspace.toggle_special(...)'`
+# (classic `hyprctl dispatch <args>` syntax is parsed as Lua here).
+set -u
+
+MODE="${1:-terminal}"
+WS="scratchpad"
+
+toggle_ws() {
+    hyprctl eval "hl.dsp.workspace.toggle_special(\"${WS}\")" >/dev/null 2>&1
+}
+
+clients_json() {
+    hyprctl clients -j 2>/dev/null
+}
+
+class_exists() {
+    local cls="$1"
+    clients_json | python3 -c "
+import json,sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+cls = '''$cls'''.lower()
+found = any((c.get('class') or '').lower() == cls for c in data)
+sys.exit(0 if found else 1)
+"
+}
+
+calc_class_exists() {
+    clients_json | grep -qiE '"class":\s*"(scratchpad-calc|gnome-calculator|qalculate-gtk|org\.gnome\.Calculator|io\.github\.Qalculate)"'
+}
+
+launch_terminal() {
+    if ! command -v kitty >/dev/null 2>&1; then
+        notify-send "Scratchpad" "kitty not found" 2>/dev/null || echo "kitty not found" >&2
+        return 1
+    fi
+    # Window rule pins class scratchpad-terminal to special:scratchpad
+    kitty --class scratchpad-terminal >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+}
+
+launch_calc() {
+    if command -v gnome-calculator >/dev/null 2>&1; then
+        gnome-calculator >/dev/null 2>&1 &
+    elif command -v qalculate-gtk >/dev/null 2>&1; then
+        qalculate-gtk >/dev/null 2>&1 &
+    elif command -v kitty >/dev/null 2>&1 && command -v bc >/dev/null 2>&1; then
+        # Window rule pins class scratchpad-calc to special:scratchpad
+        kitty --class scratchpad-calc -e bc -l >/dev/null 2>&1 &
+    else
+        notify-send "Scratchpad" "No calculator found (gnome-calculator/qalculate-gtk/kitty+bc)" 2>/dev/null \
+            || echo "No calculator backend found" >&2
+        return 1
+    fi
+    disown 2>/dev/null || true
+}
+
+case "$MODE" in
+    terminal|term)
+        if ! class_exists "scratchpad-terminal"; then
+            launch_terminal || exit 1
+            sleep 0.5
+        fi
+        toggle_ws
+        ;;
+    calc|calculator)
+        if ! calc_class_exists; then
+            launch_calc || exit 1
+            sleep 0.5
+        fi
+        toggle_ws
+        ;;
+    *)
+        echo "Usage: $(basename "$0") <terminal|calc>" >&2
+        exit 2
+        ;;
+esac

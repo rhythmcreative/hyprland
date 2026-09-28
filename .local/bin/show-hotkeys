@@ -69,6 +69,7 @@ SUPER + Tab               │ Workspace Overview               │ Window
 SUPER + ALT + Tab         │ Switch Open Windows              │ Rofi
 SUPER + M                 │ Exit Hyprland Session            │ Session
 SUPER + L                 │ Lock Screen (Hyprlock)           │ Security
+SUPER + Escape            │ Panic Mode (Hide All + Mute)     │ Privacy
 SUPER + BackSpace         │ Power Menu (Shutdown/Reboot)     │ Session
 SUPER + P                 │ Screenshot & Edit (Swappy)       │ Utility
 SUPER + SHIFT + P         │ Color Picker (Hyprpicker)        │ Utility
@@ -81,6 +82,11 @@ SUPER + ALT + W           │ Change Wallpaper + Sync Waybar   │ Wallpaper
 SUPER + XF86Back / Prior  │ Resync Colors with Pywal         │ Theme
 SUPER + S                 │ Toggle Special Workspace (Scratch)│ Workspace
 SUPER + SHIFT + S         │ Move Window to Special Workspace │ Workspace
+SUPER + grave / T         │ Quake Dropdown Terminal (Scratchpad)│ Workspace
+SUPER + C                 │ Floating Calculator (Scratchpad) │ Utility
+SUPER + ALT + 1           │ Layout Preset: Code (Dwindle)    │ Tiling
+SUPER + ALT + 2           │ Layout Preset: Read (Master)     │ Tiling
+SUPER + ALT + 3           │ Layout Preset: Float (Relaxed)   │ Tiling
 SUPER + 1 .. 9, 0         │ Switch to Workspace 1 .. 10      │ Navigation
 SUPER + SHIFT + 1 .. 0    │ Move Window to Workspace 1 .. 10 │ Navigation
 SUPER + Arrow Keys        │ Move Focus (Left/Right/Up/Down)  │ Navigation
@@ -94,6 +100,10 @@ F11 / F12                 │ Fine Volume Tuning (- / +)       │ Hardware
 XF86AudioPlay / Pause     │ Play / Pause Media               │ Media
 XF86AudioNext / Prev      │ Next / Previous Track            │ Media
 XF86KbdBrightnessUp/Down  │ Asus Keyboard Backlight          │ Hardware
+XF86AudioMicMute        │ Mic Mute Toggle with OSD         │ Audio
+SUPER + SHIFT + M       │ Mic Mute Toggle with OSD         │ Audio
+SUPER + ALT + M         │ Mic Noise Suppression Toggle     │ Audio
+Privacy Shield Daemon   │ Camera/Mic Background Alerts     │ Privacy
 EOF
 )
 
@@ -136,6 +146,21 @@ if [ -n "$selected" ]; then
         *"SUPER + E"*)
             thunar &
             ;;
+        *grave*)
+            "$HOME/.local/bin/toggle-scratchpad" terminal &
+            ;;
+        *"SUPER + C "*)
+            "$HOME/.local/bin/toggle-scratchpad" calc &
+            ;;
+        *"SUPER + ALT + 1"*)
+            "$HOME/.local/bin/layout-preset" code &
+            ;;
+        *"SUPER + ALT + 2"*)
+            "$HOME/.local/bin/layout-preset" read &
+            ;;
+        *"SUPER + ALT + 3"*)
+            "$HOME/.local/bin/layout-preset" float &
+            ;;
         *"SUPER + BackSpace"*)
             "$HOME/.local/bin/powermenu-with-monitor-detection" &
             ;;
@@ -157,8 +182,17 @@ if [ -n "$selected" ]; then
         *"SUPER + L"*)
             hyprlock &
             ;;
+        *"SUPER + Escape"*)
+            "$HOME/.local/bin/panic-mode" &
+            ;;
         *"SUPER + SHIFT + G"*)
             "$HOME/.config/hypr/scripts/toggle_performance.sh" &
+            ;;
+        *"SUPER + SHIFT + M"*|*"XF86AudioMicMute"*)
+            "$HOME/.local/bin/mic-osd-toggle" &
+            ;;
+        *"SUPER + ALT + M"*)
+            "$HOME/.local/bin/toggle-noise-suppression" &
             ;;
         *"F10"*)
             "$HOME/.local/bin/toggle-bluetooth" &

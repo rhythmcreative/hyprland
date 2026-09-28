@@ -590,9 +590,13 @@ step_software() {
         pavucontrol
         playerctl
         pamixer
+        rnnoise
+        noise-suppression-for-voice
 
         # Hardware, Screen & Capture Tools
         brightnessctl
+        v4l-utils
+        lsof
         swappy
         grim
         slurp
@@ -660,6 +664,11 @@ step_software() {
         inotify-tools
         psmisc
         xdg-user-dirs
+
+        # Snapshots and filesystem rollback (pre-OTA safety nets)
+        btrfs-progs
+        snapper
+        timeshift
     )
 
     gum spin --spinner dot --title "Installing core packages and dependencies..." --padding "0 0 0 $PADDING_LEFT" -- \

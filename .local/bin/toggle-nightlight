@@ -1,31 +1,119 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Persistent Night Light settings and hyprsunset runtime controls.
+
+set -u
+
+CONFIG_DIR="$HOME/.config/rhythm"
+CONFIG_FILE="$CONFIG_DIR/night-light.conf"
+DEFAULT_TEMPERATURE=4500
+DEFAULT_GAMMA=100
 ACTION="${1:-toggle}"
+
+read_settings() {
+    TEMPERATURE="$DEFAULT_TEMPERATURE"
+    GAMMA="$DEFAULT_GAMMA"
+    if [ -f "$CONFIG_FILE" ]; then
+        local stored
+        stored=$(awk -F= '$1 == "temperature" {print $2; exit}' "$CONFIG_FILE")
+        [[ "$stored" =~ ^[0-9]+$ ]] && TEMPERATURE="$stored"
+        stored=$(awk -F= '$1 == "gamma" {print $2; exit}' "$CONFIG_FILE")
+        [[ "$stored" =~ ^[0-9]+$ ]] && GAMMA="$stored"
+    fi
+}
+
+save_settings() {
+    mkdir -p "$CONFIG_DIR"
+    local tmp="$CONFIG_FILE.tmp.$$"
+    {
+        printf 'temperature=%s\n' "$TEMPERATURE"
+        printf 'gamma=%s\n' "$GAMMA"
+    } > "$tmp"
+    mv -f "$tmp" "$CONFIG_FILE"
+}
+
+is_on() { pgrep -x hyprsunset >/dev/null 2>&1; }
+
+start_nightlight() {
+    read_settings
+    if is_on; then
+        hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || true
+        hyprctl hyprsunset gamma "$GAMMA" >/dev/null 2>&1 || true
+    else
+        nohup hyprsunset -t "$TEMPERATURE" -g "$GAMMA" >/dev/null 2>&1 &
+    fi
+}
+
+set_temperature() {
+    local value="${1:-}"
+    [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -ge 1000 ] && [ "$value" -le 20000 ] || {
+        echo "Temperature must be between 1000 and 20000 K." >&2
+        return 2
+    }
+    read_settings
+    TEMPERATURE="$value"
+    save_settings
+    if is_on; then
+        hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || start_nightlight
+    fi
+    echo "$TEMPERATURE"
+}
+
+set_gamma() {
+    local value="${1:-}"
+    [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -ge 20 ] && [ "$value" -le 100 ] || {
+        echo "Gamma must be between 20 and 100 percent." >&2
+        return 2
+    }
+    read_settings
+    GAMMA="$value"
+    save_settings
+    if is_on; then
+        hyprctl hyprsunset gamma "$GAMMA" >/dev/null 2>&1 || start_nightlight
+    fi
+    echo "$GAMMA"
+}
 
 case "$ACTION" in
     status)
-        if pgrep -x hyprsunset >/dev/null; then
-            echo "on"
-        else
-            echo "off"
-        fi
+        is_on && echo "on" || echo "off"
+        ;;
+    settings)
+        read_settings
+        if is_on; then enabled=true; else enabled=false; fi
+        printf '{"enabled":%s,"temperature":%s,"gamma":%s}\n' "$enabled" "$TEMPERATURE" "$GAMMA"
         ;;
     on)
-        if ! pgrep -x hyprsunset >/dev/null; then
-            nohup hyprsunset -t 4500 >/dev/null 2>&1 &
-        fi
+        start_nightlight
         echo "on"
         ;;
     off)
         pkill -x hyprsunset 2>/dev/null || true
         echo "off"
         ;;
-    toggle|*)
-        if pgrep -x hyprsunset >/dev/null; then
+    toggle)
+        if is_on; then
             pkill -x hyprsunset 2>/dev/null || true
             echo "off"
         else
-            nohup hyprsunset -t 4500 >/dev/null 2>&1 &
+            start_nightlight
             echo "on"
         fi
+        ;;
+    temperature|set-temperature)
+        set_temperature "${2:-}"
+        ;;
+    gamma|set-gamma)
+        set_gamma "${2:-}"
+        ;;
+    reset)
+        TEMPERATURE="$DEFAULT_TEMPERATURE"
+        GAMMA="$DEFAULT_GAMMA"
+        save_settings
+        if is_on; then start_nightlight; fi
+        echo "reset"
+        ;;
+    *)
+        echo "Usage: toggle-nightlight status|settings|on|off|toggle|temperature K|gamma PERCENT|reset" >&2
+        exit 2
         ;;
 esac

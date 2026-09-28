@@ -597,6 +597,7 @@ step_software() {
         grim
         slurp
         wl-clipboard
+        wf-recorder
         libnotify
         socat
         xorg-xrandr
@@ -625,6 +626,7 @@ step_software() {
         bibata-cursor-theme
         tela-circle-icon-theme-all
         python-pywal
+        python-pillow
         awww
         cava
 
@@ -637,6 +639,10 @@ step_software() {
         pkgconf
         gtk4
         gtk4-layer-shell
+
+        # Power Management
+        power-profiles-daemon
+        upower
 
         # System Utilities & Scripting Runtimes
         python
@@ -653,6 +659,7 @@ step_software() {
         fastfetch
         inotify-tools
         psmisc
+        xdg-user-dirs
     )
 
     gum spin --spinner dot --title "Installing core packages and dependencies..." --padding "0 0 0 $PADDING_LEFT" -- \
@@ -1118,12 +1125,22 @@ MONCONF
         sed -i "s|/home/rhythmcreative|$HOME|g" "$file" 2>/dev/null || true
     done
 
-    # Enable Dynamic Island systemd user service
-    step_item "Enabling Dynamic Island user service..."
+    # Create standard user directories (Videos, Pictures, Music, Downloads, etc.)
+    step_item "Creating standard user directories..."
+    xdg-user-dirs-update >> "$LOG_FILE" 2>&1 || true
+    mkdir -p "$HOME/Videos/Recordings" "$HOME/Pictures/Screenshots" "$HOME/Pictures/Wallpapers"
+
+    # Enable all Dynamic Island & system user services
+    step_item "Enabling Dynamic Island and background services..."
     systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+
+    # Enable system-level power-profiles-daemon (required by auto-power-profile)
+    sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
 
     # Configure Waybar battery modules for target machine (0, 1, or 2+ batteries)
     if [ -f "$HOME/.config/waybar/scripts/auto-battery-setup.sh" ]; then
@@ -1280,9 +1297,10 @@ EOF
     # Pipewire audio sockets
     step_item "Enabling Pipewire user audio services..."
     systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
 
-    # Add user to required groups
-    sudo usermod -aG video,input,render,wheel,audio,storage "$USER"
+    # Add user to required groups (network for nmcli, lp for printing, optical for disc)
+    sudo usermod -aG video,input,render,wheel,audio,storage,network,lp,optical "$USER"
     step_ok "System services and permissions configured."
 }
 
@@ -1310,6 +1328,17 @@ step_update() {
             bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
         fi
     fi
+
+    # Reload systemd and re-enable all services after update
+    step_item "Reloading systemd user services..."
+    systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now waybar-island.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+    sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
+    step_ok "Services reloaded."
 
     clear_logo
     echo ""

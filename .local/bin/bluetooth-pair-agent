@@ -14,6 +14,8 @@ island writes back through the "respond" subcommand.
 Usage:
     bluetooth-pair-agent serve              run the agent (systemd user service)
     bluetooth-pair-agent respond ID accept|reject [PIN]
+    bluetooth-pair-agent test [confirm|pin|authorize]
+                                                 open a real prompt on demand
 """
 
 import json
@@ -303,6 +305,37 @@ def respond(argv):
     return 0
 
 
+def test(kind):
+    """Fire a fake pairing request at ourselves so the prompt can be checked.
+
+    Some devices never ask for a confirmation because the bonding is refused
+    earlier, so there is no way to see the island prompt with them. This
+    reproduces a BlueZ call on demand: the island opens exactly as it would for
+    a real request, and the buttons answer through the same channel.
+    """
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    agent = IslandAgent(bus)
+    device = "/org/bluez/hci0/dev_00_11_22_33_44_55"
+    try:
+        props = dbus.Interface(
+            bus.get_object(BUS_NAME, device), "org.freedesktop.DBus.Properties"
+        )
+        props.Set("org.bluez.Device1", "Alias", "Test Device", False)
+    except Exception:
+        pass
+    if kind == "pin":
+        print(agent.RequestPinCode(dbus.ObjectPath(device)))
+    elif kind == "authorize":
+        agent.RequestAuthorization(dbus.ObjectPath(device))
+    else:
+        agent.RequestConfirmation(
+            dbus.ObjectPath(device), dbus.UInt32(482913), dbus.UInt32(0)
+        )
+        print("confirmed")
+    return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__, file=sys.stderr)
@@ -312,6 +345,8 @@ def main():
     if sys.argv[1] == "serve":
         serve()
         return 0
+    if sys.argv[1] == "test":
+        return test(sys.argv[2] if len(sys.argv) > 2 else "confirm")
     print(__doc__, file=sys.stderr)
     return 2
 

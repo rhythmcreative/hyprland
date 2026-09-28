@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""BlueZ pairing agent that shows the request inside the dynamic island.
+
+BlueZ never sends a pairing request as a desktop notification: it is a D-Bus
+method call (RequestConfirmation, RequestPinCode, RequestAuthorization, ...)
+that the registered agent has to answer. Without an agent the pairing fails
+with org.bluez.Error.AuthenticationCanceled and nothing appears anywhere, which
+is why the island could not show the request.
+
+This agent registers itself as the default agent, forwards every request to the
+island over quickshell IPC, and waits for the Confirm/Reject answer that the
+island writes back through the "respond" subcommand.
+
+Usage:
+    bluetooth-pair-agent serve              run the agent (systemd user service)
+    bluetooth-pair-agent respond ID accept|reject [PIN]
+"""
+
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+
+try:
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+except ImportError as exc:  # pragma: no cover
+    print("bluetooth-pair-agent: missing dependency: %s" % exc, file=sys.stderr)
+    sys.exit(1)
+
+AGENT_PATH = "/org/rhythmcreative/BluetoothIslandAgent"
+BUS_NAME = "org.bluez"
+MANAGER_PATH = "/org/bluez"
+AGENT_INTERFACE = "org.bluez.Agent1"
+ISLAND_QML = os.path.expanduser("~/.config/quickshell/waybar-island/shell.qml")
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+STATE_DIR = os.path.join(RUNTIME_DIR, "rhythm-bluetooth-pairing")
+REQUEST_TIMEOUT = 120.0
+
+
+def request_path(request_id):
+    return os.path.join(STATE_DIR, request_id + ".json")
+
+
+def response_path(request_id):
+    return os.path.join(STATE_DIR, request_id + ".response")
+
+
+def focused_monitor():
+    """Screen name the island should open the prompt on.
+
+    The service does not inherit HYPRLAND_INSTANCE_SIGNATURE, so look the
+    current socket up in the runtime dir before asking Hyprland.
+    """
+    env = dict(os.environ)
+    signature = env.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    runtime = env.get("XDG_RUNTIME_DIR", RUNTIME_DIR)
+    if not signature:
+        hypr_dir = os.path.join(runtime, "hypr")
+        try:
+            candidates = [
+                name
+                for name in os.listdir(hypr_dir)
+                if os.path.isdir(os.path.join(hypr_dir, name))
+            ]
+            if candidates:
+                newest = max(
+                    candidates, key=lambda n: os.path.getmtime(os.path.join(hypr_dir, n))
+                )
+                env["HYPRLAND_INSTANCE_SIGNATURE"] = newest
+        except OSError:
+            pass
+    try:
+        result = subprocess.run(
+            ["hyprctl", "monitors", "-j"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+        )
+        for entry in json.loads(result.stdout or "[]"):
+            if entry.get("focused"):
+                return entry.get("name", "")
+    except Exception:
+        pass
+    return ""
+
+
+def device_label(bus, device_path):
+    """Alias plus address, so the prompt names the device."""
+    alias = ""
+    try:
+        props = dbus.Interface(
+            bus.get_object(BUS_NAME, device_path), "org.freedesktop.DBus.Properties"
+        )
+        value = props.Get("org.bluez.Device1", "Alias")
+        if value:
+            alias = str(value)
+    except Exception:
+        pass
+    tail = device_path.rsplit("/", 1)[-1]
+    if tail.startswith("dev_") and len(tail) == 4 + 17:
+        address = ":".join(tail[4:].split("_"))
+    else:
+        address = tail
+    return alias or address, address
+
+
+def notify_island(request_id, payload):
+    """Ask the island to open the prompt; a missing island must not break pairing."""
+    monitor = focused_monitor()
+    command = [
+        "quickshell", "ipc", "-p", ISLAND_QML, "--any-display",
+        "call", "island", "showPairingRequest", monitor, request_id,
+        json.dumps(payload),
+    ]
+    print("pairing request %s for monitor '%s'" % (request_id, monitor), flush=True)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0 or not result.stdout.strip():
+            print(
+                "island ipc did not confirm (code %s): %s %s"
+                % (result.returncode, result.stdout.strip(), result.stderr.strip()),
+                flush=True,
+            )
+    except Exception as exc:
+        print("island ipc error: %s" % exc, flush=True)
+
+
+def wait_for_answer(request_id, cancelled):
+    """Hold this handler open while keeping the main loop alive for other calls."""
+    context = GLib.MainContext.default()
+    path = response_path(request_id)
+    deadline = time.monotonic() + REQUEST_TIMEOUT
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            try:
+                with open(path) as handle:
+                    return json.loads(handle.read().strip() or "{}")
+            except (OSError, ValueError):
+                return {}
+        if cancelled.is_set():
+            return None
+        while context.pending():
+            context.iteration(False)
+        time.sleep(0.1)
+    return None
+
+
+def cleanup(request_id):
+    for path in (request_path(request_id), response_path(request_id)):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+class IslandAgent(dbus.service.Object):
+    def __init__(self, bus):
+        dbus.service.Object.__init__(self, bus, AGENT_PATH)
+        self.bus = bus
+        self.counter = 0
+        self.pending = {}
+
+    def _begin(self, kind, extra):
+        self.counter += 1
+        request_id = "%d-%d" % (int(time.time()), self.counter)
+        cancelled = threading.Event()
+        self.pending[request_id] = cancelled
+        label, address = device_label(self.bus, extra.get("device", ""))
+        payload = {
+            "kind": kind,
+            "device": address,
+            "name": label,
+            "passkey": extra.get("passkey", ""),
+            "hint": extra.get("hint", ""),
+        }
+        os.makedirs(STATE_DIR, exist_ok=True)
+        try:
+            with open(request_path(request_id), "w") as handle:
+                json.dump(payload, handle)
+        except OSError:
+            pass
+        notify_island(request_id, payload)
+        return request_id, cancelled
+
+    def _finish(self, request_id):
+        self.pending.pop(request_id, None)
+        cleanup(request_id)
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="ouu", out_signature="")
+    def RequestConfirmation(self, device, passkey, entered):
+        request_id, cancelled = self._begin(
+            "confirm",
+            {
+                "device": str(device),
+                "passkey": str(passkey),
+                "hint": "Check that this number matches the device screen.",
+            },
+        )
+        answer = wait_for_answer(request_id, cancelled)
+        self._finish(request_id)
+        if not answer or answer.get("action") != "accept":
+            raise dbus.DBusException("org.bluez.Error.AuthenticationCanceled")
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        request_id, cancelled = self._begin(
+            "pin",
+            {"device": str(device), "hint": "Type the PIN shown on the device."},
+        )
+        answer = wait_for_answer(request_id, cancelled)
+        self._finish(request_id)
+        if not answer or answer.get("action") != "accept" or not answer.get("pin"):
+            raise dbus.DBusException("org.bluez.Error.AuthenticationCanceled")
+        return str(answer["pin"])
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        request_id, cancelled = self._begin(
+            "authorize",
+            {"device": str(device), "hint": "Allow this device to connect?"},
+        )
+        answer = wait_for_answer(request_id, cancelled)
+        self._finish(request_id)
+        if not answer or answer.get("action") != "accept":
+            raise dbus.DBusException("org.bluez.Error.AuthenticationRejected")
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    def Release(self):
+        pass
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    def Cancel(self):
+        for cancelled in list(self.pending.values()):
+            cancelled.set()
+
+
+AGENT_CAPABILITY = "KeyboardDisplay"
+
+
+def register(bus):
+    manager = dbus.Interface(
+        bus.get_object(BUS_NAME, MANAGER_PATH), "org.bluez.AgentManager1"
+    )
+    # The second argument is the agent capability, not an interface name:
+    # "KeyboardDisplay" allows both showing the passkey and typing a PIN.
+    manager.RegisterAgent(AGENT_PATH, AGENT_CAPABILITY)
+    manager.RequestDefaultAgent(AGENT_PATH)
+
+
+def serve():
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    os.makedirs(STATE_DIR, exist_ok=True)
+    loop = GLib.MainLoop()
+    # The exported object must stay referenced: if it is garbage collected the
+    # methods disappear from the bus and BlueZ gets UnknownObject.
+    agent = []
+
+    def attempt():
+        # bluetoothd may still be starting and another session may already own
+        # the default agent: keep retrying instead of dying silently.
+        while True:
+            try:
+                agent.append(IslandAgent(bus))
+                register(bus)
+                print(
+                    "bluetooth-pair-agent: default agent registered on %s as %s"
+                    % (AGENT_PATH, bus.get_unique_name()),
+                    flush=True,
+                )
+                return False
+            except Exception as exc:
+                print("bluetooth-pair-agent: retrying (%s)" % exc, flush=True)
+                time.sleep(5)
+
+    GLib.idle_add(attempt)
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+
+
+def respond(argv):
+    if len(argv) < 2:
+        print("Usage: bluetooth-pair-agent respond ID accept|reject [PIN]", file=sys.stderr)
+        return 2
+    request_id, action = argv[0], argv[1]
+    if action not in ("accept", "reject"):
+        print("Unknown action: %s" % action, file=sys.stderr)
+        return 2
+    payload = {"action": action}
+    if action == "accept" and len(argv) > 2:
+        payload["pin"] = argv[2]
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(response_path(request_id), "w") as handle:
+        json.dump(payload, handle)
+    return 0
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+    if sys.argv[1] == "respond":
+        return respond(sys.argv[2:])
+    if sys.argv[1] == "serve":
+        serve()
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

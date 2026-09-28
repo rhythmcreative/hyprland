@@ -887,9 +887,8 @@ else
     exit 1
 fi
 
-# Mantener las barras ocultas mientras dura la transicion del wallpaper
+# Mantener las barras ocultas durante la transicion y la paleta
 sleep 1.3
-"$HOME/.local/bin/wallpaper-bars" show
 # Guardar wallpaper actual
 echo "$selected_file" > "$HOME/.cache/current-wallpaper"
 
@@ -910,6 +909,10 @@ else
     log "Pywal no disponible, solo se aplicó el wallpaper"
     notify "Wallpaper aplicado"
 fi
+
+# Las barras vuelven ya con la paleta nueva aplicada
+sleep 0.4
+"$HOME/.local/bin/wallpaper-bars" show
 
 # Verificación final de Waybar
 if ! pgrep -x waybar > /dev/null; then

@@ -100,8 +100,7 @@ F11 / F12                 │ Fine Volume Tuning (- / +)       │ Hardware
 XF86AudioPlay / Pause     │ Play / Pause Media               │ Media
 XF86AudioNext / Prev      │ Next / Previous Track            │ Media
 XF86KbdBrightnessUp/Down  │ Asus Keyboard Backlight          │ Hardware
-XF86AudioMicMute        │ Mic Mute Toggle with OSD         │ Audio
-SUPER + SHIFT + M       │ Mic Mute Toggle with OSD         │ Audio
+XF86AudioMicMute        │ Mic Mute Toggle                  │ Audio
 SUPER + ALT + M         │ Mic Noise Suppression Toggle     │ Audio
 Privacy Shield Daemon   │ Camera/Mic Background Alerts     │ Privacy
 EOF
@@ -187,9 +186,6 @@ if [ -n "$selected" ]; then
             ;;
         *"SUPER + SHIFT + G"*)
             "$HOME/.config/hypr/scripts/toggle_performance.sh" &
-            ;;
-        *"SUPER + SHIFT + M"*|*"XF86AudioMicMute"*)
-            "$HOME/.local/bin/mic-osd-toggle" &
             ;;
         *"SUPER + ALT + M"*)
             "$HOME/.local/bin/toggle-noise-suppression" &

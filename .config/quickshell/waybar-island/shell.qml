@@ -11,7 +11,47 @@ import Quickshell.Services.Notifications
 ShellRoot {
     id: root
 
-    property bool expanded: false
+    // One Quickshell process owns one PanelWindow per monitor. Keep UI state on
+    // each PanelWindow, and use this registry only to route external IPC calls.
+    property var islandPanels: ({})
+
+    function registerIslandPanel(screenName, panel) {
+        let panels = Object.assign({}, root.islandPanels)
+        panels[screenName] = panel
+        root.islandPanels = panels
+    }
+
+    function unregisterIslandPanel(screenName) {
+        let panels = Object.assign({}, root.islandPanels)
+        delete panels[screenName]
+        root.islandPanels = panels
+    }
+
+    function panelForScreen(screenName) {
+        if (screenName && screenName !== "all")
+            return root.islandPanels[screenName] || null
+        let names = Object.keys(root.islandPanels)
+        return names.length ? root.islandPanels[names[0]] : null
+    }
+
+    function setPanelState(screenName, expandedValue, tabValue, subViewValue) {
+        let panel = root.panelForScreen(screenName)
+        if (!panel) return null
+        if (expandedValue !== undefined) panel.expanded = expandedValue
+        if (tabValue !== undefined) panel.currentTab = tabValue
+        if (subViewValue !== undefined) panel.controlSubView = subViewValue
+        return panel
+    }
+
+    function anyPanelExpanded() {
+        return Object.keys(root.islandPanels).some(name => root.islandPanels[name].expanded)
+    }
+
+    function anyPanelSubView(subView) {
+        return Object.keys(root.islandPanels).some(name =>
+            root.islandPanels[name].expanded && root.islandPanels[name].controlSubView === subView)
+    }
+
     property string activePlayerTitle: ""
     property string activePlayerArtist: ""
     property bool isPlaying: false
@@ -37,14 +77,12 @@ ShellRoot {
         root.notifHistory = h.slice(0, 30)
         root.notifUnread = Math.min(99, root.notifUnread + 1)
     }
-    function notifOpenCenter() {
+    function notifOpenCenter(screenName) {
         if (root.currentNotification) root.currentNotification.dismiss()
         root.currentNotification = null
         root.notifActive = false
         root.notifUnread = 0
-        root.expanded = true
-        root.currentTab = 2
-        root.controlSubView = 0
+        root.setPanelState(screenName, true, 2, 0)
         root.refreshAllStates()
     }
     function notifClear() {
@@ -105,13 +143,6 @@ ShellRoot {
 
     property bool islandVisible: true
     property var hiddenScreens: ({})
-    property int currentTab: 0 // 0 = Control & Sistema, 1 = Ajustes Hyprland
-    property real tabFade: 1.0
-    Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-    Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: root.tabFade = 1.0 }
-    Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (root.expanded && !root.notifActive) root.expanded = false } }
-    Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!root.expanded && !root.notifActive) { root.expanded = true; root.controlSubView = 0; root.refreshAllStates() } } }
-    property int controlSubView: 0 // 0 = Main, 1 = Wi-Fi, 2 = Bluetooth, 3 = Audio Output, 4 = System Update (OTA)
 
     // OTA System Update state
     property var otaData: ({
@@ -186,175 +217,134 @@ ShellRoot {
         dndCheckProc.running = true
         hyprStatusProc.running = true
         otaStatusProc.running = true
-        if (root.controlSubView === 1) wifiListProc.running = true
-        if (root.controlSubView === 2) btStatusProc.running = true
-        if (root.controlSubView === 3) {
-            audioSinksProc.running = true
-            audioAppsProc.running = true
-        }
-        if (root.controlSubView === 4) {
-            otaStatusProc.running = true
-            otaChangelogProc.running = true
-        }
-    }
-
-    onCurrentTabChanged: {
-        if (root.controlSubView !== 4) root.controlSubView = 0
-        if (root.currentTab === 1) hyprStatusProc.running = true
-        root.tabFade = 0.0
-        tabFadeReset.restart()
-    }
-
-    onExpandedChanged: {
-        if (root.expanded) {
-            if (root.controlSubView !== 4) root.controlSubView = 0
-            root.refreshAllStates()
-        } else {
-            root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
-        }
-    }
-
-    onControlSubViewChanged: {
-        if (root.controlSubView === 2) {
-            btStatusProc.running = true
-            if (root.btEnabled) {
-                root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
-            }
-        } else {
-            root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
-        }
-        if (root.controlSubView === 4) {
-            otaStatusProc.running = true
-            otaChangelogProc.running = true
-        }
+        otaChangelogProc.running = true
     }
 
     IpcHandler {
         target: "settings"
-        function toggle(): string {
-            root.expanded = !root.expanded
-            if (root.expanded) {
-                root.currentTab = 1
-                root.controlSubView = 0
+        function toggle(screenName: string): string {
+            let panel = root.panelForScreen(screenName)
+            if (!panel) return "unavailable"
+            panel.expanded = !panel.expanded
+            if (panel.expanded) {
+                panel.currentTab = 1
+                panel.controlSubView = 0
                 root.refreshAllStates()
             }
-            return root.expanded ? "expanded" : "collapsed"
+            return panel.expanded ? "expanded" : "collapsed"
         }
-        function open(): string {
-            root.expanded = true
-            root.currentTab = 1
-            root.controlSubView = 0
+        function open(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 1, 0)
+            if (!panel) return "unavailable"
             root.refreshAllStates()
             return "expanded"
         }
-        function open_wifi(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 1
+        function open_wifi(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 1)
+            if (!panel) return "unavailable"
             root.wifiScanning = true
             wifiListProc.running = true
             root.refreshAllStates()
             return "expanded"
         }
-        function open_bt(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 2
+        function open_bt(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 2)
+            if (!panel) return "unavailable"
             root.btScanning = true
             btStatusProc.running = true
             root.refreshAllStates()
             return "expanded"
         }
-        function open_hypr(): string {
-            root.expanded = true
-            root.currentTab = 1
-            root.controlSubView = 0
+        function open_hypr(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 1, 0)
+            if (!panel) return "unavailable"
             root.refreshAllStates()
             return "expanded"
         }
-        function open_audio(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 3
+        function open_audio(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 3)
+            if (!panel) return "unavailable"
             audioSinksProc.running = true
+            audioAppsProc.running = true
             root.refreshAllStates()
             return "expanded"
         }
-        function close(): string {
-            root.expanded = false
-            return "collapsed"
+        function close(screenName: string): string {
+            let panel = root.setPanelState(screenName, false)
+            return panel ? "collapsed" : "unavailable"
         }
     }
 
     IpcHandler {
         target: "island"
-        function toggle(): string {
-            root.expanded = !root.expanded
-            if (root.expanded) {
-                root.currentTab = 0
-                root.controlSubView = 0
+        function toggle(screenName: string): string {
+            let panel = root.panelForScreen(screenName)
+            if (!panel) return "unavailable"
+            panel.expanded = !panel.expanded
+            if (panel.expanded) {
+                panel.currentTab = 0
+                panel.controlSubView = 0
                 root.refreshAllStates()
             }
-            return root.expanded ? "expanded" : "collapsed"
+            return panel.expanded ? "expanded" : "collapsed"
         }
-        function openWifi(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 1
+        function openWifi(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 1)
+            if (!panel) return "unavailable"
             root.wifiScanning = true
             wifiListProc.running = true
             return "wifi"
         }
-        function openBluetooth(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 2
+        function openBluetooth(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 2)
+            if (!panel) return "unavailable"
             root.btScanning = true
             btStatusProc.running = true
             return "bluetooth"
         }
-        function openAudio(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 3
+        function openAudio(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 3)
+            if (!panel) return "unavailable"
             audioSinksProc.running = true
             return "audio"
         }
-        function openControl(): string {
-            root.expanded = true
-            root.currentTab = 0
-            root.controlSubView = 0
+        function openControl(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 0)
+            if (!panel) return "unavailable"
             root.refreshAllStates()
             return "control"
         }
-        function openHyprland(): string {
-            root.expanded = true
-            root.currentTab = 1
-            root.controlSubView = 0
+        function openHyprland(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 1, 0)
+            if (!panel) return "unavailable"
             root.refreshAllStates()
             return "hyprland"
         }
-        function openOta(): string {
-            root.controlSubView = 4
-            root.expanded = true
+        function openOta(screenName: string): string {
+            let current = root.panelForScreen(screenName)
+            if (!current) return "unavailable"
+            let panel = root.setPanelState(screenName, true, current.currentTab, 4)
+            if (!panel) return "unavailable"
             otaStatusProc.running = true
             otaChangelogProc.running = true
             return "ota"
         }
-        function openNotifications(): string {
-            root.notifOpenCenter()
+        function openNotifications(screenName: string): string {
+            root.notifOpenCenter(screenName)
             return "notifications"
         }
-        function collapse(): string {
-            root.expanded = false
-            return "collapsed"
+        function collapse(screenName: string): string {
+            let panel = root.setPanelState(screenName, false)
+            return panel ? "collapsed" : "unavailable"
         }
         function hide(screenName: string): string {
-            root.expanded = false
             if (!screenName || screenName === "" || screenName === "all") {
+                Object.keys(root.islandPanels).forEach(name => root.islandPanels[name].expanded = false)
                 root.islandVisible = false
                 root.hiddenScreens = {}
             } else {
+                let panel = root.panelForScreen(screenName)
+                if (panel) panel.expanded = false
                 let hs = Object.assign({}, root.hiddenScreens)
                 hs[screenName] = true
                 root.hiddenScreens = hs
@@ -634,7 +624,7 @@ ShellRoot {
         id: btPollTimer
         interval: 1500
         repeat: true
-        running: root.expanded && root.controlSubView === 2 && root.btEnabled
+        running: root.anyPanelSubView(2) && root.btEnabled
         onTriggered: {
             if (!btStatusProc.running) {
                 btStatusProc.running = true
@@ -873,7 +863,7 @@ ShellRoot {
         id: statsTimer
         interval: 3000
         repeat: true
-        running: root.expanded && root.currentTab === 0 && root.controlSubView === 0
+        running: root.anyPanelExpanded()
         onTriggered: {
             sysStatsProc.running = true
         }
@@ -887,6 +877,48 @@ ShellRoot {
         PanelWindow {
             id: islandWin
             required property var modelData
+
+            property bool expanded: false
+            property int currentTab: 0
+            property int controlSubView: 0
+            property real tabFade: 1.0
+            Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+
+            Component.onCompleted: root.registerIslandPanel(modelData.name, islandWin)
+            Component.onDestruction: root.unregisterIslandPanel(modelData.name)
+
+            onCurrentTabChanged: {
+                if (islandWin.controlSubView !== 4) islandWin.controlSubView = 0
+                if (islandWin.currentTab === 1) hyprStatusProc.running = true
+                islandWin.tabFade = 0.0
+                tabFadeReset.restart()
+            }
+            onExpandedChanged: {
+                if (islandWin.expanded) root.refreshAllStates()
+                else if (!root.anyPanelExpanded()) root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+            }
+            onControlSubViewChanged: {
+                if (islandWin.controlSubView === 1) wifiListProc.running = true
+                if (islandWin.controlSubView === 2) {
+                    btStatusProc.running = true
+                    if (root.btEnabled) root.runCmd("$HOME/.local/bin/notch-bt-helper scan")
+                } else if (!Object.keys(root.islandPanels).some(name => root.islandPanels[name] !== islandWin && root.islandPanels[name].controlSubView === 2)) {
+                    root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
+                }
+                if (islandWin.controlSubView === 3) {
+                    audioSinksProc.running = true
+                    audioAppsProc.running = true
+                }
+                if (islandWin.controlSubView === 4) {
+                    otaStatusProc.running = true
+                    otaChangelogProc.running = true
+                }
+            }
+
+            Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: islandWin.tabFade = 1.0 }
+            Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (islandWin.expanded && !root.notifActive) islandWin.expanded = false } }
+            Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; islandWin.controlSubView = 0; root.refreshAllStates() } } }
+
             screen: modelData
             visible: root.islandVisible && !root.hiddenScreens[modelData.name]
 
@@ -904,13 +936,13 @@ ShellRoot {
 
         aboveWindows: true
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.expanded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: islandWin.expanded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         mask: Region {
             item: capsule
 
             Region {
-                item: root.expanded ? cazaClics : null
+                item: islandWin.expanded ? cazaClics : null
                 intersection: Intersection.Combine
             }
         }
@@ -920,7 +952,7 @@ ShellRoot {
             id: dimmer
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, 0.35)
-            opacity: root.expanded ? 1.0 : 0.0
+            opacity: islandWin.expanded ? 1.0 : 0.0
             visible: opacity > 0
             Behavior on opacity {
                 NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
@@ -931,17 +963,17 @@ ShellRoot {
         Item {
             id: cazaClics
             anchors.fill: parent
-            enabled: root.expanded
+            enabled: islandWin.expanded
 
             FocusScope {
                 anchors.fill: parent
-                focus: root.expanded
-                Keys.onEscapePressed: root.expanded = false
+                focus: islandWin.expanded
+                Keys.onEscapePressed: islandWin.expanded = false
             }
 
             MouseArea {
                 anchors.fill: parent
-                onClicked: root.expanded = false
+                onClicked: islandWin.expanded = false
             }
         }
 
@@ -957,7 +989,7 @@ ShellRoot {
                 onHoveredChanged: {
                     if (islandHover.hovered) {
                         hoverCollapseGrace.stop()
-                    } else if (root.expanded && !root.notifActive) {
+                    } else if (islandWin.expanded && !root.notifActive) {
                         hoverCollapseGrace.restart()
                     }
                 }
@@ -965,8 +997,8 @@ ShellRoot {
 
 
             readonly property real ala: 16
-            width: root.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: root.expanded ? Math.min(800, islandContentCol.implicitHeight + 52) : (root.notifActive ? 56 : 36)
+            width: islandWin.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
+            height: islandWin.expanded ? Math.min(800, islandContentCol.implicitHeight + 52) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
                 NumberAnimation {
@@ -988,7 +1020,7 @@ ShellRoot {
                 id: silueta
                 anchors.fill: parent
                 ala: capsule.ala
-                cuerpoRadio: root.expanded ? 24 : (root.notifActive ? 16 : 12)
+                cuerpoRadio: islandWin.expanded ? 24 : (root.notifActive ? 16 : 12)
                 relleno: root.colBg
                 lado: "arriba"
 
@@ -1012,7 +1044,7 @@ ShellRoot {
                 id: collapsedView
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: (!root.expanded && !root.notifActive) ? 1 : 0
+                opacity: (!islandWin.expanded && !root.notifActive) ? 1 : 0
 
                 Behavior on opacity {
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
@@ -1026,9 +1058,9 @@ ShellRoot {
                     onExited: hoverExpandTimer.stop()
                     onClicked: {
                         hoverExpandTimer.stop()
-                        root.expanded = !root.expanded
-                        if (root.expanded) {
-                            root.controlSubView = 0
+                        islandWin.expanded = !islandWin.expanded
+                        if (islandWin.expanded) {
+                            islandWin.controlSubView = 0
                             root.refreshAllStates()
                         }
                     }
@@ -1252,7 +1284,7 @@ ShellRoot {
 
                     // Unread notifications badge (adaptive count)
                     Row {
-                        visible: root.notifUnread > 0 && !root.expanded && !root.notifActive
+                        visible: root.notifUnread > 0 && !islandWin.expanded && !root.notifActive
                         spacing: 4
                         anchors.verticalCenter: parent.verticalCenter
                         Text {
@@ -1288,13 +1320,13 @@ ShellRoot {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.notifOpenCenter()
+                            onClicked: root.notifOpenCenter(islandWin.modelData.name)
                         }
                     }
 
                     // Indicator icon
                     Text {
-                        text: root.expanded ? "󰅃" : "󰅀"
+                        text: islandWin.expanded ? "󰅃" : "󰅀"
                         color: root.colMuted
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 11
@@ -1313,7 +1345,7 @@ ShellRoot {
                 anchors.leftMargin: 6
                 anchors.rightMargin: 6
                 visible: opacity > 0
-                opacity: (!root.expanded && root.notifActive) ? 1 : 0
+                opacity: (!islandWin.expanded && root.notifActive) ? 1 : 0
 
                 Behavior on opacity {
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
@@ -1322,7 +1354,7 @@ ShellRoot {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.notifOpenCenter()
+                    onClicked: root.notifOpenCenter(islandWin.modelData.name)
                 }
 
                 RowLayout {
@@ -1417,7 +1449,7 @@ ShellRoot {
                 anchors.topMargin: 32
                 anchors.bottomMargin: 20
                 visible: opacity > 0
-                opacity: root.expanded ? 1 : 0
+                opacity: islandWin.expanded ? 1 : 0
 
                 Behavior on opacity {
                     NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
@@ -1483,7 +1515,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.expanded = false; root.runCmd("hyprlock"); }
+                                    onClicked: { islandWin.expanded = false; root.runCmd("hyprlock"); }
                                 }
                             }
 
@@ -1500,7 +1532,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.expanded = false; root.runCmd("~/.local/bin/powermenu-with-monitor-detection"); }
+                                    onClicked: { islandWin.expanded = false; root.runCmd("~/.local/bin/powermenu-with-monitor-detection"); }
                                 }
                             }
 
@@ -1517,7 +1549,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.expanded = false
+                                    onClicked: islandWin.expanded = false
                                 }
                             }
                         }
@@ -1527,14 +1559,14 @@ ShellRoot {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 12
-                        visible: root.controlSubView === 0
+                        visible: islandWin.controlSubView === 0
 
                         // Tab 0: Control & Sistema
                         Rectangle {
                             width: 200
                             height: 34
                             radius: 17
-                            color: root.currentTab === 0 ? root.colAccent : root.colSurface
+                            color: islandWin.currentTab === 0 ? root.colAccent : root.colSurface
                             Behavior on color { ColorAnimation { duration: 150 } }
 
                             RowLayout {
@@ -1542,13 +1574,13 @@ ShellRoot {
                                 spacing: 8
                                 Text {
                                     text: "󰒓"
-                                    color: root.currentTab === 0 ? root.colBg : root.colAccent
+                                    color: islandWin.currentTab === 0 ? root.colBg : root.colAccent
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 14
                                 }
                                 Text {
                                     text: "Control & System"
-                                    color: root.currentTab === 0 ? root.colBg : root.colFg
+                                    color: islandWin.currentTab === 0 ? root.colBg : root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
                                     font.weight: Font.Bold
@@ -1559,8 +1591,8 @@ ShellRoot {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    root.currentTab = 0
-                                    root.controlSubView = 0
+                                    islandWin.currentTab = 0
+                                    islandWin.controlSubView = 0
                                 }
                             }
                         }
@@ -1570,7 +1602,7 @@ ShellRoot {
                             width: 200
                             height: 34
                             radius: 17
-                            color: root.currentTab === 1 ? root.colAccent : root.colSurface
+                            color: islandWin.currentTab === 1 ? root.colAccent : root.colSurface
                             Behavior on color { ColorAnimation { duration: 150 } }
 
                             RowLayout {
@@ -1578,13 +1610,13 @@ ShellRoot {
                                 spacing: 8
                                 Text {
                                     text: "󰣇"
-                                    color: root.currentTab === 1 ? root.colBg : root.colAccent
+                                    color: islandWin.currentTab === 1 ? root.colBg : root.colAccent
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 14
                                 }
                                 Text {
                                     text: "Hyprland Settings"
-                                    color: root.currentTab === 1 ? root.colBg : root.colFg
+                                    color: islandWin.currentTab === 1 ? root.colBg : root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
                                     font.weight: Font.Bold
@@ -1595,8 +1627,8 @@ ShellRoot {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    root.currentTab = 1
-                                    root.controlSubView = 0
+                                    islandWin.currentTab = 1
+                                    islandWin.controlSubView = 0
                                 }
                             }
                         }
@@ -1606,7 +1638,7 @@ ShellRoot {
                             width: 150
                             height: 34
                             radius: 17
-                            color: root.currentTab === 2 ? root.colAccent : root.colSurface
+                            color: islandWin.currentTab === 2 ? root.colAccent : root.colSurface
                             Behavior on color { ColorAnimation { duration: 150 } }
 
                             RowLayout {
@@ -1614,13 +1646,13 @@ ShellRoot {
                                 spacing: 8
                                 Text {
                                     text: "󰂚"
-                                    color: root.currentTab === 2 ? root.colBg : root.colAccent
+                                    color: islandWin.currentTab === 2 ? root.colBg : root.colAccent
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 14
                                 }
                                 Text {
                                     text: "Alerts"
-                                    color: root.currentTab === 2 ? root.colBg : root.colFg
+                                    color: islandWin.currentTab === 2 ? root.colBg : root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
                                     font.weight: Font.Bold
@@ -1630,12 +1662,12 @@ ShellRoot {
                                     height: 18
                                     width: Math.max(18, tabPillCount.implicitWidth + 10)
                                     radius: 9
-                                    color: root.currentTab === 2 ? root.colBg : root.colAccent
+                                    color: islandWin.currentTab === 2 ? root.colBg : root.colAccent
                                     Text {
                                         id: tabPillCount
                                         anchors.centerIn: parent
                                         text: root.notifUnread > 9 ? "9+" : root.notifUnread
-                                        color: root.currentTab === 2 ? root.colAccent : root.colBg
+                                        color: islandWin.currentTab === 2 ? root.colAccent : root.colBg
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 10
                                         font.weight: Font.Bold
@@ -1647,8 +1679,8 @@ ShellRoot {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    root.currentTab = 2
-                                    root.controlSubView = 0
+                                    islandWin.currentTab = 2
+                                    islandWin.controlSubView = 0
                                     root.notifUnread = 0
                                 }
                             }
@@ -1660,8 +1692,8 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        visible: root.currentTab === 0 && root.controlSubView === 0
-                        opacity: root.tabFade
+                        visible: islandWin.currentTab === 0 && islandWin.controlSubView === 0
+                        opacity: islandWin.tabFade
 
                         // Media Player Card
                         Rectangle {
@@ -1808,7 +1840,7 @@ ShellRoot {
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                                             onClicked: mouse => {
                                                 if (mouse.button === Qt.RightButton) {
-                                                    root.controlSubView = 1
+                                                    islandWin.controlSubView = 1
                                                     root.wifiScanning = true
                                                     wifiListProc.running = true
                                                 } else {
@@ -1856,7 +1888,7 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.controlSubView = 1
+                                                islandWin.controlSubView = 1
                                                 root.wifiScanning = true
                                                 wifiListProc.running = true
                                             }
@@ -1934,7 +1966,7 @@ ShellRoot {
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                                             onClicked: mouse => {
                                                 if (mouse.button === Qt.RightButton) {
-                                                    root.controlSubView = 2
+                                                    islandWin.controlSubView = 2
                                                     btStatusProc.running = true
                                                 } else {
                                                     const newState = !root.btEnabled
@@ -1979,7 +2011,7 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.controlSubView = 2
+                                                islandWin.controlSubView = 2
                                                 root.btScanning = true
                                                 btStatusProc.running = true
                                             }
@@ -2089,7 +2121,7 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.controlSubView = 3
+                                                islandWin.controlSubView = 3
                                                 audioSinksProc.running = true
                                             }
                                         }
@@ -2215,7 +2247,7 @@ ShellRoot {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.notifOpenCenter()
+                                    onClicked: root.notifOpenCenter(islandWin.modelData.name)
                                 }
                             }
 
@@ -2566,7 +2598,7 @@ ShellRoot {
                                     color: root.isMuted ? root.colMuted : root.colAccent
                                     visible: !root.isMuted && root.volumeLevel > 0
                                     Behavior on width {
-                                        enabled: !volMouseArea.pressed && !capsuleWidthAnim.running && root.expanded
+                                        enabled: !volMouseArea.pressed && !capsuleWidthAnim.running && islandWin.expanded
                                         NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
                                     }
                                 }
@@ -2656,7 +2688,7 @@ ShellRoot {
                                     radius: 21
                                     color: root.colAccent
                                     Behavior on width {
-                                        enabled: !brightMouseArea.pressed && !capsuleWidthAnim.running && root.expanded
+                                        enabled: !brightMouseArea.pressed && !capsuleWidthAnim.running && islandWin.expanded
                                         NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
                                     }
                                 }
@@ -2823,7 +2855,7 @@ ShellRoot {
                                     Text { text: "󰈊"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Picker"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("hyprpicker -a"); } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("hyprpicker -a"); } }
                             }
 
                             Rectangle {
@@ -2833,7 +2865,7 @@ ShellRoot {
                                     Text { text: "󰸉"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Gallery"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("~/.local/bin/wallpaper-gallery"); } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("~/.local/bin/wallpaper-gallery"); } }
                             }
 
                             Rectangle {
@@ -2889,7 +2921,7 @@ ShellRoot {
                                     Text { text: "󰈮"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Tasks"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expanded = false; root.runCmd("kitty -e htop"); } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("kitty -e htop"); } }
                             }
                         }
                     }
@@ -2898,7 +2930,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.controlSubView === 1
+                        visible: islandWin.controlSubView === 1
 
                         // Sub-header with back button
                         RowLayout {
@@ -2934,7 +2966,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.controlSubView = 0
+                                    onClicked: islandWin.controlSubView = 0
                                 }
                             }
 
@@ -3036,7 +3068,7 @@ ShellRoot {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.expanded = false
+                                                islandWin.expanded = false
                                                 root.runCmd("nm-connection-editor")
                                             }
                                         }
@@ -3273,7 +3305,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.controlSubView === 2
+                        visible: islandWin.controlSubView === 2
 
                         // Sub-header with back button
                         RowLayout {
@@ -3309,7 +3341,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.controlSubView = 0
+                                    onClicked: islandWin.controlSubView = 0
                                 }
                             }
 
@@ -3415,7 +3447,7 @@ ShellRoot {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.expanded = false
+                                                islandWin.expanded = false
                                                 root.runCmd("blueman-manager")
                                             }
                                         }
@@ -3783,7 +3815,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.controlSubView === 3
+                        visible: islandWin.controlSubView === 3
 
                         // Sub-header with back button
                         RowLayout {
@@ -3819,7 +3851,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.controlSubView = 0
+                                    onClicked: islandWin.controlSubView = 0
                                 }
                             }
 
@@ -3866,7 +3898,7 @@ ShellRoot {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        root.expanded = false
+                                        islandWin.expanded = false
                                         root.runCmd("pavucontrol")
                                     }
                                 }
@@ -4115,8 +4147,8 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        visible: root.currentTab === 1 && root.controlSubView === 0
-                        opacity: root.tabFade
+                        visible: islandWin.currentTab === 1 && islandWin.controlSubView === 0
+                        opacity: islandWin.tabFade
 
                         // Subtitle
                         Text {
@@ -4468,7 +4500,7 @@ ShellRoot {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    root.controlSubView = 4
+                                    islandWin.controlSubView = 4
                                     otaStatusProc.running = true
                                     otaChangelogProc.running = true
                                 }
@@ -4503,8 +4535,8 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        visible: root.currentTab === 2
-                        opacity: root.tabFade
+                        visible: islandWin.currentTab === 2
+                        opacity: islandWin.tabFade
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -4647,7 +4679,7 @@ ShellRoot {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.expanded = false
+                                                islandWin.expanded = false
                                                 root.runCmd("$HOME/.local/bin/open-notification-app '" + modelData.app + "'")
                                             }
                                         }
@@ -4673,7 +4705,7 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: root.controlSubView === 4
+                        visible: islandWin.controlSubView === 4
 
                         // Sub-header with back button
                         RowLayout {
@@ -4693,7 +4725,7 @@ ShellRoot {
 
                                 MouseArea {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.controlSubView = 0
+                                    onClicked: islandWin.controlSubView = 0
                                 }
                             }
 
@@ -4728,7 +4760,7 @@ ShellRoot {
                                 Text { anchors.centerIn: parent; text: "󰓓"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
                                 MouseArea {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.expanded = false; root.runCmd("kitty -e system-ota gui") }
+                                    onClicked: { islandWin.expanded = false; root.runCmd("kitty -e system-ota gui") }
                                 }
                             }
                         }

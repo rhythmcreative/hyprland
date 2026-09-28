@@ -51,7 +51,24 @@ echo "--- Launching Waybar at $(date) ---" >> "$LOG_FILE"
 # 1. Kill existing waybar instances aggressively
 echo "Stopping existing waybar processes..." >> "$LOG_FILE"
 pkill -9 waybar || true
-pkill -f "waybar/scripts" || true
+
+# 1b. Los modulos de Waybar (Cava) sobreviven al pkill de la barra y se quedan
+# huerfanos escribiendo "Broken pipe" al log. Se comparan lineas de comando
+# completas contra las rutas conocidas, nunca un patron parcial: un pkill -f
+# sobre "waybar/scripts" tambien mataba a cualquier otro proceso que mencionara
+# esa ruta en sus argumentos.
+for entry in /proc/[0-9]*; do
+    pid="${entry#/proc/}"
+    [ "$pid" = "$$" ] && continue
+    # El grupo redirige tambien el error de bash si el proceso desaparece entre
+    # el listado de /proc y la lectura de su linea de comandos.
+    last_arg=$( { tr '\0' '\n' < "$entry/cmdline"; } 2>/dev/null | tail -n1 )
+    case "$last_arg" in
+        "$WAYBAR_DIR"/scripts/*.sh|/tmp/waybar_cava_config_*)
+            kill "$pid" 2>/dev/null || true
+            ;;
+    esac
+done
 
 # Wait for process to fully release resources
 sleep 0.2

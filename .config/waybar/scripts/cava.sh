@@ -30,6 +30,9 @@ ascii_max_range = 7
 
 trap "rm -f $config_file" EXIT
 
-cava -p "$config_file" | while read -r line; do
-    echo "$line" | sed "$dict"
+cava -p "$config_file" 2>/dev/null | while read -r line; do
+    # Si Waybar dejo de leer esta salida (por ejemplo, porque la barra se
+    # relanzo), el pipe esta roto. Sin esto el bucle sigue girando con cava
+    # alimentandolo y solo escribe "Broken pipe" en el log de Waybar.
+    echo "$line" | sed "$dict" 2>/dev/null || break
 done

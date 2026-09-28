@@ -56,6 +56,14 @@ reconcile_docks() {
     return 0
 }
 
+# Waybar no lo supervisa ningun servicio: si muere, la barra desaparece hasta
+# el proximo evento de monitor. Comprobarlo aqui lo deja solo.
+reconcile_waybar() {
+    [ -x "$HOME/.config/waybar/launch.sh" ] || return 0
+    pgrep -x waybar >/dev/null 2>&1 && return 0
+    "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1 &
+}
+
 handle_monitor_event() {
     sleep 0.8
 
@@ -79,12 +87,13 @@ handle_monitor_event() {
     handle_monitor_event < /dev/null
 ) &
 
-# Reconciliación periódica: el dock siempre queda en la pantalla correcta,
-# aunque se pierda un evento o una instancia muera sola.
+# Reconciliación periódica: el dock y la barra siempre quedan en la pantalla
+# correcta, aunque se pierda un evento o una instancia muera sola.
 (
     while true; do
         sleep 15
         reconcile_docks < /dev/null
+        reconcile_waybar < /dev/null
     done
 ) &
 

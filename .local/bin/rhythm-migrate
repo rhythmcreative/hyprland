@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# rhythm-migrate: idempotent dotfiles migration runner (Omarchy-style).
+# Runs pending scripts from ~/hyprland/migrations/ (or $REPO_DIR) in order,
+# recording completed ones under ~/.local/state/rhythm/migrations/.
+# Safe to run on fresh installs and on every OTA update.
+set -euo pipefail
+
+REPO_DIR="${RHYTHM_REPO:-$HOME/hyprland}"
+[ -d "$REPO_DIR/migrations" ] || REPO_DIR="/home/rhythmcreative/hyprland"
+STATE_DIR="$HOME/.local/state/rhythm/migrations"
+mkdir -p "$STATE_DIR"
+
+pending=()
+for m in "$REPO_DIR"/migrations/[0-9]*-*.sh; do
+    [ -f "$m" ] || continue
+    name=$(basename "$m" .sh)
+    [ -f "$STATE_DIR/$name.done" ] || pending+=("$m")
+done
+
+if [ ${#pending[@]} -eq 0 ]; then
+    echo "Migrations: all up to date."
+    exit 0
+fi
+
+failed=0
+for m in "${pending[@]}"; do
+    name=$(basename "$m" .sh)
+    echo "Migrations: running $name..."
+    if bash "$m"; then
+        printf '%s\n' "$(date -Iseconds)" > "$STATE_DIR/$name.done"
+        echo "Migrations: $name done."
+    else
+        echo "Migrations: $name FAILED (continuing)." >&2
+        failed=1
+    fi
+done
+exit $failed

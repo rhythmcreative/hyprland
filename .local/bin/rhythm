@@ -1,0 +1,843 @@
+#!/usr/bin/env bash
+# rhythm - Unified CLI for Rhythm Hyprland helpers (Omarchy-style).
+# Groups scattered ~/.local/bin helpers behind documented subcommands.
+# Delegates to real scripts; never duplicates system-ota logic.
+# English output, no emojis.
+#
+# Usage:
+#   rhythm <group> <command> [args]
+#   rhythm commands [--json]
+#   rhythm <group> --help
+#   rhythm <group> <command> --help
+#
+# Shortcuts:
+#   rhythm update       (= system-ota update)
+#   rhythm check        (= system-ota check)
+#   rhythm screenshot   (= capture screenshot)
+#   rhythm debug        (= debug summary)
+
+set -euo pipefail
+
+SELF="rhythm"
+
+# Resolve helper directory: script location first, then $HOME/.local/bin.
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "$HOME/.local/bin")"
+if [ ! -d "$BIN_DIR" ]; then
+    BIN_DIR="$HOME/.local/bin"
+fi
+
+GROUPS="audio bluetooth wifi capture toggle theme wallpaper update power privacy debug"
+
+# --- helpers ---------------------------------------------------------------
+
+err() {
+    echo "$SELF: $*" >&2
+}
+
+require() {
+    # require <script-name> : fail with clear message if helper missing.
+    local name="$1"
+    local path="$BIN_DIR/$name"
+    if [ -x "$path" ]; then
+        echo "$path"
+        return 0
+    fi
+    if command -v "$name" >/dev/null 2>&1; then
+        command -v "$name"
+        return 0
+    fi
+    err "helper '$name' not found in $BIN_DIR and not on PATH."
+    return 1
+}
+
+is_help() {
+    case "${1:-}" in
+        -h|--help|help) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+top_help() {
+    cat <<'EOF'
+rhythm - Unified CLI for Rhythm Hyprland helpers
+
+Usage:
+  rhythm <group> <command> [args]
+  rhythm commands [--json]
+  rhythm <group> --help
+  rhythm <group> <command> --help
+
+Groups:
+  audio       Audio sinks, per-app volume, volume up/down/mute
+  bluetooth   Bluetooth power, devices, connect/disconnect
+  wifi        Wi-Fi scan, connect/disconnect, toggle
+  capture     Screenshots, screen recording, text notes (no OCR: tesseract missing)
+  toggle      nightlight, caffeine, powersave, performance, bluetooth, noise, dnd state
+  theme       Pywal color sync / resync
+  wallpaper   Wallpaper selector, random, set from file
+  update      System OTA updates (delegates to system-ota)
+  power       Powersave, performance, battery/auto-profile status
+  privacy     Microphone/camera status
+  debug       Versions, failed services, Hyprland layer counts
+
+Shortcuts:
+  rhythm update        Same as: rhythm update run  (system-ota update)
+  rhythm check         Same as: rhythm update check (system-ota check)
+  rhythm screenshot    Same as: rhythm capture screenshot
+  rhythm debug         Same as: rhythm debug summary
+
+Examples:
+  rhythm audio list
+  rhythm wifi rescan
+  rhythm capture record toggle
+  rhythm toggle nightlight
+  rhythm wallpaper random
+  rhythm update status
+  rhythm debug summary
+EOF
+}
+
+# --- rhythm commands -------------------------------------------------------
+
+cmd_commands() {
+    local json=false
+    for a in "$@"; do
+        case "$a" in
+            --json) json=true ;;
+            -h|--help|help)
+                echo "Usage: rhythm commands [--json]"
+                echo ""
+                echo "List all groups and commands."
+                return 0
+                ;;
+            *) err "unknown flag for commands: $a"; return 1 ;;
+        esac
+    done
+    if [ "$json" = true ]; then
+        cat <<'EOF'
+{
+  "groups": {
+    "audio": ["list", "apps", "up", "down", "mute", "set"],
+    "bluetooth": ["status", "on", "off", "toggle", "list", "connect", "disconnect", "menu"],
+    "wifi": ["list", "rescan", "toggle", "connect", "disconnect", "menu"],
+    "capture": ["screenshot", "snip", "record", "status", "note"],
+    "toggle": ["nightlight", "caffeine", "powersave", "performance", "bluetooth", "noise", "dnd"],
+    "theme": ["sync", "resync", "status"],
+    "wallpaper": ["selector", "random", "set"],
+    "update": ["check", "status", "run", "changelog", "backup", "rollback", "gui", "release"],
+    "power": ["powersave", "performance", "status"],
+    "privacy": ["status"],
+    "debug": ["summary", "versions", "services", "layers"]
+  },
+  "shortcuts": ["update", "check", "screenshot", "debug"]
+}
+EOF
+        else
+        cat <<'EOF'
+audio       list apps up down mute set
+bluetooth   status on off toggle list connect disconnect menu
+wifi        list rescan toggle connect disconnect menu
+capture     screenshot snip record status note
+toggle      nightlight caffeine powersave performance bluetooth noise dnd
+theme       sync resync status
+wallpaper   selector random set
+update      check status run changelog backup rollback gui release
+power       powersave performance status
+privacy     status
+debug       summary versions services layers
+
+shortcuts: update check screenshot debug
+EOF
+    fi
+}
+
+# --- group help texts ------------------------------------------------------
+
+group_help_audio() {
+    cat <<'EOF'
+Usage: rhythm audio <command> [args]
+
+Commands:
+  list                 List audio sinks (notch-audio-helper list)
+  apps                 List per-app volumes (notch-audio-helper apps)
+  up                   Raise volume 5% (volume-dynamic up)
+  down                 Lower volume 5% (volume-dynamic down)
+  mute                 Toggle mute (volume-dynamic mute)
+  set <id>             Set default sink by id (notch-audio-helper set <id>)
+
+Examples:
+  rhythm audio list
+  rhythm audio up
+  rhythm audio set 2
+EOF
+}
+
+group_help_bluetooth() {
+    cat <<'EOF'
+Usage: rhythm bluetooth <command> [args]
+
+Commands:
+  status               Show bluetooth power/devices (notch-bt-helper status)
+  on                   Power bluetooth on (notch-bt-helper on)
+  off                  Power bluetooth off (notch-bt-helper off)
+  toggle               Toggle bluetooth power (notch-bt-helper toggle)
+  list                 Alias for status
+  connect <MAC>        Connect a device (notch-bt-helper connect <MAC>)
+  disconnect <MAC>     Disconnect a device (notch-bt-helper disconnect <MAC>)
+  menu                 Open rofi bluetooth menu (rofi-bluetooth-menu)
+
+Examples:
+  rhythm bluetooth status
+  rhythm bluetooth toggle
+  rhythm bluetooth connect AA:BB:CC:DD:EE:FF
+EOF
+}
+
+group_help_wifi() {
+    cat <<'EOF'
+Usage: rhythm wifi <command> [args]
+
+Commands:
+  list                 List visible networks (notch-wifi-helper list)
+  rescan               Rescan and list (notch-wifi-helper rescan)
+  toggle               Toggle Wi-Fi radio (notch-wifi-helper toggle)
+  connect <SSID> [password]
+                       Connect to a network
+  disconnect           Disconnect active Wi-Fi
+  menu                 Open rofi Wi-Fi menu (rofi-wifi-menu)
+
+Examples:
+  rhythm wifi list
+  rhythm wifi rescan
+  rhythm wifi connect MySSID mypassword
+EOF
+}
+
+group_help_capture() {
+    cat <<'EOF'
+Usage: rhythm capture <command> [args]
+
+Commands:
+  screenshot           Region screenshot to ~/Pictures/Screenshots + clipboard
+  snip                 Alias for screenshot
+  record <start|stop|toggle|status> [fullscreen|region]
+                       Screen recording (screen-recorder-helper)
+  status               Show recording status JSON
+  note [text]          Save a timestamped text note to ~/Documents/notes.
+                       OCR from screenshots is unavailable: tesseract is
+                       not installed, so no image-to-text is offered.
+
+Examples:
+  rhythm capture screenshot
+  rhythm capture record toggle
+  rhythm capture record status
+  rhythm capture note "idea: remap hypr binding"
+EOF
+}
+
+group_help_toggle() {
+    cat <<'EOF'
+Usage: rhythm toggle <command> [on|off|toggle|status]
+
+Commands:
+  nightlight [action]  Toggle hyprsunset night light (default: toggle)
+  caffeine [action]    Toggle idle inhibit via hypridle (default: toggle)
+  powersave [action]   Toggle power saving mode (default: toggle)
+  performance          Toggle max-performance Hyprland mode
+  bluetooth            Toggle bluetooth power (toggle-bluetooth)
+  noise [action]       Toggle mic noise suppression (toggle-noise-suppression)
+  dnd                  Show Do-Not-Disturb state (mako, best effort)
+
+Each [action] accepts: on, off, toggle, status (default: toggle).
+
+Examples:
+  rhythm toggle nightlight
+  rhythm toggle caffeine status
+  rhythm toggle powersave on
+  rhythm toggle dnd
+EOF
+}
+
+group_help_theme() {
+    cat <<'EOF'
+Usage: rhythm theme <command>
+
+Commands:
+  sync                 Sync pywal colors across GTK/Qt/Waybar/Rofi/SDDM
+                       (modern-pywal-sync)
+  resync               Alias for sync
+  status               Show current wallpaper + wal colors
+
+Examples:
+  rhythm theme sync
+  rhythm theme status
+EOF
+}
+
+group_help_wallpaper() {
+    cat <<'EOF'
+Usage: rhythm wallpaper <command> [args]
+
+Commands:
+  selector             Open wallpaper picker (wallpaper-selector)
+  random               Apply a random wallpaper (wallpaper-random)
+  set <file>           Set wallpaper from file (setwall.sh <file>)
+
+Examples:
+  rhythm wallpaper selector
+  rhythm wallpaper random
+  rhythm wallpaper set ~/Pictures/Wallpapers/hero.jpg
+EOF
+}
+
+group_help_update() {
+    cat <<'EOF'
+Usage: rhythm update <command> [args]
+
+Delegates to system-ota. system-ota is the owner; rhythm adds no logic.
+
+Commands:
+  check [--json]       Check for remote updates and notify
+  status [--json]      Show current update status
+  run [--system]       Install OTA update (alias: system-ota update)
+  changelog [--json]   View recent changes
+  backup               Create a manual safety checkpoint
+  rollback             Restore from a previous checkpoint
+  gui                  Launch interactive terminal UI
+  release <version>    Tag and release a new system version
+
+Examples:
+  rhythm update check
+  rhythm update status
+  rhythm run 2>/dev/null || rhythm update run
+EOF
+}
+
+group_help_power() {
+    cat <<'EOF'
+Usage: rhythm power <command> [args]
+
+Commands:
+  powersave [on|off|toggle|status]
+                       Powersave mode (toggle-powersave, default: toggle)
+  performance          Toggle max-performance Hyprland mode
+  status               Battery capacity/status + powersave state
+
+Examples:
+  rhythm power status
+  rhythm power powersave on
+  rhythm power performance
+EOF
+}
+
+group_help_privacy() {
+    cat <<'EOF'
+Usage: rhythm privacy <command>
+
+Commands:
+  status               Show mic/camera state JSON (privacy-status)
+
+Examples:
+  rhythm privacy status
+EOF
+}
+
+group_help_debug() {
+    cat <<'EOF'
+Usage: rhythm debug <command>
+
+Commands:
+  summary              Versions + failed services + layer counts
+  versions             Compositor, kernel, helper versions
+  services             Failed systemd (system + user) services
+  layers               Hyprland layer counts via hyprctl
+
+Examples:
+  rhythm debug summary
+  rhythm debug versions
+  rhythm debug services
+EOF
+}
+
+# --- groups ----------------------------------------------------------------
+
+group_audio() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_audio; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_audio; return 0; fi; done
+    case "$cmd" in
+        list|apps)
+            local h; h="$(require notch-audio-helper)" || return 1
+            "$h" "$cmd"
+            ;;
+        up|down|mute)
+            local h; h="$(require volume-dynamic)" || return 1
+            "$h" "$cmd"
+            ;;
+        set)
+            if [ $# -lt 1 ]; then err "usage: rhythm audio set <sink-id>"; return 1; fi
+            local h; h="$(require notch-audio-helper)" || return 1
+            "$h" set "$1"
+            ;;
+        *) err "unknown audio command: $cmd (see: rhythm audio --help)"; return 1 ;;
+    esac
+}
+
+group_bluetooth() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_bluetooth; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_bluetooth; return 0; fi; done
+    case "$cmd" in
+        status|list)
+            local h; h="$(require notch-bt-helper)" || return 1
+            "$h" status
+            ;;
+        on|off|toggle)
+            local h; h="$(require notch-bt-helper)" || return 1
+            "$h" "$cmd"
+            ;;
+        connect|disconnect)
+            if [ $# -lt 1 ]; then err "usage: rhythm bluetooth $cmd <MAC>"; return 1; fi
+            local h; h="$(require notch-bt-helper)" || return 1
+            "$h" "$cmd" "$1"
+            ;;
+        menu)
+            local h; h="$(require rofi-bluetooth-menu)" || return 1
+            "$h"
+            ;;
+        *) err "unknown bluetooth command: $cmd (see: rhythm bluetooth --help)"; return 1 ;;
+    esac
+}
+
+group_wifi() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_wifi; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_wifi; return 0; fi; done
+    case "$cmd" in
+        list|rescan|toggle|disconnect)
+            local h; h="$(require notch-wifi-helper)" || return 1
+            "$h" "$cmd"
+            ;;
+        connect)
+            if [ $# -lt 1 ]; then err "usage: rhythm wifi connect <SSID> [password]"; return 1; fi
+            local h; h="$(require notch-wifi-helper)" || return 1
+            "$h" connect "$@"
+            ;;
+        menu)
+            local h; h="$(require rofi-wifi-menu)" || return 1
+            "$h"
+            ;;
+        *) err "unknown wifi command: $cmd (see: rhythm wifi --help)"; return 1 ;;
+    esac
+}
+
+group_capture() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_capture; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_capture; return 0; fi; done
+    case "$cmd" in
+        screenshot|snip)
+            local h; h="$(require screen-recorder-helper)" || return 1
+            "$h" snip
+            ;;
+        record)
+            local sub="${1:-toggle}"; shift || true
+            case "$sub" in
+                start|stop|toggle|status) ;;
+                *) err "usage: rhythm capture record <start|stop|toggle|status> [fullscreen|region]"; return 1 ;;
+            esac
+            local h; h="$(require screen-recorder-helper)" || return 1
+            if [ "$sub" = "start" ]; then
+                "$h" start "${1:-fullscreen}"
+            else
+                "$h" "$sub"
+            fi
+            ;;
+        status)
+            local h; h="$(require screen-recorder-helper)" || return 1
+            "$h" status
+            ;;
+        note)
+            if command -v tesseract >/dev/null 2>&1; then
+                echo "Note: tesseract is installed, but rhythm capture note saves text directly."
+            else
+                echo "Note: OCR unavailable (tesseract not installed); saving text note instead."
+            fi
+            local dir="$HOME/Documents/notes"
+            mkdir -p "$dir"
+            local text="$*"
+            if [ -z "$text" ]; then
+                if [ -t 0 ]; then
+                    echo "Type note, Ctrl-D to save:"
+                fi
+                text="$(cat)"
+            fi
+            if [ -z "$text" ]; then err "empty note, nothing saved."; return 1; fi
+            local f="$dir/note_$(date +%Y%m%d_%H%M%S).txt"
+            printf '%s\n' "$text" > "$f"
+            echo "Saved: $f"
+            ;;
+        *) err "unknown capture command: $cmd (see: rhythm capture --help)"; return 1 ;;
+    esac
+}
+
+group_toggle() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_toggle; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_toggle; return 0; fi; done
+    local action="${1:-toggle}"
+    case "$action" in
+        on|off|toggle|status) ;;
+        *) err "action must be on|off|toggle|status, got: $action"; return 1 ;;
+    esac
+    case "$cmd" in
+        nightlight)
+            local h; h="$(require toggle-nightlight)" || return 1
+            "$h" "$action"
+            ;;
+        caffeine)
+            local h; h="$(require toggle-caffeine)" || return 1
+            "$h" "$action"
+            ;;
+        powersave)
+            local h; h="$(require toggle-powersave)" || return 1
+            if [ "$action" = "status" ]; then
+                if [ -f /tmp/powersave-active ]; then echo "on"; else echo "off"; fi
+            else
+                "$h" "$action"
+            fi
+            ;;
+        performance)
+            local h; h="$(require notch-hypr-helper)" || return 1
+            if [ "$action" = "status" ]; then
+                if [ -f /tmp/hypr-perf-mode ] || [ -f "$XDG_RUNTIME_DIR/hypr-perf-mode" 2>/dev/null ]; then
+                    echo "on"
+                else
+                    "$h" status 2>/dev/null | grep -qi "perf" && echo "on" || echo "off"
+                fi
+            else
+                "$h" toggle-perf
+            fi
+            ;;
+        bluetooth)
+            if [ "$action" = "status" ]; then
+                local h; h="$(require notch-bt-helper)" || return 1
+                "$h" status
+            else
+                local h; h="$(require toggle-bluetooth)" || return 1
+                if [ "$action" = "on" ]; then
+                    bluetoothctl power on 2>/dev/null || "$h"
+                elif [ "$action" = "off" ]; then
+                    bluetoothctl power off 2>/dev/null || "$h"
+                else
+                    "$h"
+                fi
+            fi
+            ;;
+        noise|noise-suppression)
+            local h; h="$(require toggle-noise-suppression)" || return 1
+            if [ "$action" = "status" ]; then
+                if [ -f /tmp/noise-suppression.state ]; then
+                    cat /tmp/noise-suppression.state
+                else
+                    echo "DISABLED"
+                fi
+            else
+                "$h" "$action" 2>/dev/null || "$h"
+            fi
+            ;;
+        dnd)
+            if command -v makoctl >/dev/null 2>&1; then
+                local mode
+                mode="$(makoctl mode 2>/dev/null || true)"
+                if [ -z "$mode" ]; then
+                    echo "off (mako default mode)"
+                elif echo "$mode" | grep -qi "do-not-disturb"; then
+                    echo "on"
+                else
+                    echo "off ($mode)"
+                fi
+            else
+                echo "unknown (makoctl not installed)"
+                return 1
+            fi
+            ;;
+        *) err "unknown toggle command: $cmd (see: rhythm toggle --help)"; return 1 ;;
+    esac
+}
+
+group_theme() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_theme; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_theme; return 0; fi; done
+    case "$cmd" in
+        sync|resync)
+            local h; h="$(require modern-pywal-sync)" || return 1
+            "$h"
+            ;;
+        status)
+            echo "wallpaper: $(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || echo unknown)"
+            if [ -f "$HOME/.cache/wal/colors" ]; then
+                echo "colors: $HOME/.cache/wal/colors"
+                head -n 8 "$HOME/.cache/wal/colors" 2>/dev/null || true
+            else
+                echo "colors: no pywal cache found"
+            fi
+            ;;
+        *) err "unknown theme command: $cmd (see: rhythm theme --help)"; return 1 ;;
+    esac
+}
+
+group_wallpaper() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_wallpaper; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_wallpaper; return 0; fi; done
+    case "$cmd" in
+        selector)
+            local h; h="$(require wallpaper-selector)" || return 1
+            "$h"
+            ;;
+        random)
+            local h; h="$(require wallpaper-random)" || return 1
+            "$h"
+            ;;
+        set)
+            if [ $# -lt 1 ]; then err "usage: rhythm wallpaper set <file>"; return 1; fi
+            if [ ! -f "$1" ]; then err "file not found: $1"; return 1; fi
+            local h; h="$(require setwall.sh)" || return 1
+            "$h" "$1"
+            ;;
+        *) err "unknown wallpaper command: $cmd (see: rhythm wallpaper --help)"; return 1 ;;
+    esac
+}
+
+group_update() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_update; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_update; return 0; fi; done
+    local h; h="$(require system-ota)" || return 1
+    case "$cmd" in
+        check|status|changelog|backup|rollback|gui|release|update) ;;
+        run) cmd="update" ;;
+        *) err "unknown update command: $cmd (see: rhythm update --help)"; return 1 ;;
+    esac
+    "$h" "$cmd" "$@"
+}
+
+group_power() {
+    local cmd="${1:-}"
+    if [ -z "$cmd" ] || is_help "$cmd"; then group_help_power; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_power; return 0; fi; done
+    case "$cmd" in
+        powersave)
+            local action="${1:-toggle}"
+            case "$action" in
+                on|off|toggle|status) ;;
+                *) err "usage: rhythm power powersave [on|off|toggle|status]"; return 1 ;;
+            esac
+            if [ "$action" = "status" ]; then
+                if [ -f /tmp/powersave-active ]; then echo "powersave: on"; else echo "powersave: off"; fi
+            else
+                local h; h="$(require toggle-powersave)" || return 1
+                "$h" "$action"
+            fi
+            ;;
+        performance)
+            local h; h="$(require notch-hypr-helper)" || return 1
+            "$h" toggle-perf
+            ;;
+        status)
+            local cap="unknown" state="unknown"
+            for b in /sys/class/power_supply/BAT*; do
+                [ -d "$b" ] || continue
+                cap="$(cat "$b/capacity" 2>/dev/null || echo unknown)"
+                state="$(cat "$b/status" 2>/dev/null || echo unknown)"
+                echo "battery ($(basename "$b")): $cap% ($state)"
+            done
+            if ! ls -d /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+                echo "battery: no battery found (desktop)"
+            fi
+            if [ -f /tmp/powersave-active ]; then echo "powersave: on"; else echo "powersave: off"; fi
+            if command -v powerprofilesctl >/dev/null 2>&1; then
+                echo "profile: $(powerprofilesctl get 2>/dev/null || echo unknown)"
+            fi
+            ;;
+        *) err "unknown power command: $cmd (see: rhythm power --help)"; return 1 ;;
+    esac
+}
+
+group_privacy() {
+    local cmd="${1:-status}"
+    if is_help "$cmd"; then group_help_privacy; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_privacy; return 0; fi; done
+    case "$cmd" in
+        status)
+            local h; h="$(require privacy-status)" || return 1
+            "$h"
+            ;;
+        *) err "unknown privacy command: $cmd (see: rhythm privacy --help)"; return 1 ;;
+    esac
+}
+
+debug_versions() {
+    echo "kernel: $(uname -r 2>/dev/null || echo unknown)"
+    if command -v hyprctl >/dev/null 2>&1; then
+        echo "hyprland: $(hyprctl version 2>/dev/null | head -n 2 | tr '\n' ' ' || echo unknown)"
+    else
+        echo "hyprland: hyprctl not found"
+    fi
+    for c in waybar quickshell grim slurp wf-recorder wl-copy jq notify-send; do
+        if command -v "$c" >/dev/null 2>&1; then
+            echo "$c: $("$c" --version 2>/dev/null | head -n1 || echo installed)"
+        else
+            echo "$c: not installed"
+        fi
+    done
+    local ota; ota="$(require system-ota 2>/dev/null)" || ota=""
+    if [ -n "$ota" ]; then
+        echo "system-ota: $ota"
+    fi
+    for v in "$HOME/.version" "$(dirname "$BIN_DIR")/.version" "/home/rhythmcreative/hyprland/.version"; do
+        if [ -f "$v" ]; then echo "dotfiles version ($v): $(tr -d '[:space:]' < "$v")"; fi
+    done
+}
+
+debug_services() {
+    echo "== system failed =="
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --failed --no-legend --no-pager 2>/dev/null || echo "(systemctl unavailable)"
+        echo "== user failed =="
+        systemctl --user --failed --no-legend --no-pager 2>/dev/null || echo "(user bus unavailable)"
+    else
+        echo "systemctl not found"
+        return 1
+    fi
+}
+
+debug_layers() {
+    if ! command -v hyprctl >/dev/null 2>&1; then
+        err "hyprctl not found; cannot query layers."
+        return 1
+    fi
+    if command -v jq >/dev/null 2>&1; then
+        hyprctl layers -j 2>/dev/null | jq -r 'to_entries[] | "\(.key): \(.value.levels | map(.[]? | 1) | length) surfaces"' 2>/dev/null \
+            || hyprctl layers 2>/dev/null || echo "(not in a Hyprland session?)"
+    else
+        hyprctl layers 2>/dev/null || echo "(not in a Hyprland session?)"
+    fi
+}
+
+group_debug() {
+    local cmd="${1:-summary}"
+    if is_help "$cmd"; then group_help_debug; return 0; fi
+    shift || true
+    for a in "$@"; do if is_help "$a"; then group_help_debug; return 0; fi; done
+    case "$cmd" in
+        summary)
+            echo "== versions =="
+            debug_versions
+            echo ""
+            echo "== failed services =="
+            debug_services
+            echo ""
+            echo "== layers =="
+            debug_layers
+            ;;
+        versions) debug_versions ;;
+        services) debug_services ;;
+        layers) debug_layers ;;
+        *) err "unknown debug command: $cmd (see: rhythm debug --help)"; return 1 ;;
+    esac
+}
+
+# --- main ------------------------------------------------------------------
+
+main() {
+    if [ $# -eq 0 ]; then
+        top_help
+        return 0
+    fi
+    case "$1" in
+        -h|--help|help)
+            top_help
+            return 0
+            ;;
+        commands)
+            shift
+            cmd_commands "$@"
+            return $?
+            ;;
+        # top-level shortcuts
+        update)
+            shift || true
+            if [ $# -eq 0 ]; then
+                group_update run
+            elif is_help "$1"; then
+                group_help_update
+            else
+                case "$1" in
+                    check|status|run|changelog|backup|rollback|gui|release|--json|--system|-*)
+                        group_update "$@"
+                        ;;
+                    *)
+                        # rhythm update [extra args] -> system-ota update [args]
+                        local h; h="$(require system-ota)" || return 1
+                        "$h" update "$@"
+                        ;;
+                esac
+            fi
+            return $?
+            ;;
+        check)
+            shift || true
+            for a in "$@"; do if is_help "$a"; then group_help_update; return 0; fi; done
+            local h; h="$(require system-ota)" || return 1
+            "$h" check "$@"
+            return $?
+            ;;
+        screenshot)
+            shift || true
+            for a in "$@"; do if is_help "$a"; then group_help_capture; return 0; fi; done
+            group_capture screenshot "$@"
+            return $?
+            ;;
+        debug)
+            shift || true
+            if [ $# -eq 0 ]; then
+                group_debug summary
+            else
+                group_debug "$@"
+            fi
+            return $?
+            ;;
+    esac
+
+    local group="$1"
+    shift
+    case "$group" in
+        audio) group_audio "$@" ;;
+        bluetooth|bt) group_bluetooth "$@" ;;
+        wifi) group_wifi "$@" ;;
+        capture|screenshot) group_capture "$@" ;;
+        toggle) group_toggle "$@" ;;
+        theme) group_theme "$@" ;;
+        wallpaper|wallpapers|wp) group_wallpaper "$@" ;;
+        update|ota) group_update "$@" ;;
+        power) group_power "$@" ;;
+        privacy) group_privacy "$@" ;;
+        debug) group_debug "$@" ;;
+        *) err "unknown group: $group (see: rhythm --help)"; return 1 ;;
+    esac
+}
+
+main "$@"

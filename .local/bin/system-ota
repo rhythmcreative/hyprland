@@ -447,6 +447,12 @@ cmd_update() {
         done
     fi
 
+    # Step 2b: Run pending dotfiles migrations (idempotent)
+    echo "Running pending migrations..."
+    if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
+        RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1 || echo "Warning: some migrations reported issues."
+    fi
+
     # Step 3: Pacman packages if requested
     if [ "$system_packages" = "true" ]; then
         echo "[3/4] Updating system packages with pacman..."

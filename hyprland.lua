@@ -54,6 +54,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher &")
     hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
+    hl.exec_cmd("~/.local/bin/toggle-touchpad --restore")
 end)
 
 -- Environment variables
@@ -359,3 +360,8 @@ hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh
 
 -- GROUP 6: panic/boss key (instant privacy screen, toggle to restore)
 hl.bind(mainMod .. " + Escape", hl.dsp.exec_cmd("~/.local/bin/panic-mode"))
+
+-- Omarchy-style toggles (Do Not Disturb + touchpad)
+hl.bind(mainMod .. " + CONTROL + D", hl.dsp.exec_cmd("~/.local/bin/toggle-dnd"), { locked = true })
+hl.bind(mainMod .. " + CONTROL + T", hl.dsp.exec_cmd("~/.local/bin/toggle-touchpad"), { locked = true })
+hl.bind("XF86TouchpadToggle", hl.dsp.exec_cmd("~/.local/bin/toggle-touchpad"), { locked = true })

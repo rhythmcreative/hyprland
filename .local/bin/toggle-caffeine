@@ -1,14 +1,9 @@
 #!/bin/bash
-# toggle-caffeine: idle inhibitor for the Dynamic Island "Awake mode".
-#
-# The inhibitor is implemented by SIGSTOP/SIGCONT on hypridle. Hyprland spawns a
-# new hypridle every time the config is loaded, and that fresh process is not
-# stopped, so the inhibitor silently dies after a while. A small keeper loop
-# re-applies the stop for as long as the state file exists.
+# toggle-caffeine: persistent idle/sleep inhibitor for the Dynamic Island.
 
 STATE_FILE="/tmp/caffeine-active"
-KEEPER_PID_FILE="/tmp/caffeine-keeper.pid"
 ACTION="${1:-toggle}"
+SERVICE="rhythm-caffeine.service"
 
 stop_hypridle() {
     pkill -STOP -x hypridle 2>/dev/null || true
@@ -18,36 +13,22 @@ cont_hypridle() {
     pkill -CONT -x hypridle 2>/dev/null || true
 }
 
-stop_keeper() {
-    if [ -f "$KEEPER_PID_FILE" ]; then
-        local pid
-        pid=$(cat "$KEEPER_PID_FILE" 2>/dev/null)
-        [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
-        rm -f "$KEEPER_PID_FILE"
-    fi
-}
-
-start_keeper() {
-    stop_keeper
-    nohup bash -c '
-        while [ -f /tmp/caffeine-active ]; do
-            pkill -STOP -x hypridle 2>/dev/null || true
-            sleep 2
-        done
-    ' >/dev/null 2>&1 &
-    echo $! > "$KEEPER_PID_FILE"
-}
-
 enable() {
     touch "$STATE_FILE"
     stop_hypridle
-    start_keeper
+    if ! systemctl --user start "$SERVICE"; then
+        rm -f "$STATE_FILE"
+        cont_hypridle
+        notify-send "Awake Mode" "Could not start the idle inhibitor service." 2>/dev/null || true
+        echo "error"
+        return 1
+    fi
     echo "on"
 }
 
 disable() {
     rm -f "$STATE_FILE"
-    stop_keeper
+    systemctl --user stop "$SERVICE" 2>/dev/null || true
     cont_hypridle
     echo "off"
 }
@@ -55,6 +36,9 @@ disable() {
 case "$ACTION" in
     status)
         if [ -f "$STATE_FILE" ]; then
+            # Recover the supervised inhibitor if it was interrupted.
+            systemctl --user is-active --quiet "$SERVICE" || systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
+            stop_hypridle
             echo "on"
         else
             echo "off"

@@ -660,6 +660,7 @@ step_software() {
         imagemagick
         mpv
         mpvpaper
+        syncplay
         htop
         btop
         fastfetch

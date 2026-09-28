@@ -1,0 +1,29 @@
+#!/bin/bash
+# privacy-status - Fast mic/camera state probe for the Dynamic Island.
+# Outputs JSON: {"mic": true/false, "cam": true/false}
+# Same detection as privacy-shield-daemon, single-shot, no notifications.
+mic=false
+cam=false
+
+if command -v pactl >/dev/null 2>&1; then
+    if pactl list sources 2>/dev/null | awk '
+        /^Source #/ { name=""; state="" }
+        /^\tName: / { name=$2 }
+        /^\tState: / { state=$2 }
+        state == "RUNNING" && name != "" && name !~ /\.monitor$/ { found=1 }
+        END { exit !found }
+    '; then
+        mic=true
+    fi
+fi
+
+for dev in /dev/video*; do
+    [ -e "$dev" ] || continue
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -s "$dev" 2>/dev/null && { cam=true; break; }
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -t "$dev" >/dev/null 2>&1 && { cam=true; break; }
+    fi
+done
+
+printf '{"mic": %s, "cam": %s}\n' "$mic" "$cam"

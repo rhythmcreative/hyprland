@@ -120,6 +120,7 @@ ShellRoot {
     property bool caffeineEnabled: false
     property bool powerSaverEnabled: false
     property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
+    property var privacyState: ({ mic: false, cam: false })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
     property bool wifiScanning: false
     property bool btScanning: false
@@ -661,6 +662,28 @@ ShellRoot {
     }
 
     Process {
+        id: privacyStatusProc
+        command: ["bash", "-c", "$HOME/.local/bin/privacy-status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.privacyState = JSON.parse(text.trim())
+                } catch(e) {}
+            }
+        }
+    }
+
+    Timer {
+        id: privacyPollTimer
+        interval: 2000
+        running: true
+        repeat: true
+        onTriggered: {
+            privacyStatusProc.running = true
+        }
+    }
+
+    Process {
         id: sysStatsProc
         command: ["bash", "-c", "$HOME/.local/bin/notch-sys-stats"]
         stdout: StdioCollector {
@@ -960,6 +983,41 @@ ShellRoot {
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                             maximumLineCount: 1
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    // Privacy indicator in collapsed pill (mic green, camera orange)
+                    Row {
+                        visible: root.privacyState.mic || root.privacyState.cam
+                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: root.privacyState.cam ? "#FFA726" : "#66BB6A"
+                            anchors.verticalCenter: parent.verticalCenter
+                            SequentialAnimation on opacity {
+                                running: root.privacyState.mic || root.privacyState.cam
+                                loops: Animation.Infinite
+                                NumberAnimation { to: 0.3; duration: 600 }
+                                NumberAnimation { to: 1.0; duration: 600 }
+                            }
+                        }
+
+                        Text {
+                            text: root.privacyState.cam ? "󰄀" : "󰍬"
+                            color: root.privacyState.cam ? "#FFA726" : "#66BB6A"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
                         }
 

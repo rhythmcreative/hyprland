@@ -114,13 +114,11 @@ fi
     nm-applet --indicator >/dev/null 2>&1 &
 ) &
 
-# 6b. Asegurar rust-dock activo y recargar colores (SIGWINCH determinista + inotify)
+# 6b. Asegurar rust-dock activo
 echo "  • rust-dock..."
 if ! pgrep -x rust-dock >/dev/null 2>&1; then
     "$HOME/.local/bin/rust-dock-launcher" &
-    sleep 1
 fi
-pkill -SIGWINCH -x rust-dock 2>/dev/null || true
 
 # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
 pkill -x waybar_auto_hi 2>/dev/null || true

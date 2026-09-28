@@ -1146,6 +1146,7 @@ MONCONF
     systemctl --user enable wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
 
     # Enable system-level power-profiles-daemon (required by auto-power-profile)
@@ -1351,6 +1352,7 @@ step_update() {
     systemctl --user enable --now wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
+    systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
     systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
     step_ok "Services reloaded."

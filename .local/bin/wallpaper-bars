@@ -7,18 +7,70 @@
 # Shared by every wallpaper entry point so all of them animate the same way:
 # the island and the dock slide away, the wallpaper changes, they come back.
 
+get_focused_monitor() {
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null \
+        | head -n1
+}
+
+monitor="${2:-}"
+if [ -z "$monitor" ]; then
+    if [ "${1:-}" = "show" ] && [ -s /tmp/wallpaper-bars-monitor ]; then
+        monitor=$(cat /tmp/wallpaper-bars-monitor)
+    else
+        monitor=$(get_focused_monitor)
+    fi
+fi
+[ -n "$monitor" ] && [ "$monitor" != "null" ] || monitor="all"
+
+waybar_pids_for_monitor() {
+    local pid cmd
+    while read -r pid; do
+        [ -n "$pid" ] || continue
+        cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+        case "$cmd" in
+            *"config-$monitor "*|*"config-$monitor"|*"--config $HOME/.config/waybar/config-$monitor"*)
+                echo "$pid"
+                ;;
+        esac
+    done < <(pgrep -x waybar 2>/dev/null || true)
+}
+
+dock_pids_for_monitor() {
+    local pid cmd
+    while read -r pid; do
+        [ -n "$pid" ] || continue
+        cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+        case "$cmd" in
+            *" -o $monitor"|*" -o $monitor "*) echo "$pid" ;;
+        esac
+    done < <(pgrep -x rust-dock 2>/dev/null || true)
+}
+
 case "${1:-}" in
     hide)
+        [ "$monitor" = "all" ] || echo "$monitor" > /tmp/wallpaper-bars-monitor
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-            --any-display call island hide all >/dev/null 2>&1 || true
-        pkill -SIGUSR1 waybar >/dev/null 2>&1 || true
-        pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
+            --any-display call island hide "$monitor" >/dev/null 2>&1 || true
+        if [ "$monitor" = "all" ]; then
+            pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || true
+            pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
+        else
+            while read -r pid; do [ -n "$pid" ] && kill -USR1 "$pid" 2>/dev/null || true; done < <(waybar_pids_for_monitor)
+            while read -r pid; do [ -n "$pid" ] && kill -USR1 "$pid" 2>/dev/null || true; done < <(dock_pids_for_monitor)
+        fi
         ;;
     show)
-        pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
-        pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true
+        if [ "$monitor" = "all" ]; then
+            pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+            pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true
+        else
+            while read -r pid; do [ -n "$pid" ] && kill -USR2 "$pid" 2>/dev/null || true; done < <(waybar_pids_for_monitor)
+            while read -r pid; do [ -n "$pid" ] && kill -USR2 "$pid" 2>/dev/null || true; done < <(dock_pids_for_monitor)
+        fi
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-            --any-display call island reveal all >/dev/null 2>&1 || true
+            --any-display call island reveal "$monitor" >/dev/null 2>&1 || true
+        rm -f /tmp/wallpaper-bars-monitor
         ;;
     *)
         echo "Usage: wallpaper-bars hide|show" >&2

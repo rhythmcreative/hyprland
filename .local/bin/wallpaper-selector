@@ -23,35 +23,28 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
 fi
 
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+
+# Pantalla activa: las barras se ocultan solo en la pantalla enfocada, igual que
+# hacen los menus de red, para que el resto de pantallas no se queden a medias.
+get_active_monitor() {
+    local mon
+    mon=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)
+    [ -n "$mon" ] && [ "$mon" != "null" ] && echo "$mon" && return
+    echo ""
+}
+ISLAND_TARGET="$(get_active_monitor)"
+[ -n "$ISLAND_TARGET" ] || ISLAND_TARGET="all"
 PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
 ROFI_THEME="$HOME/.config/rofi/wallpaper-select-pywal.rasi"
 
-# Visibility tracking
-_RUST_DOCK_WAS_VISIBLE=false
-_QUICKSHELL_WAS_VISIBLE=false
-_WAYBAR_WAS_VISIBLE=false
-
+# Hide/reveal only the active monitor's bars. wallpaper-bars targets the
+# matching Waybar config, rust-dock -o output, and Quickshell screen.
 hide_all_bars() {
-    if pgrep -x waybar >/dev/null 2>&1; then
-        _WAYBAR_WAS_VISIBLE=true
-        pkill -SIGUSR1 waybar 2>/dev/null &
-    fi
-    if pgrep -x rust-dock >/dev/null 2>&1; then
-        _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 -x rust-dock 2>/dev/null &
-    fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
-        _QUICKSHELL_WAS_VISIBLE=true
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide all >/dev/null 2>&1 &
-    fi
-    wait
+    "$HOME/.local/bin/wallpaper-bars" hide "$ISLAND_TARGET"
 }
 
 show_all_bars() {
-    [ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-    [ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 -x rust-dock 2>/dev/null &
-    [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal all >/dev/null 2>&1 &
-    wait
+    "$HOME/.local/bin/wallpaper-bars" show "$ISLAND_TARGET"
 }
 
 cleanup() {
@@ -118,6 +111,9 @@ if [[ ! -f "$selected_path" ]]; then
 fi
 
 # 4. APLICACIÓN CON ANIMACIÓN SINCRONIZADA
+# The selector hid this monitor while Rofi was open. Restore it first because
+# the transition helper uses SIGUSR1 (toggle) to start its own hide animation.
+show_all_bars
 "$HOME/.local/bin/sync-wallpaper-animation" "$selected_path"
 
 # 5. Generar thumbnails faltantes (mantenimiento en background)

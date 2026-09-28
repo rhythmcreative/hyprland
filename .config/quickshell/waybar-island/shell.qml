@@ -2328,6 +2328,7 @@ ShellRoot {
                                     }
                                 }
                             }
+                        }
 
                         // Sliders Card (Material 3 Pill Sliders: Volume & Brightness)
                         ColumnLayout {

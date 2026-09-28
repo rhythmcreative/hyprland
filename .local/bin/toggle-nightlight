@@ -140,6 +140,10 @@ case "$ACTION" in
                 SCHEDULE_START="$start_time"
                 SCHEDULE_END="$end_time"
                 save_settings
+                # La unidad la despliega el instalador en ~/.config/systemd/user;
+                # tras un install recien hecho el gestor de usuario todavia no la
+                # conoce, asi que recargar antes de arrancarla.
+                systemctl --user daemon-reload >/dev/null 2>&1 || true
                 if ! systemctl --user start rhythm-nightlight-schedule.service; then
                     SCHEDULE="off"
                     save_settings

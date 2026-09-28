@@ -619,6 +619,7 @@ ShellRoot {
                 const panel = root.panelForScreen(root.wifiConnectScreen)
                 if (panel) {
                     if (result && result.status === "ok") {
+                        panel.clearWifiPassword()
                         panel.wifiConnectState = "connected"
                         panel.wifiConnectMessage = "Connected to " + root.wifiConnectSsid + "."
                     } else {
@@ -936,6 +937,10 @@ ShellRoot {
             property string wifiConnectState: "idle"
             property string wifiConnectMessage: ""
             property bool wifiPasswordVisible: false
+            function clearWifiPassword() {
+                wifiPasswordVisible = false
+                wifiPassInput.text = ""
+            }
             Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
             Component.onCompleted: root.registerIslandPanel(modelData.name, islandWin)
@@ -3165,7 +3170,7 @@ ShellRoot {
                         // Inline Wi-Fi password and connection status card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: islandWin.wifiConnectState === "idle" ? 48 : 70
+                            height: islandWin.wifiConnectState === "idle" ? 48 : 84
                             radius: 12
                             color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
                             border.color: islandWin.wifiConnectState === "error" ? "#ef5350" : root.colAccent
@@ -3223,7 +3228,7 @@ ShellRoot {
                                         }
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: islandWin.wifiConnectState !== "connecting"
+                                            enabled: islandWin.wifiConnectState !== "connecting" && islandWin.wifiConnectState !== "connected"
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: islandWin.wifiPasswordVisible = !islandWin.wifiPasswordVisible
                                         }
@@ -3292,6 +3297,8 @@ ShellRoot {
                                            islandWin.wifiConnectState === "connected" ? "#80d890" : root.colAccent
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 9
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
                                     elide: Text.ElideRight
                                 }
                             }

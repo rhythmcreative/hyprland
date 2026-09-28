@@ -16,15 +16,31 @@ if [ -z "$XR_OUT" ]; then
     exit 0
 fi
 
-# Detectar monitores conectados
-CONNECTED=$(printf '%s\n' "$XR_OUT" | awk '/\yconnected\y/ && !/disconnected/ { print $1 }')
+# Detect outputs that are connected AND expose at least one usable mode.
+# Some hybrid-GPU setups report phantom outputs as connected but with no modes
+# (e.g. DP-1-0 on the SDDM Xorg seat). Passing those to xrandr --auto makes the
+# entire multi-output command fail and can leave the greeter without a display.
+CONNECTED=$(printf '%s\n' "$XR_OUT" | awk '
+    function flush_output() {
+        if (name != "" && has_mode) print name
+    }
+    $2 == "connected" {
+        flush_output()
+        name = $1
+        has_mode = ($0 ~ /[0-9]+x[0-9]+/)
+        next
+    }
+    name != "" && /^[[:space:]]+[0-9]+x[0-9]+/ { has_mode = 1; next }
+    name != "" && !/^[[:space:]]/ { flush_output(); name = ""; has_mode = 0 }
+    END { flush_output() }
+')
 if [ -z "$CONNECTED" ]; then
     xrandr --auto 2>/dev/null || true
     exit 0
 fi
 
-EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)')
-INTERNAL=$(printf '%s\n' "$CONNECTED" | grep -E '^(eDP|LVDS)')
+EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)' || true)
+INTERNAL=$(printf '%s\n' "$CONNECTED" | grep -E '^(eDP|LVDS)' || true)
 
 get_width() {
     printf '%s\n' "$XR_OUT" | awk -v m="$1" '

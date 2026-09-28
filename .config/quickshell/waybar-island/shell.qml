@@ -136,6 +136,176 @@ ShellRoot {
     property string selectedWifiSsid: ""
     property bool showUnnamedBtDevices: false
     property var monitorList: []
+    property string monSelected: ""
+    property var monStaged: ({})
+    property bool monDirty: false
+    property int monMapKey: 0
+    function monGet(n) {
+        for (var i = 0; i < root.monitorList.length; i++)
+            if (root.monitorList[i].name === n) return root.monitorList[i]
+        return null
+    }
+    function monDesc(n) {
+        var m = root.monGet(n)
+        return m ? (m.desc + "  \u2022  " + m.width + "x" + m.height + "@" + m.refresh + "Hz") : ""
+    }
+    function monActual(n, k) {
+        var m = root.monGet(n)
+        if (!m) return ""
+        if (k === "x") return m.x
+        if (k === "y") return m.y
+        if (k === "res") return m.width + "x" + m.height
+        if (k === "hz") return m.refresh
+        if (k === "scale") return m.scale
+        if (k === "transform") return m.transform
+        if (k === "mirror") return (m.mirrorOf === "none" || !m.mirrorOf) ? "" : m.mirrorOf
+        if (k === "active") return !m.disabled
+        if (k === "vrr") return !!m.vrr
+        if (k === "dpms") return m.dpms !== false
+        return ""
+    }
+    function monEff(n, k) {
+        var st = root.monStaged[n]
+        if (st !== undefined && st[k] !== undefined) return st[k]
+        return root.monActual(n, k)
+    }
+    function monTouchStaged() {
+        var n = 0
+        for (var k in root.monStaged) { for (var f in root.monStaged[k]) n++ }
+        root.monDirty = n > 0
+    }
+    function monSetStage(n, k, v) {
+        var cur = root.monStaged[n] || {}
+        var act = root.monActual(n, k)
+        if (v === act) { delete cur[k] } else { cur[k] = v }
+        var all = Object.assign({}, root.monStaged)
+        if (Object.keys(cur).length === 0) { delete all[n] } else { all[n] = cur }
+        root.monStaged = all
+        root.monTouchStaged()
+    }
+    function monNudge(n, axis, d) {
+        root.monSetStage(n, axis, root.monEff(n, axis) + d)
+    }
+    function monResList(n) {
+        var m = root.monGet(n)
+        if (!m) return []
+        var out = []
+        for (var i = 0; i < m.modes.length; i++) {
+            var r = m.modes[i].split("@")[0]
+            if (out.indexOf(r) === -1) out.push(r)
+        }
+        return out
+    }
+    function monHzList(n, res) {
+        var m = root.monGet(n)
+        if (!m) return []
+        var out = []
+        for (var i = 0; i < m.modes.length; i++) {
+            var p = m.modes[i].split("@")
+            if (p[0] === res) {
+                var h = String(parseInt(p[1]))
+                if (out.indexOf(h) === -1) out.push(h)
+            }
+        }
+        return out
+    }
+    function monMirrorOpts(n) {
+        var out = [""]
+        for (var i = 0; i < root.monitorList.length; i++)
+            if (root.monitorList[i].name !== n) out.push(root.monitorList[i].name)
+        return out
+    }
+    function monApply() {
+        for (var n in root.monStaged) {
+            var st = root.monStaged[n]
+            var m = root.monGet(n)
+            if (!m) continue
+            if (st.active === false) {
+                var enabled = 0
+                for (var i = 0; i < root.monitorList.length; i++) {
+                    var o = root.monitorList[i]
+                    var off = (root.monStaged[o.name] && root.monStaged[o.name].active === false) || (o.disabled && !(root.monStaged[o.name] && root.monStaged[o.name].active === true))
+                    if (!off) enabled++
+                }
+                if (enabled < 1) {
+                    root.runCmd("notify-send -a Displays 'Cannot disable the last active display'")
+                    continue
+                }
+                root.runCmd("$HOME/.local/bin/notch-monitor-helper toggle " + n)
+                continue
+            }
+            var res = st.res !== undefined ? st.res : (m.width + "x" + m.height)
+            var hz = st.hz !== undefined ? st.hz : m.refresh
+            var xx = st.x !== undefined ? st.x : m.x
+            var yy = st.y !== undefined ? st.y : m.y
+            var sc = st.scale !== undefined ? st.scale : m.scale
+            var tr = st.transform !== undefined ? st.transform : m.transform
+            var mir = st.mirror !== undefined ? st.mirror : ((m.mirrorOf === "none" || !m.mirrorOf) ? "none" : m.mirrorOf)
+            root.runCmd("$HOME/.local/bin/notch-monitor-helper configure '" + n + "' '" + res + "@" + hz + "' '" + xx + "x" + yy + "' " + sc + " " + tr + " " + mir)
+        }
+        root.monStaged = ({})
+        root.monDirty = false
+        root.monMapKey++
+        monRefreshTimer.restart()
+    }
+    function monRevert() {
+        root.monStaged = ({})
+        root.monDirty = false
+        root.monMapKey++
+        monListProc.running = true
+    }
+    function monToggleVrr(n) {
+        var on = !root.monEff(n, "vrr")
+        root.runCmd("$HOME/.local/bin/notch-monitor-helper vrr " + n + " " + (on ? "on" : "off"))
+        monRefreshTimer.restart()
+    }
+    function monToggleDpms(n) {
+        var on = !root.monEff(n, "dpms")
+        root.runCmd("$HOME/.local/bin/notch-monitor-helper dpms " + n + " " + (on ? "on" : "off"))
+        monRefreshTimer.restart()
+    }
+    function monLayoutFromCanvas(n, cx, cy, cw, ch) {
+        var m = root.monGet(n)
+        if (!m) return null
+        var b = m.bounds || {minx: 0, miny: 0, bw: 1, bh: 1}
+        return {
+            x: Math.round(b.minx + ((cx - 10) / Math.max(1, cw - 20)) * (b.bw || 1)),
+            y: Math.round(b.miny + ((cy - 10) / Math.max(1, ch - 20)) * (b.bh || 1))
+        }
+    }
+    function monDragMove(n, cx, cy, cw, ch) {
+        var p = root.monLayoutFromCanvas(n, cx, cy, cw, ch)
+        if (!p) return
+        var cur = Object.assign({}, root.monStaged[n] || {})
+        cur.x = p.x
+        cur.y = p.y
+        var all = Object.assign({}, root.monStaged)
+        all[n] = cur
+        root.monStaged = all
+    }
+    function monSnapDrop(n, cx, cy, cw, ch) {
+        var p = root.monLayoutFromCanvas(n, cx, cy, cw, ch)
+        if (!p) return
+        var m = root.monGet(n)
+        var nx = Math.round(p.x / 10) * 10
+        var ny = Math.round(p.y / 10) * 10
+        for (var i = 0; i < root.monitorList.length; i++) {
+            var o = root.monitorList[i]
+            if (o.name === n) continue
+            var ox = (root.monStaged[o.name] && root.monStaged[o.name].x !== undefined) ? root.monStaged[o.name].x : o.x
+            var oy = (root.monStaged[o.name] && root.monStaged[o.name].y !== undefined) ? root.monStaged[o.name].y : o.y
+            if (Math.abs(nx - ox) < 40) nx = ox
+            if (Math.abs(nx + m.width - ox) < 40) nx = ox - m.width
+            if (Math.abs(nx - (ox + o.width)) < 40) nx = ox + o.width
+            if (Math.abs(ny - oy) < 40) ny = oy
+            if (Math.abs(ny + m.height - oy) < 40) ny = oy - m.height
+            if (Math.abs(ny - (oy + o.height)) < 40) ny = oy + o.height
+        }
+        if (nx < 0) nx = 0
+        if (ny < 0) ny = 0
+        root.monSetStage(n, "x", nx)
+        root.monSetStage(n, "y", ny)
+    }
     readonly property var namedBtDevices: (root.btDevices || []).filter(d => d.has_name || d.paired || d.connected)
     readonly property var unnamedBtDevices: (root.btDevices || []).filter(d => !d.has_name && !d.paired && !d.connected)
 
@@ -786,6 +956,17 @@ ShellRoot {
             onStreamFinished: {
                 try {
                     root.monitorList = JSON.parse(text.trim())
+                    var ok = false
+                    for (var i = 0; i < root.monitorList.length; i++)
+                        if (root.monitorList[i].name === root.monSelected) ok = true
+                    if (!ok) {
+                        root.monSelected = ""
+                        for (var j = 0; j < root.monitorList.length; j++)
+                            if (root.monitorList[j].focused) root.monSelected = root.monitorList[j].name
+                        if (root.monSelected === "" && root.monitorList.length > 0)
+                            root.monSelected = root.monitorList[0].name
+                    }
+                    root.monMapKey++
                 } catch(e) {
                     root.monitorList = []
                 }
@@ -4737,8 +4918,9 @@ ShellRoot {
                             }
                         }
 
-                        // Visual map of the desktop
+                        // Visual map of the desktop (drag monitors to arrange)
                         Rectangle {
+                            id: monMapCanvas
                             Layout.fillWidth: true
                             Layout.preferredHeight: 110
                             radius: 14
@@ -4751,14 +4933,16 @@ ShellRoot {
                                 model: root.monitorList
                                 delegate: Rectangle {
                                     property var mon: modelData
-                                    x: 10 + mon.map.x * (parent.width - 20)
-                                    y: 10 + mon.map.y * (parent.height - 20)
+                                    property bool isSel: root.monSelected === mon.name
+                                    property bool hasDrop: root.monStaged[mon.name] !== undefined && root.monStaged[mon.name].x !== undefined
+                                    x: hasDrop ? 10 + ((root.monStaged[mon.name].x - mon.bounds.minx) / Math.max(1, mon.bounds.bw)) * (parent.width - 20) : 10 + mon.map.x * (parent.width - 20)
+                                    y: hasDrop ? 10 + (((root.monStaged[mon.name].y !== undefined ? root.monStaged[mon.name].y : mon.y) - mon.bounds.miny) / Math.max(1, mon.bounds.bh)) * (parent.height - 20) : 10 + mon.map.y * (parent.height - 20)
                                     width: Math.max(46, mon.map.w * (parent.width - 20))
                                     height: Math.max(30, mon.map.h * (parent.height - 20))
                                     radius: 6
-                                    color: mon.focused ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                                    border.color: mon.focused ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.2)
-                                    border.width: mon.focused ? 2 : 1
+                                    color: isSel ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.35) : (mon.focused ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08))
+                                    border.color: (isSel || mon.focused) ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.2)
+                                    border.width: (isSel || mon.focused) ? 2 : 1
                                     Text {
                                         anchors.centerIn: parent
                                         text: mon.name
@@ -4766,6 +4950,36 @@ ShellRoot {
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 9
                                         font.weight: Font.Bold
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        property real pressCX: 0
+                                        property real pressCY: 0
+                                        property real startRX: 0
+                                        property real startRY: 0
+                                        property bool dragging: false
+                                        onPressed: function(mouse) {
+                                            root.monSelected = mon.name
+                                            var pt = parent.mapToItem(monMapCanvas, mouse.x, mouse.y)
+                                            pressCX = pt.x
+                                            pressCY = pt.y
+                                            startRX = parent.x
+                                            startRY = parent.y
+                                            dragging = false
+                                        }
+                                        onPositionChanged: function(mouse) {
+                                            var pt = parent.mapToItem(monMapCanvas, mouse.x, mouse.y)
+                                            if (!dragging && Math.abs(pt.x - pressCX) + Math.abs(pt.y - pressCY) > 5) dragging = true
+                                            if (!dragging) return
+                                            root.monDragMove(mon.name, startRX + (pt.x - pressCX), startRY + (pt.y - pressCY), monMapCanvas.width, monMapCanvas.height)
+                                        }
+                                        onReleased: function(mouse) {
+                                            if (!dragging) return
+                                            dragging = false
+                                            var pt = parent.mapToItem(monMapCanvas, mouse.x, mouse.y)
+                                            root.monSnapDrop(mon.name, startRX + (pt.x - pressCX), startRY + (pt.y - pressCY), monMapCanvas.width, monMapCanvas.height)
+                                        }
                                     }
                                 }
                             }
@@ -4780,181 +4994,439 @@ ShellRoot {
                             }
                         }
 
-                        // Monitor cards
-                        Flickable {
+                        // Monitor selector (tap a card to edit it below)
+                        RowLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 250
-                            contentWidth: width
-                            contentHeight: monColumn.implicitHeight
-                            clip: true
+                            spacing: 8
+                            Repeater {
+                                model: root.monitorList
+                                delegate: Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 40
+                                    radius: 10
+                                    color: root.monSelected === modelData.name ? root.colAccent : root.colSurface
+                                    border.color: modelData.focused ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                    border.width: 1
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 8
+                                        Text {
+                                            text: "󰍹"
+                                            color: root.monSelected === modelData.name ? root.colBg : root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                        }
+                                        Text {
+                                            text: modelData.name
+                                            color: root.monSelected === modelData.name ? root.colBg : root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Rectangle {
+                                            width: 8; height: 8; radius: 4
+                                            color: modelData.disabled ? "#ff5555" : "#66BB6A"
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.monSelected = modelData.name
+                                    }
+                                }
+                            }
+                        }
+
+                        // nwg-style form for the selected display
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: monFormCol.implicitHeight + 20
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+                            visible: root.monGet(root.monSelected) !== null
 
                             ColumnLayout {
-                                id: monColumn
-                                width: parent.width
+                                id: monFormCol
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 10
                                 spacing: 8
 
-                                Repeater {
-                                    model: root.monitorList
-                                    delegate: Rectangle {
-                                        property var mon: modelData
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    ColumnLayout {
+                                        spacing: 0
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: monCardCol.implicitHeight + 20
-                                        radius: 14
-                                        color: mon.focused ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.12) : root.colSurface
-                                        border.color: mon.focused ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                                        border.width: 1
+                                        Text {
+                                            text: root.monSelected
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 13
+                                            font.weight: Font.Bold
+                                        }
+                                        Text {
+                                            text: root.monDesc(root.monSelected)
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                    Text {
+                                        text: "Active"
+                                        color: root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 10
+                                    }
+                                    Rectangle {
+                                        width: 44; height: 24; radius: 12
+                                        color: root.monEff(root.monSelected, "active") ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                                        Rectangle {
+                                            width: 18; height: 18; radius: 9
+                                            color: "white"
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            x: root.monEff(root.monSelected, "active") ? parent.width - width - 3 : 3
+                                            Behavior on x { NumberAnimation { duration: 150 } }
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.monSetStage(root.monSelected, "active", !root.monEff(root.monSelected, "active"))
+                                        }
+                                    }
+                                }
 
-                                        ColumnLayout {
-                                            id: monCardCol
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            anchors.margins: 10
-                                            spacing: 8
+                                Text {
+                                    text: "Mode (resolution)"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                    font.weight: Font.Bold
+                                }
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: root.monResList(root.monSelected)
+                                        delegate: Rectangle {
+                                            property string resStr: modelData
+                                            height: 28
+                                            width: resLbl.implicitWidth + 18
+                                            radius: 8
+                                            color: root.monEff(root.monSelected, "res") === resStr ? root.colAccent : root.colSurface
+                                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                            border.width: 1
+                                            Text {
+                                                id: resLbl
+                                                anchors.centerIn: parent
+                                                text: resStr
+                                                color: root.monEff(root.monSelected, "res") === resStr ? root.colBg : root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.monSetStage(root.monSelected, "res", resStr)
+                                            }
+                                        }
+                                    }
+                                }
 
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 8
-                                                Text {
-                                                    text: "󰍹"
-                                                    color: root.colAccent
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 16
-                                                }
-                                                ColumnLayout {
-                                                    spacing: 0
-                                                    Layout.fillWidth: true
+                                Text {
+                                    text: "Refresh rate"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                    font.weight: Font.Bold
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: root.monHzList(root.monSelected, root.monEff(root.monSelected, "res"))
+                                        delegate: Rectangle {
+                                            property string hzStr: modelData
+                                            height: 28; width: 64; radius: 8
+                                            color: String(root.monEff(root.monSelected, "hz")) === hzStr ? root.colAccent : root.colSurface
+                                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                            border.width: 1
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: hzStr
+                                                color: String(root.monEff(root.monSelected, "hz")) === hzStr ? root.colBg : root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.monSetStage(root.monSelected, "hz", parseInt(hzStr))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+                                    ColumnLayout {
+                                        spacing: 4
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "Position X / Y"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                        }
+                                        RowLayout {
+                                            spacing: 6
+                                            Repeater {
+                                                model: ["x", "y"]
+                                                delegate: RowLayout {
+                                                    property string axis: modelData
+                                                    spacing: 4
+                                                    Rectangle {
+                                                        width: 24; height: 24; radius: 6
+                                                        color: root.colSurface
+                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                                                        border.width: 1
+                                                        Text { anchors.centerIn: parent; text: "−"; color: root.colFg; font.pixelSize: 13 }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.monNudge(root.monSelected, axis, -10) }
+                                                    }
                                                     Text {
-                                                        text: mon.name + (mon.focused ? "  •  Focused" : "")
+                                                        text: axis.toUpperCase() + ": " + root.monEff(root.monSelected, axis)
                                                         color: root.colFg
                                                         font.family: "JetBrainsMono Nerd Font"
-                                                        font.pixelSize: 12
-                                                        font.weight: Font.Bold
-                                                        elide: Text.ElideRight
-                                                        Layout.fillWidth: true
-                                                    }
-                                                    Text {
-                                                        text: mon.desc + "  •  " + mon.width + "x" + mon.height + "@" + mon.refresh + "Hz  •  scale " + mon.scale
-                                                        color: root.colMuted
-                                                        font.family: "JetBrainsMono Nerd Font"
-                                                        font.pixelSize: 9
-                                                        elide: Text.ElideRight
-                                                        Layout.fillWidth: true
-                                                    }
-                                                }
-                                                Rectangle {
-                                                    height: 26; width: 72; radius: 8
-                                                    color: mon.disabled ? root.colAccent : Qt.rgba(255, 85, 85, 0.2)
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: mon.disabled ? "Enable" : "Disable"
-                                                        color: mon.disabled ? root.colBg : "#ff5555"
-                                                        font.family: "JetBrainsMono Nerd Font"
                                                         font.pixelSize: 10
-                                                        font.weight: Font.Bold
+                                                        Layout.preferredWidth: 76
+                                                        horizontalAlignment: Text.AlignHCenter
                                                     }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            root.runCmd("$HOME/.local/bin/notch-monitor-helper toggle " + mon.name)
-                                                            monRefreshTimer.restart()
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            Flow {
-                                                Layout.fillWidth: true
-                                                spacing: 6
-                                                Repeater {
-                                                    model: mon.modes
-                                                    delegate: Rectangle {
-                                                        property string modeStr: modelData
-                                                        property bool modeActive: (mon.width + "x" + mon.height + "@" + mon.refresh) === (modeStr.split("@")[0] + "@" + parseInt(modeStr.split("@")[1]))
-                                                        height: 28
-                                                        width: modeLabel.implicitWidth + 18
-                                                        radius: 8
-                                                        color: modeActive ? root.colAccent : root.colSurface
-                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
-                                                        border.width: 1
-                                                        Text {
-                                                            id: modeLabel
-                                                            anchors.centerIn: parent
-                                                            text: modeStr.split("@")[0] + "  @" + parseInt(modeStr.split("@")[1])
-                                                            color: modeActive ? root.colBg : root.colFg
-                                                            font.family: "JetBrainsMono Nerd Font"
-                                                            font.pixelSize: 9
-                                                        }
-                                                        MouseArea {
-                                                            anchors.fill: parent
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper set '" + mon.name + "' '" + modeStr + "'")
-                                                                monRefreshTimer.restart()
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 6
-                                                Repeater {
-                                                    model: ["1", "1.25", "1.5", "2"]
-                                                    delegate: Rectangle {
-                                                        property string scaleStr: modelData
-                                                        height: 26; width: 48; radius: 8
-                                                        color: String(mon.scale) === scaleStr ? root.colAccent : root.colSurface
-                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
-                                                        border.width: 1
-                                                        Text {
-                                                            anchors.centerIn: parent
-                                                            text: scaleStr + "x"
-                                                            color: String(mon.scale) === scaleStr ? root.colBg : root.colFg
-                                                            font.family: "JetBrainsMono Nerd Font"
-                                                            font.pixelSize: 9
-                                                        }
-                                                        MouseArea {
-                                                            anchors.fill: parent
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper scale '" + mon.name + "' " + scaleStr)
-                                                                monRefreshTimer.restart()
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Item { Layout.fillWidth: true }
-                                                Repeater {
-                                                    model: ["left", "right", "above", "below"]
-                                                    delegate: Rectangle {
-                                                        property string dirStr: modelData
-                                                        height: 26; width: 62; radius: 8
+                                                    Rectangle {
+                                                        width: 24; height: 24; radius: 6
                                                         color: root.colSurface
-                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
                                                         border.width: 1
-                                                        Text {
-                                                            anchors.centerIn: parent
-                                                            text: dirStr.charAt(0).toUpperCase() + dirStr.slice(1)
-                                                            color: root.colFg
-                                                            font.family: "JetBrainsMono Nerd Font"
-                                                            font.pixelSize: 9
-                                                        }
-                                                        MouseArea {
-                                                            anchors.fill: parent
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                root.runCmd("$HOME/.local/bin/notch-monitor-helper pos '" + mon.name + "' " + dirStr)
-                                                                monRefreshTimer.restart()
-                                                            }
-                                                        }
+                                                        Text { anchors.centerIn: parent; text: "+"; color: root.colFg; font.pixelSize: 13 }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.monNudge(root.monSelected, axis, 10) }
                                                     }
                                                 }
                                             }
                                         }
                                     }
+                                    ColumnLayout {
+                                        spacing: 4
+                                        Text {
+                                            text: "Scale"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                        }
+                                        RowLayout {
+                                            spacing: 6
+                                            Repeater {
+                                                model: ["1", "1.25", "1.5", "2"]
+                                                delegate: Rectangle {
+                                                    property string scStr: modelData
+                                                    height: 26; width: 46; radius: 8
+                                                    color: String(root.monEff(root.monSelected, "scale")) === scStr ? root.colAccent : root.colSurface
+                                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                    border.width: 1
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: scStr
+                                                        color: String(root.monEff(root.monSelected, "scale")) === scStr ? root.colBg : root.colFg
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 9
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.monSetStage(root.monSelected, "scale", parseFloat(scStr))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+                                    ColumnLayout {
+                                        spacing: 4
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "Transform"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                        }
+                                        RowLayout {
+                                            spacing: 6
+                                            Repeater {
+                                                model: [0, 1, 2, 3]
+                                                delegate: Rectangle {
+                                                    property int trVal: modelData
+                                                    property var trNames: ["Normal", "90°", "180°", "270°"]
+                                                    height: 26; width: 62; radius: 8
+                                                    color: root.monEff(root.monSelected, "transform") === trVal ? root.colAccent : root.colSurface
+                                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                    border.width: 1
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: trNames[trVal]
+                                                        color: root.monEff(root.monSelected, "transform") === trVal ? root.colBg : root.colFg
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 9
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.monSetStage(root.monSelected, "transform", trVal)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        spacing: 4
+                                        Text {
+                                            text: "Mirror of"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                        }
+                                        RowLayout {
+                                            spacing: 6
+                                            Repeater {
+                                                model: root.monMirrorOpts(root.monSelected)
+                                                delegate: Rectangle {
+                                                    property string mirVal: modelData
+                                                    height: 26; width: mirLbl.implicitWidth + 18; radius: 8
+                                                    color: root.monEff(root.monSelected, "mirror") === mirVal ? root.colAccent : root.colSurface
+                                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                    border.width: 1
+                                                    Text {
+                                                        id: mirLbl
+                                                        anchors.centerIn: parent
+                                                        text: mirVal === "" ? "None" : mirVal
+                                                        color: root.monEff(root.monSelected, "mirror") === mirVal ? root.colBg : root.colFg
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 9
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.monSetStage(root.monSelected, "mirror", mirVal)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+                                    RowLayout {
+                                        spacing: 8
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "Adaptive sync"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                        }
+                                        Rectangle {
+                                            width: 40; height: 22; radius: 11
+                                            color: root.monEff(root.monSelected, "vrr") ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                                            Rectangle {
+                                                width: 16; height: 16; radius: 8
+                                                color: "white"
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                x: root.monEff(root.monSelected, "vrr") ? parent.width - width - 3 : 3
+                                                Behavior on x { NumberAnimation { duration: 150 } }
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.monToggleVrr(root.monSelected)
+                                            }
+                                        }
+                                    }
+                                    RowLayout {
+                                        spacing: 8
+                                        Text {
+                                            text: "Power (DPMS)"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                        }
+                                        Rectangle {
+                                            width: 40; height: 22; radius: 11
+                                            color: root.monEff(root.monSelected, "dpms") ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                                            Rectangle {
+                                                width: 16; height: 16; radius: 8
+                                                color: "white"
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                x: root.monEff(root.monSelected, "dpms") ? parent.width - width - 3 : 3
+                                                Behavior on x { NumberAnimation { duration: 150 } }
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.monToggleDpms(root.monSelected)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Apply / Revert bar (staged changes like nwg-displays)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            visible: root.monDirty
+                            Rectangle {
+                                Layout.fillWidth: true; height: 40; radius: 20
+                                color: monApplyHover.containsMouse ? Qt.lighter(root.colAccent, 1.15) : root.colAccent
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text { text: "✓"; color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Apply"; color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                MouseArea {
+                                    id: monApplyHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.monApply()
+                                }
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true; height: 40; radius: 20
+                                color: root.colSurface
+                                border.color: root.colBorder; border.width: 1
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text { text: "✕"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Revert"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.monRevert()
                                 }
                             }
                         }

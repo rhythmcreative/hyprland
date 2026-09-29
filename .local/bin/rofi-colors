@@ -1,18 +1,18 @@
 #!/bin/bash
-# Escribe los dos fondos de rofi con el color actual de pywal:
+# Escribe el fondo macizo del modo ahorro de energia con el color actual de
+# pywal:  colors-powersave.rasi
 #
-#   colors-window.rasi     translucido comun (80% / 67%)
-#   colors-powersave.rasi  macizo, para el modo ahorro
+# Sin ahorro este script no hace falta: rofi-themed no aplica nada y cada menu
+# conserva el fondo translucent que trae su propio tema, que es el de siempre y
+# el que deja ver el desenfoque del compositor. Solo el ahorro lo cambia, y para
+# eso hace falta este unico fichero.
 #
-# Vive aqui y no dentro de sync-rofi-pywal ni de toggle-powersave porque los dos
-# necesitan escribirlo y cada uno por su cuenta dejaba al otro desfasado. Con el
-# ahorro activo y un fondo nuevo, el macizo se quedaba con el color del fondo
-# anterior; medido: fondo #884400 y colors-powersave.rasi seguia en #151921.
-#
-# rofi-themed lo llama en cada apertura de menu, asi que da igual que script
-# cambiase el fondo y da igual si el ahorro estaba activo: el color es el que
-# sea. Solo escribe si el contenido cambia, asi que no toca el disco si no hace
-# falta.
+# Vive aqui y no dentro de toggle-powersave porque al cambiar el fondo con el
+# ahorro activo el macizo se quedaba con el color del fondo anterior; medido:
+# fondo #884400 y colors-powersave.rasi seguia en #151921. rofi-themed lo llama
+# en cada apertura de menu, asi que da igual que script cambiase el fondo.
+# Solo escribe si el contenido cambia, asi que no toca el disco si no hace falta.
+
 set -u
 
 dir="$HOME/.config/rofi"
@@ -24,23 +24,17 @@ if [[ ! "$bg" =~ ^\#[0-9a-fA-F]{6,8}$ ]]; then
     bg="#101516"
 fi
 
-translucido="* { bgcolor: ${bg}CC; background-trans: ${bg}CC; background-alt-trans: ${bg}AA; }
-window { background-color: ${bg}CC; }
-mainbox { background-color: ${bg}AA; }"
-
 macizo="* { bgcolor: ${bg}; background-trans: ${bg}; background-alt-trans: ${bg}; }
 window { background-color: ${bg}; }
 mainbox { background-color: ${bg}; }"
 
 escribir() {
-    # $1 ruta, $2 contenido. Los dos ficheros no llevan comentarios: su
-    # contenido se pasa a rofi con -theme-str y un comentario se interpretaria
-    # como si fuera tema.
+    # $1 ruta, $2 contenido. El fichero no lleva comentarios: su contenido se
+    # pasa a rofi con -theme-str y un comentario se interpretaria como tema.
     if [ -f "$1" ] && [ "$(cat "$1" 2>/dev/null)" = "$2" ]; then
         return 0
     fi
     printf '%s\n' "$2" > "$1" 2>/dev/null || true
 }
 
-escribir "$dir/colors-window.rasi" "$translucido"
 escribir "$dir/colors-powersave.rasi" "$macizo"

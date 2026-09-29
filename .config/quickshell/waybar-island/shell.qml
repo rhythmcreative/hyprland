@@ -1197,7 +1197,6 @@ ShellRoot {
                     otaChangelogProc.running = true
                 }
                 if (islandWin.controlSubView === 5) nightLightSettingsProc.running = true
-                if (islandWin.controlSubView === 7) clipListProc.running = true
             }
 
             Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: islandWin.tabFade = 1.0 }
@@ -1880,7 +1879,7 @@ ShellRoot {
 
                         // Tab 0: Control & Sistema
                         Rectangle {
-                            width: 200
+                            width: 140
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 0 ? root.colAccent : root.colSurface
@@ -1896,7 +1895,7 @@ ShellRoot {
                                     font.pixelSize: 14
                                 }
                                 Text {
-                                    text: "Control & System"
+                                    text: "Control"
                                     color: islandWin.currentTab === 0 ? root.colBg : root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -1916,7 +1915,7 @@ ShellRoot {
 
                         // Tab 1: Hyprland Settings
                         Rectangle {
-                            width: 200
+                            width: 140
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 1 ? root.colAccent : root.colSurface
@@ -1932,7 +1931,7 @@ ShellRoot {
                                     font.pixelSize: 14
                                 }
                                 Text {
-                                    text: "Hyprland Settings"
+                                    text: "Hyprland"
                                     color: islandWin.currentTab === 1 ? root.colBg : root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -1952,7 +1951,7 @@ ShellRoot {
 
                         // Tab 2: Alerts
                         Rectangle {
-                            width: 150
+                            width: 140
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 2 ? root.colAccent : root.colSurface
@@ -1999,6 +1998,43 @@ ShellRoot {
                                     islandWin.currentTab = 2
                                     islandWin.controlSubView = 0
                                     root.notifUnread = 0
+                                }
+                            }
+                        }
+
+                        // Tab 3: Portapapeles (opcion aparte de Alertas, arriba)
+                        Rectangle {
+                            width: 140
+                            height: 34
+                            radius: 17
+                            color: islandWin.currentTab === 3 ? root.colAccent : root.colSurface
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                Text {
+                                    text: "󰅍"
+                                    color: islandWin.currentTab === 3 ? root.colBg : root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                Text {
+                                    text: "Clipboard"
+                                    color: islandWin.currentTab === 3 ? root.colBg : root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Bold
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    islandWin.currentTab = 3
+                                    islandWin.controlSubView = 0
+                                    clipListProc.running = true
                                 }
                             }
                         }
@@ -4617,33 +4653,6 @@ ShellRoot {
                             Layout.alignment: Qt.AlignHCenter
                         }
 
-                        // Tarjeta Portapapeles: arriba de los ajustes, abre la lista.
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 64
-                            radius: 14
-                            color: root.colSurface
-                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                            border.width: 1
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 12
-                                Text { text: "󰅍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 22 }
-                                ColumnLayout {
-                                    spacing: 2
-                                    Layout.fillWidth: true
-                                    Text { text: "Portapapeles"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
-                                    Text { text: root.clipList.length > 0 ? (root.clipList.length + " guardados · " + root.clipList[0].text) : "Vacio: copia algo primero"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
-                                }
-                                Text { text: "›"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18; font.weight: Font.Bold }
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: { islandWin.controlSubView = 7; clipListProc.running = true }
-                            }
-                        }
 
                         // 4 Hyprland Toggles (2x2 Grid)
                         GridLayout {
@@ -5187,6 +5196,120 @@ ShellRoot {
 
 
 
+                    // ── TAB 3: PORTAPAPELES ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        visible: islandWin.currentTab === 3
+                        opacity: islandWin.tabFade
+
+                        // ── PORTAPAPELES: opcion aparte dentro de Alertas ──
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Text {
+                                text: "Clipboard"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+                            Rectangle {
+                                height: 20
+                                width: 34
+                                radius: 10
+                                color: root.clipList.length > 0 ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.clipList.length > 9 ? "9+" : root.clipList.length
+                                    color: root.clipList.length > 0 ? root.colBg : root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Rectangle {
+                                height: 32
+                                width: 110
+                                radius: 16
+                                color: root.colSurface
+                                border.color: root.colBorder
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Borrar todo"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.runCmd("$HOME/.local/bin/clipboard-history wipe"); clipListProc.running = true }
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: root.clipList
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                height: 44
+                                radius: 12
+                                color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
+                                border.width: 1
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    Text {
+                                        text: "󰅍"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 16
+                                    }
+                                    Text {
+                                        text: modelData.text
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Rectangle {
+                                        height: 26
+                                        width: 30
+                                        radius: 8
+                                        color: Qt.rgba(255, 85, 85, 0.2)
+                                        Text { anchors.centerIn: parent; text: "󰆴"; color: "#ff5555"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: { root.runCmd("cliphist delete <<< " + modelData.id); clipListProc.running = true }
+                                        }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy") }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: root.clipList.length === 0
+                            text: "Vacio: copia algo primero"
+                            color: root.colMuted
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                    }
+
                     // ── 5. SUBSECCIÓN: NIGHT LIGHT ──
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -5503,93 +5626,6 @@ ShellRoot {
                             }
                         }
                     }
-                    // ── SUBSECCIÓN: PORTAPAPELES ──
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-                        visible: islandWin.controlSubView === 7
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-                            Rectangle {
-                                width: 100; height: 32; radius: 16
-                                color: root.colSurface; border.color: root.colBorder; border.width: 1
-                                RowLayout {
-                                    anchors.centerIn: parent; spacing: 6
-                                    Text { text: "󰁍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
-                                    Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
-                                }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: islandWin.controlSubView = 0 }
-                            }
-                            Text { text: "Portapapeles"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13; font.weight: Font.Bold }
-                            Item { Layout.fillWidth: true }
-                            Rectangle {
-                                width: 110; height: 32; radius: 16
-                                color: root.colSurface; border.color: root.colBorder; border.width: 1
-                                Text { anchors.centerIn: parent; text: "Borrar todo"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
-                                MouseArea {
-                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.runCmd("$HOME/.local/bin/clipboard-history wipe"); clipListProc.running = true }
-                                }
-                            }
-                        }
-
-                        Repeater {
-                            model: root.clipList
-                            delegate: Rectangle {
-                                Layout.fillWidth: true
-                                height: 44
-                                radius: 12
-                                color: root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
-                                border.width: 1
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 10
-                                    Text {
-                                        text: "󰅍"
-                                        color: root.colAccent
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 16
-                                    }
-                                    Text {
-                                        text: modelData.text
-                                        color: root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                    Rectangle {
-                                        width: 30; height: 26; radius: 8
-                                        color: Qt.rgba(255, 85, 85, 0.2)
-                                        Text { anchors.centerIn: parent; text: "󰆴"; color: "#ff5555"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
-                                        MouseArea {
-                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                            onClicked: { root.runCmd("cliphist delete <<< " + modelData.id); clipListProc.running = true }
-                                        }
-                                    }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy") }
-                                }
-                            }
-                        }
-
-                        Text {
-                            visible: root.clipList.length === 0
-                            text: "Vacio: copia algo primero"
-                            color: root.colMuted
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            Layout.alignment: Qt.AlignHCenter
-                        }
-                    }
-
-
                     // ── SUBSECCIÓN: BLUETOOTH PAIRING REQUEST ──
                     // BlueZ entrega la solicitud al agente registrado, no al
                     // servidor de notificaciones: bluetooth-pair-agent la

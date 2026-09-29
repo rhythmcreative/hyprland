@@ -3210,7 +3210,15 @@ ShellRoot {
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Random"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("sleep 0.6 && ~/.local/bin/wallpaper-changer-with-waybar-sync") }
+                                // Este boton pone "Random" y un icono de barajado, pero llamaba a
+                                // wallpaper-changer-with-waybar-sync, que abre un selector para elegir
+                                // a mano. No es lo aleatorio, y por eso pulsarlo no hacia lo que el
+                                // nombre promete. wallpaper-random es el que corresponde y ya
+                                // funcionaba.
+                                //
+                                // Sin el "sleep 0.6" del boton de galeria: aqui no se abre ningun
+                                // menu de rofi al que haya que robarle el foco.
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("~/.local/bin/wallpaper-random") }
                             }
 
                             Rectangle {

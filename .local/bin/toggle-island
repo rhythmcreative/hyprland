@@ -18,9 +18,20 @@ fi
 
 export QT_QPA_PLATFORM="wayland"
 
-if ! pgrep -f "quickshell -p .*waybar-island" >/dev/null; then
-    quickshell -p "$HOME/.config/quickshell/waybar-island/shell.qml" >/dev/null 2>&1 &
-    sleep 0.5
+# Arrancar SIEMPRE por la unidad de systemd, para que haya un solo dueño y su
+# Restart=always pueda supervisionarla.
+#
+# Antes se lanzaba quickshell directamente desde aqui, y entonces la isla quedaba
+# fuera de la unidad: si se caia, nadie la volvia a levantar. Ese proceso se
+# quedaba huerfano, con PPID 1 y en el cgroup session-5.scope, mientras
+# waybar-island.service seguia inactive (dead) sin una sola entrada en el journal.
+if ! "$HOME/.local/bin/island-running" >/dev/null; then
+    if systemctl --user is-enabled waybar-island.service >/dev/null 2>&1; then
+        systemctl --user start waybar-island.service >/dev/null 2>&1
+    else
+        "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 &
+    fi
+    sleep 0.8
 fi
 
 ACTIVE_MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)

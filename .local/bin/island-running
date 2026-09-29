@@ -1,0 +1,26 @@
+#!/bin/bash
+# Dice si la isla (waybar-island) esta corriendo. Uso:  island-running && ...
+#
+# Existe por el mismo motivo que se reescribio dock-procs: `pgrep -f` compara la
+# LINEA DE COMANDOS entera, no el nombre del proceso. Con
+# `pgrep -f "quickshell -p .*waybar-island"` cualquier cosa que mencionara esa
+# ruta —una terminal, un script, el propio agente— contaba como isla corriendo.
+# Eso hacia que modern-pywal-sync creyera que podia mandar un IPC, que
+# settings-menu no la arrancara, y que show-hotkeys la ocultara sin existir.
+#
+# Y con `pkill -f` el fallo era peor: quickshell-island llego a matar el shell
+# que lo invocaba por ese mismo motivo.
+#
+# pgrep -x compara solo el nombre del ejecutable, asi que ningun bash puede
+# coincidir. Luego se filtra por linea de comandos para no contar otros
+# quickshell que no sean la isla.
+
+for _pid in $(pgrep -x quickshell 2>/dev/null); do
+    if tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null | grep -q "waybar-island"; then
+        echo yes
+        exit 0
+    fi
+done
+
+echo no
+exit 1

@@ -139,7 +139,7 @@ pkill -SIGUSR2 -x waybar 2>/dev/null || true
 
 # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
 echo "  • Dynamic Island (Quickshell)..."
-if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
     quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
 else
     "$HOME/.local/bin/quickshell-island" &

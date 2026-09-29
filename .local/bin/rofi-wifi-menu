@@ -27,7 +27,7 @@ fi
 # Prefer opening on the focused monitor's Dynamic Island
 ACTIVE_MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)
 [ -n "$ACTIVE_MON" ] || ACTIVE_MON="eDP-1"
-if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
     quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call settings open_wifi "$ACTIVE_MON" >/dev/null 2>&1
     exit 0
 fi
@@ -56,7 +56,7 @@ if [ -z "$_BARS_HIDDEN" ] && [ -n "$ACTIVE_MON" ]; then
         export _RUST_DOCK_WAS_VISIBLE=true
         pkill -SIGUSR1 -x rust-dock 2>/dev/null &
     fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+    if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         export _QUICKSHELL_WAS_VISIBLE=true
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$ACTIVE_MON" >/dev/null 2>&1 &
     fi

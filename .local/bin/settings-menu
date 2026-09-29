@@ -23,7 +23,7 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
 fi
 
 # Asegurar que Quickshell este activo
-if ! pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
     quickshell -p "$HOME/.config/quickshell/waybar-island/shell.qml" &
     sleep 0.5
 fi

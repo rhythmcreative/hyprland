@@ -124,4 +124,4 @@ yay-debug
 zapzap
 mpv
 mpvpaper
-gnome-network-displays socat hyprsunset libnotify inotify-tools psmisc
+gnome-network-displays socat hyprsunset libnotify inotify-tools psmisc python-dbus python-gobject wf-recorder nm-connection-editor mkinitcpio

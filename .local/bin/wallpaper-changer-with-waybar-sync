@@ -186,7 +186,11 @@ selected=$(rofi -dmenu -i \
     -p "Wallpaper + Waybar Sync" \
     -show-icons \
     -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi" \
-    -theme "$HOME/.config/rofi/colors-window.rasi" \
+    -theme-str "$(cat "$HOME/.config/rofi/colors-window.rasi")" \
+    $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+        && printf -- '-theme-str "%s"' "$(cat "$HOME/.config/rofi/colors-powersave.rasi")" ) \
+    $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+        && printf -- '-theme %s' "$HOME/.config/rofi/colors-powersave.rasi" ) \
     < "$TEMP_FILE")
 
 # Si no se selecciónó nada, mostrar waybar y salir

@@ -268,29 +268,19 @@ echo "Tema principal actualizado: $ROFI_THEME_FILE"
 
 # Fondo translucido COMUN de los menus de rofi.
 #
-# Antes cada menu traia su propia opacidad y ninguna coincidia: el principal al
-# 60%, el selector de fondos al 40% —el mas transparente, y el que mas se
-# notaba— y el de apagado al 75%. Con power saver encima, dos de los tres
-# cambiaban y el tercero se quedaba como estaba.
+# Un solo fichero para los cuatro menus y un solo valor de opacidad. Antes cada
+# uno traia el suyo y ninguno coincidia: el principal al 60%, el selector de
+# fondos al 40% y el de apagado al 75%. Con el ahorro activo se anade encima
+# colors-powersave.rasi, que es macizo.
 #
-# Aqui hay una sola opacidad para todos, con el color real de pywal y el mismo
-# alfa CC (80%) que ya usaba el override de power saver: se ve el escritorio
-# detras, pero el texto se lee bien. Se escribe siempre, no solo con el ahorro
-# activo, asi que cambiar de fondo lo mantiene al dia.
+# El fichero se pasa con -theme-str, NO con un segundo -theme: rofi ignora un
+# segundo fichero de tema y se queda con el primero, mientras que -theme-str si
+# pisa. Por eso el contenido va en un fichero aparte y no con comentarios dentro.
 BG_PALETTE=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
 [ -n "$BG_PALETTE" ] || BG_PALETTE="#101516"
 cat > "$HOME/.config/rofi/colors-window.rasi" << EOF
-/* Fondo translucido comun. Lo escribe sync-rofi-pywal, no editar a mano. */
-* {
-    bgcolor: ${BG_PALETTE}CC;
-    background-trans: ${BG_PALETTE}CC;
-    background-alt-trans: ${BG_PALETTE}AA;
-}
-window {
-    background-color: ${BG_PALETTE}CC;
-}
-mainbox {
-    background-color: ${BG_PALETTE}AA;
-}
+* { bgcolor: ${BG_PALETTE}CC; background-trans: ${BG_PALETTE}CC; background-alt-trans: ${BG_PALETTE}AA; }
+window { background-color: ${BG_PALETTE}CC; }
+mainbox { background-color: ${BG_PALETTE}AA; }
 EOF
-echo "Fondo comun de rofi actualizado: $HOME/.config/rofi/colors-window.rasi"
+echo "Fondo comun de rofi actualizado"

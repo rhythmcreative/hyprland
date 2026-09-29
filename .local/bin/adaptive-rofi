@@ -71,16 +71,17 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-# Fondo translucido comun, el mismo para todos los menus y siempre. Rofi fusiona
-# varios -theme y el ultimo gana, asi que se anade al final y pisa al tema
-# pywal sin tocar nada mas. Lo escribe sync-rofi-pywal al cambiar de fondo.
-#
-# Antes cada menu traia su propia opacidad —60%, 40%, 75%, ninguna igual— y el
-# power saver anadia una cuarta copia por menu. Con esto hay una sola.
-if [ -f "$HOME/.config/rofi/colors-window.rasi" ]; then
-    ROFI_ARGS="$ROFI_ARGS -theme $HOME/.config/rofi/colors-window.rasi"
+# El fondo translucido comun, el mismo para todos los menus. Rofi fusiona
+# varios -theme y el ultimo gana, asi que el orden importa: primero este, y
+# encima el macizo del power saver cuando esta activo.
+COMMON_THEME="$HOME/.config/rofi/colors-window.rasi"
+SAVER_THEME="$HOME/.config/rofi/colors-powersave.rasi"
+if [ -f "$COMMON_THEME" ]; then
+    ROFI_ARGS="$ROFI_ARGS -theme $COMMON_THEME"
 fi
-
+if [ -f "/tmp/powersave-active" ] && [ -f "$SAVER_THEME" ]; then
+    ROFI_ARGS="$ROFI_ARGS -theme $SAVER_THEME"
+fi
 _rust_was_visible=false
 _waybar_was_visible=false
 _qs_was_visible=false

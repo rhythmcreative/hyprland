@@ -47,13 +47,27 @@ enable_powersave() {
     done
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
-    # 5. El fondo translucido de rofi ya no se toca aqui.
+    # 5. Los menus de rofi se vuelven macizos.
     #
-    # Antes este script escribia colors-powersave.rasi y ademas cada menu lleva-
-    # ba su propia copia del -theme-str, tres en total. Con una sola opacidad
-    # comun el ahorro de energia no cambia: aqui lo que se quita es el blur, que
-    # es cosa de Hyprland, no del panel. El fondo lo escribe sync-rofi-pywal en
-    # ~/.config/rofi/colors-window.rasi y lo anaden los cuatro menus.
+    # Esto es lo que hace el ahorro de verdad aqui: sin translucidez no hay nada
+    # que componer detras del panel. El color va SIN alfa a proposito — con
+    # alfa seguia siendo un panel y solo se notaba menos; lo que se quiere es que
+    # el fondo no se vea.
+    #
+    # El override se aplica DETRAS de colors-window.rasi, que es el translucido
+    # comun. Rofi fusiona varios -theme y gana el ultimo, asi que el orden es lo
+    # que decide si esto se ve o no.
+    local bg_c
+    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+    [ -n "$bg_c" ] || bg_c="#101516"
+    for rdir in "$HOME/.config/rofi"; do
+        [ -d "$rdir" ] || continue
+        cat > "$rdir/colors-powersave.rasi" << EOF
+* { bgcolor: ${bg_c}; background-trans: ${bg_c}; background-alt-trans: ${bg_c}; }
+window { background-color: ${bg_c}; }
+mainbox { background-color: ${bg_c}; }
+EOF
+    done
 
     # 6. Desktop Notification
     notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true

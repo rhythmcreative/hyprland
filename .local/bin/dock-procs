@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Señalar las instancias REALES de rust-dock o waybar de un monitor.
+#
+# POR QUÉ EXISTE ESTO
+# -------------------
+# La forma que se venía usando era:
+#
+#     pkill -SIGUSR1 -f "rust-dock.*-o +$mon"
+#
+# `-f` compara la LÍNEA DE COMANDOS COMPLETA, así que ese patrón no distingue un
+# dock de una terminal, un editor o un script que simplemente mencionen
+# "rust-dock" y "-o". Y pkill no perdona: le manda la señal a todo lo que
+# case. La acción por defecto de SIGUSR1 es terminar el proceso, así que
+# cualquier proceso ajeno que tuviera esas dos palabras en una orden se
+# llevaba por delante. Está observado: una shell de pruebas murió por escribir
+# un comando con "rust-dock" y "-o" dentro.
+#
+# Aquí se compara el EJECUTABLE de cada proceso, que es lo único que no se puede
+# falsificar por accident, y la señal se manda solo a los que de verdad son.
+# Es el mismo criterio que ya aplica el lanzador de Waybar, por el mismo motivo.
+#
+# Uso:
+#     dock-procs rust-dock signal  <monitor> <senal>   # p.ej. USR1
+#     dock-procs rust-dock on     <monitor>
+#     dock-procs waybar    signal <monitor> <senal>
+#     dock-procs <tipo> list                          # un monitor por linea
+
+set -u
+
+kind="${1:-}"
+action="${2:-}"
+target="${3:-}"
+signal="${4:-}"
+
+[ -n "$kind" ] && [ -n "$action" ] || {
+    echo "uso: dock-procs <rust-dock|waybar> <signal|on> <monitor> [senal]" >&2
+    exit 2
+}
+
+# Ejecutables aceptados para cada tipo. Se comparan contra /proc/<pid>/exe, que
+# es el binario de verdad, no una cadena de la linea de comandos.
+case "$kind" in
+    rust-dock) want_exe='*/rust-dock' ;;
+    waybar)    want_exe='*/waybar' ;;
+    *) echo "tipo desconocido: $kind" >&2; exit 2 ;;
+esac
+
+# Campo con el que se identifica el monitor en cada tipo.
+#   rust-dock -> -o <monitor>
+#   waybar    -> -c <ruta>/config-<monitor>
+monitor_of() {
+    local pid="$1" cmd
+    cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
+    case "$kind" in
+        rust-dock) printf '%s' "$cmd" | grep -oP -- '-o\s+\K\S+' || true ;;
+        waybar)    printf '%s' "$cmd" | grep -oP -- '-c\s+\S*config-\K\S+' || true ;;
+    esac
+}
+
+pids_of_kind() {
+    local entry pid exe
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+        case "$exe" in
+            $want_exe) echo "$pid" ;;
+        esac
+    done
+}
+
+matched=0
+for pid in $(pids_of_kind); do
+    out=$(monitor_of "$pid")
+    if [ "$action" = "list" ]; then
+        # Un monitor por linea, para poder compararlo con la lista de Hyprland.
+        [ -n "$out" ] && printf '%s\n' "$out"
+        matched=1
+        continue
+    fi
+    [ -n "$target" ] && [ "$out" != "$target" ] && continue
+    matched=1
+    case "$action" in
+        signal) kill "-$signal" "$pid" 2>/dev/null || true ;;
+        on)     : ;;
+    esac
+done
+
+[ "$matched" = "1" ] && exit 0 || exit 1

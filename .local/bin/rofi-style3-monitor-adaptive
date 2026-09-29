@@ -127,14 +127,14 @@ hide_active_bars() {
     if [ -n "$mon" ]; then
         if pgrep -f "waybar.*config-$mon" >/dev/null 2>&1; then
             _WAYBAR_WAS_VISIBLE=true
-            pkill -SIGUSR1 -f "waybar.*config-$mon" 2>/dev/null &
+            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR1 &
         elif pgrep -x waybar >/dev/null 2>&1; then
             _WAYBAR_WAS_VISIBLE=true
             pkill -SIGUSR1 waybar 2>/dev/null &
         fi
         if pgrep -f "rust-dock.*-o +$mon" >/dev/null 2>&1; then
             _RUST_DOCK_WAS_VISIBLE=true
-            pkill -SIGUSR1 -f "rust-dock.*-o +$mon" 2>/dev/null &
+            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR1 &
         elif pgrep -x rust-dock >/dev/null 2>&1; then
             _RUST_DOCK_WAS_VISIBLE=true
             pkill -SIGUSR1 -x rust-dock 2>/dev/null &
@@ -152,11 +152,11 @@ show_active_bars() {
     log_debug "Restaurando barras en monitor activo: $mon..."
     if [ -n "$mon" ]; then
         if [ "$_WAYBAR_WAS_VISIBLE" = true ]; then
-            pkill -SIGUSR2 -f "waybar.*config-$mon" 2>/dev/null &
+            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR2 &
             pkill -SIGUSR2 -x waybar 2>/dev/null &
         fi
         if [ "$_RUST_DOCK_WAS_VISIBLE" = true ]; then
-            pkill -SIGUSR2 -f "rust-dock.*-o +$mon" 2>/dev/null &
+            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 &
             pkill -SIGUSR2 -x rust-dock 2>/dev/null &
         fi
         if [ "$_QUICKSHELL_WAS_VISIBLE" = true ]; then

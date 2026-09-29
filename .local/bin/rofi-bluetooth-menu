@@ -44,14 +44,14 @@ if [ -z "$_BARS_HIDDEN" ] && [ -n "$ACTIVE_MON" ]; then
     export _BARS_HIDDEN=1
     if pgrep -f "waybar.*config-$ACTIVE_MON" >/dev/null 2>&1; then
         export _WAYBAR_WAS_VISIBLE=true
-        pkill -SIGUSR1 -f "waybar.*config-$ACTIVE_MON" 2>/dev/null &
+        "$HOME/.local/bin/dock-procs" waybar signal "$ACTIVE_MON" USR1 &
     elif pgrep -x waybar >/dev/null 2>&1; then
         export _WAYBAR_WAS_VISIBLE=true
         pkill -SIGUSR1 waybar 2>/dev/null &
     fi
     if pgrep -f "rust-dock.*-o +$ACTIVE_MON" >/dev/null 2>&1; then
         export _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 -f "rust-dock.*-o +$ACTIVE_MON" 2>/dev/null &
+        "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MON" USR1 &
     elif pgrep -x rust-dock >/dev/null 2>&1; then
         export _RUST_DOCK_WAS_VISIBLE=true
         pkill -SIGUSR1 -x rust-dock 2>/dev/null &
@@ -64,8 +64,8 @@ fi
 
 restore_bars() {
     if [ -n "$ACTIVE_MON" ]; then
-        [ "$_WAYBAR_WAS_VISIBLE" = "true" ] && { pkill -SIGUSR2 -f "waybar.*config-$ACTIVE_MON" 2>/dev/null & pkill -SIGUSR2 -x waybar 2>/dev/null & }
-        [ "$_RUST_DOCK_WAS_VISIBLE" = "true" ] && { pkill -SIGUSR2 -f "rust-dock.*-o +$ACTIVE_MON" 2>/dev/null & pkill -SIGUSR2 -x rust-dock 2>/dev/null & }
+        [ "$_WAYBAR_WAS_VISIBLE" = "true" ] && { "$HOME/.local/bin/dock-procs" waybar signal "$ACTIVE_MON" USR2 & pkill -SIGUSR2 -x waybar 2>/dev/null & }
+        [ "$_RUST_DOCK_WAS_VISIBLE" = "true" ] && { "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MON" USR2 & pkill -SIGUSR2 -x rust-dock 2>/dev/null & }
         [ "$_QUICKSHELL_WAS_VISIBLE" = "true" ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$ACTIVE_MON" >/dev/null 2>&1 &
     fi
 }

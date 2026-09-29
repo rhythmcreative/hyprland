@@ -58,16 +58,53 @@ if [ -z "$monitors" ] || [ "$monitors" = "null" ]; then
     exit 0
 fi
 
+# PIDs de las INSTANCIAS REALES de rust-dock, y nada mas.
+#
+# Antes se buscaban con `pgrep -f "rust-dock.*-o"`, que compara la LINEA DE
+# COMANDOS completa: no distingue un dock de una terminal, un editor o un script
+# que simplemente mencionen esas dos palabras. Y como despues se hacía `kill`
+# sobre lo que salia, cualquier proceso asi se llevaba por delante. Se ha visto
+# matar shells y scripts que solo tenían "rust-dock" y "-o" en un comando.
+#
+# Aquí se compara el EJECUTABLE, y el `-o` se lee de la linea de comandos de ese
+# proceso concreto. Es el mismo criterio que el lanzador de Waybar, por el mismo
+# motivo escrito allí.
+dock_pids() {
+    local entry pid exe
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+        case "$exe" in
+            */rust-dock) ;;
+            *) continue ;;
+        esac
+        echo "$pid"
+    done
+}
+
+# Monitor (-o) en el que está un dock concreto.
+dock_output() {
+    tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -oP -- '-o\s+\K\S+' || true
+}
+
+dock_on_monitor() {
+    local pid
+    for pid in $(dock_pids); do
+        [ "$(dock_output "$pid")" = "$1" ] && return 0
+    done
+    return 1
+}
+
 # Si hay alguna instancia genérica sin -o, terminarla para usar instancias por monitor
-if pgrep -x rust-dock >/dev/null 2>&1 && ! pgrep -f "rust-dock -o" >/dev/null 2>&1; then
+# pgrep -x compara el NOMBRE del proceso, así que aquí no hay riesgo: solo docks.
+if pgrep -x rust-dock >/dev/null 2>&1 && ! dock_pids | grep -q .; then
     pkill -x rust-dock 2>/dev/null
     sleep 0.2
 fi
 
 # Cerrar instancias asociadas a monitores desconectados
-for pid in $(pgrep -f "rust-dock.*-o" 2>/dev/null); do
-    cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null)
-    out=$(echo "$cmd" | grep -oP -- '-o\s+\K\S+')
+for pid in $(dock_pids); do
+    out=$(dock_output "$pid")
     if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
         kill "$pid" 2>/dev/null
     fi
@@ -75,9 +112,7 @@ done
 
 while IFS= read -r monitor; do
     [ -z "$monitor" ] && continue
-    if ! pgrep -f "rust-dock.*-o +$monitor(\$| )" >/dev/null 2>&1; then
-        "$RUST_DOCK" -o "$monitor" >/dev/null 2>&1 &
-    fi
+    dock_on_monitor "$monitor" || "$RUST_DOCK" -o "$monitor" >/dev/null 2>&1 &
 done <<< "$monitors"
 
 echo "visible" > "$STATE_FILE" 2>/dev/null || true

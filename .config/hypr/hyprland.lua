@@ -327,7 +327,11 @@ hl.bind(mainMod .. " + ALT + Tab", hl.dsp.exec_cmd("~/.local/bin/adaptive-rofi w
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd('grim -g "$(slurp)" - | swappy -f -'))
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("hyprpicker -a"))
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))
-hl.bind("ALT + Return", hl.dsp.exec_cmd("hyprctl dispatch fullscreen 0"))
+-- `hyprctl dispatch <args>` NO funciona en esta build: hyprctl envuelve los
+-- argumentos en hl.dispatch(...) y eso no es Lua valido, asi que falla con
+-- "')' expected near". El equivalente verificado es hyprctl eval con el
+-- dispatcher de la API de lua.
+hl.bind("ALT + Return", hl.dsp.exec_cmd("hyprctl eval 'hl.dsp.window.fullscreen(0)'"))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock --immediate-render"))
 hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("~/.config/hypr/scripts/toggle_performance.sh"))
 hl.bind(mainMod .. " + BackSpace", hl.dsp.exec_cmd("~/.local/bin/powermenu-with-monitor-detection"))

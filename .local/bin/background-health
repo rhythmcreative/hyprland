@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Lista los monitores encendidos cuya superficie de fondo no se esta viendo.
+#
+#   eDP-1        (uno por linea, vacio si todo esta bien)
+#
+# El compositor pone la superficie de fondo en alfa 0 cuando un monitor se
+# enciende despues de haber estado apagado, o cuando se desconecta y vuelve.
+# awww sigue creyendo que tiene la imagen puesta — "awww query" la lista sin
+# problema — asi que ni awww ni el watcher se enteran: no hay evento dpms en el
+# socket2 de Hyprland, solo monitoradded, monitorremoved, focusedmon,
+# openwindow, closewindow, configreloaded y screencast.
+#
+# Medido: DP-6 con la superficie en a:0 y sin fondo visible, y forzando el
+# pintado pasa a a:1.
+#
+# La unica senal fiable es el alfa de la capa, asi que se cruzan las superficies
+# de awww de hyprctl layers con la posicion y el tamano de cada monitor.
+
+set -u
+
+mons=$(hyprctl monitors -j 2>/dev/null) || exit 0
+layers=$(hyprctl layers 2>/dev/null) || exit 0
+[ -n "$mons" ] && [ -n "$layers" ] || exit 0
+
+# Superficies de fondo de awww: "xywh: X Y W H, a: ALFA" por monitor, agrupadas
+# por monitor con awk. Se guardan como "X,Y WxH ALFA" para comparar.
+awk '
+  /^Monitor /            { mon = $2; sub(/:$/, "", mon) }
+  /namespace: awww-daemon/ {
+      match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+, a: [0-9]+/) {
+          det = substr($0, RSTART, RLENGTH)
+          split(det, f, /[:,]/)
+          x = f[2] + 0; y = f[3] + 0; w = f[4] + 0; h = f[5] + 0; a = f[7] + 0
+          printf "%s\t%d,%d %dx%d %d\n", mon, x, y, w, h, a
+      }
+  }
+' <<< "$layers" > /tmp/.bg-layers.$$ 2>/dev/null || { rm -f /tmp/.bg-layers.$$; exit 0; }
+
+jq -r '.[] | select(.active == true or .dpmsStatus == true) | [.name, (.x|tostring), (.y|tostring), (.width|tostring), (.height|tostring)] | @tsv' \
+    <<< "$mons" 2>/dev/null | while IFS=$'\t' read -r name x y w h; do
+        [ -n "$name" ] || continue
+        # Superficie de fondo de awww en ESTE monitor con alfa a 1
+        good=$(awk -F'\t' -v m="$name" '$1 == m {
+                        split($2, p, " "); split(p[1], c, ",")
+                        if (c[1] == x && c[2] == y && p[2] == w "x" h && $3 == 1) found = 1
+                    }
+                    END { print found + 0 }' x="$x" y="$y" w="$w" h="$h" "/tmp/.bg-layers.$$" 2>/dev/null)
+        [ "${good:-0}" = "1" ] || echo "$name"
+    done
+
+rm -f "/tmp/.bg-layers.$$"

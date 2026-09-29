@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Read Hyprland's event socket and print debounced monitor events.
+
+Why this exists instead of a `while read` line in bash
+-----------------------------------------------------
+Hyprland exposes its events on a Unix socket, and the usual shell idiom
+(`while read ... done < "$SOCKET"`) cannot work against it: opening a socket
+file with open() fails with ENXIO, because a socket node is not a regular file
+to be opened. You have to connect() to it. The monitor watcher had been
+checking that the socket existed and then reading its own stdin, so it never
+received a single event and no monitor was ever handled live.
+
+Debouncing
+----------
+One physical plug makes Hyprland emit a burst: monitoradded, monitoraddedv2,
+mode changes, and so on. Acting on each one rebuilds Waybar as many times as
+the burst lasts, so events of interest are collapsed and only the first is
+printed; the next one is released after two seconds of silence.
+
+Usage:
+    hypr-event-stream [socket-path]
+"""
+
+import os
+import socket
+import sys
+import time
+
+BURST_WINDOW = 2.0
+WANTED = ("monitoradded", "monitorremoved")
+
+
+def resolve_socket():
+    if len(sys.argv) > 1 and sys.argv[1]:
+        return sys.argv[1]
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    if not sig:
+        try:
+            subdirs = [
+                name
+                for name in os.listdir(os.path.join(runtime, "hypr"))
+                if os.path.isdir(os.path.join(runtime, "hypr", name))
+            ]
+            if subdirs:
+                sig = max(
+                    subdirs,
+                    key=lambda n: os.path.getmtime(
+                        os.path.join(runtime, "hypr", n)
+                    ),
+                )
+        except OSError:
+            return ""
+    if not sig:
+        return ""
+    return os.path.join(runtime, "hypr", sig, ".socket2.sock")
+
+
+def main():
+    path = resolve_socket()
+    if not path or not os.path.exists(path):
+        return 0
+
+    try:
+        conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        conn.connect(path)
+    except OSError as exc:
+        print("hypr-event-stream: cannot connect to %s: %s" % (path, exc),
+              file=sys.stderr)
+        return 1
+
+    # Line buffered, so the consumer reacts the moment an event lands.
+    with conn, os.fdopen(os.dup(conn.fileno()), "r", encoding="utf-8",
+                         errors="replace", buffering=1) as stream:
+        burst_until = 0.0
+        while True:
+            line = stream.readline()
+            if line == "":
+                # Hyprland closed the connection (compositor restart).
+                return 0
+
+            now = time.monotonic()
+            if now < burst_until:
+                # Still inside the burst: this is the same plug repeating.
+                continue
+            if not line.startswith(WANTED):
+                continue
+
+            print(line.strip(), flush=True)
+            burst_until = now + BURST_WINDOW
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main() or 0)
+    except KeyboardInterrupt:
+        sys.exit(0)

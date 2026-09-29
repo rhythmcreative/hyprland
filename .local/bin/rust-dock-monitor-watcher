@@ -71,10 +71,47 @@ reconcile_docks() {
 
 # Waybar no lo supervisa ningun servicio: si muere, la barra desaparece hasta
 # el proximo evento de monitor. Comprobarlo aqui lo deja solo.
+#
+# UNA BARRA POR MONITOR, no "alguna barra". Antes era `pgrep -x waybar`: con la
+# barra de la pantalla principal en pie, ese check daba el visto bueno y una
+# pantalla nueva se quedaba SIN BARRA para siempre. Pasaba al arrancar, porque
+# el dock y la barra se lanzan a la vez y el monitor externo todavia no aparece
+# en `hyprctl monitors` cuando launch.sh pregunta (por eso el log solo hacia
+# falta a eDP-1). Y no habia red de seguridad: la comprobacion periodica era
+# justo la que no se enteraba. El dock ya lo hacia bien en reconcile_docks; aqui
+# faltaba el equivalente.
+#
+# El enfriamiento evita martillear: relanzar mata TODAS las barras con pkill -9
+# y las reconstruye, asi que si algo no converge no se repite cada 15s.
+COOLDOWN_FILE="/tmp/.waybar-reconcile-cooldown"
 reconcile_waybar() {
     [ -x "$HOME/.config/waybar/launch.sh" ] || return 0
-    pgrep -x waybar >/dev/null 2>&1 && return 0
+    command -v hyprctl >/dev/null 2>&1 || return 0
+
+    local monitors
+    monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
+    [ -z "$monitors" ] && return 0
+
+    local m missing=0
+    while IFS= read -r m; do
+        [ -z "$m" ] && continue
+        # launch.sh lanza `waybar -c <dir>/config-<monitor> -s <estilo>`, asi que
+        # el output se lee del propio cmdline. El ancla evita que config-DP-1
+        # case con config-DP-11.
+        pgrep -f "waybar .*-c .*config-$m(\$| )" >/dev/null 2>&1 || { missing=1; break; }
+    done <<< "$monitors"
+
+    [ "$missing" = "0" ] && { rm -f "$COOLDOWN_FILE" 2>/dev/null; return 0; }
+
+    local now last
+    now=$(date +%s)
+    last=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+    # 90s: se autorrecupera solo, pero no se martillea.
+    [ $((now - last)) -lt 90 ] && return 0
+    printf '%s\n' "$now" > "$COOLDOWN_FILE" 2>/dev/null || true
+
     "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1 &
+    return 0
 }
 
 handle_monitor_event() {
@@ -94,10 +131,24 @@ handle_monitor_event() {
     restart_dock
 }
 
-# Auto-reconciliación inicial tras arranque para monitores con handshake retardado (ej. DisplayPort/HDMI externo)
+# Reconciliación inicial para monitores con handshake retardado (DisplayPort o
+# HDMI externo tardan segundos en aparecer en `hyprctl monitors`).
+#
+# ANTES esto era un `handle_monitor_event`, que reinicia barra y dock enteros.
+# Como el autostart de Hyprland ya habia arrancado la barra, cada arranque la
+# mataba y la reconstruia sin motivo: el tercer fogonazo de los tres que se veian
+# al iniciar sesion.
+#
+# Aqui solo se reconcilia, que ya significa "soluciona lo que falte": si cada
+# monitor tiene su barra y su dock, no se toca nada. Se repite varias veces
+# porque el monitor puede tardar en aparecer, y cada pasada sale sola si todo
+# esta bien.
 (
-    sleep 3
-    handle_monitor_event < /dev/null
+    for _ in 1 2 3 4 5 6; do
+        sleep 5
+        reconcile_docks < /dev/null
+        reconcile_waybar < /dev/null
+    done
 ) &
 
 # Reconciliación periódica: el dock y la barra siempre quedan en la pantalla
@@ -113,32 +164,27 @@ handle_monitor_event() {
 while true; do
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
-        # Hyprland emits a burst of events for a single plug (monitoradded,
-        # monitoraddedv2, mode changes, ...). Acting on each one restarts Waybar
-        # as many times as the burst is long, so swallow the rest of the burst:
-        # the next event is only accepted after two seconds of silence.
-        burst=0
-        while true; do
-            if IFS= read -r -t 2 event; then
+        # Hyprland sends its events as lines on this socket. Bash cannot read
+        # it: `open()` on a socket node returns ENXIO, so the classic
+        # `while read ... done < "$SOCKET"` never worked, and this loop used to
+        # check that the socket existed and then read stdin — which under
+        # systemd is /dev/null, so it got an instant EOF and no monitor event
+        # was ever handled. `connect()` is what works, so the stream is read by
+        # a helper that does exactly that and nothing else.
+        #
+        # The burst collapsing lives there too: one plug makes Hyprland emit
+        # several events, and rebuilding Waybar once per event is the flicker
+        # this whole arrangement was supposed to avoid.
+        STREAM="$HOME/.local/bin/hypr-event-stream"
+        if [ -x "$STREAM" ]; then
+            "$STREAM" "$SOCKET" | while IFS= read -r event; do
                 case "$event" in
                     monitoradded*|monitorremoved*)
-                        if [ "$burst" = "0" ]; then
-                            burst=1
-                            handle_monitor_event < /dev/null &
-                        fi
+                        handle_monitor_event < /dev/null &
                         ;;
                 esac
-            else
-                status=$?
-                # read returns 1 at EOF (socket closed) and >128 on timeout: only
-                # a timeout means the burst is over, an EOF must leave the loop.
-                if [ "$status" -gt 128 ]; then
-                    burst=0
-                else
-                    break
-                fi
-            fi
-        done
+            done
+        fi
     fi
     sleep 2
 done

@@ -105,10 +105,14 @@ if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
 fi
 
 # Reinicio rapido en segundo plano (SIGHUP mata a waybar: no usar)
+# --force: la paleta cambio y Waybar no relee el CSS en caliente, asi que aqui
+# si toca reconstruir aunque las barras ya esten donde deben. Sin esto el
+# sincronizador se saltaria el reinicio en el arranque y la barra saldria con
+# los colores viejos.
 (
     pkill -x waybar 2>/dev/null || true
     sleep 0.3
-    "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1
+    "$HOME/.config/waybar/launch.sh" --force >/dev/null 2>&1
     sleep 1
     pkill -x nm-applet 2>/dev/null || true
     nm-applet --indicator >/dev/null 2>&1 &

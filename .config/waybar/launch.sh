@@ -5,6 +5,26 @@ WAYBAR_DIR="$HOME/.config/waybar"
 STATE_FILE="$WAYBAR_DIR/vertical_state"
 LOG_FILE="$HOME/.cache/waybar-launch.log"
 
+# IDEMPOTENTE POR DEFECTO.
+#
+# Hay cuatro llamadores —el autostart de Hyprland, el sincronizador de pywal,
+# el vigilante de monitores y el cambio de perfil de bateria— y TODOS hacian
+# `pkill -9 waybar` y un respawn completo. Al arrancar convergian tres de ellos
+# en cuatro segundos, asi que la barra se veia desaparecer y reaparecer tres
+# veces en cada login sin que nada hubiera cambiado.
+#
+# Asi que aqui solo se reconstruye lo que de verdad no esta bien: si cada monitor
+# conectado ya tiene su barra, se sale sin tocar ninguna. Quien SI necesite
+# reconstruir (pywal, que cambia los colores, y el perfil de bateria, que cambia
+# modulos) lo pide con --force, porque en esos casos Waybar tiene que releer su
+# CSS y no lo hace en caliente.
+FORCE=0
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=1 ;;
+    esac
+done
+
 # Monitor add/remove events can arrive in bursts, and wallpaper/theme sync can
 # launch Waybar at the same time. Serialize the kill-and-spawn sequence so two
 # launchers can never leave duplicate bars on the same output. Use a mkdir lock
@@ -47,6 +67,33 @@ trap release_waybar_lock EXIT
 mkdir -p "$(dirname "$LOG_FILE")"
 
 echo "--- Launching Waybar at $(date) ---" >> "$LOG_FILE"
+
+# 0. ¿Hay algo que rehacer?
+#
+# Se resuelve el entorno y la lista de monitores ANTES de matar nada, porque
+# un `pkill -9` que despues resulta innecesario es justo el fogonazo que se ve.
+if [ "$FORCE" = "0" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    WL_DISP=$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
+    [ -n "$WL_DISP" ] && export WAYLAND_DISPLAY=$(basename "$WL_DISP")
+fi
+
+if [ "$FORCE" = "0" ] && command -v hyprctl >/dev/null 2>&1; then
+    cur_monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
+    if [ -n "$cur_monitors" ] && [ "$cur_monitors" != "null" ]; then
+        all_present=1
+        while IFS= read -r m; do
+            [ -z "$m" ] && continue
+            # Anclado para que config-DP-1 no case con config-DP-11.
+            pgrep -f "waybar .*-c .*config-$m(\$| )" >/dev/null 2>&1 || { all_present=0; break; }
+        done <<< "$cur_monitors"
+        if [ "$all_present" = "1" ]; then
+            echo "All monitors already have a bar; nothing to do." >> "$LOG_FILE"
+            release_waybar_lock
+            trap - EXIT
+            exit 0
+        fi
+    fi
+fi
 
 # 1. Kill existing waybar instances aggressively
 echo "Stopping existing waybar processes..." >> "$LOG_FILE"

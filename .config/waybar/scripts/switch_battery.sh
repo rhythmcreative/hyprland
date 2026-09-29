@@ -39,4 +39,7 @@ fi
 mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 
 # Reload Waybar
-pkill -SIGUSR2 waybar || hyprctl dispatch exec "$HOME/.config/waybar/launch.sh"
+# --force: se acaba de cambiar el modulo de bateria en el config, y Waybar no
+# relee su config en caliente. Sin --force el launcher veria una barra por
+# monitor y no reconstruiria nada, dejando el modulo viejo.
+pkill -SIGUSR2 waybar || hyprctl dispatch exec "$HOME/.config/waybar/launch.sh --force"

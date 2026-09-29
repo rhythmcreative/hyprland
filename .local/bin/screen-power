@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Apaga o enciende todas las pantallas.
+#
+# Sustituye a "hyprctl dispatch dpms off", que NO funciona en Hyprland 0.56:
+# hyprctl envuelve los argumentos del dispatcher en hl.dispatch(...), que no es
+# una llamada valida, y falla con "')' expected near 'off'". hypridle lo tenia en
+# sus tres lineas, asi que la pantalla no se apagaba nunca a los 5'30".
+#
+# Lo que si funciona es `hyprctl repl`, que ejecuta Lua de verdad. La API de lua
+# solo expone parte de los dispatchers, pero dpms esta, y para ejecutarlo hay
+# que pasarle el dispatcher a hl.dispatch(). Verificado: apagada, grim ya no
+# captura esa salida; encendida, vuelve a capturar.
+#
+# OJO con las comillas: hl.dsp.dpms() usa comillas simples, y si van dentro de
+# las comillas dobles que se pasan a hyprctl repl, $estado y $m no se expanden y
+# el compositor recibe el texto literal '$estado'. Por eso la cadena se monta
+# primero en una variable.
+#
+# Uso: screen-power on|off|toggle
+
+set -u
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="wayland-1"
+
+estado="${1:-}"
+[ -n "$estado" ] || { echo "Uso: screen-power on|off|toggle" >&2; exit 1; }
+
+FLAG="$XDG_RUNTIME_DIR/screen-power.state"
+
+case "$estado" in
+    on|off) ;;
+    toggle)
+        if [ -f "$FLAG" ] && [ "$(cat "$FLAG" 2>/dev/null)" = "off" ]; then
+            estado="on"
+        else
+            estado="off"
+        fi
+        ;;
+    *) echo "screen-power: solo on, off o toggle" >&2; exit 1 ;;
+esac
+
+command -v hyprctl >/dev/null 2>&1 || { echo "screen-power: hyprctl no esta" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "screen-power: jq no esta" >&2; exit 1; }
+
+# Los monitores se consultan una vez: si el script se queda sin monitors no
+# hay nada que apagar, y con dpms sin nombre el dispatcher no hace nada.
+monitores=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.disabled == false) | .name' 2>/dev/null)
+[ -n "$monitores" ] || { echo "screen-power: no hay monitores activos" >&2; exit 1; }
+
+fallos=0
+for m in $monitores; do
+    lua="hl.dispatch(hl.dsp.dpms('$estado', '$m'))"
+    if ! hyprctl repl "$lua" >/dev/null 2>&1; then
+        echo "screen-power: no se pudo poner $m en $estado" >&2
+        fallos=$((fallos + 1))
+    fi
+done
+
+[ "$estado" = "off" ] && echo "off" > "$FLAG" 2>/dev/null || rm -f "$FLAG" 2>/dev/null
+
+[ "$fallos" -eq 0 ] || exit 1
+exit 0

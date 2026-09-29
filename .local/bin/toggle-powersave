@@ -53,17 +53,23 @@ enable_powersave() {
     [ -n "$bg_c" ] || bg_c="#101516"
     for rdir in "$HOME/.config/rofi" "/home/rhythmcreative/.config/rofi"; do
         if [ -d "$rdir" ]; then
-            cat > "$rdir/colors-powersave.rasi" << EOF
+            # Esto es una version SEMI-TRANSPARENTE a proposito, igual que el tema
+        # normal: el ahorro viene de quitar el blur, no de poner el panel opaco.
+        # Con el color sin alfa el menu salia macizo, tapaba el escritorio de
+        # fondo y se veía raro, cuando en theory solo deberia verse sin desenfoque.
+        # Los sufijos son los mismos que genera pywal en colors-pywal.rasi:
+        # CC = 80%, AA = 67%.
+        cat > "$rdir/colors-powersave.rasi" << EOF
 * {
-    bgcolor: ${bg_c};
-    background-trans: ${bg_c};
-    background-alt-trans: ${bg_c};
+    bgcolor: ${bg_c}CC;
+    background-trans: ${bg_c}CC;
+    background-alt-trans: ${bg_c}AA;
 }
 window {
-    background-color: ${bg_c};
+    background-color: ${bg_c}CC;
 }
 mainbox {
-    background-color: ${bg_c};
+    background-color: ${bg_c}AA;
 }
 EOF
         fi

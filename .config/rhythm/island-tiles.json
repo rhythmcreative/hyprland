@@ -116,9 +116,7 @@
     {
       "icon": "󰅍",
       "label": "Portapapeles",
-      "cmd": "~/.local/bin/clipboard-history",
-      "close": true,
-      "delay": 0.6
+      "view": 7
     }
   ]
 }

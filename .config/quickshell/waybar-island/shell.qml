@@ -197,6 +197,7 @@ ShellRoot {
     property var clipList: []
     property int clipCount: 0
     property int clipCopiedId: -1
+    property string clipToast: ""
     property bool isMuted: false
 
     property var wifiList: []
@@ -5236,22 +5237,28 @@ ShellRoot {
                                 }
                             }
                             Item { Layout.fillWidth: true }
+                            // Aviso al copiar: sustituye a "Clear all" mientras dura.
+                            // Solo texto en ingles, sin emojis: "Text copied" / "Image pasted".
                             Rectangle {
                                 height: 32
-                                width: 110
+                                width: root.clipToast !== "" ? Math.max(110, clipToastText.implicitWidth + 44) : 110
                                 radius: 16
-                                color: root.colSurface
-                                border.color: root.colBorder
+                                color: root.clipToast !== "" ? root.colAccent : root.colSurface
+                                border.color: root.clipToast !== "" ? root.colAccent : root.colBorder
                                 border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+
                                 Text {
+                                    id: clipToastText
                                     anchors.centerIn: parent
-                                    text: "Clear all"
+                                    text: root.clipToast !== "" ? root.clipToast : "Clear all"
                                     color: root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
                                 }
                                 MouseArea {
                                     anchors.fill: parent
+                                    visible: root.clipToast === ""
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: { root.runCmd("cliphist wipe"); clipListProc.running = true }
                                 }
@@ -5334,7 +5341,13 @@ Flickable {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy"); root.clipCopiedId = modelData.id; clipCopyTimer.restart(); clipListProc.running = true }
+                                    onClicked: {
+                                        root.runCmd("cliphist decode " + modelData.id + " | wl-copy")
+                                        root.clipCopiedId = modelData.id
+                                        root.clipToast = modelData.image ? "Image pasted" : "Text copied"
+                                        clipCopyTimer.restart()
+                                        clipListProc.running = true
+                                    }
                                 }
                             }
                         }
@@ -5343,7 +5356,7 @@ Flickable {
                             id: clipCopyTimer
                             interval: 1500
                             repeat: false
-                            onTriggered: root.clipCopiedId = -1
+                            onTriggered: { root.clipCopiedId = -1; root.clipToast = "" }
                         }
                         Timer {
                             interval: 5000

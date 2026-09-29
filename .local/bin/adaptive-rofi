@@ -71,12 +71,16 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-if [ -f "/tmp/powersave-active" ]; then
-    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-    [ -n "$bg_c" ] || bg_c="#101516"
-    # Con alfa, igual que el tema normal: el ahorro es quitar el blur, no volver
-    # el panel macizo. Los sufijos son los de pywal (CC = 80%, AA = 67%).
-    ROFI_ARGS="$ROFI_ARGS -theme-str '* { bgcolor: ${bg_c}CC; background-trans: ${bg_c}CC; background-alt-trans: ${bg_c}AA; } window { background-color: ${bg_c}CC; } mainbox { background-color: ${bg_c}AA; }'"
+# El override de power saver vive UNA SOLA VEZ, en colors-powersave.rasi, que
+# escribe toggle-powersave. Rofi fusiona varios -theme y el ultimo gana, asi que
+# esto se anade al final y pisa al tema pywal sin tocar nada mas.
+#
+# Antes aqui havia una copia del -theme-str en linea, y con ella la misma
+# correccion hacia falta en cada sitio: tres copias del mismo bloque, tres
+# oportunidades de que se queden desincronizadas, y de hecho se quedaron —la
+# del .rasi seguia opaca mucho despues de arreglar las otras dos.
+if [ -f "/tmp/powersave-active" ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ]; then
+    ROFI_ARGS="$ROFI_ARGS -theme $HOME/.config/rofi/colors-powersave.rasi"
 fi
 
 _rust_was_visible=false

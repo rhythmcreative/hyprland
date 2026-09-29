@@ -301,14 +301,15 @@ launch_rofi() {
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
     log_debug "Tema: $ADAPTED_STYLE"
     
+    # El override de power saver vive UNA SOLA VEZ, en colors-powersave.rasi,
+    # que escribe toggle-powersave. Rofi fusiona varios -theme y el ultimo gana,
+    # asi que se anade al final y pisa al tema pywal sin tocar nada mas.
+    # Antes estaba aqui una copia del -theme-str en linea; con tres copias del
+    # mismo bloque era facil que una se quedara atras, y se quedo.
     local extra_args=()
-    if [ -f "/tmp/powersave-active" ]; then
-        local bg_c
-        bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-        [ -n "$bg_c" ] || bg_c="#101516"
-        # Con alfa, igual que el tema normal: el ahorro es quitar el blur, no volver
-            # el panel macizo. Los sufijos son los de pywal (CC = 80%, AA = 67%).
-            extra_args+=(-theme-str "* { bgcolor: ${bg_c}CC; background-trans: ${bg_c}CC; background-alt-trans: ${bg_c}AA; } window { background-color: ${bg_c}CC; } mainbox { background-color: ${bg_c}AA; }")
+    local ps_theme="$HOME/.config/rofi/colors-powersave.rasi"
+    if [ -f "/tmp/powersave-active" ] && [ -f "$ps_theme" ]; then
+        extra_args+=(-theme "$ps_theme")
     fi
 
     # Lanzar rofi con el tema adaptado

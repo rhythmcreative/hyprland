@@ -23,7 +23,15 @@ set -u
 antes=$(hyprctl devices -j 2>/dev/null | jq -r '.keyboards[] | select(.main==true) | .active_layout_index' 2>/dev/null)
 [ -n "$antes" ] || antes=$(hyprctl devices -j 2>/dev/null | jq -r '.keyboards[0].active_layout_index' 2>/dev/null)
 
-hyprctl switchxkblayout all next >/dev/null 2>&1 || true
+# Cambia el MISMO teclado que leen kb-layout y el modulo de waybar. Con "all"
+# tambien se avanzan los teclados virtuales, que no son los de verdad y no
+# siguen al resto: el teclado real volvia a US mientras el indicador se quedaba
+# en ES.
+KB_TARGET="at-translated-set-2-keyboard"
+if ! hyprctl devices -j 2>/dev/null | jq -e --arg n "$KB_TARGET" '.keyboards[] | select(.name == $n)' >/dev/null 2>&1; then
+    KB_TARGET="all"
+fi
+hyprctl switchxkblayout "$KB_TARGET" next >/dev/null 2>&1 || true
 
 sleep 0.2
 

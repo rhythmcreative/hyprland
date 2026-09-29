@@ -16,9 +16,9 @@
 #
 #   rhythm-caffeine.service             la isla la alterna con un interruptor, y
 #                                       toggle-caffeine status la arranca sola
-#                                       mientras el flag exista
-#   rhythm-nightlight-schedule.service  solo debe correr si el usuario activó un
-#                                       horario
+#                                       mientras el flag exista. Habilitarla en el
+#                                       arranque pondria un inhibidor de suspension
+#                                       desde el login.
 #   blueman-applet.service              masked a proposito en esta maquina
 #   pipewire-session-manager.service    alias de la distro
 #   rhythm-ota-check.service            static, lo dispara el timer
@@ -32,7 +32,13 @@ arrancar=false
 [ "${1:-}" = "--now" ] && arrancar=true
 
 dir="$HOME/.config/systemd/user"
-excluidas="rhythm-caffeine.service rhythm-nightlight-schedule.service blueman-applet.service pipewire-session-manager.service"
+# rhythm-nightlight-schedule NO se excluye: estaba excluido pensando que solo
+# debía correr si el usuario ponía un horario, que es justo el caso para el que
+# existe. El propio script sale con codigo 0 si no hay horario, asi que
+# habilitarlo no cuesta nada, y con eso el horario sobrevive a un reinicio: los
+# ajustes ya se guardaban en ~/.config/rhythm/night-light.conf, lo que no pasaba
+# es que nadie arrancase el servicio al iniciar sesion.
+excluidas="rhythm-caffeine.service blueman-applet.service pipewire-session-manager.service"
 
 if ! command -v systemctl >/dev/null 2>&1; then
     echo "enable-user-services: systemctl no disponible"

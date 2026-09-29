@@ -11,23 +11,47 @@
 # completa de otro espacio de trabajo tiene visible=false, y si se contara,
 # cambiar de espacio dejaria la isla escondida sin motivo.
 #
-# El campo "monitor" de un cliente es un indice numerico, no un nombre, asi que se
-# cruza con hyprctl monitors -j para obtener el nombre real.
+# Coste: sondea la isla cada segundo, asi que esto se ejecuta mucho. Por eso solo
+# se hace UNA llamada a hyprctl por vuelta. Antes eran dos, monitors y clients,
+# unas 172.800 al dia para saber si habia un video en pantalla completa.
+#
+# El campo "monitor" de un cliente es un indice numerico, no un nombre, asi que
+# hace falta traducirlo. El nombre de un monitor no cambia cada segundo, asi que
+# la tabla indice -> nombre se guarda en cache y solo se renueva cuando Hyprland
+# avisa de que se ha anadido o quitado un monitor, o cada cinco minutos para no
+# quedarse obsoleta si el evento se pierde.
 
 set -u
 
-mons=$(hyprctl monitors -j 2>/dev/null) || { echo "{}"; exit 0; }
-clients=$(hyprctl clients -j 2>/dev/null) || { echo "{}"; exit 0; }
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/rhythm"
+cache="$cache_dir/monitor-names"
+mkdir -p "$cache_dir" 2>/dev/null || true
 
-[ -n "$mons" ] && [ -n "$clients" ] || { echo "{}"; exit 0; }
+renovar_cache() {
+    hyprctl monitors -j 2>/dev/null | jq -r '.[] | "\(.id) \(.name)"' 2>/dev/null > "$cache.$$" 2>/dev/null || return 1
+    mv -f "$cache.$$" "$cache" 2>/dev/null || return 1
+}
+
+# Sin cache, o caducada (mas de 5 minutos), se renueva.
+if [ ! -s "$cache" ] || [ -n "$(find "$cache" -mmin +5 2>/dev/null)" ]; then
+    renovar_cache || true
+fi
+
+clients=$(hyprctl clients -j 2>/dev/null) || { echo "{}"; exit 0; }
+[ -n "$clients" ] || { echo "{}"; exit 0; }
+
+[ -s "$cache" ] || renovar_cache || { echo "{}"; exit 0; }
+
+awk '{m[$1]=$2} END{for(k in m) print k"\t"m[k]}' "$cache" > "$cache.map" 2>/dev/null || { echo "{}"; exit 0; }
 
 jq -nc \
-  --argjson mons "$mons" \
   --argjson clients "$clients" \
-  '($mons | map({key: (.id|tostring), value: .name}) | from_entries) as $por_id
+  --rawfile nombres "$cache.map" \
+  '($nombres | split("\n") | map(select(length > 0) | split("\t")) | map({key: .[0], value: .[1]}) | from_entries) as $por_id
    | [$clients[]
       | select(.visible == true and .mapped == true and (.fullscreen > 0))
       | $por_id[(.monitor|tostring)]]
+   | map(select(. != null))
    | unique
    | map({key: ., value: true})
    | from_entries'

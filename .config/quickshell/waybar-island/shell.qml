@@ -5237,28 +5237,22 @@ ShellRoot {
                                 }
                             }
                             Item { Layout.fillWidth: true }
-                            // Aviso al copiar: sustituye a "Clear all" mientras dura.
-                            // Solo texto en ingles, sin emojis: "Text copied" / "Image pasted".
                             Rectangle {
                                 height: 32
-                                width: root.clipToast !== "" ? Math.max(110, clipToastText.implicitWidth + 44) : 110
+                                width: 110
                                 radius: 16
-                                color: root.clipToast !== "" ? root.colAccent : root.colSurface
-                                border.color: root.clipToast !== "" ? root.colAccent : root.colBorder
+                                color: root.colSurface
+                                border.color: root.colBorder
                                 border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-
                                 Text {
-                                    id: clipToastText
                                     anchors.centerIn: parent
-                                    text: root.clipToast !== "" ? root.clipToast : "Clear all"
+                                    text: "Clear all"
                                     color: root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
                                 }
                                 MouseArea {
                                     anchors.fill: parent
-                                    visible: root.clipToast === ""
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: { root.runCmd("cliphist wipe"); clipListProc.running = true }
                                 }
@@ -5327,10 +5321,14 @@ Flickable {
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
+                                        // Al copiar, la propia fila lo dice: "Text copied" o
+                                        // "Image pasted" en vez de su subtitulo, en color acento.
                                         Text {
-                                            text: modelData.sub
-                                            visible: modelData.sub !== ""
-                                            color: root.colMuted
+                                            readonly property bool justCopied: modelData.id === root.clipCopiedId && root.clipToast !== ""
+                                            text: justCopied ? root.clipToast : modelData.sub
+                                            visible: justCopied || modelData.sub !== ""
+                                            color: justCopied ? root.colAccent : root.colMuted
+                                            font.weight: justCopied ? Font.Bold : Font.Normal
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 10
                                             elide: Text.ElideRight

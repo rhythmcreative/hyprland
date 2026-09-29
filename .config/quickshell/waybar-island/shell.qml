@@ -194,6 +194,7 @@ ShellRoot {
     property bool wifiEnabled: true
     property bool btEnabled: false
     property string kbLayout: "US"
+    property var clipList: []
     property int clipCount: 0
     property bool isMuted: false
 
@@ -316,6 +317,7 @@ ShellRoot {
         dndCheckProc.running = true
         clipCountProc.running = true
         hyprStatusProc.running = true
+        clipListProc.running = true
         otaStatusProc.running = true
         otaChangelogProc.running = true
     }
@@ -656,6 +658,20 @@ ShellRoot {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.perfMode = text.trim() === "perf"
+            }
+        }
+    }
+
+    Process {
+        id: clipListProc
+        command: ["bash", "-c", "$HOME/.local/bin/clipboard-list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.clipList = JSON.parse(text.trim())
+                } catch(e) {
+                    root.clipList = []
+                }
             }
         }
     }
@@ -1181,6 +1197,7 @@ ShellRoot {
                     otaChangelogProc.running = true
                 }
                 if (islandWin.controlSubView === 5) nightLightSettingsProc.running = true
+                if (islandWin.controlSubView === 7) clipListProc.running = true
             }
 
             Timer { id: tabFadeReset; interval: 40; repeat: false; onTriggered: islandWin.tabFade = 1.0 }
@@ -1611,7 +1628,7 @@ ShellRoot {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.runCmd("$HOME/.local/bin/clipboard-history")
+                            onClicked: { islandWin.expanded = true; islandWin.controlSubView = 7; clipListProc.running = true }
                         }
                     }
 
@@ -5490,6 +5507,93 @@ ShellRoot {
                             }
                         }
                     }
+                    // ── SUBSECCIÓN: PORTAPAPELES ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: islandWin.controlSubView === 7
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Rectangle {
+                                width: 100; height: 32; radius: 16
+                                color: root.colSurface; border.color: root.colBorder; border.width: 1
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 6
+                                    Text { text: "󰁍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14 }
+                                    Text { text: "Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: islandWin.controlSubView = 0 }
+                            }
+                            Text { text: "Portapapeles"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13; font.weight: Font.Bold }
+                            Item { Layout.fillWidth: true }
+                            Rectangle {
+                                width: 110; height: 32; radius: 16
+                                color: root.colSurface; border.color: root.colBorder; border.width: 1
+                                Text { anchors.centerIn: parent; text: "Borrar todo"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.runCmd("$HOME/.local/bin/clipboard-history wipe"); clipListProc.running = true }
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: root.clipList
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                height: 44
+                                radius: 12
+                                color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
+                                border.width: 1
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    Text {
+                                        text: "󰅍"
+                                        color: root.colAccent
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 16
+                                    }
+                                    Text {
+                                        text: modelData.text
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Rectangle {
+                                        width: 30; height: 26; radius: 8
+                                        color: Qt.rgba(255, 85, 85, 0.2)
+                                        Text { anchors.centerIn: parent; text: "󰆴"; color: "#ff5555"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: { root.runCmd("cliphist delete <<< " + modelData.id); clipListProc.running = true }
+                                        }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy") }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: root.clipList.length === 0
+                            text: "Vacio: copia algo primero"
+                            color: root.colMuted
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+                    }
+
+
                     // ── SUBSECCIÓN: BLUETOOTH PAIRING REQUEST ──
                     // BlueZ entrega la solicitud al agente registrado, no al
                     // servidor de notificaciones: bluetooth-pair-agent la

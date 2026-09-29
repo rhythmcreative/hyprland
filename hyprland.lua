@@ -24,18 +24,36 @@ local color14 = "rgb(9A9D9E)"
 local color15 = "rgb(c2c8c9)"
 local background = "rgb(101012)"
 
--- Monitors (from nwg-displays)
+-- Monitors
+--
+-- Aqui ya no hay posiciones escritas a mano, y esa es toda la idea.
+--
+-- Con eDP-1 anclado en 2560x0 y DP-6 en 0x0, el escritorio se rompia en cuanto
+-- cambiaba la topologia: al desenchufar DP-6, el portatil se quedaba en un x
+-- que ya no existia y quedaba un hueco de 2560px a su izquierda. Y un monitor
+-- nuevo no tenia regla, asi que caia donde Hyprland quisiera.
+--
+-- Ahora el portatil no lleva posicion: Hyprland se la coloca sola y el hueco no
+-- puede aparecer. Lo unico que se le fija es la escala, porque su valor por
+-- defecto es 1.5 en una 1080p y deja el texto diminuto.
+--
+-- El resto de monitores no tienen regla, y no es un descuido: lo que Hyprland
+-- hace con un monitor sin regla es justo lo que se quiere aqui — modo
+-- preferido, posicion automatica y escala automatica. Al enchufar o desenchufar
+-- cualquiera, la disposicion se recompone sola.
+--
+-- OJO: en esta version de Hyprland los comodines en `output` no coinciden
+-- (`eDP-*` no hace nada), asi que el panel interno va por su nombre exacto. Por
+-- lo mismo `output = ""` no actua de regla general. Si algun dia se soportan los
+-- comodines, esto se reduce a una sola regla con `eDP-*`.
+--
+-- Lo que nwg-displays escribia en monitors.conf nunca se leyo: este fichero no
+-- lo incluia. Si algun dia se quieren perfiles por cable, se ponen aqui como
+-- reglas propias, que es lo que Hyprland va a usar.
 hl.monitor({
     output   = "eDP-1",
-    mode     = "1920x1080@144.0",
-    position = "2560x0",
-    scale    = "1",
-})
-
-hl.monitor({
-    output   = "DP-6",
-    mode     = "2560x1440@239.97",
-    position = "0x0",
+    mode     = "preferred",
+    position = "auto",
     scale    = "1",
 })
 

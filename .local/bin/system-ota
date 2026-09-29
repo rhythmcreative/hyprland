@@ -391,6 +391,13 @@ cmd_update() {
         esac
     done
 
+    # Todo lo que falla aqui se ignoraba con "|| true" y el final escribia siempre
+    # "aplicado correctamente", asi que la notificacion decia que habia ido bien
+    # con el pull vaciado, el despliegue a medias o la isla sin volver. Se cuenta
+    # cada problema y el resumen lo dice.
+    local OTA_PROBLEMS=0
+    local OTA_DEPLOY_FAILED=0
+
     send_notif "System Update" "Starting OTA update process..." "normal"
 
     # Pre-OTA filesystem snapshot before dotfiles pull (best effort, never fatal).
@@ -421,13 +428,22 @@ cmd_update() {
         behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
         if [ "$behind" -gt 0 ]; then
             echo "Pulling $behind new commit(s) from remote..."
-            git -C "$REPO_DIR" pull --rebase origin main >> "$LOG_FILE" 2>&1 || {
-                echo "Warning: Rebase failed or had conflicts. Preserving local state."
-            }
+            if ! git -C "$REPO_DIR" pull --rebase origin main >> "$LOG_FILE" 2>&1; then
+                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                echo "  [!] El pull fallo o tuvo conflictos. Se deja el estado local como estaba."
+                echo "      Detalle en $LOG_FILE"
+            fi
         fi
 
         if [ "$stash_needed" = "true" ]; then
-            git -C "$REPO_DIR" stash pop >/dev/null 2>&1 || true
+            # Antes: "|| true". Si el pop tenia conflictos, tus cambios se quedaban
+            # en el stash sin mas y el updateInsetsaba con exito, asi que no te
+            # enterabas de nada hasta que los buscabas.
+            if ! git -C "$REPO_DIR" stash pop >> "$LOG_FILE" 2>&1; then
+                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                echo "  [!] No se pudieron restaurar tus cambios locales; siguen en el stash."
+                echo "      Recuperalos con: git -C $REPO_DIR stash list"
+            fi
         fi
     fi
 
@@ -446,24 +462,48 @@ cmd_update() {
         cp -f "$REPO_DIR/.version" "$HOME/.version" 2>/dev/null || true
     fi
 
+    # Fichero a fichero y contando fallos. Un "cp -rf ... || true" a pelo tapaba
+    # cualquier error: si un destino no se podia escribir, el update Terminaba
+    # igual y no habia forma de saber que esos ficheros no se desplegaron.
+    local _src _dst _base
     if [ -d "$REPO_DIR/.local/bin" ]; then
         mkdir -p "$HOME/.local/bin"
-        cp -f "$REPO_DIR"/.local/bin/* "$HOME/.local/bin/" 2>/dev/null || true
+        for _src in "$REPO_DIR"/.local/bin/*; do
+            [ -e "$_src" ] || continue
+            _base=$(basename "$_src")
+            if ! cp -f "$_src" "$HOME/.local/bin/$_base" 2>/dev/null; then
+                OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+                echo "  [!] no desplegado: .local/bin/$_base"
+            fi
+        done
         chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
     fi
 
     if [ -d "$REPO_DIR/.config" ]; then
         mkdir -p "$HOME/.config"
-        for item in "$REPO_DIR"/.config/*; do
-            local base
-            base=$(basename "$item")
-            if [ -d "$item" ]; then
-                mkdir -p "$HOME/.config/$base"
-                cp -rf "$item"/* "$HOME/.config/$base/" 2>/dev/null || true
+        for _src in "$REPO_DIR"/.config/*; do
+            _base=$(basename "$_src")
+            if [ -d "$_src" ]; then
+                mkdir -p "$HOME/.config/$_base"
+                for _dst in "$_src"/*; do
+                    [ -e "$_dst" ] || continue
+                    if ! cp -rf "$_dst" "$HOME/.config/$_base/" 2>/dev/null; then
+                        OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+                        echo "  [!] no desplegado: .config/$_base/$(basename "$_dst")"
+                    fi
+                done
             else
-                cp -f "$item" "$HOME/.config/$base" 2>/dev/null || true
+                if ! cp -f "$_src" "$HOME/.config/$_base" 2>/dev/null; then
+                    OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+                    echo "  [!] no desplegado: .config/$_base"
+                fi
             fi
         done
+    fi
+
+    if [ "$OTA_DEPLOY_FAILED" -gt 0 ]; then
+        OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+        echo "  [!] $OTA_DEPLOY_FAILED fichero(s) no se pudieron desplegar."
     fi
 
     # Units were just replaced on disk, so systemd needs to re-read them.
@@ -472,14 +512,20 @@ cmd_update() {
     # Step 2b: Run pending dotfiles migrations (idempotent)
     echo "Running pending migrations..."
     if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
-        RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1 || echo "Warning: some migrations reported issues."
+        if ! RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1; then
+            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+            echo "  [!] Algunas migraciones dand problemas. Detalle en $LOG_FILE"
+        fi
     fi
 
     # Step 3: Pacman packages if requested
     if [ "$system_packages" = "true" ]; then
         echo "[3/4] Updating system packages with pacman..."
         if command -v sudo >/dev/null 2>&1; then
-            sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1 || echo "Warning: pacman update had warnings or errors."
+            if ! sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1; then
+                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                echo "  [!] pacman termino con errores. Detalle en $LOG_FILE"
+            fi
         else
             echo "Sudo not available, skipping pacman system packages."
         fi
@@ -511,14 +557,29 @@ cmd_update() {
             echo "Island did not come back, launching it directly..."
             systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
             setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null
+            sleep 3
+            if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                echo "  [!] La isla no ha vuelto. Mira: journalctl --user -u waybar-island -n 30"
+            fi
         fi
     fi
 
     # Re-generate clean status
     generate_status_json "false" >/dev/null 2>&1 || true
 
-    send_notif "System Update Complete" "OTA update applied successfully. Desktop services reloaded." "normal"
-    echo "OTA update finished successfully!"
+    # El resumen ya no afirma exito sin condiciones. Antes ponia "aplicado
+    # correctamente" aunque el pull hubiera fallado, el despliegue hubiera dejado
+    # ficheros sin escribir o la isla no hubiera vuelto, porque cada paso se
+    # tragaba su error con "|| true".
+    if [ "$OTA_PROBLEMS" -eq 0 ] && [ "$OTA_DEPLOY_FAILED" -eq 0 ]; then
+        send_notif "System Update Complete" "OTA update applied successfully. Desktop services reloaded." "normal"
+        echo "OTA update finished successfully!"
+    else
+        send_notif "System Update Finished With Warnings" "Termino con $OTA_PROBLEMS problema(s). Revisa el registro: $LOG_FILE" "normal"
+        echo "OTA update terminado con $OTA_PROBLEMS problema(s). Detalle en $LOG_FILE"
+        echo "No se ha dado por bueno: revisa lo de arriba antes de darlo por hecho."
+    fi
 }
 
 cmd_rollback() {

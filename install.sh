@@ -1093,6 +1093,11 @@ MONCONF
         [ -e "$file" ] || continue
         local name
         name=$(basename "$file")
+        # Nada de __pycache__ ni .pyc: son restos de pruebas y no deben viajar
+        # a ~/.local/bin.
+        case "$name" in
+            __pycache__|*.pyc) continue ;;
+        esac
         local target="$HOME/.local/bin/$name"
         
         if [ -e "$target" ]; then

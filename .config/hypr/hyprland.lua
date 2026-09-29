@@ -127,9 +127,10 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("hypridle &")
     hl.exec_cmd("~/.config/waybar/launch.sh &")
     hl.exec_cmd("~/.local/bin/rust-dock-launcher &")
-    hl.exec_cmd("~/.local/bin/quickshell-island &")
-    hl.exec_cmd("~/.local/bin/rust-dock-monitor-watcher &")
-    hl.exec_cmd("~/.local/bin/wallpaper-monitor-watcher &")
+    -- La isla, el watcher de monitores y el de wallpapers arrancan desde sus
+    -- unidades de systemd de usuario (waybar-island, rust-dock-monitor-watcher,
+    -- wallpaper-monitor-watcher), que son las que los reinician si mueren.
+    -- Lanzarlos aqui tambien dejaba la unidad muerta, sin supervision.
     hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
 end)

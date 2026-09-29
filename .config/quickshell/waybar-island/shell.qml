@@ -446,6 +446,12 @@ ShellRoot {
             root.notifOpenCenter(screenName)
             return "notifications"
         }
+        function openClipboard(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 3, 0)
+            if (!panel) return "unavailable"
+            clipListProc.running = true
+            return "clipboard"
+        }
         function collapse(screenName: string): string {
             let panel = root.setPanelState(screenName, false)
             return panel ? "collapsed" : "unavailable"
@@ -5255,7 +5261,7 @@ ShellRoot {
                             model: root.clipList
                             delegate: Rectangle {
                                 Layout.fillWidth: true
-                                height: 44
+                                height: modelData.image ? 76 : 44
                                 radius: 12
                                 color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
@@ -5265,7 +5271,7 @@ ShellRoot {
                                     anchors.margins: 10
                                     spacing: 10
                                     Item {
-                                        width: 40; height: 40
+                                        width: 64; height: 64
                                         Text {
                                             anchors.centerIn: parent
                                             visible: !modelData.image

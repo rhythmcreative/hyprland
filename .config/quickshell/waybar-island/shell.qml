@@ -1598,40 +1598,6 @@ ShellRoot {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    // Clipboard indicator, junto a las alertas: abre el
-                    // historial sin expandir la isla.
-                    Row {
-                        spacing: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        Text {
-                            text: "󰅍"
-                            color: root.colAccent
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: root.clipCount > 0 ? root.clipCount : ""
-                            color: root.colFg
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            font.weight: Font.Bold
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Rectangle {
-                            width: 1
-                            height: 12
-                            color: root.colMuted
-                            opacity: 0.4
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: { islandWin.expanded = true; islandWin.controlSubView = 7; clipListProc.running = true }
-                        }
-                    }
-
                     // Unread notifications badge (adaptive count)
                     Row {
                         visible: root.notifUnread > 0 && !islandWin.expanded && !root.notifActive
@@ -1673,6 +1639,7 @@ ShellRoot {
                             onClicked: root.notifOpenCenter(islandWin.modelData.name)
                         }
                     }
+
 
                     // Indicator icon
                     Text {
@@ -4643,10 +4610,39 @@ ShellRoot {
                         // Subtitle
                         Text {
                             text: "Real-time Hyprland Compositor Settings"
+
                             color: root.colMuted
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
                             Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        // Tarjeta Portapapeles: arriba de los ajustes, abre la lista.
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 64
+                            radius: 14
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
+                                Text { text: "󰅍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 22 }
+                                ColumnLayout {
+                                    spacing: 2
+                                    Layout.fillWidth: true
+                                    Text { text: "Portapapeles"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                    Text { text: root.clipList.length > 0 ? (root.clipList.length + " guardados · " + root.clipList[0].text) : "Vacio: copia algo primero"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+                                Text { text: "›"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18; font.weight: Font.Bold }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { islandWin.controlSubView = 7; clipListProc.running = true }
+                            }
                         }
 
                         // 4 Hyprland Toggles (2x2 Grid)

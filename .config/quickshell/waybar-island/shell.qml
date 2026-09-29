@@ -733,7 +733,7 @@ ShellRoot {
 
     Process {
         id: clipCountProc
-        command: ["bash", "-c", "$HOME/.local/bin/clipboard-history count"]
+        command: ["bash", "-c", "cliphist list 2>/dev/null | wc -l"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const n = parseInt(text.trim(), 10)
@@ -5245,7 +5245,7 @@ ShellRoot {
                                 border.width: 1
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Borrar todo"
+                                    text: "Clear all"
                                     color: root.colFg
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
@@ -5253,7 +5253,7 @@ ShellRoot {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.runCmd("$HOME/.local/bin/clipboard-history wipe"); clipListProc.running = true }
+                                    onClicked: { root.runCmd("cliphist wipe"); clipListProc.running = true }
                                 }
                             }
                         }
@@ -5355,7 +5355,7 @@ Flickable {
 
                         Text {
                             visible: root.clipList.length === 0
-                            text: "Vacio: copia algo primero"
+                            text: "Empty: copy something first"
                             color: root.colMuted
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 10

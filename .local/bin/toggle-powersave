@@ -47,33 +47,13 @@ enable_powersave() {
     done
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
-    # 5. Make Rofi completely solid/opaque in powersave mode
-    local bg_c
-    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-    [ -n "$bg_c" ] || bg_c="#101516"
-    for rdir in "$HOME/.config/rofi" "/home/rhythmcreative/.config/rofi"; do
-        if [ -d "$rdir" ]; then
-            # Esto es una version SEMI-TRANSPARENTE a proposito, igual que el tema
-        # normal: el ahorro viene de quitar el blur, no de poner el panel opaco.
-        # Con el color sin alfa el menu salia macizo, tapaba el escritorio de
-        # fondo y se veía raro, cuando en theory solo deberia verse sin desenfoque.
-        # Los sufijos son los mismos que genera pywal en colors-pywal.rasi:
-        # CC = 80%, AA = 67%.
-        cat > "$rdir/colors-powersave.rasi" << EOF
-* {
-    bgcolor: ${bg_c}CC;
-    background-trans: ${bg_c}CC;
-    background-alt-trans: ${bg_c}AA;
-}
-window {
-    background-color: ${bg_c}CC;
-}
-mainbox {
-    background-color: ${bg_c}AA;
-}
-EOF
-        fi
-    done
+    # 5. El fondo translucido de rofi ya no se toca aqui.
+    #
+    # Antes este script escribia colors-powersave.rasi y ademas cada menu lleva-
+    # ba su propia copia del -theme-str, tres en total. Con una sola opacidad
+    # comun el ahorro de energia no cambia: aqui lo que se quita es el blur, que
+    # es cosa de Hyprland, no del panel. El fondo lo escribe sync-rofi-pywal en
+    # ~/.config/rofi/colors-window.rasi y lo anaden los cuatro menus.
 
     # 6. Desktop Notification
     notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true

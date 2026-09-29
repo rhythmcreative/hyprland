@@ -301,15 +301,13 @@ launch_rofi() {
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
     log_debug "Tema: $ADAPTED_STYLE"
     
-    # El override de power saver vive UNA SOLA VEZ, en colors-powersave.rasi,
-    # que escribe toggle-powersave. Rofi fusiona varios -theme y el ultimo gana,
-    # asi que se anade al final y pisa al tema pywal sin tocar nada mas.
-    # Antes estaba aqui una copia del -theme-str en linea; con tres copias del
-    # mismo bloque era facil que una se quedara atras, y se quedo.
+    # Fondo translucido comun, el mismo para todos los menus y siempre. Se anade
+    # al final porque rofi fusiona varios -theme y gana el ultimo. Lo escribe
+    # sync-rofi-pywal al cambiar de fondo.
     local extra_args=()
-    local ps_theme="$HOME/.config/rofi/colors-powersave.rasi"
-    if [ -f "/tmp/powersave-active" ] && [ -f "$ps_theme" ]; then
-        extra_args+=(-theme "$ps_theme")
+    local common_theme="$HOME/.config/rofi/colors-window.rasi"
+    if [ -f "$common_theme" ]; then
+        extra_args+=(-theme "$common_theme")
     fi
 
     # Lanzar rofi con el tema adaptado

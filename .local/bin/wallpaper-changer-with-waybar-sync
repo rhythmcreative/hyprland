@@ -179,11 +179,14 @@ log "Mostrando selector de wallpapers con sincronización waybar..."
 hide_waybar
 log "Waybar ocultado para mostrar selector"
 
-# Ejecutar rofi con tema apropiado
+# El path antiguo era $HOME/HyprNova/..., que no existe en esta maquina, asi que
+# rofi se caia a su tema por defecto y el menu salia con otro aspecto sin que
+# nadie supiera por que. El tema bueno es el que genera pywal.
 selected=$(rofi -dmenu -i \
     -p "Wallpaper + Waybar Sync" \
     -show-icons \
-    -theme "$HOME/HyprNova/.config/rofi/themes/wallpaper-select.rasi" \
+    -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi" \
+    -theme "$HOME/.config/rofi/colors-window.rasi" \
     < "$TEMP_FILE")
 
 # Si no se selecciónó nada, mostrar waybar y salir

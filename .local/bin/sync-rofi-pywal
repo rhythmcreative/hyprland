@@ -266,32 +266,31 @@ echo "Colores de rofi sincronizados con pywal"
 echo "Archivo de colores actualizado: $ROFI_COLORS_FILE"
 echo "Tema principal actualizado: $ROFI_THEME_FILE"
 
-# Refrescar también el override de power saver, si está activo.
+# Fondo translucido COMUN de los menus de rofi.
 #
-# Antes el color lo leía cada menú al abrirse, así que siempre era fresco. Al
-# centralizarlo en colors-powersave.rasi, que solo escribe toggle-powersave, un
-# cambio de fondo con el ahorro activo dejaba el menú con el color viejo. Esto lo
-# vuelve a tener al día sin depender de que nadie vuelva a tocar el interruptor.
-if [ -f /tmp/powersave-active ]; then
-    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-    [ -n "$bg_c" ] || bg_c="#101516"
-    for rdir in "$HOME/.config/rofi"; do
-        [ -d "$rdir" ] || continue
-        # Con alfa, igual que el tema normal: el ahorro es quitar el blur, no
-        # volver el panel macizo. CC = 80%, AA = 67%, los de pywal.
-        cat > "$rdir/colors-powersave.rasi" << PSRASI
+# Antes cada menu traia su propia opacidad y ninguna coincidia: el principal al
+# 60%, el selector de fondos al 40% —el mas transparente, y el que mas se
+# notaba— y el de apagado al 75%. Con power saver encima, dos de los tres
+# cambiaban y el tercero se quedaba como estaba.
+#
+# Aqui hay una sola opacidad para todos, con el color real de pywal y el mismo
+# alfa CC (80%) que ya usaba el override de power saver: se ve el escritorio
+# detras, pero el texto se lee bien. Se escribe siempre, no solo con el ahorro
+# activo, asi que cambiar de fondo lo mantiene al dia.
+BG_PALETTE=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+[ -n "$BG_PALETTE" ] || BG_PALETTE="#101516"
+cat > "$HOME/.config/rofi/colors-window.rasi" << EOF
+/* Fondo translucido comun. Lo escribe sync-rofi-pywal, no editar a mano. */
 * {
-    bgcolor: ${bg_c}CC;
-    background-trans: ${bg_c}CC;
-    background-alt-trans: ${bg_c}AA;
+    bgcolor: ${BG_PALETTE}CC;
+    background-trans: ${BG_PALETTE}CC;
+    background-alt-trans: ${BG_PALETTE}AA;
 }
 window {
-    background-color: ${bg_c}CC;
+    background-color: ${BG_PALETTE}CC;
 }
 mainbox {
-    background-color: ${bg_c}AA;
+    background-color: ${BG_PALETTE}AA;
 }
-PSRASI
-    done
-    echo "Override de power saver de rofi actualizado con el fondo nuevo"
-fi
+EOF
+echo "Fondo comun de rofi actualizado: $HOME/.config/rofi/colors-window.rasi"

@@ -5272,24 +5272,31 @@ Flickable {
                             model: root.clipList
                             delegate: Rectangle {
                                 Layout.fillWidth: true
-                                height: modelData.image ? 84 : 56
+                                height: 48
                                 radius: 12
                                 color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
                                 border.width: 1
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 10
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 12
+                                    spacing: 12
                                     Item {
-                                        width: 64; height: 64
-                                        Text {
-                                            anchors.centerIn: parent
+                                        width: 26; height: 26
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 13
                                             visible: !modelData.image
-                                            text: "󰅍"
-                                            color: root.colAccent
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 16
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰅍"
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 14
+                                            }
                                         }
                                         Image {
                                             anchors.fill: parent
@@ -5297,39 +5304,29 @@ Flickable {
                                             source: modelData.image ? "file://" + modelData.thumb : ""
                                             fillMode: Image.PreserveAspectCrop
                                             smooth: true
+                                            asynchronous: true
                                         }
                                     }
                                     ColumnLayout {
                                         spacing: 1
                                         Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
                                         Text {
                                             text: modelData.title
                                             color: root.colFg
                                             font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 11
-                                            font.weight: Font.Bold
+                                            font.pixelSize: 13
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
                                         Text {
                                             text: modelData.sub
+                                            visible: modelData.sub !== ""
                                             color: root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
-                                        }
-                                    }
-                                    Rectangle {
-                                        height: 26
-                                        width: 30
-                                        radius: 8
-                                        color: Qt.rgba(255, 85, 85, 0.2)
-                                        Text { anchors.centerIn: parent; text: "󰆴"; color: "#ff5555"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: { root.runCmd("cliphist delete <<< " + modelData.id); clipListProc.running = true }
                                         }
                                     }
                                 }

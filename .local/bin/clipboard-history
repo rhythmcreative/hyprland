@@ -30,10 +30,16 @@ if ! cliphist list 2>/dev/null | grep -q .; then
     exit 0
 fi
 
+# Monitor enfocado, como hacen los otros menus: sin -monitor rofi se abria en
+# DP-6 aunque estuvieras en eDP-1, y con la isla en overlay encima parecia que el
+# menu salia "en el dynamic island" o no se veia.
+MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)
+[ -n "$MON" ] || MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
 sel=$(cliphist list 2>/dev/null | rofi-themed -dmenu -i \
     -p "Portapapeles" \
     -mesg "Enter copia · Alt+D borra · Alt+W borra todo" \
     -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi" \
+    ${MON:+-monitor "$MON"} \
     -kb-custom-1 "Alt+d" \
     -kb-custom-2 "Alt+w")
 rc=$?

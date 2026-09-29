@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Lista del historial en JSON para la isla: [{"id":2,"text":"..."}]
+# Texto recortado a 120 caracteres y en una linea, para que quepa en la fila.
+
+set -u
+cliphist list 2>/dev/null | head -30 | python3 -c '
+import json, sys
+out = []
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    if not line or "\t" not in line:
+        continue
+    sid, _, prev = line.partition("\t")
+    try:
+        iid = int(sid)
+    except ValueError:
+        continue
+    prev = " ".join(prev.split())[:120]
+    out.append({"id": iid, "text": prev if prev else "(vacio)"})
+print(json.dumps(out))
+'

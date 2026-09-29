@@ -119,7 +119,14 @@ generate_status_json() {
 
     local pacman_updates=0
     local pacman_pkgs=()
-    if command -v pacman >/dev/null 2>&1; then
+    # checkupdates (pacman-contrib) pregunta a los repositorios sin tocar el
+    # sistema. pacman -Qu solo compara contra la BD local, asi que sin una
+    # sincronizacion reciente no ve nada. Se prefiere el primero y se cae al
+    # segundo.
+    if command -v checkupdates >/dev/null 2>&1; then
+        local raw_pacman
+        raw_pacman=$(checkupdates 2>/dev/null || true)
+    elif command -v pacman >/dev/null 2>&1; then
         local raw_pacman
         raw_pacman=$(pacman -Qu 2>/dev/null || true)
         if [ -n "$raw_pacman" ]; then

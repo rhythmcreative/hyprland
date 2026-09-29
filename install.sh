@@ -658,6 +658,7 @@ step_software() {
         jq
         bc
         imagemagick
+        pacman-contrib
         mpv
         mpvpaper
         gnome-network-displays

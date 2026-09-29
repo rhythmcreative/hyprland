@@ -368,6 +368,23 @@ EOF
     echo "$target"
 }
 
+# Devuelve la isla si este guion muere sin haberla devuelto.
+#
+# En el camino normal la isla se para antes del despliegue y se vuelve al final.
+# El trap cubre el caso de que el guion muera en medio: entonces la isla se queda
+# apagada y el usuario pierde el panel y las notificaciones sin aviso.
+_ota_devolver_isla() {
+    local rc=$?
+    [ -n "${OTA_RUNNER:-}" ] && rm -f "$OTA_RUNNER" 2>/dev/null
+    if [ "${OTA_ISLAND_WAS_ACTIVE:-false}" = "true" ] \
+       && ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        echo "[!] El update termino de forma inesperada; devolviendo la isla..." >> "$LOG_FILE"
+        systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+        systemctl --user start waybar-island.service >/dev/null 2>&1 || true
+    fi
+    return $rc
+}
+
 cmd_update() {
     local dotfiles_only=false
     local system_packages=false
@@ -378,10 +395,34 @@ cmd_update() {
     # kills its child processes on shutdown, so without detaching first the
     # update would kill itself at that stop and never bring the panel back.
     if [ "${OTA_DETACHED:-0}" != "1" ]; then
-        OTA_DETACHED=1 setsid --fork bash "$0" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
+        # Correr desde una COPIA en /tmp, nunca desde $HOME/.local/bin/system-ota.
+        #
+        # El paso de despliegue copia el repositorio entero sobre .local/bin, y
+        # este script vive ahi. Bash no lee el guion entero de una vez: relee por
+        # offset a medida que avanza, asi que al sobrescribirse en mitad de la
+        # ejecucion se queda leyendo basura y se muere sin decir nada. Medido con
+        # un guion minimo: imprime el paso 1, se sobrescribe, no imprime nada mas
+        # y sale con codigo 0.
+        #
+        # Asi fue como un update real se quedo en "Deploying configs and scripts...",
+        # sin migraciones, sin pacman, sin recargar servicios y sin reiniciar la
+        # isla: la dejo apagada y no llego a mandar la notificacion final.
+        local runner
+        runner=$(mktemp /tmp/system-ota-run.XXXXXX)
+        if ! cp -f "$0" "$runner" 2>/dev/null; then
+            runner="$0"
+        else
+            chmod +x "$runner" 2>/dev/null || true
+        fi
+        OTA_DETACHED=1 OTA_RUNNER="$runner" setsid --fork bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
         echo "OTA update started in the background (detached)."
         return 0
     fi
+
+    # Red de seguridad: si este guion muere por lo que sea, aunque sea por un error
+    # que no hayamos previsto, la isla no puede quedarse apagada. Es el servidor de
+    # notificaciones, y sin ella no hay forma de avisar de nada.
+    trap '_ota_devolver_isla' EXIT
 
     for arg in "$@"; do
         case "$arg" in
@@ -456,6 +497,9 @@ cmd_update() {
     island_was_active=false
     if systemctl --user is-active --quiet waybar-island.service 2>/dev/null; then
         island_was_active=true
+        # Esta es la que lee el trap de salida: si el guion muere despues de
+        # aqui, la isla se queda apagada y el trap tiene que saber que estaba viva.
+        OTA_ISLAND_WAS_ACTIVE=true
         systemctl --user stop waybar-island.service >/dev/null 2>&1 || true
     fi
     if [ -f "$REPO_DIR/.version" ]; then

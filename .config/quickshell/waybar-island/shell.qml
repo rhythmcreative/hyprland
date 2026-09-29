@@ -5272,7 +5272,7 @@ Flickable {
                             model: root.clipList
                             delegate: Rectangle {
                                 Layout.fillWidth: true
-                                height: modelData.image ? 84 : 44
+                                height: modelData.image ? 84 : 56
                                 radius: 12
                                 color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
@@ -5299,13 +5299,26 @@ Flickable {
                                             smooth: true
                                         }
                                     }
-                                    Text {
-                                        text: modelData.text
-                                        color: root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        elide: Text.ElideRight
+                                    ColumnLayout {
+                                        spacing: 1
                                         Layout.fillWidth: true
+                                        Text {
+                                            text: modelData.title
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: modelData.sub
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                     Rectangle {
                                         height: 26

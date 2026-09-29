@@ -1,0 +1,117 @@
+{
+  "_comment": "Tiles de Ajustes rapidos para la isla. El orden es el orden en pantalla. Se lee al arrancar la isla; si borras o renuevas este fichero, la isla vuelve a los chips de siempre. 'delay' es la espera antes de lanzar un menu de rofi: sin ella rofi no consigue el foco, se auto-selecciona la primera entrada y se cierra. 'close' cierra la isla al pulsar.",
+  "tiles": [
+    {
+      "icon": "󰈢",
+      "label": "WiFi",
+      "cmd": "~/.local/bin/rofi-wifi-menu",
+      "close": false,
+      "delay": 0.6
+    },
+    {
+      "icon": "󰂯",
+      "label": "Bluetooth",
+      "cmd": "~/.local/bin/rofi-bluetooth-menu",
+      "close": false,
+      "delay": 0.6
+    },
+    {
+      "icon": "󰕾",
+      "label": "Volumen",
+      "cmd": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰛨",
+      "label": "Brillo",
+      "cmd": "brightnessctl set 5%+",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰓩",
+      "label": "Teclado",
+      "cmd": "~/.local/bin/toggle-keyboard-layout",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰜢",
+      "label": "Scratch",
+      "cmd": "~/.local/bin/toggle-scratchpad terminal",
+      "close": true,
+      "delay": 0.4
+    },
+    {
+      "icon": "󰓦",
+      "label": "Cafeina",
+      "cmd": "~/.local/bin/toggle-caffeine",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰗜",
+      "label": "DND",
+      "cmd": "~/.local/bin/toggle-dnd",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰃟",
+      "label": "Random",
+      "cmd": "~/.local/bin/wallpaper-random",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰝆",
+      "label": "Galeria",
+      "cmd": "~/.local/bin/wallpaper-gallery",
+      "close": true,
+      "delay": 0.6
+    },
+    {
+      "icon": "󰙅",
+      "label": "Picker",
+      "cmd": "hyprpicker -a",
+      "close": true,
+      "delay": 0
+    },
+    {
+      "icon": "󰒲",
+      "label": "Grabar",
+      "cmd": "~/.local/bin/screen-recorder-helper toggle",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󰃬",
+      "label": "Privacidad",
+      "cmd": "systemctl --user restart privacy-shield.service",
+      "close": false,
+      "delay": 0
+    },
+    {
+      "icon": "󱐦",
+      "label": "Panico",
+      "cmd": "~/.local/bin/panic-mode",
+      "close": true,
+      "delay": 0.4
+    },
+    {
+      "icon": "󰩌",
+      "label": "Actualizar",
+      "cmd": "~/.local/bin/system-ota gui",
+      "close": true,
+      "delay": 0
+    },
+    {
+      "icon": "󰓮",
+      "label": "Tareas",
+      "cmd": "kitty -e htop",
+      "close": true,
+      "delay": 0
+    }
+  ]
+}

@@ -5264,11 +5264,23 @@ ShellRoot {
                                     anchors.fill: parent
                                     anchors.margins: 10
                                     spacing: 10
-                                    Text {
-                                        text: "󰅍"
-                                        color: root.colAccent
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 16
+                                    Item {
+                                        width: 40; height: 40
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: !modelData.image
+                                            text: "󰅍"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 16
+                                        }
+                                        Image {
+                                            anchors.fill: parent
+                                            visible: modelData.image
+                                            source: modelData.image ? "file://" + modelData.thumb : ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            smooth: true
+                                        }
                                     }
                                     Text {
                                         text: modelData.text

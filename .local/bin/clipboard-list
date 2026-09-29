@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
-# Lista del historial en JSON para la isla: [{"id":2,"text":"..."}]
+# Lista del historial en JSON para la isla:
+# [{"id":2,"text":"...","image":false,"thumb":""}, ...]
+#
 # Texto recortado a 120 caracteres y en una linea, para que quepa en la fila.
+# Para imagenes (preview "[[ binary data ... ]]") se vuelca el contenido a
+# ~/.cache/rhythm/clip-thumbs/<id>.png y se pasa la ruta, para que la isla
+# ensene la miniatura en vez del texto. Los thumbs de ids que ya no estan se
+# borran, para no acumular basura.
 
 set -u
+
+THUMB_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/rhythm/clip-thumbs"
+mkdir -p "$THUMB_DIR" 2>/dev/null || true
+
 cliphist list 2>/dev/null | head -30 | python3 -c '
-import json, sys
+import json, os, subprocess, sys
+
+thumb_dir = os.environ.get("THUMB_DIR", os.path.expanduser("~/.cache/rhythm/clip-thumbs"))
+os.makedirs(thumb_dir, exist_ok=True)
+
 out = []
+vivos = set()
 for line in sys.stdin:
     line = line.rstrip("\n")
     if not line or "\t" not in line:
@@ -15,7 +30,33 @@ for line in sys.stdin:
         iid = int(sid)
     except ValueError:
         continue
-    prev = " ".join(prev.split())[:120]
-    out.append({"id": iid, "text": prev if prev else "(vacio)"})
+    vivos.add(iid)
+    if prev.startswith("[[ binary data"):
+        path = os.path.join(thumb_dir, "%d.png" % iid)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            try:
+                data = subprocess.run(["cliphist", "decode", str(iid)],
+                                      capture_output=True, timeout=10).stdout
+                if data[:8].startswith(b"\x89PNG\r\n\x1a\n"):
+                    open(path, "wb").write(data)
+                else:
+                    path = ""
+            except Exception:
+                path = ""
+        prev_txt = prev[:120]
+        out.append({"id": iid, "text": prev_txt, "image": bool(path), "thumb": path})
+    else:
+        prev = " ".join(prev.split())[:120]
+        out.append({"id": iid, "text": prev if prev else "(vacio)", "image": False, "thumb": ""})
+
+# limpiar thumbs huerfanos
+for f in os.listdir(thumb_dir):
+    if f.endswith(".png"):
+        try:
+            if int(f[:-4]) not in vivos:
+                os.remove(os.path.join(thumb_dir, f))
+        except ValueError:
+            pass
+
 print(json.dumps(out))
 '

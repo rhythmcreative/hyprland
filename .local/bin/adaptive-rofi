@@ -71,22 +71,7 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-# El fondo translucido comun y, encima, el macizo del ahorro de energia. Van en
-# un array aparte porque ROFI_ARGS se expande sin entrecomillar y el css, con
-# espacios, se habria partido en argumentos sueltos.
-#
-# Se pasan con -theme-str y no con un segundo -theme: rofi ignora el segundo
-# fichero de tema y se queda con el primero, asi que con -theme el fondo nunca
-# llegaba a aplicarse.
-ROFI_FONDO=()
-COMMON_THEME="$HOME/.config/rofi/colors-window.rasi"
-SAVER_THEME="$HOME/.config/rofi/colors-powersave.rasi"
-if [ -f "$COMMON_THEME" ]; then
-    ROFI_FONDO+=(-theme-str "$(cat "$COMMON_THEME")")
-fi
-if [ -f "/tmp/powersave-active" ] && [ -f "$SAVER_THEME" ]; then
-    ROFI_FONDO+=(-theme-str "$(cat "$SAVER_THEME")")
-fi
+# El fondo lo pone rofi, no este script. Ver la cabecera de ese fichero.
 _rust_was_visible=false
 _waybar_was_visible=false
 _qs_was_visible=false
@@ -109,7 +94,7 @@ if [ -n "$ACTIVE_MONITOR" ]; then
     fi
 fi
 
-rofi $ROFI_ARGS "${ROFI_FONDO[@]}"
+rofi-themed $ROFI_ARGS
 
 if [ -n "$ACTIVE_MONITOR" ]; then
     [ "$_rust_was_visible" = true ] && "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MONITOR" USR2 &

@@ -432,22 +432,12 @@ no='✗'       # X mark simple
 # primero. Y van en un array porque al meter el css con un $(...) sin
 # entrequillar se partia por los espacios: rofi recibia "-theme-str" '"*' '{'
 # 'bgcolor:' sueltos y se quedaba con el fondo translucido.
-rofi_con_fondo() {
-    local args=(-dmenu "$@")
-    local comun="$HOME/.config/rofi/colors-window.rasi"
-    local macizo="$HOME/.config/rofi/colors-powersave.rasi"
-    if [ -f "$comun" ]; then
-        args+=(-theme-str "$(cat "$comun")")
-    fi
-    if [ -f /tmp/powersave-active ] && [ -f "$macizo" ]; then
-        args+=(-theme-str "$(cat "$macizo")")
-    fi
-    rofi "${args[@]}"
-}
-
+# El fondo lo pone rofi, no este script. Asi el menu de apagado y su
+# confirmacion no pueden quedarse sin fondo por separado del resto de menus.
+#
 # Rofi CMD con monitor especifico
 rofi_cmd() {
-    rofi_con_fondo \
+    rofi-themed -dmenu \
         -p "Goodbye ${USER}" \
         -mesg "Uptime: $uptime" \
         -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
@@ -456,7 +446,7 @@ rofi_cmd() {
 
 # Confirmation CMD con monitor especifico
 confirm_cmd() {
-    rofi_con_fondo \
+    rofi-themed -dmenu \
         -p 'Confirmation' \
         -mesg 'Are You Sure?' \
         -theme "${TEMP_DIR}/confirm-${ACTIVE_MONITOR}.rasi" \

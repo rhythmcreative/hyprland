@@ -182,28 +182,11 @@ log "Waybar ocultado para mostrar selector"
 # El path antiguo era $HOME/HyprNova/..., que no existe en esta maquina, asi que
 # rofi se caia a su tema por defecto y el menu salia con otro aspecto sin que
 # nadie supiera por que. El tema bueno es el que genera pywal.
-# El fondo translucido comun y, encima, el macizo del ahorro de energia. Van como
-# -theme-str porque rofi ignora un segundo -theme y se queda con el primero.
-#
-# El array no es cosmetico: al meter el css con un $(...) sin entrecomillar, las
-# comillas se perdian y la cadena se partia por los espacios, de modo que rofi
-# recibia "-theme-str" '"*' '{' 'bgcolor:' ... sueltos y el panel se quedaba con el
-# fondo translucido aunque el ahorro estuviera activo.
-ROFI_MENU_ARGS=(-dmenu -i
-    -p "Wallpaper + Waybar Sync"
-    -show-icons
-    -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi")
-
-COMMON_THEME="$HOME/.config/rofi/colors-window.rasi"
-SAVER_THEME="$HOME/.config/rofi/colors-powersave.rasi"
-if [ -f "$COMMON_THEME" ]; then
-    ROFI_MENU_ARGS+=(-theme-str "$(cat "$COMMON_THEME")")
-fi
-if [ -f /tmp/powersave-active ] && [ -f "$SAVER_THEME" ]; then
-    ROFI_MENU_ARGS+=(-theme-str "$(cat "$SAVER_THEME")")
-fi
-
-selected=$(rofi "${ROFI_MENU_ARGS[@]}" < "$TEMP_FILE")
+selected=$(rofi-themed -dmenu -i \
+    -p "Wallpaper + Waybar Sync" \
+    -show-icons \
+    -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi" \
+    < "$TEMP_FILE")
 
 # Si no se selecciónó nada, mostrar waybar y salir
 if [[ -z "$selected" ]]; then

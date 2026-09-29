@@ -17,7 +17,6 @@
   "modules-center": [],
   "modules-right": [
     "hyprland/language",
-    "custom/clipboard",
     "bluetooth",
     "tray",
     "pulseaudio",
@@ -316,13 +315,5 @@
   "tray": {
     "icon-size": 18,
     "spacing": 10
-  },
-  "custom/clipboard": {
-    "format": "󰅍 {}",
-    "interval": 5,
-    "exec": "$HOME/.local/bin/clipboard-history count",
-    "tooltip": true,
-    "tooltip-format": "Portapapeles: {} entradas - clic para ver",
-    "on-click": "$HOME/.local/bin/clipboard-history"
   }
 }

@@ -194,6 +194,7 @@ ShellRoot {
     property bool wifiEnabled: true
     property bool btEnabled: false
     property string kbLayout: "US"
+    property int clipCount: 0
     property bool isMuted: false
 
     property var wifiList: []
@@ -313,6 +314,7 @@ ShellRoot {
         caffeineCheckProc.running = true
         powerSaveCheckProc.running = true
         dndCheckProc.running = true
+        clipCountProc.running = true
         hyprStatusProc.running = true
         otaStatusProc.running = true
         otaChangelogProc.running = true
@@ -673,6 +675,7 @@ ShellRoot {
                 const val = text.trim()
                 root.kbLayout = val.length > 0 && val !== "null" ? val : "US"
             }
+
         }
     }
 
@@ -703,6 +706,17 @@ ShellRoot {
         running: true
         onTriggered: fullscreenProc.running = true
         triggeredOnStart: true
+    }
+
+    Process {
+        id: clipCountProc
+        command: ["bash", "-c", "$HOME/.local/bin/clipboard-history count"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const n = parseInt(text.trim(), 10)
+                root.clipCount = isNaN(n) ? 0 : n
+            }
+        }
     }
 
     Process {
@@ -1565,6 +1579,40 @@ ShellRoot {
                         font.pixelSize: 13
                         font.weight: Font.Bold
                         anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    // Clipboard indicator, junto a las alertas: abre el
+                    // historial sin expandir la isla.
+                    Row {
+                        spacing: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            text: "󰅍"
+                            color: root.colAccent
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: root.clipCount > 0 ? root.clipCount : ""
+                            color: root.colFg
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Rectangle {
+                            width: 1
+                            height: 12
+                            color: root.colMuted
+                            opacity: 0.4
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.runCmd("$HOME/.local/bin/clipboard-history")
+                        }
                     }
 
                     // Unread notifications badge (adaptive count)

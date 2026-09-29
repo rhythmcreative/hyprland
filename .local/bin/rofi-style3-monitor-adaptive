@@ -306,7 +306,9 @@ launch_rofi() {
         local bg_c
         bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
         [ -n "$bg_c" ] || bg_c="#101516"
-        extra_args+=(-theme-str "* { bgcolor: ${bg_c}; background-trans: ${bg_c}; background-alt-trans: ${bg_c}; } window { background-color: ${bg_c}; } mainbox { background-color: ${bg_c}; }")
+        # Con alfa, igual que el tema normal: el ahorro es quitar el blur, no volver
+            # el panel macizo. Los sufijos son los de pywal (CC = 80%, AA = 67%).
+            extra_args+=(-theme-str "* { bgcolor: ${bg_c}CC; background-trans: ${bg_c}CC; background-alt-trans: ${bg_c}AA; } window { background-color: ${bg_c}CC; } mainbox { background-color: ${bg_c}AA; }")
     fi
 
     # Lanzar rofi con el tema adaptado

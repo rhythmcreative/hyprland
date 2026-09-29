@@ -8,6 +8,19 @@ LAUNCHER="$HOME/.local/bin/rust-dock-launcher"
 STATE_FILE="/tmp/rust-dock-visible"
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
+# Solo una instancia. Hyprland lo arranca en el autostart y systemd lo
+# supervisa, asi que sin este guardia hay dos vigilantes y cada evento de
+# monitor reinicia las barras el doble de veces.
+PIDFILE="$RUNTIME/rust-dock-monitor-watcher.pid"
+if [ -f "$PIDFILE" ]; then
+    owner=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+        exit 0
+    fi
+fi
+printf '%s\n' "$$" > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
 detect_socket() {
     local sig="${HYPRLAND_INSTANCE_SIGNATURE}"
     if [ -z "$sig" ]; then
@@ -100,12 +113,31 @@ handle_monitor_event() {
 while true; do
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
-        socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do
-            case "$event" in
-                monitoradded*|monitorremoved*)
-                    handle_monitor_event < /dev/null
-                    ;;
-            esac
+        # Hyprland emits a burst of events for a single plug (monitoradded,
+        # monitoraddedv2, mode changes, ...). Acting on each one restarts Waybar
+        # as many times as the burst is long, so swallow the rest of the burst:
+        # the next event is only accepted after two seconds of silence.
+        burst=0
+        while true; do
+            if IFS= read -r -t 2 event; then
+                case "$event" in
+                    monitoradded*|monitorremoved*)
+                        if [ "$burst" = "0" ]; then
+                            burst=1
+                            handle_monitor_event < /dev/null &
+                        fi
+                        ;;
+                esac
+            else
+                status=$?
+                # read returns 1 at EOF (socket closed) and >128 on timeout: only
+                # a timeout means the burst is over, an EOF must leave the loop.
+                if [ "$status" -gt 128 ]; then
+                    burst=0
+                else
+                    break
+                fi
+            fi
         done
     fi
     sleep 2

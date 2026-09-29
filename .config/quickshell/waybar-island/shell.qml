@@ -83,6 +83,13 @@ ShellRoot {
         root.currentNotification = null
         root.notifActive = false
         root.notifUnread = 0
+        // A pending pairing request has a short lifetime: show it instead of
+        // the notification list, otherwise the request is only visible through
+        // a notification that leads somewhere else.
+        if (root.pairRequest.active && root.pairRequest.state === "pending") {
+            root.setPanelState(screenName, true, 0, 6)
+            return
+        }
         root.setPanelState(screenName, true, 2, 0)
         root.refreshAllStates()
     }
@@ -366,7 +373,9 @@ ShellRoot {
             panel.expanded = !panel.expanded
             if (panel.expanded) {
                 panel.currentTab = 0
-                panel.controlSubView = 0
+                // Abrir la isla con una solicitud pendiente debe llevar al
+                // aviso de emparejamiento, no a la vista de control.
+                panel.controlSubView = root.pairRequest.active ? 6 : 0
                 root.refreshAllStates()
             }
             return panel.expanded ? "expanded" : "collapsed"
@@ -1086,7 +1095,7 @@ ShellRoot {
             Component.onDestruction: root.unregisterIslandPanel(modelData.name)
 
             onCurrentTabChanged: {
-                if (islandWin.controlSubView !== 4) islandWin.controlSubView = 0
+                if (islandWin.controlSubView !== 4 && !(root.pairRequest.active && islandWin.currentTab === 0)) islandWin.controlSubView = 0
                 if (islandWin.currentTab === 1) hyprStatusProc.running = true
                 islandWin.tabFade = 0.0
                 tabFadeReset.restart()
@@ -2180,10 +2189,11 @@ ShellRoot {
                                                     Layout.fillWidth: true
                                                 }
                                                 Text {
-                                                    text: root.btEnabled ? (root.btDevices.filter(d => d.connected).length > 0 ? root.btDevices.filter(d => d.connected)[0].name : "Enabled") : "Disabled"
+                                                    text: root.pairRequest.active ? "Pairing request pending" : (root.btEnabled ? (root.btDevices.filter(d => d.connected).length > 0 ? root.btDevices.filter(d => d.connected)[0].name : "Enabled") : "Disabled")
                                                     color: root.btEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 9
+                                                    font.weight: root.pairRequest.active ? Font.Bold : Font.Normal
                                                     elide: Text.ElideRight
                                                     Layout.fillWidth: true
                                                 }
@@ -2196,8 +2206,12 @@ ShellRoot {
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                                             onClicked: mouse => {
                                                 if (mouse.button === Qt.RightButton) {
-                                                    islandWin.controlSubView = 2
-                                                    btStatusProc.running = true
+                                                    if (root.pairRequest.active) {
+                                                        islandWin.controlSubView = 6
+                                                    } else {
+                                                        islandWin.controlSubView = 2
+                                                        btStatusProc.running = true
+                                                    }
                                                 } else {
                                                     const newState = !root.btEnabled
                                                     root.btEnabled = newState

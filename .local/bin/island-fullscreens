@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Lista los monitores que tienen una ventana en pantalla completa, como JSON.
+#
+#   {"eDP-1":true}
+#
+# Lo usa la isla para esconderse mientras hay un video a pantalla completa en ese
+# monitor. La isla esta en la capa Overlay, que en Hyprland se dibuja por encima
+# de las ventanas en pantalla completa, asi que sin esto se ve encima del video.
+#
+# Se miran las ventanas VISIBLES y MAPEADAS a proposito: una ventana en pantalla
+# completa de otro espacio de trabajo tiene visible=false, y si se contara,
+# cambiar de espacio dejaria la isla escondida sin motivo.
+#
+# El campo "monitor" de un cliente es un indice numerico, no un nombre, asi que se
+# cruza con hyprctl monitors -j para obtener el nombre real.
+
+set -u
+
+mons=$(hyprctl monitors -j 2>/dev/null) || { echo "{}"; exit 0; }
+clients=$(hyprctl clients -j 2>/dev/null) || { echo "{}"; exit 0; }
+
+[ -n "$mons" ] && [ -n "$clients" ] || { echo "{}"; exit 0; }
+
+jq -nc \
+  --argjson mons "$mons" \
+  --argjson clients "$clients" \
+  '($mons | map({key: (.id|tostring), value: .name}) | from_entries) as $por_id
+   | [$clients[]
+      | select(.visible == true and .mapped == true and (.fullscreen > 0))
+      | $por_id[(.monitor|tostring)]]
+   | unique
+   | map({key: ., value: true})
+   | from_entries'

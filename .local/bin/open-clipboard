@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Abre la pestana Portapapeles de la isla en el monitor enfocado.
+# Es lo que lanza SUPER+V. Antes abria un menu de rofi; ahora todo el
+# portapapeles vive dentro de la isla y el rofi se elimino.
+
+set -u
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="wayland-1"
+
+MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -n1)
+[ -n "$MON" ] || MON="eDP-1"
+quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island openClipboard "$MON" 2>/dev/null

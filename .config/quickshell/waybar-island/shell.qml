@@ -293,7 +293,7 @@ ShellRoot {
         volProc.running = true
         briProc.running = true
         wifiProc.running = true
-        btProc.running = true
+        btStatusProc.running = true
         perfProc.running = true
         kbProc.running = true
         muteProc.running = true
@@ -633,15 +633,11 @@ ShellRoot {
         }
     }
 
-    Process {
-        id: btProc
-        command: ["bash", "-c", "bluetoothctl show 2>/dev/null | grep -i 'powered' | awk '{print $2}'"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.btEnabled = text.trim() === "yes"
-            }
-        }
-    }
+    //  `btProc` estaba aquí para preguntar solo "¿está encendido?", pero
+    //  escribía root.btEnabled y eso ya lo hace btStatusProc, que además trae
+    //  discovering y la lista de aparatos. Dos procesos escribiendo la misma
+    //  propiedad, cada uno con su propio ritmo, es la forma de que el estado
+    //  parpadee. Se queda uno solo: el que lo sabe todo.
 
     Process {
         id: perfProc
@@ -755,9 +751,15 @@ ShellRoot {
 
     Timer {
         id: btPollTimer
-        interval: 1500
         repeat: true
-        running: root.anyPanelSubView(2) && root.btEnabled
+        //  El estado de bluetooth se mira SIEMPRE, no solo con la lista
+        //  abierta. Antes esto solo corría con el subview de BT desplegado, así
+        //  que al cerrar la isla la píldora se quedaba con el último
+        //  `btDevices` que vio —congelado— mientras waybar, que va por D-Bus,
+        //  seguía al día. Esa era la desincronización entre las dos barras.
+        running: true
+        //  Rápido donde se nota, tranquilo de fondo.
+        interval: root.anyPanelSubView(2) ? 1500 : 3000
         onTriggered: {
             if (!btStatusProc.running) {
                 btStatusProc.running = true
@@ -771,7 +773,6 @@ ShellRoot {
         repeat: false
         onTriggered: {
             btStatusProc.running = true
-            btProc.running = true
         }
     }
 

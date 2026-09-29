@@ -1,9 +1,62 @@
 #!/usr/bin/env python3
 import sys
+import os
 import subprocess
 import json
 import re
 import time
+
+MAC_RE = re.compile(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\r')
+
+
+def read_info(mac):
+    """`bluetoothctl info` for one device, or '' when BlueZ has dropped it.
+
+    A device that bluez has forgotten is the normal state of something that was
+    never paired, so a failure here is information, not a crash.
+    """
+    try:
+        return subprocess.check_output(['bluetoothctl', 'info', mac],
+                                       text=True, stderr=subprocess.DEVNULL, timeout=10)
+    except Exception:
+        return ''
+
+
+def first_error(out):
+    """The bluez error inside a command's output, or '' if there is none.
+
+    bluez answers `pair` with exit code 0 even while reporting a failure, so the
+    code is never the signal — the text is.
+    """
+    for line in (out or '').splitlines():
+        line = ANSI.sub('', line).strip()
+        if line.startswith('Failed to') or 'org.bluez.Error' in line:
+            return line
+    return ''
+
+
+def _state_dir():
+    runtime = os.environ.get('XDG_RUNTIME_DIR', '/run/user/%d' % os.getuid())
+    return os.path.join(runtime, 'rhythm-bluetooth-pairing')
+
+
+def mark_pending(mac):
+    """Tell the agent which device this pair attempt is for."""
+    try:
+        os.makedirs(_state_dir(), exist_ok=True)
+        with open(os.path.join(_state_dir(), 'pending.json'), 'w') as handle:
+            json.dump({'mac': mac}, handle)
+    except OSError:
+        pass
+
+
+def clear_pending():
+    try:
+        os.remove(os.path.join(_state_dir(), 'pending.json'))
+    except OSError:
+        pass
+
 
 def get_bt_status():
     try:
@@ -71,11 +124,10 @@ def get_bt_status():
         clean_devs = []
         for d in devices:
             mac = d['mac']
-            info = ''
-            try:
-                info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, stderr=subprocess.DEVNULL)
-            except Exception:
-                pass
+            # bluetoothctl colorea la salida cuando cree que hay terminal; los
+            # códigos se cuelan delante del nombre de la propiedad y rompen los
+            # `startswith` de abajo, así que se van primero.
+            info = ANSI.sub('', read_info(mac))
 
             d['connected'] = 'Connected: yes' in info
             d['paired'] = 'Paired: yes' in info or (mac in paired_macs)
@@ -186,16 +238,67 @@ def main():
             print(json.dumps({'status': 'error', 'message': 'Missing MAC'}))
             sys.exit(1)
         mac = sys.argv[2]
+        # La MAC acaba en una orden de shell en la isla: se comprueba el
+        # formato. Viene de bluez, pero no se le hace caso al remitente.
+        if not re.match(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$', mac):
+            print(json.dumps({'status': 'error', 'message': 'Invalid MAC'}))
+            sys.exit(1)
         try:
-            # Check paired state
-            info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, stderr=subprocess.DEVNULL)
+            info = read_info(mac)
+
             if 'Paired: yes' not in info:
-                # Trust and pair before connecting
-                subprocess.run(['bluetoothctl', 'trust', mac], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-                subprocess.run(['bluetoothctl', 'pair', mac], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
-            
-            res = subprocess.run(['bluetoothctl', 'connect', mac], capture_output=True, text=True, timeout=12)
-            print(json.dumps({'status': 'ok' if res.returncode == 0 else 'error', 'message': res.stdout.strip() or res.stderr.strip()}))
+                # CONFiar antes de emparejar era el bug que rompía todo esto.
+                #
+                # `bluetoothctl trust` es una escritura de propiedad: no negocia
+                # nada, no espera a nadie y por eso NUNCA falla. Se quedaba
+                # puesto mientras `pair` —que sí necesita al agente— se caía, y
+                # el aparato acababa en `Trusted: yes / Paired: no`: una
+                # confianza sin clave de enlace, que bluez conserva en su árbol
+                # y la lista enseña como si fuera utilizable. Al reintentarlo,
+                # bluez reutiliza ese objeto a medias y el emparejamiento vuelve
+                # a caer. Por eso aquí ya no hay ni un aparato emparejado.
+                #
+                # Así que primero se limpia el estado a medias, luego se empareja
+                # de verdad y solo entonces se confía.
+                if 'Trusted: yes' in info:
+                    # `remove` borra el objeto incompleto, no el enlace: aquí no
+                    # hay ninguno que perder.
+                    subprocess.run(['bluetoothctl', 'remove', mac],
+                                   capture_output=True, text=True, timeout=10)
+
+                # `pair` bloquea mientras el agente pide la confirmación en la
+                # isla. El agente tiene 28s de ventana, así que el proceso se le
+                # da bastante más: cortarlo antes produce justo el
+                # trusted-sin-paired que se está limpiando aquí.
+                # Este bluetoothctl es un cliente pelado y NO registra agente,
+                # así que la negociación le llega al agente que corre aparte
+                # (bluetooth-pair-agent) y el diálogo sale en la isla.
+                #
+                # El prompt del agente va por adaptador, no por aparato: sin
+                # dejar la MAC escrita aquí, la isla preguntaría por emparejar
+                # algo que no sabe nombrar.
+                mark_pending(mac)
+                try:
+                    res = subprocess.run(['bluetoothctl', 'pair', mac],
+                                         capture_output=True, text=True, timeout=60)
+                finally:
+                    clear_pending()
+                out = ((res.stdout or '') + (res.stderr or '')).strip()
+                if 'Pairing successful' not in out:
+                    # El código de salida no sirve: bluez contesta 0 incluso
+                    # cuando contesta «not available». Solo vale la respuesta.
+                    print(json.dumps({'status': 'error',
+                                      'message': first_error(out) or 'Pairing failed'}))
+                    return
+
+                # Emparejado de verdad: ahora la confianza sí significa algo.
+                subprocess.run(['bluetoothctl', 'trust', mac],
+                               capture_output=True, text=True, timeout=10)
+
+            res = subprocess.run(['bluetoothctl', 'connect', mac], capture_output=True, text=True, timeout=20)
+            out = ((res.stdout or '') + (res.stderr or '')).strip()
+            print(json.dumps({'status': 'ok' if 'Connection successful' in out else 'error',
+                              'message': out or first_error(out)}))
         except Exception as e:
             print(json.dumps({'status': 'error', 'message': str(e)}))
 

@@ -42,4 +42,7 @@ mv "$WAYBAR_CONFIG.tmp" "$WAYBAR_CONFIG"
 # --force: se acaba de cambiar el modulo de bateria en el config, y Waybar no
 # relee su config en caliente. Sin --force el launcher veria una barra por
 # monitor y no reconstruiria nada, dejando el modulo viejo.
-pkill -SIGUSR2 waybar || hyprctl dispatch exec "$HOME/.config/waybar/launch.sh --force"
+# El fallback usa hyprctl eval y no "hyprctl dispatch exec", que en Hyprland
+# 0.56 no funciona: hyprctl mete los args dentro de hl.dispatch(...) y eso no es
+# Lua valido. La API de si tiene exec_cmd.
+pkill -SIGUSR2 waybar || hyprctl eval "hl.dispatch(hl.dsp.exec_cmd('$HOME/.config/waybar/launch.sh --force'))" >/dev/null 2>&1

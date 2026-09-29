@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Mueve la ventana activa al workspace especial y vuelve al workspace anterior.
+#
+# Sustituye a "hyprctl dispatch movetoworkspacesilent special", que no funciona
+# en Hyprland 0.56: hyprctl mete los argumentos dentro de hl.dispatch(...) y eso
+# no es Lua valido, falla con "')' expected near 'special'". El boton de hyprbars
+# no hacia nada.
+#
+# La API de lua no tiene "silent", asi que se emula: se apunta el workspace
+# activo, se mueve la ventana y, si el compositor ha seguido a la ventana, se
+# vuelve al workspace de antes. Por eso el script existe y no es una linea suelta
+# en colors.conf.
+#
+# No hay equivalente en la API para "mover por direccion": hl.dsp.window.move
+# solo acepta la ventana enfocada (direction, x+y, workspace, into_group,
+# out_of_group), y ahi no hay campo de direccion.
+
+set -u
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+command -v hyprctl >/dev/null 2>&1 || exit 1
+command -v jq >/dev/null 2>&1 || exit 1
+
+ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.name // empty' 2>/dev/null)
+# El workspace tiene que ser numerico para pasarlo a la API como numero.
+numero="${ws//[!0-9]/}"
+[ -n "$numero" ] || exit 1
+
+hyprctl eval "hl.dispatch(hl.dsp.window.move({workspace='special:magic'}))" >/dev/null 2>&1 || exit 1
+sleep 0.15
+
+ahora=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.name // empty' 2>/dev/null)
+if [ "$ahora" != "$ws" ]; then
+    hyprctl eval "hl.dispatch(hl.dsp.focus({workspace=$numero}))" >/dev/null 2>&1 || true
+fi
+exit 0

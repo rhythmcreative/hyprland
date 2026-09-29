@@ -402,50 +402,10 @@ _ota_devolver_isla() {
 # delante de nadie. Un servicio nuevo espera al siguiente inicio de sesion, o a un
 # systemctl --user start a mano.
 ota_habilitar_servicios() {
-    local dir="$HOME/.config/systemd/user"
-    # Units que se activan bajo demanda o a proposito:
-    #   rhythm-caffeine.service             la isla la alterna, y su status la
-    #                                       arranca sola mientras el flag exista
-    #   rhythm-nightlight-schedule.service  solo si el usuario puso un horario
-    #   blueman-applet.service              masked a proposito en esta maquina
-    #   pipewire-session-manager.service    alias de la distro
-    local excluidas="rhythm-caffeine.service rhythm-nightlight-schedule.service blueman-applet.service pipewire-session-manager.service"
-    local unit name actual nuevo
-
-    [ -d "$dir" ] || return 0
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-
-    nuevo=0
-    for unit in "$dir"/*.service "$dir"/*.timer; do
-        [ -e "$unit" ] || continue
-        name=$(basename "$unit")
-
-        case " $excluidas " in
-            *" $name "*) continue ;;
-        esac
-
-        # Solo las que el propio fichero dice que deben arrancar con la sesion.
-        # graphical-session.target se deja fuera a proposito: en Hyprland con SDDM
-        # no lo activa nadie y una unidad colgando de el no arranca sin avisar.
-        grep -qE '^[[:space:]]*WantedBy=.*(default\.target|timers\.target)' "$unit" 2>/dev/null || continue
-
-        actual=$(systemctl --user is-enabled "$name" 2>/dev/null || echo "unknown")
-        case "$actual" in
-            enabled|enabled-runtime|masked|static|indirect|alias|generated) continue ;;
-        esac
-
-        if systemctl --user enable "$name" >/dev/null 2>&1; then
-            echo "  [+] servicio habilitado: $name"
-            nuevo=$((nuevo + 1))
-        else
-            echo "  [!] no se pudo habilitar: $name"
-        fi
-    done
-
-    if [ "$nuevo" -gt 0 ]; then
-        echo "  $nuevo servicio(s) nuevo(s). Arrancaran en el proximo inicio de sesion,"
-        echo "  o a mano con: systemctl --user start <nombre>"
-    fi
+    # La regla vive en enable-user-services, que install.sh tambien llama. Estaba
+    # duplicada aqui y alli con dos listas distintas, que es como se llega a que un
+    # servicio se habilite en una instalacion nueva y no en una actualizacion.
+    "$HOME/.local/bin/enable-user-services" 2>/dev/null || true
 }
 
 cmd_update() {

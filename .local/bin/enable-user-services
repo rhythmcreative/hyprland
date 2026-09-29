@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Habilita los servicios de usuario que deben arrancar con la sesion.
+#
+# La regla es la del propio fichero de la unidad: si tiene WantedBy=default.target
+# o WantedBy=timers.target, se habilita. No hay ninguna lista que mantener, asi que
+# anadir un servicio al repo basta.
+#
+# Esto estaba en tres sitios distintos con tres listas distintas, y por eso
+# install.sh (instalacion nueva) y el actualizador OTA (cada actualizacion)
+# habiltaban cosas distintas. Los dos llaman a este guion.
+#
+# Solo habilita, no arranca. Arrancar cosas sin avisar es de otra historia: un
+# update no deberia encenderte la webcam ni sacarte el dock delante.
+#
+# Unidades que se dejan fuera a proposito:
+#
+#   rhythm-caffeine.service             la isla la alterna con un interruptor, y
+#                                       toggle-caffeine status la arranca sola
+#                                       mientras el flag exista
+#   rhythm-nightlight-schedule.service  solo debe correr si el usuario activó un
+#                                       horario
+#   blueman-applet.service              masked a proposito en esta maquina
+#   pipewire-session-manager.service    alias de la distro
+#   rhythm-ota-check.service            static, lo dispara el timer
+#
+# Uso: enable-user-services   (solo habilita)
+#      enable-user-services --now   (habilita y arranca lo recien habilitado)
+
+set -u
+
+arrancar=false
+[ "${1:-}" = "--now" ] && arrancar=true
+
+dir="$HOME/.config/systemd/user"
+excluidas="rhythm-caffeine.service rhythm-nightlight-schedule.service blueman-applet.service pipewire-session-manager.service"
+
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "enable-user-services: systemctl no disponible"
+    exit 0
+fi
+
+if [ ! -d "$dir" ]; then
+    echo "enable-user-services: no existe $dir"
+    exit 0
+fi
+
+systemctl --user daemon-reload >/dev/null 2>&1 || true
+
+nuevas=0
+
+for unit in "$dir"/*.service "$dir"/*.timer; do
+    [ -e "$unit" ] || continue
+    name=$(basename "$unit")
+
+    case " $excluidas " in
+        *" $name "*) continue ;;
+    esac
+
+    # graphical-session.target se deja fuera a proposito: en Hyprland arrancado con
+    # SDDM no lo activa nadie, y una unidad colgando de el se queda sin arrancar
+    # sin decir nada. Fue justo el fallo de waybar-island, wallpaper-monitor-watcher
+    # y privacy-shield durante meses.
+    grep -qE '^[[:space:]]*WantedBy=.*(default\.target|timers\.target)' "$unit" 2>/dev/null || continue
+
+    estado=$(systemctl --user is-enabled "$name" 2>/dev/null || echo "unknown")
+    case "$estado" in
+        enabled|enabled-runtime) continue ;;
+        masked|static|indirect|alias|generated) continue ;;
+    esac
+
+    if systemctl --user enable "$name" >/dev/null 2>&1; then
+        echo "  habilitada $name"
+        if [ "$arrancar" = true ]; then
+            systemctl --user start "$name" >/dev/null 2>&1 || true
+        fi
+        nuevas=$((nuevas + 1))
+    else
+        echo "  NO se pudo habilitar $name"
+    fi
+done
+
+echo "enable-user-services: $nuevas habilitadas ahora."

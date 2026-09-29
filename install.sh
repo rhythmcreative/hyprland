@@ -1148,15 +1148,24 @@ MONCONF
     mkdir -p "$HOME/Videos/Recordings" "$HOME/Pictures/Screenshots" "$HOME/Pictures/Wallpapers"
 
     # Enable all Dynamic Island & system user services
+    #
+    # Antes habia aqui una lista a mano de siete unidades, y el actualizador OTA
+    # tenia otra distinta. Con dos listas, un servicio nuevo se habilitaba en una
+    # instalacion nueva y no en una actualizacion, o al reves, segun donde se
+    # hubiera anadido. Ahora los dos llaman al mismo guion, que decide mirando el
+    # WantedBy de cada unidad, asi que no hay nada que mantener.
     step_item "Enabling Dynamic Island and background services..."
-    systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable waybar-island.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-bluetooth-agent.service >> "$LOG_FILE" 2>&1 || true
+    if [ -x "$HOME/.local/bin/enable-user-services" ]; then
+        "$HOME/.local/bin/enable-user-services" --now >> "$LOG_FILE" 2>&1 || step_warn "Some user services could not be enabled."
+    else
+        systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
+        step_warn "enable-user-services missing; falling back to the service list."
+        for u in waybar-island.service wallpaper-monitor-watcher.service rust-dock-monitor-watcher.service \
+                 rhythm-power-profile.service privacy-shield.service rhythm-bluetooth-agent.service; do
+            systemctl --user enable --now "$u" >> "$LOG_FILE" 2>&1 || true
+        done
+        systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+    fi
 
     # Enable system-level power-profiles-daemon (required by auto-power-profile)
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true

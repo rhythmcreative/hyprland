@@ -437,7 +437,21 @@ cmd_update() {
         else
             chmod +x "$runner" 2>/dev/null || true
         fi
-        OTA_DETACHED=1 OTA_RUNNER="$runner" setsid --fork bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
+        # Escapar del cgroup del servicio, no solo de la sesion.
+        #
+        # setsid saca al proceso de la sesion, pero NO del cgroup: sigue en
+        # app.slice/waybar-island.service. Como la unidad no tiene KillMode, systemd
+        # usa control-group y al parar la isla mata TODO lo que haya dentro,
+        # incluido el runner ya desvinculado. Medido: un update lanzado desde la
+        # isla moria justo al parar la isla ("Deploying configs and scripts..." era
+        # lo ultimo del log), mientras el mismo codigo lanzado desde un terminal
+        # llegaba al final. systemd-run --scope lo pone en un scope propio, fuera
+        # del alcance del stop.
+        if command -v systemd-run >/dev/null 2>&1; then
+            OTA_DETACHED=1 OTA_RUNNER="$runner" systemd-run --user --scope --quiet bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
+        else
+            OTA_DETACHED=1 OTA_RUNNER="$runner" setsid --fork bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null
+        fi
         echo "OTA update started in the background (detached)."
         return 0
     fi

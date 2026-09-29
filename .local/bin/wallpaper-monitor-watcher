@@ -11,16 +11,49 @@ detect_socket() {
     echo "$RUNTIME/hypr/$sig/.socket2.sock"
 }
 
+repintar() {
+    [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ] || return 0
+    "$HOME/.local/bin/load-last-wallpaper-fast" >/dev/null 2>&1 &
+}
+
+# Revision periodica.
+#
+# Encender un monitor no dispara nada en el socket2: no existe evento dpms, solo
+# monitoradded, monitorremoved, focusedmon, openwindow, closewindow,
+# configreloaded y screencast. Asi que el watcher solo enteraba de un monitor NUEVO,
+# no de uno que ya estaba y se enciende, y el fondo se quedaba sin pintar.
+#
+# awww sigue creyendo que la imagen esta puesta —"awww query" la lista sin
+# problema— mientras la superficie del compositor esta en alfa 0, asi que la
+# unica senal fiable es el alfa de la capa, que es lo que comprueba
+# background-health.
+revisar() {
+    [ -x "$HOME/.local/bin/background-health" ] || return 0
+    local roto
+    roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
+    [ -n "$roto" ] || return 0
+    echo "$(date '+%Y-%m-%d %H:%M:%S') fondo sin pintar en: $(echo "$roto" | tr '\n' ' ')" >> "$LOG_FILE"
+    repintar
+}
+
+LOG_FILE="$HOME/.cache/wallpaper-monitor-watcher.log"
+
+contador=0
 while true; do
+    # Revision cada 5 vueltas del bucle exterior, unos 10 segundos.
+    contador=$((contador + 1))
+    if [ "$contador" -ge 5 ]; then
+        contador=0
+        revisar
+    fi
+
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
         socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do
             case "$event" in
                 monitoradded*)
                     sleep 0.6
-                    if [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ]; then
-                        "$HOME/.local/bin/load-last-wallpaper-fast" >/dev/null 2>&1 &
-                    fi
+                    repintar
                     ;;
             esac
         done

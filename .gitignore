@@ -8,3 +8,10 @@ __pycache__/
 # está publicada en el historial; copiar la plantilla no la devuelve. Rotárala
 # en openweathermap.org y deja la real solo aquí.
 .config/waybar/openweather_api_key
+
+# Copias de seguridad que dejan los scripts al reescribirse. Hay dos en disco
+# (bluetooth-pair-agent.bak-20260929, notch-bt-helper.bak-20260929) y son
+# ejecutables: si uno entra en un commit, el update los despliega en cada maquina
+# como si fueran scripts de verdad.
+*.bak-*
+*.bak

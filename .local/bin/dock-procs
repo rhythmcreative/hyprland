@@ -58,10 +58,19 @@ monitor_of() {
 }
 
 pids_of_kind() {
-    local entry pid exe
-    for entry in /proc/[0-9]*; do
-        pid="${entry#/proc/}"
-        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+    # `pgrep -x` compara el NOMBRE del proceso (comm), no la linea de comandos:
+    # es preciso —una terminal que mencione "rust-dock" no se llama rust-dock—
+    # y tarda ~40 ms.
+    #
+    # La primera version de esto recorria /proc/[0-9]* con un readlink por
+    # entrada para no depender de comm. Sonaba bien y era seguro, pero costaba
+    # mas de un segundo: las barras recibian la orden un segundo despues que la
+    # isla, y al abrir y cerrar los menus se notaia clarisimo. Ahora el nombre
+    # estrecha primero y el ejecutable confirma despues, sobre cuatro o cinco
+    # procesos en vez de cuatrocientos.
+    local pid exe
+    for pid in $(pgrep -x "$kind" 2>/dev/null); do
+        exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
         case "$exe" in
             $want_exe) echo "$pid" ;;
         esac

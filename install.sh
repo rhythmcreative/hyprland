@@ -1266,12 +1266,31 @@ step_system() {
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
         echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
 
-        # SDDM Multi-monitor script
+        # El greeter corre en WAYLAND, no en X11, y esto no es estetico.
+        #
+        # En un portatil con GPU hibrida el monitor externo cuelga de la tarjeta
+        # discreta y el panel del portatil de la integrada. El servidor X que
+        # levanta SDDM solo consecuguia encender una de las dos, asi que con las
+        # dos conectadas el login se quedaba en negro y la unica salida era
+        # reiniciar con el cable fuera. Hyprland ya conduce ambas GPUs sin
+        # problema en la sesion normal, asi que se le da tambien el login.
+        #
+        # El Xsetup se sigue desplegando y queda de red de seguridad: es el
+        # camino que se usa si hay que volver a X11.
+        if [ -f "$DOTFILES_DIR/sddm/hyprland.lua" ]; then
+            sudo cp -f "$DOTFILES_DIR/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua
+            sudo chmod 644 /usr/share/sddm/hyprland.lua
+        fi
+        echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=start-hyprland -- --config /usr/share/sddm/hyprland.lua" \
+            | sudo tee /etc/sddm.conf.d/10-wayland.conf > /dev/null
+
+        # Red de seguridad: si algun dia hay que volver a X11, se renombra este
+        # fichero a .disabled y se restaura xsetup.conf.
+        [ -f "/etc/sddm.conf.d/xsetup.conf" ] && sudo mv -f /etc/sddm.conf.d/xsetup.conf /etc/sddm.conf.d/xsetup.conf.disabled
         if [ -f "$DOTFILES_DIR/sddm/Xsetup" ]; then
             sudo cp -f "$DOTFILES_DIR/sddm/Xsetup" /etc/sddm/Xsetup
             sudo chmod +x /etc/sddm/Xsetup
         fi
-        echo -e "[X11]\nDisplayCommand=/etc/sddm/Xsetup" | sudo tee /etc/sddm.conf.d/xsetup.conf > /dev/null
 
         # Sudoers NOPASSWD helper for live pywal sync
         sudo mkdir -p /etc/sudoers.d

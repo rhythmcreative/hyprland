@@ -1,0 +1,10 @@
+# Plantilla: copia a ~/.config/waybar/openweather_api_key y pon tu clave real.
+#
+#   cp ~/.config/waybar/openweather_api_key.example ~/.config/waybar/openweather_api_key
+#
+# El fichero real esta en .gitignore a proposito. Antes de que lo estuviera, una
+# clave real acabo publicada en el historial de este repositorio, asi que hay que
+# darlo por filtrado: rotala en openweathermap.org.
+#
+# Sin clave, los scripts de weather avisan en la barra en vez de romperse.
+API_KEY=

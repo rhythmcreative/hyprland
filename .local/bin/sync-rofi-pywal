@@ -265,3 +265,33 @@ EOF
 echo "Colores de rofi sincronizados con pywal"
 echo "Archivo de colores actualizado: $ROFI_COLORS_FILE"
 echo "Tema principal actualizado: $ROFI_THEME_FILE"
+
+# Refrescar también el override de power saver, si está activo.
+#
+# Antes el color lo leía cada menú al abrirse, así que siempre era fresco. Al
+# centralizarlo en colors-powersave.rasi, que solo escribe toggle-powersave, un
+# cambio de fondo con el ahorro activo dejaba el menú con el color viejo. Esto lo
+# vuelve a tener al día sin depender de que nadie vuelva a tocar el interruptor.
+if [ -f /tmp/powersave-active ]; then
+    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
+    [ -n "$bg_c" ] || bg_c="#101516"
+    for rdir in "$HOME/.config/rofi"; do
+        [ -d "$rdir" ] || continue
+        # Con alfa, igual que el tema normal: el ahorro es quitar el blur, no
+        # volver el panel macizo. CC = 80%, AA = 67%, los de pywal.
+        cat > "$rdir/colors-powersave.rasi" << PSRASI
+* {
+    bgcolor: ${bg_c}CC;
+    background-trans: ${bg_c}CC;
+    background-alt-trans: ${bg_c}AA;
+}
+window {
+    background-color: ${bg_c}CC;
+}
+mainbox {
+    background-color: ${bg_c}AA;
+}
+PSRASI
+    done
+    echo "Override de power saver de rofi actualizado con el fondo nuevo"
+fi

@@ -1,0 +1,12 @@
+[Unit]
+Description=Clipboard history watcher (cliphist over wl-paste)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cliphist-daemon
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=default.target

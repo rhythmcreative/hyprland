@@ -1375,15 +1375,23 @@ step_update() {
     fi
 
     # Reload systemd and re-enable all services after update
+    #
+    # Esto era una SEGUNDA lista de unidades, igual que la de mas arriba. Unificar
+    # solo una de las dos deja el mismo problema: un servicio nuevo se habilita en
+    # un sitio y no en el otro, y no se ve hasta que algo no arranca. Las dos
+    # llaman a enable-user-services, que decide mirando el WantedBy de cada
+    # unidad.
     step_item "Reloading systemd user services..."
     systemctl --user daemon-reload >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now waybar-island.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now wallpaper-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rust-dock-monitor-watcher.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-power-profile.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now privacy-shield.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now rhythm-bluetooth-agent.service >> "$LOG_FILE" 2>&1 || true
+    if [ -x "$HOME/.local/bin/enable-user-services" ]; then
+        "$HOME/.local/bin/enable-user-services" --now >> "$LOG_FILE" 2>&1 || true
+    else
+        for u in waybar-island.service wallpaper-monitor-watcher.service rust-dock-monitor-watcher.service \
+                 rhythm-power-profile.service privacy-shield.service rhythm-bluetooth-agent.service; do
+            systemctl --user enable --now "$u" >> "$LOG_FILE" 2>&1 || true
+        done
+        systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
+    fi
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
 
     # rust-dock: relanzar para que tome el binario recien desplegado

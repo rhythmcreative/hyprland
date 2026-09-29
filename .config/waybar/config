@@ -28,8 +28,9 @@
     "format-en": "US",
     "format-es": "ES",
     "tooltip-format": "{long} ({short}) - click to switch",
-    "on-click": "hyprctl switchxkblayout all next",
-    "format-us": "US"
+    "on-click": "hyprctl switchxkblayout at-translated-set-2-keyboard next",
+    "format-us": "US",
+    "keyboard-name": "at-translated-set-2-keyboard"
   },
   "custom/desktop-power": {
     "format": "",

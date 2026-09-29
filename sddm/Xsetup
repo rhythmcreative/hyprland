@@ -1,47 +1,45 @@
 #!/bin/sh
-# Configuración rápida y atómica de monitores para SDDM
+# Configuración de monitores para SDDM, pantalla a pantalla.
+#
+# POR QUÉ UNA SALIDA A UNA Y NO UN COMANDO ÚNICO
+# ----------------------------------------------
+# xrandr aplica un comando de varios --output de forma ATÓMICA: si una sola
+# salida falla, aborta el ENTERO y no se configura ninguna, dejando al greeter
+# sin pantalla. Con un monitor no hay nada que pueda tumbar el comando, asi que
+# el fallo solo se manifesto cuando habia mas de uno: basta con que una salida
+# real todavia no este lista (un DisplayPort o un HDMI con handshake lento, o
+# una que xrandr encore no conoce) para que las demas se queden sin configurar
+# y el greeter no llegue a arrancar.
+#
+# Por eso aqui cada salida se aplica por separado, se anota la que falle y se
+# sigue. El greeter siempre queda con al menos una pantalla funcionando, que es
+# lo unico que necesita para mostrar el login.
 
-# Obtener query de xrandr rápidamente (máximo 2 reintentos de 50ms)
-XR_OUT=""
-for _ in 1 2 3; do
-    XR_OUT=$(xrandr --query 2>/dev/null)
-    if printf '%s\n' "$XR_OUT" | grep -q "connected"; then
-        break
-    fi
-    sleep 0.05
-done
+# Salidas conectadas QUE ADEMAS exponen al menos un modo utilizable.
+#
+# El filtro de modos importa: una salida se puede reportar como conectada sin
+# tener ninguno (GPU hibrida, head sin cable), y esas no sirven para
+# configurar nada. Sin este filtro, incluirlas hacia fallar el comando.
+get_connected_outputs() {
+    awk '
+        function flush_output() {
+            if (name != "" && has_mode) print name
+        }
+        $2 == "connected" {
+            flush_output()
+            name = $1
+            has_mode = ($0 ~ /[0-9]+x[0-9]+/)
+            next
+        }
+        name != "" && /^[[:space:]]+[0-9]+x[0-9]+/ { has_mode = 1; next }
+        name != "" && !/^[[:space:]]/ { flush_output(); name = ""; has_mode = 0 }
+        END { flush_output() }
+    '
+}
 
-if [ -z "$XR_OUT" ]; then
-    xrandr --auto 2>/dev/null || true
-    exit 0
-fi
-
-# Detect outputs that are connected AND expose at least one usable mode.
-# Some hybrid-GPU setups report phantom outputs as connected but with no modes
-# (e.g. DP-1-0 on the SDDM Xorg seat). Passing those to xrandr --auto makes the
-# entire multi-output command fail and can leave the greeter without a display.
-CONNECTED=$(printf '%s\n' "$XR_OUT" | awk '
-    function flush_output() {
-        if (name != "" && has_mode) print name
-    }
-    $2 == "connected" {
-        flush_output()
-        name = $1
-        has_mode = ($0 ~ /[0-9]+x[0-9]+/)
-        next
-    }
-    name != "" && /^[[:space:]]+[0-9]+x[0-9]+/ { has_mode = 1; next }
-    name != "" && !/^[[:space:]]/ { flush_output(); name = ""; has_mode = 0 }
-    END { flush_output() }
-')
-if [ -z "$CONNECTED" ]; then
-    xrandr --auto 2>/dev/null || true
-    exit 0
-fi
-
-EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)' || true)
-INTERNAL=$(printf '%s\n' "$CONNECTED" | grep -E '^(eDP|LVDS)' || true)
-
+# Ancho de la primera linea de modos de una salida. xrandr --auto elige por su
+# cuenta, asi que esto solo sirve para encadenar posiciones; si no se puede
+# leer, se estima 1920 y ya esta.
 get_width() {
     printf '%s\n' "$XR_OUT" | awk -v m="$1" '
         $1 == m && /connected/ { f=1; next }
@@ -50,32 +48,92 @@ get_width() {
     '
 }
 
+# xrandr --query puede no responder todavia. Pocos reintentos y cortos: este
+# script corre en el arranque del greeter y cada retardo aqui se nota.
+XR_OUT=""
+for _ in 1 2 3 4 5; do
+    XR_OUT=$(xrandr --query 2>/dev/null)
+    if printf '%s\n' "$XR_OUT" | grep -q "connected"; then
+        break
+    fi
+    sleep 0.1
+done
+
+if [ -z "$XR_OUT" ]; then
+    xrandr --auto 2>/dev/null || true
+    exit 0
+fi
+
+CONNECTED=$(printf '%s\n' "$XR_OUT" | get_connected_outputs)
+if [ -z "$CONNECTED" ]; then
+    xrandr --auto 2>/dev/null || true
+    exit 0
+fi
+
+# Las externas primero y la internal al final: el login se lee mejor con el
+# panel del portatil a la derecha, que es como el resto del escritorio.
+EXTERNALS=$(printf '%s\n' "$CONNECTED" | grep -vE '^(eDP|LVDS)' || true)
+INTERNAL=$(printf '%s\n' "$CONNECTED" | grep -E '^(eDP|LVDS)' || true)
+
 X=0
 FIRST=true
-CMD="xrandr"
+APPLIED=0
+
+apply_output() {
+    mon="$1"
+    W=$(get_width "$mon")
+    [ -z "$W" ] && W=1920
+
+    if [ "$FIRST" = true ]; then
+        if xrandr --output "$mon" --auto --pos "${X}x0" --primary >/dev/null 2>&1; then
+            FIRST=false
+            APPLIED=$((APPLIED + 1))
+            return 0
+        fi
+        # Reintento sin --primary: algunos drivers lo rechazan.
+        if xrandr --output "$mon" --auto --pos "${X}x0" >/dev/null 2>&1; then
+            FIRST=false
+            APPLIED=$((APPLIED + 1))
+            return 0
+        fi
+    else
+        if xrandr --output "$mon" --auto --pos "${X}x0" >/dev/null 2>&1; then
+            APPLIED=$((APPLIED + 1))
+            return 0
+        fi
+    fi
+    return 1
+}
 
 for mon in $EXTERNALS; do
     W=$(get_width "$mon")
     [ -z "$W" ] && W=1920
-    if [ "$FIRST" = true ]; then
-        CMD="$CMD --output $mon --auto --pos ${X}x0 --primary"
-        FIRST=false
+    if apply_output "$mon"; then
+        X=$((X + W))
     else
-        CMD="$CMD --output $mon --auto --pos ${X}x0"
+        # Esta no se pudo configurar. Se sigue con la siguiente en lugar de
+        # abortar el conjunto: perder una pantalla es mejor que perderlas todas.
+        echo "Xsetup: no se pudo configurar $mon, se continua" >&2
+        X=$((X + W))
     fi
-    X=$((X + W))
 done
 
 for mon in $INTERNAL; do
     W=$(get_width "$mon")
     [ -z "$W" ] && W=1920
-    if [ "$FIRST" = true ]; then
-        CMD="$CMD --output $mon --auto --pos ${X}x0 --primary"
-        FIRST=false
+    if apply_output "$mon"; then
+        X=$((X + W))
     else
-        CMD="$CMD --output $mon --auto --pos ${X}x0"
+        echo "Xsetup: no se pudo configurar $mon, se continua" >&2
+        X=$((X + W))
     fi
-    X=$((X + W))
 done
 
-eval "$CMD" 2>/dev/null || xrandr --auto 2>/dev/null || true
+# Si no se configuro ninguna, al menos una pantalla con el modo por defecto.
+# El greeter sin pantalla no arranca, y esto es lo unico que lo evita.
+if [ "$APPLIED" = "0" ]; then
+    echo "Xsetup: ninguna salida configurada, fallback a xrandr --auto" >&2
+    xrandr --auto 2>/dev/null || true
+fi
+
+exit 0

@@ -266,21 +266,8 @@ echo "Colores de rofi sincronizados con pywal"
 echo "Archivo de colores actualizado: $ROFI_COLORS_FILE"
 echo "Tema principal actualizado: $ROFI_THEME_FILE"
 
-# Fondo translucido COMUN de los menus de rofi.
-#
-# Un solo fichero para los cuatro menus y un solo valor de opacidad. Antes cada
-# uno traia el suyo y ninguno coincidia: el principal al 60%, el selector de
-# fondos al 40% y el de apagado al 75%. Con el ahorro activo se anade encima
-# colors-powersave.rasi, que es macizo.
-#
-# El fichero se pasa con -theme-str, NO con un segundo -theme: rofi ignora un
-# segundo fichero de tema y se queda con el primero, mientras que -theme-str si
-# pisa. Por eso el contenido va en un fichero aparte y no con comentarios dentro.
-BG_PALETTE=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-[ -n "$BG_PALETTE" ] || BG_PALETTE="#101516"
-cat > "$HOME/.config/rofi/colors-window.rasi" << EOF
-* { bgcolor: ${BG_PALETTE}CC; background-trans: ${BG_PALETTE}CC; background-alt-trans: ${BG_PALETTE}AA; }
-window { background-color: ${BG_PALETTE}CC; }
-mainbox { background-color: ${BG_PALETTE}AA; }
-EOF
+# Los fondos de rofi los escribe rofi-colors, el unico sitio que los genera:
+# el translucido comun y el macizo del ahorro. Antes cada script escribia el suyo
+# y se quedaban desfasados el uno del otro al cambiar el fondo.
+"$HOME/.local/bin/rofi-colors" 2>/dev/null || true
 echo "Fondo comun de rofi actualizado"

@@ -50,24 +50,19 @@ enable_powersave() {
     # 5. Los menus de rofi se vuelven macizos.
     #
     # Esto es lo que hace el ahorro de verdad aqui: sin translucidez no hay nada
-    # que componer detras del panel. El color va SIN alfa a proposito — con
-    # alfa seguia siendo un panel y solo se notaba menos; lo que se quiere es que
-    # el fondo no se vea.
+    # que componer detras del panel. El color va SIN alfa a proposito — con alfa
+    # seguia siendo un panel y solo se notaba menos; lo que se quiere es que el
+    # fondo no se vea.
     #
-    # El override se aplica DETRAS de colors-window.rasi, que es el translucido
-    # comun. Rofi fusiona varios -theme y gana el ultimo, asi que el orden es lo
-    # que decide si esto se ve o no.
-    local bg_c
-    bg_c=$(head -n 1 "$HOME/.cache/wal/colors" 2>/dev/null || echo "#101516")
-    [ -n "$bg_c" ] || bg_c="#101516"
-    for rdir in "$HOME/.config/rofi"; do
-        [ -d "$rdir" ] || continue
-        cat > "$rdir/colors-powersave.rasi" << EOF
-* { bgcolor: ${bg_c}; background-trans: ${bg_c}; background-alt-trans: ${bg_c}; }
-window { background-color: ${bg_c}; }
-mainbox { background-color: ${bg_c}; }
-EOF
-    done
+    # El macizo se aplica DETRAS del translucido comun, que es lo que genera
+    # rofi-themed. Rofi fusiona los -theme-str y gana el ultimo, asi que el orden
+    # es lo que decide si esto se ve o no.
+    #
+    # Los ficheros los escribe rofi-colors, no este script: si cada uno escribiera
+    # el suyo, cambiar el fondo con el ahorro activo dejaba el macizo con el
+    # color del fondo anterior.
+    "$HOME/.local/bin/rofi-colors" 2>/dev/null || true
+
 
     # 6. Desktop Notification
     notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true
@@ -104,12 +99,13 @@ disable_powersave() {
     done
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
-    # 5. Restore Rofi default translucent blur
-    for rdir in "$HOME/.config/rofi" "/home/rhythmcreative/.config/rofi"; do
-        if [ -d "$rdir" ]; then
-            > "$rdir/colors-powersave.rasi"
-        fi
-    done
+    # 5. De los fondos de rofi no hay que hacer nada aqui.
+    #
+    # rofi-colors mantiene los dos ficheros al dia con el color de pywal siempre,
+    # asi que no hay nada que regenerar ni que borrar. Lo unico que decide si el
+    # menu sale macizo o translucido es que /tmp/powersave-active exista, y eso
+    # lo comprueba rofi-themed al arrancar. Antes este bloque truncaba el
+    # fichero a vacio, que no era lo mismo que no existir.
 
     # 6. Desktop Notification
     notify-send -a "Battery Saver" -i battery-good "Battery Saver Turned Off" "Normal performance and visual effects restored" 2>/dev/null || true

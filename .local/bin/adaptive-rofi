@@ -71,16 +71,21 @@ if [ -n "$THEME" ]; then
     ROFI_ARGS="$ROFI_ARGS -theme $THEME"
 fi
 
-# El fondo translucido comun, el mismo para todos los menus. Rofi fusiona
-# varios -theme y el ultimo gana, asi que el orden importa: primero este, y
-# encima el macizo del power saver cuando esta activo.
+# El fondo translucido comun y, encima, el macizo del ahorro de energia. Van en
+# un array aparte porque ROFI_ARGS se expande sin entrecomillar y el css, con
+# espacios, se habria partido en argumentos sueltos.
+#
+# Se pasan con -theme-str y no con un segundo -theme: rofi ignora el segundo
+# fichero de tema y se queda con el primero, asi que con -theme el fondo nunca
+# llegaba a aplicarse.
+ROFI_FONDO=()
 COMMON_THEME="$HOME/.config/rofi/colors-window.rasi"
 SAVER_THEME="$HOME/.config/rofi/colors-powersave.rasi"
 if [ -f "$COMMON_THEME" ]; then
-    ROFI_ARGS="$ROFI_ARGS -theme $COMMON_THEME"
+    ROFI_FONDO+=(-theme-str "$(cat "$COMMON_THEME")")
 fi
 if [ -f "/tmp/powersave-active" ] && [ -f "$SAVER_THEME" ]; then
-    ROFI_ARGS="$ROFI_ARGS -theme $SAVER_THEME"
+    ROFI_FONDO+=(-theme-str "$(cat "$SAVER_THEME")")
 fi
 _rust_was_visible=false
 _waybar_was_visible=false
@@ -104,7 +109,7 @@ if [ -n "$ACTIVE_MONITOR" ]; then
     fi
 fi
 
-rofi $ROFI_ARGS
+rofi $ROFI_ARGS "${ROFI_FONDO[@]}"
 
 if [ -n "$ACTIVE_MONITOR" ]; then
     [ "$_rust_was_visible" = true ] && "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MONITOR" USR2 &

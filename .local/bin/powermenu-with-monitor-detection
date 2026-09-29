@@ -424,34 +424,42 @@ logout='󰍃'    # Símbolo logout
 yes='✓'      # Checkmark simple
 no='✗'       # X mark simple
 
-# Rofi CMD con monitor específico
-# El fondo translucido comun se anade al final de cada rofi: rofi fusiona
-# varios -theme y gana el ultimo. Es el mismo que usan el menu principal y el
+# Lanza rofi con el fondo translucido comun y, si el ahorro de energia esta
+# activo, el macizo encima. Es el mismo fondo que usan el menu principal y el
 # selector de fondos, para que los cuatro se vean igual.
+#
+# Van como -theme-str porque rofi ignora un segundo -theme y se queda con el
+# primero. Y van en un array porque al meter el css con un $(...) sin
+# entrequillar se partia por los espacios: rofi recibia "-theme-str" '"*' '{'
+# 'bgcolor:' sueltos y se quedaba con el fondo translucido.
+rofi_con_fondo() {
+    local args=(-dmenu "$@")
+    local comun="$HOME/.config/rofi/colors-window.rasi"
+    local macizo="$HOME/.config/rofi/colors-powersave.rasi"
+    if [ -f "$comun" ]; then
+        args+=(-theme-str "$(cat "$comun")")
+    fi
+    if [ -f /tmp/powersave-active ] && [ -f "$macizo" ]; then
+        args+=(-theme-str "$(cat "$macizo")")
+    fi
+    rofi "${args[@]}"
+}
+
+# Rofi CMD con monitor especifico
 rofi_cmd() {
-    rofi -dmenu \
+    rofi_con_fondo \
         -p "Goodbye ${USER}" \
         -mesg "Uptime: $uptime" \
         -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
-        -theme-str "$(cat "$HOME/.config/rofi/colors-window.rasi")" \
-        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
-            && printf -- '-theme-str "%s"' "$(cat "$HOME/.config/rofi/colors-powersave.rasi")" ) \
-        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
-            && printf -- "-theme %s" "$HOME/.config/rofi/colors-powersave.rasi" ) \
         -monitor "$ACTIVE_MONITOR"
 }
 
-# Confirmation CMD con monitor específico
+# Confirmation CMD con monitor especifico
 confirm_cmd() {
-    rofi -dmenu \
+    rofi_con_fondo \
         -p 'Confirmation' \
-        -mesg 'Are you Sure?' \
+        -mesg 'Are You Sure?' \
         -theme "${TEMP_DIR}/confirm-${ACTIVE_MONITOR}.rasi" \
-        -theme-str "$(cat "$HOME/.config/rofi/colors-window.rasi")" \
-        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
-            && printf -- '-theme-str "%s"' "$(cat "$HOME/.config/rofi/colors-powersave.rasi")" ) \
-        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
-            && printf -- "-theme %s" "$HOME/.config/rofi/colors-powersave.rasi" ) \
         -monitor "$ACTIVE_MONITOR"
 }
 

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Muestra la abreviatura del layout de teclado activo, tal y como el usuario lo ha
+# configurado en Hyprland (input.kb_layout).
+#
+#   layouts='us,es'  active_layout_index=1  ->  ES
+#
+# Antes la isla mostraba active_keymap, que es el nombre del keymap de XKB
+# ("English (US)", "Spanish"). Eso no es lo que el usuario escribe en la config, y
+# ademas cambia de largo segun el idioma, con lo que el chip del panel se
+# redimensionaba en cada cambio y parecia que se colapsaba.
+#
+# Tambien usaba el teclado marcado como main, que en esta maquina es
+# huawei-freebuds-7i-(avrcp), el teclado virtual de los auriculares, no el real.
+# Como Hyprland aplica el mismo kb_layout a todos los dispositivos, se da igual
+# cual se lea, pero se documenta aqui para no volver a esa confusion.
+#
+# Uso:  kb-layout              -> imprime la abreviatura (US, ES, GB...)
+#       kb-layout --list       -> imprime todas las separadas por espacios
+
+set -u
+
+dev=$(hyprctl devices -j 2>/dev/null) || { echo ""; exit 0; }
+
+read -r layouts idx < <(
+    printf '%s' "$dev" | python3 -c '
+import json, sys
+try:
+    kbs = json.load(sys.stdin).get("keyboards", [])
+except Exception:
+    sys.exit(0)
+if not kbs:
+    sys.exit(0)
+# main primero; si no hay, el primero que declare layouts
+kb = next((k for k in kbs if k.get("main")), None) or next((k for k in kbs if k.get("layout")), kbs[0])
+layouts = (kb.get("layout") or "").strip()
+idx = kb.get("active_layout_index", 0) or 0
+print(layouts, idx)
+'
+)
+
+[ -n "$layouts" ] || { echo ""; exit 0; }
+
+lista=()
+IFS=',' read -r -a lista <<< "$layouts"
+
+if [ "${1:-}" = "--list" ]; then
+    printf '%s ' "${lista[@]}"
+    echo
+    exit 0
+fi
+
+actual="${lista[$idx]:-}"
+[ -n "$actual" ] || { echo ""; exit 0; }
+
+echo "$actual" | tr '[:lower:]' '[:upper:]' | cut -c1-5

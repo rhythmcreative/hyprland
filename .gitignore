@@ -2,3 +2,9 @@
 .local/bin/rust-dock
 __pycache__/
 *.pyc
+
+# Credenciales: van en el disco de cada uno, nunca en el repo.
+# .config/waybar/openweather_api_key estuvo rastreado con una clave real y ya
+# está publicada en el historial; copiar la plantilla no la devuelve. Rotárala
+# en openweathermap.org y deja la real solo aquí.
+.config/waybar/openweather_api_key

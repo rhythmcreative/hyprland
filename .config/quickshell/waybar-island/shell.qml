@@ -516,26 +516,6 @@ ShellRoot {
     readonly property color colSurfaceHover: Qt.rgba(colFg.r, colFg.g, colFg.b, 0.16)
     readonly property color colBorder: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.25)
 
-    // Quick Settings por config: ~/.config/rhythm/island-tiles.json define los
-    // tiles y su orden. Si el fichero falta o esta vacio, se usan los chips
-    // fijos de abajo. Un tile con "view": N abre la subvista N en vez de
-    // ejecutar un comando.
-    property int _tilesReloadCounter: 0
-    FileView {
-        id: tilesFile
-        path: Quickshell.env("HOME") + "/.config/rhythm/island-tiles.json"
-        watchChanges: true
-        onFileChanged: { tilesFile.reload(); root._tilesReloadCounter++ }
-        onTextChanged: { root._tilesReloadCounter++ }
-    }
-    readonly property var quickTiles: {
-        const _d = root._tilesReloadCounter
-        try {
-            const j = JSON.parse(tilesFile.text())
-            if (j && Array.isArray(j.tiles)) return j.tiles
-        } catch(e) {}
-        return []
-    }
 
     // Current time & date exactly matching Waybar format: {:%H:%M:%S  -  %A, %d}
     property string timeStr: ""
@@ -3210,9 +3190,7 @@ ShellRoot {
                         }
 
                         // Bottom Action Chips (Material 3 Pills)
-                        // Fijos: solo cuando no hay JSON de tiles.
                         RowLayout {
-                            visible: root.quickTiles.length === 0
                             Layout.fillWidth: true
                             spacing: 8
 
@@ -3306,46 +3284,17 @@ ShellRoot {
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("kitty -e htop"); } }
                             }
-                        }
-
-                        // Quick Settings por config: GridLayout 4 columnas estilo
-                        // Android. Solo cuando island-tiles.json trae tiles.
-                        GridLayout {
-                            visible: root.quickTiles.length > 0
-                            Layout.fillWidth: true
-                            columns: 4
-                            rowSpacing: 8
-                            columnSpacing: 8
-                            Repeater {
-                                model: root.quickTiles
-                                Rectangle {
-                                    Layout.fillWidth: true; Layout.preferredHeight: 56
-                                    radius: 16; color: root.colSurface
-                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                    ColumnLayout { anchors.centerIn: parent; spacing: 2
-                                        Text { text: modelData.icon || "•"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16; horizontalAlignment: Text.AlignHCenter; Layout.alignment: Qt.AlignHCenter }
-                                        Text { text: modelData.label || ""; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9; font.weight: Font.Bold; horizontalAlignment: Text.AlignHCenter; Layout.alignment: Qt.AlignHCenter }
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (modelData.view !== undefined) {
-                                                islandWin.controlSubView = modelData.view
-                                                if (modelData.view === 7) clipListProc.running = true
-                                            } else {
-                                                if (modelData.close) islandWin.expanded = false
-                                                var d = Number(modelData.delay || 0)
-                                                var c = String(modelData.cmd || "")
-                                                if (d > 0) c = "sleep " + d + " && " + c
-                                                root.runCmd(c)
-                                                if (c.indexOf("toggle-keyboard-layout") >= 0) kbProc.running = true
-                                                if (c.indexOf("screen-recorder-helper") >= 0) recStatusProc.running = true
-                                            }
-                                        }
-                                    }
+                            Rectangle {
+                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
+                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
+                                RowLayout { anchors.centerIn: parent; spacing: 5
+                                    Text { text: "󰅍"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                    Text { text: "Portapapeles"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.controlSubView = 7; clipListProc.running = true } }
                             }
                         }
+
                     }
 
                     // ── 3. SUBSECCIÓN: REDES WI-FI (CONTROL) ──

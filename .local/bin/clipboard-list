@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Lista del historial en JSON para la isla:
-# [{"id":2,"text":"...","image":false,"thumb":""}, ...]
+# [{"id":2,"title":"...","sub":"...","image":false,"thumb":""}, ...]
 #
-# Texto recortado a 120 caracteres y en una linea, para que quepa en la fila.
-# Para imagenes (preview "[[ binary data ... ]]") se vuelca el contenido a
-# ~/.cache/rhythm/clip-thumbs/<id>.png y se pasa la ruta, para que la isla
-# ensene la miniatura en vez del texto. Los thumbs de ids que ya no estan se
-# borran, para no acumular basura.
+# Como el launcher de impasto: cada fila lleva titulo y subtitulo. El titulo es
+# la vista previa (o "Imagen" si es imagen, que se identifica por su miniatura)
+# y el subtitulo el tipo con el tamano. Los thumbs van a
+# ~/.cache/rhythm/clip-thumbs/<id>.png y los huerfanos se borran.
 
 set -u
 
@@ -14,7 +13,7 @@ THUMB_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/rhythm/clip-thumbs"
 mkdir -p "$THUMB_DIR" 2>/dev/null || true
 
 cliphist list 2>/dev/null | head -30 | python3 -c '
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 thumb_dir = os.environ.get("THUMB_DIR", os.path.expanduser("~/.cache/rhythm/clip-thumbs"))
 os.makedirs(thumb_dir, exist_ok=True)
@@ -31,7 +30,9 @@ for line in sys.stdin:
     except ValueError:
         continue
     vivos.add(iid)
-    if prev.startswith("[[ binary data"):
+    m = re.match(r"\[\[ binary data (.+) (\w+) (\d+x\d+) \]\]", prev)
+    if m:
+        size, fmt, dims = m.groups()
         path = os.path.join(thumb_dir, "%d.png" % iid)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             try:
@@ -43,16 +44,16 @@ for line in sys.stdin:
                     path = ""
             except Exception:
                 path = ""
-        import re as _re
-        m = _re.match(r"\[\[ binary data (.+) (\w+) (\d+x\d+) \]\]", prev)
-        prev_txt = ("Imagen %s · %s · %s" % (m.group(2).upper(), m.group(3), m.group(1)) \
-                    if m else prev[:120])
-        out.append({"id": iid, "text": prev_txt, "image": bool(path), "thumb": path})
+        out.append({"id": iid, "title": "Imagen",
+                    "sub": "Imagen %s · %s · %s" % (fmt.upper(), dims, size),
+                    "image": bool(path), "thumb": path})
     else:
-        prev = " ".join(prev.split())[:120]
-        out.append({"id": iid, "text": prev if prev else "(vacio)", "image": False, "thumb": ""})
+        prev = " ".join(prev.split())
+        sub = "Texto · %d caracteres" % len(prev)
+        out.append({"id": iid,
+                    "title": prev[:120] if prev else "(vacio)",
+                    "sub": sub, "image": False, "thumb": ""})
 
-# limpiar thumbs huerfanos
 for f in os.listdir(thumb_dir):
     if f.endswith(".png"):
         try:

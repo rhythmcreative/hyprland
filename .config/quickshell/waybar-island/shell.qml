@@ -5257,6 +5257,17 @@ ShellRoot {
                             }
                         }
 
+Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(470, Math.max(140, tabClipCol.implicitHeight))
+                            contentWidth: width
+                            contentHeight: tabClipCol.implicitHeight
+                            clip: true
+
+                            ColumnLayout {
+                                id: tabClipCol
+                                width: parent.width
+                                spacing: 8
                         Repeater {
                             model: root.clipList
                             delegate: Rectangle {
@@ -5324,6 +5335,8 @@ ShellRoot {
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 10
                             Layout.alignment: Qt.AlignHCenter
+                        }
+                            }
                         }
 
                     }

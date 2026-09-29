@@ -3234,18 +3234,7 @@ ShellRoot {
                             }
 
                             Rectangle {
-                                // minimumWidth evita que la isla cambie de tamano al
-                                // conmutar el teclado. El chip es el unico con
-                                // Layout.fillWidth de esta fila, asi que su ancho
-                                // natural marca el ancho de la fila y de la capsula.
-                                // Con el nombre del keymap completo ("English (US)")
-                                // ocupaba mucho mas que con la abreviatura ("US"), y
-                                // al acortar el texto la isla se encogia de golpe.
-                                // Aqui se fija un ancho minimo equivalente al que
-                                // ocupaba el texto largo, para que conmutar el teclado
-                                // no la mueva.
                                 Layout.fillWidth: true
-                                Layout.minimumWidth: 132
                                 height: 36; radius: 18; color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
                                 RowLayout { anchors.centerIn: parent; spacing: 5

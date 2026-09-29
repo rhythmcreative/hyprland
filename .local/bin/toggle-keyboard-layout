@@ -29,9 +29,18 @@ sleep 0.2
 
 nuevo=$("$HOME/.local/bin/kb-layout" 2>/dev/null || echo "")
 
-# El texto que se avisa es la abreviatura del layout nuevo, la misma que ve el
-# usuario en el panel. Antes decia "English (US)" o "Spanish".
-if command -v notify-send >/dev/null 2>&1 && [ -n "$nuevo" ]; then
+# SIN notificacion, a proposito.
+#
+# La isla es el servidor de notificaciones, y cuando le llega una entra en modo
+# notificacion:
+#
+#     width: islandWin.expanded ? 660 : (root.notifActive ? 460 : ...)
+#
+# Al pulsar el chip del teclado se encogia entera de 660 a 460 px. El aviso era
+# ademas redundante, porque el chip ya muestra el layout nuevo en el sitio.
+#
+# Con --notify se recupera, para quien la quiera de verdad.
+if [ "${1:-}" = "--notify" ] && command -v notify-send >/dev/null 2>&1 && [ -n "$nuevo" ]; then
     notify-send "Teclado" "$nuevo" -t 1200 -i input-keyboard >/dev/null 2>&1 || true
 fi
 

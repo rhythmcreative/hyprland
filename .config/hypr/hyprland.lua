@@ -24,20 +24,98 @@ local color14 = "rgb(9A9D9E)"
 local color15 = "rgb(c2c8c9)"
 local background = "rgb(101012)"
 
--- Monitors (from nwg-displays)
+-- Monitors
+--
+-- El orden de estas reglas importa y no es el intuitivo: en esta versión de
+-- Hyprland GANA LA ÚLTIMA REGLA QUE COINCIDE, no la primera. Está medido —
+-- con la regla del portátil antes que las de nwg-displays, la disposición
+-- guardada se aplicaba al revés en cuanto el portátil também estaba nombrado.
+--
+-- 1) Red de seguridad, primero. Lo que nwg-displays no mencione cae aquí.
+-- 2) Lo que nwg-displays guardó, después, y por tanto manda.
+--
+-- El primero de los dos no lleva posición a propósito. Con eDP-1 anclado en
+-- 2560x0 y DP-6 en 0x0 —como estaban escritos— el escritorio se rompía al
+-- cambiar la topología: al desenchufar DP-6, el portátil se quedaba en un x
+-- que ya no existía y quedaba un hueco de 2560px a su izquierda. Sin
+-- posición, Hyprland la coloca sola y el hueco no puede aparecer. Lo único que
+-- se le fija es la escala, porque su valor por defecto es 1.5 en una 1080p y
+-- deja el texto diminuto.
+--
+-- Para un monitor sin ninguna regla, Hyprland aplica modo preferido, posición
+-- automática y escala automática: al enchufar uno nuevo se coloca solo.
+--
+-- OJO: en esta versión los comodines en `output` no coinciden (`eDP-*` no hace
+-- nada), así que el panel interno va por su nombre exacto. Por lo mismo
+-- `output = ""` no actúa de regla general.
 hl.monitor({
     output   = "eDP-1",
-    mode     = "1920x1080@144.0",
-    position = "2560x0",
+    mode     = "preferred",
+    position = "auto",
     scale    = "1",
 })
 
-hl.monitor({
-    output   = "DP-6",
-    mode     = "2560x1440@239.97",
-    position = "0x0",
-    scale    = "1",
-})
+-- Lo que nwg-displays guarda en monitors.conf, aplicado de verdad.
+--
+-- nwg-displays llevaba tiempo escribiendo ese fichero y nada lo leía: este
+-- config no tenía ninguna regla para él, así que guardar una disposición allí
+-- no cambiaba nada. Tampoco se puede resolver con `require`, que solo carga
+-- Lua, y esto son líneas `monitor=`.
+--
+-- Se parsea aquí, en el momento de cargar, y se convierte en llamadas a
+-- hl.monitor. Leerlo con io en vez de con require es a propósito: nwg-displays
+-- reescribe el fichero cada vez que guardas, y require cachearía el resultado,
+-- así que tras guardar y recargar seguiría viéndose la disposición antigua.
+--
+-- Un fichero ausente o mal formado no es un error: la config carga igual y se
+-- comporta como si nwg-displays no se hubiera usado nunca.
+--
+-- AVISO, porque es la contrapartida de que esto funcione: aquí se respetan las
+-- posiciones TAL CUAL están guardadas, incluidas las de monitores que ahora no
+-- están enchufados. Si guardas una disposición con dos pantallas y luego
+-- desenchafas una, la otra se queda en el x que ya no existe y queda el hueco
+-- — es exactamente lo que pasaba antes, solo que ahora lo decides tú desde la
+-- herramienta. Guarda la disposición con los monitores que tienes conectados, o
+-- simplemente borra la línea del que no esté. Para la disposición automática
+-- (sin huecos, se recoloca sola al enchufar y desenchufar) basta con tener
+-- monitors.conf vacío o borrar su contenido.
+local function aplicar_monitors_nwg()
+    local ruta = (os.getenv("HOME") or "") .. "/.config/hypr/monitors.conf"
+    local f = io.open(ruta, "r")
+    if not f then return end
+    for linea in f:lines() do
+        local limpio = linea:gsub("^%s+", ""):gsub("%s+$", "")
+        if limpio ~= "" and not limpio:match("^#") then
+            local partes = {}
+            for p in limpio:gmatch("[^,]+") do partes[#partes + 1] = p end
+            -- monitor=SALIDA,MODO,POSICION,ESCALA[,TRANSFORM][,vrr][,PROFUNDIDAD]
+            local salida = partes[1] and partes[1]:match("^monitor%s*=%s*(.+)$")
+            local modo, pos, escala = partes[2], partes[3], partes[4]
+            if salida and salida ~= "" and modo and pos and escala then
+                local regla = {
+                    output   = salida,
+                    mode     = modo,
+                    position = pos,
+                    scale    = escala,
+                }
+                -- Lo que sigue a la escala es la transformacion (0-3) o la
+                -- palabra "vrr". Se pasa lo que se entienda, se ignora lo demás.
+                local extra = partes[5]
+                if extra then
+                    if extra:match("^%d+$") and tonumber(extra) <= 3 then
+                        regla.transform = tonumber(extra)
+                    elseif extra:lower() == "vrr" then
+                        regla.vrr = 1
+                    end
+                end
+                hl.monitor(regla)
+            end
+        end
+    end
+    f:close()
+end
+
+aplicar_monitors_nwg()
 
 -- Autostart
 hl.on("hyprland.start", function ()

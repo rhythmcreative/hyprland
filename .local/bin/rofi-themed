@@ -13,29 +13,31 @@
 # Con el envoltorio los menus no tienen que acordarse de nada: se lanzan igual
 # que siempre y el fondo sale bien.
 #
-# Se añaden al final porque rofi fusiona los -theme-str en orden y gana el
-# último, así que el macizo tiene que ir después del translúcido.
+# Se anade al final para que gane sobre lo que traiga el tema del menu.
 #
 # -theme-str y no un segundo -theme: rofi ignora un segundo fichero de tema y se
 # queda con el primero. Y van como array porque el css tiene espacios; metido en
 # una cadena sin entrecomillar se parte en montones de argumentos sueltos.
 
-# Los ficheros de fondo se dejan al dia antes de leerlos. Antes cada uno los
-# escribia su propio script y cambiaban en momentos distintos: tras cambiar el
-# fondo, el translucido seguia con el color viejo hasta que se abria el menu
-# principal, y el macizo se quedaba con el del fondo anterior hasta que se
-# togglaba el ahorro. Aqui se regeneran siempre, y rofi-colors solo escribe si
+# El fondo del ahorro se deja al dia antes de leerlo. Antes lo escribia solo
+# toggle-powersave, asi que al cambiar el fondo con el ahorro activo el macizo
+# se quedaba con el color del fondo anterior; medido: fondo #884400 y el
+# fichero seguia en #151921. rofi-colors lo regenera siempre y solo escribe si
 # el contenido cambia.
 "$HOME/.local/bin/rofi-colors" 2>/dev/null || true
 
 args=("$@")
 
-comun="$HOME/.config/rofi/colors-window.rasi"
+# Sin ahorro de energia no se toca el fondo: cada menu se queda con el suyo, que
+# es como estaba siempre, con su translucidez y el desenfoque del compositor
+# detras. Antes se imponia un fondo comun al 80% y con eso solo se veia el 20%
+# del escritorio, asi que el blur casi no se apreciaba y el menu perdia el
+# aspecto que tenia.
+#
+# El unico cambio de aspecto es el ahorro de energia, que pone el fondo macizo
+# encima de todo lo demas. Por eso rofi-colors solo genera ese fichero.
 macizo="$HOME/.config/rofi/colors-powersave.rasi"
 
-if [ -f "$comun" ]; then
-    args+=(-theme-str "$(cat "$comun")")
-fi
 if [ -f /tmp/powersave-active ] && [ -f "$macizo" ]; then
     args+=(-theme-str "$(cat "$macizo")")
 fi

@@ -88,7 +88,7 @@ fi
 
 # Si esta apagado, mostrar opcion rapida
 if [ "$BT_STATUS" != "yes" ]; then
-    CHOSEN=$(echo -e "$POWER_OPTION\n󰒓  Abrir Administrador Completo (blueman-manager)" | rofi -dmenu -i -p "Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    CHOSEN=$(echo -e "$POWER_OPTION\n󰒓  Abrir Administrador Completo (blueman-manager)" | rofi-themed -dmenu -i -p "Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$CHOSEN" in
         *"Activar Bluetooth"*)
             rfkill unblock bluetooth 2>/dev/null || true
@@ -143,7 +143,7 @@ HEADER="$POWER_OPTION\n󰑐  Escanear dispositivos cercanos\n󰒓  Abrir Adminis
 
 MENU_CONTENT=$(echo -e "${HEADER}\n${DEV_ITEMS}")
 
-CHOSEN=$(echo -e "$MENU_CONTENT" | rofi -dmenu -i -p "Dispositivos Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "Dispositivos Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
 
 [ -z "$CHOSEN" ] && exit 0
 [[ "$CHOSEN" =~ ^─ ]] && exit 0
@@ -182,7 +182,7 @@ TARGET_NAME=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰂯󰋋�
 IS_CONN=$(bluetoothctl info "$TARGET_MAC" 2>/dev/null | grep -i "Connected:" | awk '{print $2}')
 
 if [ "$IS_CONN" = "yes" ]; then
-    ACTION=$(echo -e "󰅖  Desconectar de $TARGET_NAME\n󰆴  Desvincular (Unpair)\n󰅁  Volver" | rofi -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    ACTION=$(echo -e "󰅖  Desconectar de $TARGET_NAME\n󰆴  Desvincular (Unpair)\n󰅁  Volver" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
         *"Desconectar"*)
             notify "Desconectando de $TARGET_NAME..."
@@ -195,7 +195,7 @@ if [ "$IS_CONN" = "yes" ]; then
             ;;
     esac
 else
-    ACTION=$(echo -e "󰂱  Conectar a $TARGET_NAME\n󰌷  Emparejar (Pair)\n󰆴  Eliminar dispositivo\n󰅁  Volver" | rofi -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    ACTION=$(echo -e "󰂱  Conectar a $TARGET_NAME\n󰌷  Emparejar (Pair)\n󰆴  Eliminar dispositivo\n󰅁  Volver" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
         *"Conectar"*)
             notify "Conectando a $TARGET_NAME..."

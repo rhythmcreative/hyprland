@@ -88,7 +88,7 @@ fi
 
 # Si el Wi-Fi esta desactivado, mostrar opcion para activarlo
 if [ "$WIFI_STATE" != "enabled" ]; then
-    CHOSEN=$(echo -e "$TOGGLE_TEXT\n󰒓  Abrir Administrador (nm-connection-editor)" | rofi -dmenu -i -p "Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    CHOSEN=$(echo -e "$TOGGLE_TEXT\n󰒓  Abrir Administrador (nm-connection-editor)" | rofi-themed -dmenu -i -p "Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$CHOSEN" in
         *"Activar Wi-Fi"*)
             nmcli radio wifi on
@@ -138,7 +138,7 @@ HEADER="$TOGGLE_TEXT\n󰑐  Escanear redes de nuevo\n󰒓  Abrir Administrador d
 
 MENU_CONTENT=$(echo -e "${HEADER}\n${NET_ITEMS}")
 
-CHOSEN=$(echo -e "$MENU_CONTENT" | rofi -dmenu -i -p "Redes Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "Redes Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
 
 [ -z "$CHOSEN" ] && exit 0
 [[ "$CHOSEN" =~ ^─ ]] && exit 0
@@ -165,9 +165,9 @@ case "$CHOSEN" in
         exit 0
         ;;
     *"Conectar a red oculta"*)
-        HIDDEN_SSID=$(rofi -dmenu -p "Nombre de red (SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        HIDDEN_SSID=$(rofi-themed -dmenu -p "Nombre de red (SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
         [ -z "$HIDDEN_SSID" ] && exit 0
-        HIDDEN_PASS=$(rofi -dmenu -password -p "Contraseña para $HIDDEN_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        HIDDEN_PASS=$(rofi-themed -dmenu -password -p "Contraseña para $HIDDEN_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
         if [ -n "$HIDDEN_PASS" ]; then
             nmcli dev wifi connect "$HIDDEN_SSID" password "$HIDDEN_PASS" hidden yes
         else
@@ -184,7 +184,7 @@ SELECTED_SSID=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰤨󰤥
 
 # Si es la red activa, ofrecer desconectar u olvidar
 if [ "$SELECTED_SSID" = "$ACTIVE_CONN" ]; then
-    ACTION=$(echo -e "󰅖  Desconectar de $SELECTED_SSID\n󰆴  Olvidar esta red\n󰅁  Volver" | rofi -dmenu -i -p "$SELECTED_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    ACTION=$(echo -e "󰅖  Desconectar de $SELECTED_SSID\n󰆴  Olvidar esta red\n󰅁  Volver" | rofi-themed -dmenu -i -p "$SELECTED_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
         *"Desconectar"*)
             nmcli connection down id "$SELECTED_SSID" 2>/dev/null || nmcli device disconnect wlan0 2>/dev/null
@@ -216,7 +216,7 @@ else
         notify "Conectando a red abierta: $SELECTED_SSID..."
         nmcli dev wifi connect "$SELECTED_SSID"
     else
-        WIFI_PASSWORD=$(rofi -dmenu -password -p "Contraseña ($SELECTED_SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        WIFI_PASSWORD=$(rofi-themed -dmenu -password -p "Contraseña ($SELECTED_SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
         [ -z "$WIFI_PASSWORD" ] && exit 0
         notify "Conectando a $SELECTED_SSID..."
         if nmcli dev wifi connect "$SELECTED_SSID" password "$WIFI_PASSWORD"; then

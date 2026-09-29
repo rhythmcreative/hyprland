@@ -55,7 +55,7 @@ trap cleanup EXIT INT TERM
 
 # Verificar si el directorio existe
 if [[ ! -d "$WALLPAPER_DIR" ]]; then
-    rofi -e "Directory $WALLPAPER_DIR not found"
+    rofi-themed -e "Directory $WALLPAPER_DIR not found"
     exit 1
 fi
 
@@ -65,7 +65,7 @@ mkdir -p "$PREVIEW_DIR"
 mapfile -t images < <(find "$WALLPAPER_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" -o -iname "*.bmp" \) | sort)
 
 if [[ ${#images[@]} -eq 0 ]]; then
-    rofi -e "No se encontraron imágenes en $WALLPAPER_DIR"
+    rofi-themed -e "No se encontraron imágenes en $WALLPAPER_DIR"
     exit 1
 fi
 
@@ -88,7 +88,8 @@ done
 
 # 3. Mostrar rofi (Carga instantánea)
 hide_all_bars
-selected=$(rofi -dmenu -i \
+# El fondo lo pone rofi, no este script.
+selected=$(rofi-themed -dmenu -i \
     -p "Wallpapers" \
     -theme "$ROFI_THEME" \
     -show-icons \

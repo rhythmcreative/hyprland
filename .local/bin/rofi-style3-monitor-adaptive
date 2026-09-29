@@ -301,25 +301,11 @@ launch_rofi() {
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
     log_debug "Tema: $ADAPTED_STYLE"
     
-    # Fondo translucido comun, el mismo para los cuatro menus. Se pasa con
-    # -theme-str y NO con un segundo -theme: rofi ignora un segundo fichero de
-    # tema y se queda con el primero. Encima va el macizo del ahorro, si esta
-    # activo, que es lo unico que cambia entre modo normal y ahorro.
-    local extra_args=()
-    local COMMON_THEME="$HOME/.config/rofi/colors-window.rasi"
-    local SAVER_THEME="$HOME/.config/rofi/colors-powersave.rasi"
-    if [ -f "$COMMON_THEME" ]; then
-        extra_args+=(-theme-str "$(cat "$COMMON_THEME")")
-    fi
-    if [ -f "/tmp/powersave-active" ] && [ -f "$SAVER_THEME" ]; then
-        extra_args+=(-theme-str "$(cat "$SAVER_THEME")")
-    fi
-
+    # El fondo lo pone rofi, no este script.
     # Lanzar rofi con el tema adaptado
-    rofi -show drun \
+    rofi-themed -show drun \
          -theme "$ADAPTED_STYLE" \
-         -monitor "$ACTIVE_MONITOR" \
-         "${extra_args[@]}"
+         -monitor "$ACTIVE_MONITOR"
     
     log_debug "Rofi cerrado"
 }

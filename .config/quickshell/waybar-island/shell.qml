@@ -152,6 +152,14 @@ ShellRoot {
     property bool islandVisible: true
     property var hiddenScreens: ({})
 
+    // Monitores con una ventana a pantalla completa, y por tanto con la isla
+    // escondida. La isla vive en la capa Overlay, que Hyprland dibuja POR ENCIMA
+    // de las ventanas en pantalla completa, asi que sin esto se ve encima del
+    // video. El dock no sufre lo mismo porque usa la capa top.
+    // Lo escribe island-fullscreens, que solo cuenta ventanas visibles y mapeadas
+    // para no esconder la isla por un fullscreen de otro espacio de trabajo.
+    property var fullscreenScreens: ({})
+
     // OTA System Update state
     property var otaData: ({
         status: "up_to_date",
@@ -660,6 +668,35 @@ ShellRoot {
         }
     }
 
+    // Sondea que monitores tienen algo a pantalla completa, para esconder la isla
+    // mientras haya un video en pantalla completa. Un segundo basta: si se pierde
+    // uno, la isla reaparece ese instante y se ve el parpadeo, pero con mas la
+    // consulta se nota.
+    Process {
+        id: fullscreenProc
+        command: ["bash", "-c", "$HOME/.local/bin/island-fullscreens"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const raw = text.trim()
+                if (raw.length === 0) return
+                try {
+                    root.fullscreenScreens = JSON.parse(raw)
+                } catch (e) {
+                    root.fullscreenScreens = ({})
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: fullscreenTimer
+        interval: 1000
+        repeat: true
+        running: true
+        onTriggered: fullscreenProc.running = true
+        triggeredOnStart: true
+    }
+
     Process {
         id: muteProc
         command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q 'MUTED' && echo true || echo false"]
@@ -1158,7 +1195,7 @@ ShellRoot {
             Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; if (!root.pairRequest.active) islandWin.controlSubView = 0; root.refreshAllStates() } } }
 
             screen: modelData
-            visible: root.islandVisible && !root.hiddenScreens[modelData.name]
+            visible: root.islandVisible && !root.hiddenScreens[modelData.name] && !root.fullscreenScreens[modelData.name]
 
         anchors {
             top: true

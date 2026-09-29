@@ -38,6 +38,20 @@ ShellRoot {
     function setPanelState(screenName, expandedValue, tabValue, subViewValue) {
         let panel = root.panelForScreen(screenName)
         if (!panel) return null
+        if (expandedValue === true) {
+            // El ipc hide marca la pantalla en hiddenScreens, y el binding de
+            // visible de la ventana la apaga entera. Sin quitarlo de ahi, volver
+            // a expandir la ventana no dibuja NADA: el estado era correcto y aun
+            // asi no se veia. Pasaba con 7 scripts que llaman a hide (menu wifi,
+            // menu bluetooth, launcher, powermenu, wallpaper, atajos), y hacia
+            // que SUPER+V, es decir open-clipboard, solo abriera la primera vez.
+            root.islandVisible = true
+            if (screenName && screenName !== "all") {
+                let hs = Object.assign({}, root.hiddenScreens)
+                delete hs[screenName]
+                root.hiddenScreens = hs
+            }
+        }
         if (expandedValue !== undefined) panel.expanded = expandedValue
         if (tabValue !== undefined) panel.currentTab = tabValue
         if (subViewValue !== undefined) panel.controlSubView = subViewValue
@@ -329,13 +343,12 @@ ShellRoot {
         function toggle(screenName: string): string {
             let panel = root.panelForScreen(screenName)
             if (!panel) return "unavailable"
-            panel.expanded = !panel.expanded
-            if (panel.expanded) {
-                panel.currentTab = 1
-                panel.controlSubView = 0
-                root.refreshAllStates()
-            }
-            return panel.expanded ? "expanded" : "collapsed"
+            // Pasa por setPanelState y no por panel.expanded a pelo, para que
+            // expandir quite la marca de hiddenScreens que deja el ipc hide.
+            let abrir = !panel.expanded
+            root.setPanelState(screenName, abrir, abrir ? 1 : undefined, abrir ? 0 : undefined)
+            if (abrir) root.refreshAllStates()
+            return abrir ? "expanded" : "collapsed"
         }
         function open(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 1, 0)
@@ -1887,7 +1900,9 @@ ShellRoot {
 
                         // Tab 0: Control & Sistema
                         Rectangle {
-                            width: 140
+                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
+                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
+                            width: 136
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 0 ? root.colAccent : root.colSurface
@@ -1923,7 +1938,9 @@ ShellRoot {
 
                         // Tab 1: Hyprland Settings
                         Rectangle {
-                            width: 140
+                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
+                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
+                            width: 136
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 1 ? root.colAccent : root.colSurface
@@ -1959,7 +1976,9 @@ ShellRoot {
 
                         // Tab 2: Alerts
                         Rectangle {
-                            width: 140
+                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
+                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
+                            width: 136
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 2 ? root.colAccent : root.colSurface
@@ -2012,7 +2031,9 @@ ShellRoot {
 
                         // Tab 3: Portapapeles (opcion aparte de Alertas, arriba)
                         Rectangle {
-                            width: 140
+                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
+                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
+                            width: 136
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 3 ? root.colAccent : root.colSurface

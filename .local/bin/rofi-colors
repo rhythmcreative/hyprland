@@ -1,15 +1,21 @@
 #!/bin/bash
-# Escribe el fondo macizo del modo ahorro de energia con el color actual de
-# pywal:  colors-powersave.rasi
+# Escribe el fondo macizo de los modos sin efectos con el color actual de pywal:
+#  colors-solid.rasi
 #
-# Sin ahorro este script no hace falta: rofi-themed no aplica nada y cada menu
-# conserva el fondo translucent que trae su propio tema, que es el de siempre y
-# el que deja ver el desenfoque del compositor. Solo el ahorro lo cambia, y para
-# eso hace falta este unico fichero.
+# Hay tres modos que apagan el desenfoque, y en los tres el fondo translucido se
+# queda plano, que es justo lo que no queremos ver:
+#
+#   /tmp/powersave-active      ahorro de energia (toggle-powersave, la isla)
+#   /tmp/hypr_performance_mode  max boost   (SUPER + SHIFT + G)
+#   /tmp/hyprland_power_save   ahorro      (SUPER + Z)
+#
+# Con cualquiera de ellos el menu va macizo. Sin ninguno, este script no hace
+# falta: rofi-themed no aplica nada y cada menu conserva el fondo translucent de
+# su propio tema, que es el de siempre y el que deja ver el desenfoque.
 #
 # Vive aqui y no dentro de toggle-powersave porque al cambiar el fondo con el
 # ahorro activo el macizo se quedaba con el color del fondo anterior; medido:
-# fondo #884400 y colors-powersave.rasi seguia en #151921. rofi-themed lo llama
+# fondo #884400 y colors-solid.rasi seguia en #151921. rofi-themed lo llama
 # en cada apertura de menu, asi que da igual que script cambiase el fondo.
 # Solo escribe si el contenido cambia, asi que no toca el disco si no hace falta.
 
@@ -37,4 +43,4 @@ escribir() {
     printf '%s\n' "$2" > "$1" 2>/dev/null || true
 }
 
-escribir "$dir/colors-powersave.rasi" "$macizo"
+escribir "$dir/colors-solid.rasi" "$macizo"

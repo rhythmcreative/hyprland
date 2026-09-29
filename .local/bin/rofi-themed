@@ -28,17 +28,27 @@
 
 args=("$@")
 
-# Sin ahorro de energia no se toca el fondo: cada menu se queda con el suyo, que
-# es como estaba siempre, con su translucidez y el desenfoque del compositor
-# detras. Antes se imponia un fondo comun al 80% y con eso solo se veia el 20%
-# del escritorio, asi que el blur casi no se apreciaba y el menu perdia el
-# aspecto que tenia.
+# En modo normal no se toca el fondo: cada menu se queda con el suyo, que es como
+# estaba siempre, con su translucidez y el desenfoque del compositor detras. Antes
+# se imponia un fondo comun al 80% y con eso solo se veia el 20% del escritorio,
+# asi que el blur casi no se apreciaba y el menu perdia el aspecto que tenia.
 #
-# El unico cambio de aspecto es el ahorro de energia, que pone el fondo macizo
-# encima de todo lo demas. Por eso rofi-colors solo genera ese fichero.
-macizo="$HOME/.config/rofi/colors-powersave.rasi"
+# En los modos que apagan los efectos el fondo macizo es lo que toca, porque si no
+# el translucido se queda plano: sin desenfoque detras solo se ve el color del
+# escritorio, sin suavizar, y el menu se lee peor de lo que se leia antes.
+macizo="$HOME/.config/rofi/colors-solid.rasi"
 
-if [ -f /tmp/powersave-active ] && [ -f "$macizo" ]; then
+sin_efectos() {
+    # Ahorro de energia, el que lleva la isla y toggle-powersave.
+    [ -f /tmp/powersave-active ] && return 0
+    # Max boost, que es lo que sube el rendimiento al maximo.
+    [ -f /tmp/hypr_performance_mode ] && return 0
+    # Ahorro de la tecla directa, que apaga animaciones, sombras y desenfoque.
+    [ -f /tmp/hyprland_power_save ] && return 0
+    return 1
+}
+
+if sin_efectos && [ -f "$macizo" ]; then
     args+=(-theme-str "$(cat "$macizo")")
 fi
 

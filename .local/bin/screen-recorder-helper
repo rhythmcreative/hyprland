@@ -108,12 +108,37 @@ start_recording() {
         fi
     fi
 
+    # Salida explicita, sin preguntar.
+    #
+    # wf-recorder, sin -o, lista las pantallas y espera que se elija una por
+    # consola. Desde la isla se lanza sin entrada, recibe EOF y muere enseguida:
+    #
+    #     Please select an output from the list to capture (enter output no.):
+    #     Enter output no.:Failed to select output, exiting
+    #
+    # Lo unico que se veia era un video de cero bytes, porque el boton de la isla
+    # no da ninguna salida de error. Se graba la pantalla enfocada, y si no se
+    # puede saber, la primera.
+    #
+    # -y evita tambien el aviso de sobrescribir, que es la misma pregunta por otro
+    # lado.
+    local rec_output=""
+    if command -v hyprctl >/dev/null 2>&1; then
+        rec_output=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor // ""' 2>/dev/null || true)
+        [ -n "$rec_output" ] || rec_output=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // ""' 2>/dev/null || true)
+    fi
+    if [ -n "$rec_output" ]; then
+        rec_output="-o $rec_output"
+    else
+        rec_output="-o $(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null || echo HEADLESS-1)"
+    fi
+
     echo "Starting screen recording to $output_file..."
 
     if [ -n "$geometry" ]; then
-        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder -g "$geometry" -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -g "$geometry" -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
     else
-        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
     fi
 
     local rec_pid=$!

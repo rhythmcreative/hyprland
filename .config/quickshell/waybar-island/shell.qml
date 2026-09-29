@@ -3194,7 +3194,13 @@ ShellRoot {
                                     Text { text: "󰸉"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Gallery"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("~/.local/bin/wallpaper-gallery"); } }
+                                // El "sleep 0.6" no es cosmetico. La isla pide foco de teclado
+                                // (OnDemand) mientras esta expandida, y si rofi se abre en ese
+                                // momento no lo consigue: se auto-selecciona la primera entrada y
+                                // se cierra, sin que se vea nada. Medido: lanzado con setsid rofi
+                                // devolvia "primero.webp" al instante; con medio segundo de espera se
+                                // queda esperando al usuario.
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("sleep 0.6 && ~/.local/bin/wallpaper-gallery"); } }
                             }
 
                             Rectangle {
@@ -3204,7 +3210,7 @@ ShellRoot {
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
                                     Text { text: "Random"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("~/.local/bin/wallpaper-changer-with-waybar-sync") }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runCmd("sleep 0.6 && ~/.local/bin/wallpaper-changer-with-waybar-sync") }
                             }
 
                             Rectangle {

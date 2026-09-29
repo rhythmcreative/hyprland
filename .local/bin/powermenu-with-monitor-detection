@@ -433,7 +433,11 @@ rofi_cmd() {
         -p "Goodbye ${USER}" \
         -mesg "Uptime: $uptime" \
         -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
-        -theme "$HOME/.config/rofi/colors-window.rasi" \
+        -theme-str "$(cat "$HOME/.config/rofi/colors-window.rasi")" \
+        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+            && printf -- '-theme-str "%s"' "$(cat "$HOME/.config/rofi/colors-powersave.rasi")" ) \
+        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+            && printf -- "-theme %s" "$HOME/.config/rofi/colors-powersave.rasi" ) \
         -monitor "$ACTIVE_MONITOR"
 }
 
@@ -443,7 +447,11 @@ confirm_cmd() {
         -p 'Confirmation' \
         -mesg 'Are you Sure?' \
         -theme "${TEMP_DIR}/confirm-${ACTIVE_MONITOR}.rasi" \
-        -theme "$HOME/.config/rofi/colors-window.rasi" \
+        -theme-str "$(cat "$HOME/.config/rofi/colors-window.rasi")" \
+        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+            && printf -- '-theme-str "%s"' "$(cat "$HOME/.config/rofi/colors-powersave.rasi")" ) \
+        $( [ -f /tmp/powersave-active ] && [ -f "$HOME/.config/rofi/colors-powersave.rasi" ] \
+            && printf -- "-theme %s" "$HOME/.config/rofi/colors-powersave.rasi" ) \
         -monitor "$ACTIVE_MONITOR"
 }
 

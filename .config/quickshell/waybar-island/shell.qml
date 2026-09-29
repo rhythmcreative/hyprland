@@ -659,7 +659,14 @@ ShellRoot {
 
     Process {
         id: kbProc
-        command: ["bash", "-c", "hyprctl devices -j 2>/dev/null | jq -r '.keyboards[] | select(.main==true) | .active_keymap' 2>/dev/null | head -n1"]
+        // kb-layout devuelve la abreviatura del layout ACTIVO segun lo que el
+        // usuario configuro en input.kb_layout ("us,es" -> US / ES).
+        //
+        // Antes pedia active_keymap, que es el nombre del keymap de XKB:
+        // "English (US)" frente a "Spanish". No es lo que el usuario escribe, y
+        // como cambia de largo segun el idioma, el chip se redimensionaba en cada
+        // cambio y parecia que se colapsaba al pulsarlo.
+        command: ["bash", "-c", "$HOME/.local/bin/kb-layout"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const val = text.trim()

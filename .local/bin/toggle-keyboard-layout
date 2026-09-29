@@ -1,28 +1,38 @@
 #!/bin/bash
+# Cambia al siguiente layout de teclado, usando los que el usuario haya
+# configurado en Hyprland (input.kb_layout, aqui "us,es").
+#
+# Antes este guion tenia tres nombres de teclado escritos a mano:
+#
+#     switchxkblayout "wooting-wooting-60he-(arm)" next
+#     switchxkblayout "asus-keyboard" next
+#     switchxkblayout "at-translated-set-2-keyboard" next
+#
+# Dos problemas. "asus-keyboard" no existe en esta maquina, asi que esa linea
+# fallaba en silencio. Y el teclado real del portatil,
+# "asustek-computer-inc.-n-key-device", no estaba en la lista.
+#
+# Hyprland aplica el mismo kb_layout a todos los dispositivos, asi que "all" cubre
+# todos los teclados y no hay que conocer ningun nombre. El indice activo avanza
+# solo en el teclado real, pero todos informan el mismo, que es lo que lee
+# kb-layout para la abreviatura del panel.
 
-# Toggle keyboard layout between English (us) and Spanish (es)
-# Switch layout for main keyboards
+set -u
 
-# Switch the main Wooting keyboard
-hyprctl switchxkblayout "wooting-wooting-60he-(arm)" next 2>/dev/null
+# Leer el layout actual ANTES de cambiarlo, para avisar del nuevo y no del viejo.
+antes=$(hyprctl devices -j 2>/dev/null | jq -r '.keyboards[] | select(.main==true) | .active_layout_index' 2>/dev/null)
+[ -n "$antes" ] || antes=$(hyprctl devices -j 2>/dev/null | jq -r '.keyboards[0].active_layout_index' 2>/dev/null)
 
-# Switch the ASUS laptop keyboard as backup
-hyprctl switchxkblayout "asus-keyboard" next 2>/dev/null
+hyprctl switchxkblayout all next >/dev/null 2>&1 || true
 
-# Switch the translated keyboard as additional backup
-hyprctl switchxkblayout "at-translated-set-2-keyboard" next 2>/dev/null
+sleep 0.2
 
-# Get current layout from main keyboard
-current_map=$(hyprctl devices -j | jq -r '.keyboards[] | select(.main==true) | .active_keymap' 2>/dev/null)
+nuevo=$("$HOME/.local/bin/kb-layout" 2>/dev/null || echo "")
 
-# Fallback: get from any keyboard if main not found
-if [ -z "$current_map" ] || [ "$current_map" == "null" ]; then
-  current_map=$(hyprctl devices -j | jq -r '.keyboards[0].active_keymap' 2>/dev/null)
+# El texto que se avisa es la abreviatura del layout nuevo, la misma que ve el
+# usuario en el panel. Antes decia "English (US)" o "Spanish".
+if command -v notify-send >/dev/null 2>&1 && [ -n "$nuevo" ]; then
+    notify-send "Teclado" "$nuevo" -t 1200 -i input-keyboard >/dev/null 2>&1 || true
 fi
 
-# Show notification (fallback if notify-send not available)
-if command -v notify-send >/dev/null 2>&1; then
-  notify-send "Keyboard Layout" "Active: ${current_map}" -t 1500 -i input-keyboard 2>/dev/null || echo "Keyboard Layout: ${current_map}"
-else
-  echo "Keyboard Layout: ${current_map}"
-fi
+echo "${nuevo:-desconocido}"

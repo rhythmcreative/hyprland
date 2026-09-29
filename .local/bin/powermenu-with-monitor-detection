@@ -425,11 +425,15 @@ yes='✓'      # Checkmark simple
 no='✗'       # X mark simple
 
 # Rofi CMD con monitor específico
+# El fondo translucido comun se anade al final de cada rofi: rofi fusiona
+# varios -theme y gana el ultimo. Es el mismo que usan el menu principal y el
+# selector de fondos, para que los cuatro se vean igual.
 rofi_cmd() {
     rofi -dmenu \
         -p "Goodbye ${USER}" \
         -mesg "Uptime: $uptime" \
         -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
+        -theme "$HOME/.config/rofi/colors-window.rasi" \
         -monitor "$ACTIVE_MONITOR"
 }
 
@@ -439,6 +443,7 @@ confirm_cmd() {
         -p 'Confirmation' \
         -mesg 'Are you Sure?' \
         -theme "${TEMP_DIR}/confirm-${ACTIVE_MONITOR}.rasi" \
+        -theme "$HOME/.config/rofi/colors-window.rasi" \
         -monitor "$ACTIVE_MONITOR"
 }
 

@@ -196,6 +196,7 @@ ShellRoot {
     property string kbLayout: "US"
     property var clipList: []
     property int clipCount: 0
+    property int clipCopiedId: -1
     property bool isMuted: false
 
     property var wifiList: []
@@ -5274,8 +5275,8 @@ Flickable {
                                 Layout.fillWidth: true
                                 height: 48
                                 radius: 12
-                                color: root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
+                                color: modelData.id === root.clipCopiedId ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25) : root.colSurface
+                                border.color: modelData.id === root.clipCopiedId ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
                                 border.width: 1
                                 RowLayout {
                                     anchors.fill: parent
@@ -5333,9 +5334,23 @@ Flickable {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy") }
+                                    onClicked: { root.runCmd("cliphist decode " + modelData.id + " | wl-copy"); root.clipCopiedId = modelData.id; clipCopyTimer.restart(); clipListProc.running = true }
                                 }
                             }
+                        }
+
+                    Timer {
+                            id: clipCopyTimer
+                            interval: 1500
+                            repeat: false
+                            onTriggered: root.clipCopiedId = -1
+                        }
+                        Timer {
+                            interval: 5000
+                            repeat: true
+                            running: islandWin.currentTab === 3
+                            triggeredOnStart: true
+                            onTriggered: clipListProc.running = true
                         }
 
                         Text {

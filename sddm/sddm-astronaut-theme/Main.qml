@@ -13,8 +13,20 @@ import "Components"
 Pane {
     id: root
 
-    height: config.ScreenHeight || Screen.height
-    width: config.ScreenWidth || Screen.ScreenWidth
+    // Screen.ScreenWidth no existe: la propiedad de Qt es Screen.width. Con el
+    // config vacio la expresion daba undefined y el ancho se quedaba en 0.
+    //
+    // Importa mas de lo que parece porque TODO cuelga de aqui: el fondo usa
+    // parent.width, el ShaderEffectSource que captura el fondo para el blur se
+    // dimensiona con parent.width, y el formulario con parent.width tambien. Un
+    // ancho de 0 deja la cadena entera en 0x0 y el greeter se ve negro.
+    //
+    // Y con dos monitores el item puede caer entre las dos pantallas, donde las
+    // propiedades de Screen devuelven 0 en vez de un tamano. Por eso no se fia
+    // de ellas: si no dan algo utilizable, tira de un 1080p de reserva, que es
+    // mejor que una pantalla en negro.
+    height: config.ScreenHeight != "" ? parseInt(config.ScreenHeight) : (Screen.height || 1080)
+    width: config.ScreenWidth  != "" ? parseInt(config.ScreenWidth)  : (Screen.width  || 1920)
     padding: config.ScreenPadding
 
     LayoutMirroring.enabled: config.RightToLeftLayout == "true" ? true : Qt.application.layoutDirection === Qt.RightToLeft

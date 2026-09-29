@@ -659,6 +659,7 @@ step_software() {
         bc
         imagemagick
         pacman-contrib
+        cliphist
         mpv
         mpvpaper
         gnome-network-displays

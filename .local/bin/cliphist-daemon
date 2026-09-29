@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Historial del portapapeles: lo guarda todo (texto e imagenes) y lo sirve.
+#
+# cliphist guarda en ~/.cache/cliphist/db, asi que sobrevive a reinicios. Hay que
+# vigilar los dos tipos MIME por separado: text para lo copiado normal e image
+# para capturas y fotos. Con un solo watcher las imagenes no se guardaban.
+
+set -u
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="wayland-1"
+
+# Si ya hay watchers de esta sesion, no duplicarlos.
+if pgrep -f "wl-paste --watch cliphist store" >/dev/null 2>&1; then
+    exit 0
+fi
+
+wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
+wl-paste --type image --watch cliphist store >/dev/null 2>&1 &
+
+wait

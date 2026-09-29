@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Selector del historial del portapapeles con rofi.
+#
+# Uso: clipboard-history [comando]
+#   sin args  menu: Enter copia, Alt+D borra la entrada, Alt+W lo borra todo
+#   wipe      borra todo sin preguntar (lo usa el boton de la isla si lo hay)
+#   count     imprime cuantas entradas hay (para waybar)
+#
+# El fondo y el monitor los pone rofi-themed, como en los otros ocho menus.
+
+set -u
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="wayland-1"
+
+case "${1:-}" in
+    count)
+        cliphist list 2>/dev/null | wc -l
+        exit 0
+        ;;
+    wipe)
+        cliphist wipe 2>/dev/null || true
+        notify-send "Portapapeles" "Historial borrado" -t 1200 -i edit-clear 2>/dev/null || true
+        exit 0
+        ;;
+esac
+
+if ! cliphist list 2>/dev/null | grep -q .; then
+    notify-send "Portapapeles" "Historial vacio: copia algo primero" -t 1500 -i edit-paste 2>/dev/null || true
+    exit 0
+fi
+
+sel=$(cliphist list 2>/dev/null | rofi-themed -dmenu -i \
+    -p "Portapapeles" \
+    -mesg "Enter copia · Alt+D borra · Alt+W borra todo" \
+    -theme "$HOME/.config/rofi/wallpaper-select-pywal.rasi" \
+    -kb-custom-1 "Alt+d" \
+    -kb-custom-2 "Alt+w")
+rc=$?
+
+case "$rc" in
+    10)  # Alt+D: borrar la entrada elegida
+        id=$(printf '%s' "$sel" | cut -f1)
+        [ -n "$id" ] && cliphist delete <<< "$id" 2>/dev/null
+        exec "$0"
+        ;;
+    11)  # Alt+W: borrar todo
+        exec "$0" wipe
+        ;;
+esac
+
+[ -n "$sel" ] || exit 0
+id=$(printf '%s' "$sel" | cut -f1)
+cliphist decode "$id" 2>/dev/null | wl-copy 2>/dev/null || true

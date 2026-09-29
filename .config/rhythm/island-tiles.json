@@ -112,6 +112,13 @@
       "cmd": "kitty -e htop",
       "close": true,
       "delay": 0
+    },
+    {
+      "icon": "󰅍",
+      "label": "Portapapeles",
+      "cmd": "~/.local/bin/clipboard-history",
+      "close": true,
+      "delay": 0.6
     }
   ]
 }

@@ -26,36 +26,96 @@ local background = "rgb(101012)"
 
 -- Monitors
 --
--- Aqui ya no hay posiciones escritas a mano, y esa es toda la idea.
+-- El orden de estas reglas importa y no es el intuitivo: en esta versión de
+-- Hyprland GANA LA ÚLTIMA REGLA QUE COINCIDE, no la primera. Está medido —
+-- con la regla del portátil antes que las de nwg-displays, la disposición
+-- guardada se aplicaba al revés en cuanto el portátil também estaba nombrado.
 --
--- Con eDP-1 anclado en 2560x0 y DP-6 en 0x0, el escritorio se rompia en cuanto
--- cambiaba la topologia: al desenchufar DP-6, el portatil se quedaba en un x
--- que ya no existia y quedaba un hueco de 2560px a su izquierda. Y un monitor
--- nuevo no tenia regla, asi que caia donde Hyprland quisiera.
+-- 1) Red de seguridad, primero. Lo que nwg-displays no mencione cae aquí.
+-- 2) Lo que nwg-displays guardó, después, y por tanto manda.
 --
--- Ahora el portatil no lleva posicion: Hyprland se la coloca sola y el hueco no
--- puede aparecer. Lo unico que se le fija es la escala, porque su valor por
--- defecto es 1.5 en una 1080p y deja el texto diminuto.
+-- El primero de los dos no lleva posición a propósito. Con eDP-1 anclado en
+-- 2560x0 y DP-6 en 0x0 —como estaban escritos— el escritorio se rompía al
+-- cambiar la topología: al desenchufar DP-6, el portátil se quedaba en un x
+-- que ya no existía y quedaba un hueco de 2560px a su izquierda. Sin
+-- posición, Hyprland la coloca sola y el hueco no puede aparecer. Lo único que
+-- se le fija es la escala, porque su valor por defecto es 1.5 en una 1080p y
+-- deja el texto diminuto.
 --
--- El resto de monitores no tienen regla, y no es un descuido: lo que Hyprland
--- hace con un monitor sin regla es justo lo que se quiere aqui — modo
--- preferido, posicion automatica y escala automatica. Al enchufar o desenchufar
--- cualquiera, la disposicion se recompone sola.
+-- Para un monitor sin ninguna regla, Hyprland aplica modo preferido, posición
+-- automática y escala automática: al enchufar uno nuevo se coloca solo.
 --
--- OJO: en esta version de Hyprland los comodines en `output` no coinciden
--- (`eDP-*` no hace nada), asi que el panel interno va por su nombre exacto. Por
--- lo mismo `output = ""` no actua de regla general. Si algun dia se soportan los
--- comodines, esto se reduce a una sola regla con `eDP-*`.
---
--- Lo que nwg-displays escribia en monitors.conf nunca se leyo: este fichero no
--- lo incluia. Si algun dia se quieren perfiles por cable, se ponen aqui como
--- reglas propias, que es lo que Hyprland va a usar.
+-- OJO: en esta versión los comodines en `output` no coinciden (`eDP-*` no hace
+-- nada), así que el panel interno va por su nombre exacto. Por lo mismo
+-- `output = ""` no actúa de regla general.
 hl.monitor({
     output   = "eDP-1",
     mode     = "preferred",
     position = "auto",
     scale    = "1",
 })
+
+-- Lo que nwg-displays guarda en monitors.conf, aplicado de verdad.
+--
+-- nwg-displays llevaba tiempo escribiendo ese fichero y nada lo leía: este
+-- config no tenía ninguna regla para él, así que guardar una disposición allí
+-- no cambiaba nada. Tampoco se puede resolver con `require`, que solo carga
+-- Lua, y esto son líneas `monitor=`.
+--
+-- Se parsea aquí, en el momento de cargar, y se convierte en llamadas a
+-- hl.monitor. Leerlo con io en vez de con require es a propósito: nwg-displays
+-- reescribe el fichero cada vez que guardas, y require cachearía el resultado,
+-- así que tras guardar y recargar seguiría viéndose la disposición antigua.
+--
+-- Un fichero ausente o mal formado no es un error: la config carga igual y se
+-- comporta como si nwg-displays no se hubiera usado nunca.
+--
+-- AVISO, porque es la contrapartida de que esto funcione: aquí se respetan las
+-- posiciones TAL CUAL están guardadas, incluidas las de monitores que ahora no
+-- están enchufados. Si guardas una disposición con dos pantallas y luego
+-- desenchafas una, la otra se queda en el x que ya no existe y queda el hueco
+-- — es exactamente lo que pasaba antes, solo que ahora lo decides tú desde la
+-- herramienta. Guarda la disposición con los monitores que tienes conectados, o
+-- simplemente borra la línea del que no esté. Para la disposición automática
+-- (sin huecos, se recoloca sola al enchufar y desenchufar) basta con tener
+-- monitors.conf vacío o borrar su contenido.
+local function aplicar_monitors_nwg()
+    local ruta = (os.getenv("HOME") or "") .. "/.config/hypr/monitors.conf"
+    local f = io.open(ruta, "r")
+    if not f then return end
+    for linea in f:lines() do
+        local limpio = linea:gsub("^%s+", ""):gsub("%s+$", "")
+        if limpio ~= "" and not limpio:match("^#") then
+            local partes = {}
+            for p in limpio:gmatch("[^,]+") do partes[#partes + 1] = p end
+            -- monitor=SALIDA,MODO,POSICION,ESCALA[,TRANSFORM][,vrr][,PROFUNDIDAD]
+            local salida = partes[1] and partes[1]:match("^monitor%s*=%s*(.+)$")
+            local modo, pos, escala = partes[2], partes[3], partes[4]
+            if salida and salida ~= "" and modo and pos and escala then
+                local regla = {
+                    output   = salida,
+                    mode     = modo,
+                    position = pos,
+                    scale    = escala,
+                }
+                -- Lo que sigue a la escala es la transformacion (0-3) o la
+                -- palabra "vrr". Se pasa lo que se entienda, se ignora lo demás.
+                local extra = partes[5]
+                if extra then
+                    if extra:match("^%d+$") and tonumber(extra) <= 3 then
+                        regla.transform = tonumber(extra)
+                    elseif extra:lower() == "vrr" then
+                        regla.vrr = 1
+                    end
+                end
+                hl.monitor(regla)
+            end
+        end
+    end
+    f:close()
+end
+
+aplicar_monitors_nwg()
 
 -- Autostart
 hl.on("hyprland.start", function ()

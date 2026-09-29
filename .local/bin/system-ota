@@ -385,6 +385,69 @@ _ota_devolver_isla() {
     return $rc
 }
 
+# Habilita las unidades de usuario recien desplegadas.
+#
+# Esto NO puede vivir en una migracion: rhythm-migrate marca cada guion como hecho
+# en ~/.local/state/rhythm/migrations y no lo vuelve a ejecutar nunca. Una
+# migracion se ejecuta una vez, pero un servicio nuevo puede anadirse al repo
+# cualquier dia, asi que esto tiene que pasar en CADA actualizacion. Probado: con
+# la regla en una migracion ya marcada, rhythm-migrate responde "all up to date"
+# y un servicio nuevo se queda en disabled.
+#
+# La regla sale del propio fichero de la unidad: si tiene WantedBy=default.target
+# o timers.target, se habilita. Asi no hay ninguna lista que mantener y anadir un
+# servicio al repo basta.
+#
+# Solo habilita, no arranca: un update no debe abrir la webcam ni sacar el dock
+# delante de nadie. Un servicio nuevo espera al siguiente inicio de sesion, o a un
+# systemctl --user start a mano.
+ota_habilitar_servicios() {
+    local dir="$HOME/.config/systemd/user"
+    # Units que se activan bajo demanda o a proposito:
+    #   rhythm-caffeine.service             la isla la alterna, y su status la
+    #                                       arranca sola mientras el flag exista
+    #   rhythm-nightlight-schedule.service  solo si el usuario puso un horario
+    #   blueman-applet.service              masked a proposito en esta maquina
+    #   pipewire-session-manager.service    alias de la distro
+    local excluidas="rhythm-caffeine.service rhythm-nightlight-schedule.service blueman-applet.service pipewire-session-manager.service"
+    local unit name actual nuevo
+
+    [ -d "$dir" ] || return 0
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+
+    nuevo=0
+    for unit in "$dir"/*.service "$dir"/*.timer; do
+        [ -e "$unit" ] || continue
+        name=$(basename "$unit")
+
+        case " $excluidas " in
+            *" $name "*) continue ;;
+        esac
+
+        # Solo las que el propio fichero dice que deben arrancar con la sesion.
+        # graphical-session.target se deja fuera a proposito: en Hyprland con SDDM
+        # no lo activa nadie y una unidad colgando de el no arranca sin avisar.
+        grep -qE '^[[:space:]]*WantedBy=.*(default\.target|timers\.target)' "$unit" 2>/dev/null || continue
+
+        actual=$(systemctl --user is-enabled "$name" 2>/dev/null || echo "unknown")
+        case "$actual" in
+            enabled|enabled-runtime|masked|static|indirect|alias|generated) continue ;;
+        esac
+
+        if systemctl --user enable "$name" >/dev/null 2>&1; then
+            echo "  [+] servicio habilitado: $name"
+            nuevo=$((nuevo + 1))
+        else
+            echo "  [!] no se pudo habilitar: $name"
+        fi
+    done
+
+    if [ "$nuevo" -gt 0 ]; then
+        echo "  $nuevo servicio(s) nuevo(s). Arrancaran en el proximo inicio de sesion,"
+        echo "  o a mano con: systemctl --user start <nombre>"
+    fi
+}
+
 cmd_update() {
     local dotfiles_only=false
     local system_packages=false
@@ -550,8 +613,10 @@ cmd_update() {
         echo "  [!] $OTA_DEPLOY_FAILED fichero(s) no se pudieron desplegar."
     fi
 
-    # Units were just replaced on disk, so systemd needs to re-read them.
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    # Units were just replaced on disk, so systemd needs to re-read them, and any
+    # service new in this update has to be enabled or it would sit there deployed
+    # and never start on login.
+    ota_habilitar_servicios
 
     # Step 2b: Run pending dotfiles migrations (idempotent)
     echo "Running pending migrations..."

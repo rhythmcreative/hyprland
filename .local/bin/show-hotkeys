@@ -43,7 +43,7 @@ if pgrep -x rust-dock >/dev/null 2>&1; then
     _RUST_DOCK_WAS_VISIBLE=true
     pkill -SIGUSR1 -x rust-dock 2>/dev/null &
 fi
-if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
     _QUICKSHELL_WAS_VISIBLE=true
     quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide all >/dev/null 2>&1 &
 fi

@@ -1,13 +1,21 @@
 [Unit]
+# WantedBy va a default.target y no a graphical-session.target porque este ultimo
+# no lo activa nadie en una sesion Hyprland arrancada con SDDM: queda inactivo,
+# y una unidad enabled que apunta a un target inactivo no arranca nunca. Estaba
+# asi desde siempre y por eso waybar-island, wallpaper-monitor-watcher y
+# privacy-shield salian como inactive (dead) con Result=success y sin una sola
+# entrada en el journal: nunca habian llegado a ejecutarse.
+#
+# Las unidades que si funcionan (rhythm-bluetooth-agent, rhythm-power-profile,
+# rust-dock-monitor-watcher) usan default.target, y esa correlacion es exacta.
 Description=Dynamic Island and Notification Server for Hyprland/Waybar
-PartOf=graphical-session.target
-After=graphical-session.target
+After=default.target
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/quickshell-island
-Restart=on-failure
+Restart=always
 RestartSec=1s
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target

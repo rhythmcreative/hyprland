@@ -139,7 +139,7 @@ hide_all_bars() {
             _RUST_DOCK_WAS_VISIBLE=true
             pkill -SIGUSR1 -x rust-dock 2>/dev/null &
         fi
-        if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
             _QUICKSHELL_WAS_VISIBLE=true
             quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$mon" >/dev/null 2>&1 &
         fi
@@ -159,7 +159,7 @@ show_all_bars() {
             "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 &
             pkill -SIGUSR2 -x rust-dock 2>/dev/null &
         fi
-        if [ "$_QUICKSHELL_WAS_VISIBLE" = true ] || pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+        if [ "$_QUICKSHELL_WAS_VISIBLE" = true ] || "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
             quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &
         fi
     fi

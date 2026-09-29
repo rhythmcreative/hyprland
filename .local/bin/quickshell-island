@@ -23,7 +23,18 @@ if [ -z "$INVOCATION_ID" ] && systemctl --user is-active waybar-island.service >
     exec systemctl --user restart waybar-island.service
 fi
 
-pkill -f "quickshell -p .*waybar-island" 2>/dev/null || true
+# Matar la instancia anterior por NOMBRE de proceso y luego filtrando por linea de
+# comandos, nunca con pkill -f.
+#
+# pkill -f casa contra la linea de comandos completa, y ahi se cuela cualquiera
+# que mencione la ruta: una terminal, un script, o el propio agente. Con
+# "quickshell -p .*waybar-island" llego a matar el shell que lo invoco. pgrep -x
+# compara solo el nombre del ejecutable, asi que un bash nunca puede coincidir.
+for _pid in $(pgrep -x quickshell 2>/dev/null); do
+    if tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null | grep -q "waybar-island"; then
+        kill "$_pid" 2>/dev/null || true
+    fi
+done
 sleep 0.2
 
 exec quickshell -p "$HOME/.config/quickshell/waybar-island/shell.qml"

@@ -88,7 +88,7 @@ if [ -n "$ACTIVE_MONITOR" ]; then
         _waybar_was_visible=true
         pkill -SIGUSR1 waybar 2>/dev/null &
     fi
-    if pgrep -f "quickshell -p .*waybar-island" >/dev/null 2>&1; then
+    if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         _qs_was_visible=true
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$ACTIVE_MONITOR" >/dev/null 2>&1 &
     fi

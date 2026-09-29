@@ -5261,7 +5261,7 @@ ShellRoot {
                             model: root.clipList
                             delegate: Rectangle {
                                 Layout.fillWidth: true
-                                height: modelData.image ? 76 : 44
+                                height: modelData.image ? 84 : 44
                                 radius: 12
                                 color: root.colSurface
                                 border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)

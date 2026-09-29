@@ -43,7 +43,10 @@ for line in sys.stdin:
                     path = ""
             except Exception:
                 path = ""
-        prev_txt = prev[:120]
+        import re as _re
+        m = _re.match(r"\[\[ binary data (.+) (\w+) (\d+x\d+) \]\]", prev)
+        prev_txt = ("Imagen %s · %s · %s" % (m.group(2).upper(), m.group(3), m.group(1)) \
+                    if m else prev[:120])
         out.append({"id": iid, "text": prev_txt, "image": bool(path), "thumb": path})
     else:
         prev = " ".join(prev.split())[:120]

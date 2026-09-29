@@ -84,11 +84,11 @@ _qs_was_visible=false
 if [ -n "$ACTIVE_MONITOR" ]; then
     if pgrep -f "rust-dock.*-o +$ACTIVE_MONITOR" >/dev/null 2>&1; then
         _rust_was_visible=true
-        pkill -SIGUSR1 -f "rust-dock.*-o +$ACTIVE_MONITOR" 2>/dev/null &
+        "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MONITOR" USR1 &
     fi
     if pgrep -f "waybar.*config-$ACTIVE_MONITOR" >/dev/null 2>&1; then
         _waybar_was_visible=true
-        pkill -SIGUSR1 -f "waybar.*config-$ACTIVE_MONITOR" 2>/dev/null &
+        "$HOME/.local/bin/dock-procs" waybar signal "$ACTIVE_MONITOR" USR1 &
     elif pgrep -x waybar >/dev/null 2>&1; then
         _waybar_was_visible=true
         pkill -SIGUSR1 waybar 2>/dev/null &
@@ -102,7 +102,7 @@ fi
 rofi $ROFI_ARGS
 
 if [ -n "$ACTIVE_MONITOR" ]; then
-    [ "$_rust_was_visible" = true ] && pkill -SIGUSR2 -f "rust-dock.*-o +$ACTIVE_MONITOR" 2>/dev/null &
-    [ "$_waybar_was_visible" = true ] && { pkill -SIGUSR2 -f "waybar.*config-$ACTIVE_MONITOR" 2>/dev/null & pkill -SIGUSR2 -x waybar 2>/dev/null & }
+    [ "$_rust_was_visible" = true ] && "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MONITOR" USR2 &
+    [ "$_waybar_was_visible" = true ] && { "$HOME/.local/bin/dock-procs" waybar signal "$ACTIVE_MONITOR" USR2 & pkill -SIGUSR2 -x waybar 2>/dev/null & }
     [ "$_qs_was_visible" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$ACTIVE_MONITOR" >/dev/null 2>&1 &
 fi

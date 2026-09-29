@@ -39,6 +39,35 @@ restart_dock() {
     "$LAUNCHER" >/dev/null 2>&1 &
 }
 
+# PIDs de las INSTANCIAS REALES de rust-dock, y nada mas.
+#
+# Antes esto usaba `pgrep -f "rust-dock.*-o"`, que compara la LINEA DE COMANDOS
+# completa: no distingue un dock de una terminal, un editor o un script que
+# simplemente mencionen esas palabras. Y como despues hacia `kill` sobre lo que
+# encontraba, se llevaba por delante procesos que no tenian nada que ver — una
+# shell de pruebas murio por escribir un comando con "rust-dock" y "-o" dentro.
+#
+# Aqui se compara el EJECUTABLE de verdad, y el `-o` se lee de su linea de
+# comandos. Es el mismo criterio que ya usa el lanzador de Waybar, con el mismo
+# motivo escrito alli: un patron parcial sobre la linea de comandos mata de mas.
+dock_pids() {
+    local entry pid exe
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+        case "$exe" in
+            */rust-dock) ;;
+            *) continue ;;
+        esac
+        echo "$pid"
+    done
+}
+
+# Salida (-o) en la que esta un dock concreto.
+dock_output() {
+    tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -oP -- '-o\s+\K\S+' || true
+}
+
 # Make sure there is exactly one dock instance per connected monitor.
 # Event driven handling alone is not enough: an event that arrives while the
 # script is restarting, a monitor with a slow handshake, or an instance that
@@ -53,12 +82,17 @@ reconcile_docks() {
     local m pid out needs=0
     while IFS= read -r m; do
         [ -z "$m" ] && continue
-        pgrep -f "rust-dock.*-o +$m(\$| )" >/dev/null 2>&1 || { needs=1; break; }
+        found=0
+        for pid in $(dock_pids); do
+            out=$(dock_output "$pid")
+            [ "$out" = "$m" ] && { found=1; break; }
+        done
+        [ "$found" = "0" ] && { needs=1; break; }
     done <<< "$monitors"
 
     if [ "$needs" = "0" ]; then
-        for pid in $(pgrep -f "rust-dock.*-o" 2>/dev/null); do
-            out=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -oP -- '-o\s+\K\S+' || true)
+        for pid in $(dock_pids); do
+            out=$(dock_output "$pid")
             if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
                 kill "$pid" 2>/dev/null || true
             fi
@@ -100,6 +134,25 @@ reconcile_waybar() {
         # case con config-DP-11.
         pgrep -f "waybar .*-c .*config-$m(\$| )" >/dev/null 2>&1 || { missing=1; break; }
     done <<< "$monitors"
+
+    # Retirar las barras de monitores que ya no estan.
+    #
+    # Faltaba la otra mitad: al desenchufar un monitor, su barra se quedaba
+    # corriendo. reconcile_docks cierra los docks sobrantes y las barras se
+    # quedaban ahi, invisibles pero vivas, arrastrando su modulo de Cava con
+    # ellas. Nadie lo notaba porque no se ven, pero es un proceso menos por
+    # cada monitor que se ha enchufado alguna vez.
+    #
+    # Se comparan los monitors que Hyprland reporta con los que atienden las
+    # barras vivas, y se termina lo que no encaje. Con dock-procs, que compara
+    # el ejecutable de verdad y no la linea de comandos.
+    local PROCS="$HOME/.local/bin/dock-procs"
+    if [ -x "$PROCS" ]; then
+        for out in $("$PROCS" waybar list 2>/dev/null); do
+            [ -z "$out" ] && continue
+            echo "$monitors" | grep -qw "$out" || "$PROCS" waybar signal "$out" TERM
+        done
+    fi
 
     [ "$missing" = "0" ] && { rm -f "$COOLDOWN_FILE" 2>/dev/null; return 0; }
 

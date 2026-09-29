@@ -10,12 +10,17 @@
 # rust-dock-monitor-watcher) usan default.target, y esa correlacion es exacta.
 Description=Dynamic Island and Notification Server for Hyprland/Waybar
 After=default.target
+# Sin limite de arranques: el lanzador espera a que aparezca el socket de
+# Wayland, que es lo que hacia que fallara seis veces y acabara en
+# start-limit-hit. Si un dia falla por otra razon, reintentar es mejor que
+# quedarse sin isla y sin nadie que la levante.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/quickshell-island
 Restart=always
-RestartSec=1s
+RestartSec=2s
 
 [Install]
 WantedBy=default.target

@@ -39,13 +39,27 @@ args=("$@")
 macizo="$HOME/.config/rofi/colors-solid.rasi"
 
 sin_efectos() {
-    # Ahorro de energia, el que lleva la isla y toggle-powersave.
-    [ -f /tmp/powersave-active ] && return 0
-    # Max boost, que es lo que sube el rendimiento al maximo.
-    [ -f /tmp/hypr_performance_mode ] && return 0
-    # Ahorro de la tecla directa, que apaga animaciones, sombras y desenfoque.
-    [ -f /tmp/hyprland_power_save ] && return 0
-    return 1
+    # Las banderas de /tmp son solo una pista. La verdad es lo que diga el
+    # compositor, y se desincronizan solas: power_save.sh y optimize_performance.sh
+    # aplican el estado con "hyprctl --batch", y cualquier "hyprctl reload"
+    # posterior restaura los valores de la config SIN tocar /tmp. El OTA hace un
+    # reload en cada actualizacion, asi que una bandera se queda puesta con el
+    # sistema ya en modo normal.
+    #
+    # Medido: /tmp/hyprland_power_save puesto, blur activo y active_opacity 0.85,
+    # que es modo normal, y los menus salian macizos. Con solo mirar la bandera
+    # no hay manera de distinguir ese caso de un ahorro real.
+    #
+    # Asi que: si hay bandera pero el desenfoque esta activo, el compositor no
+    # esta en modo sin efectos y no se aplica el macizo.
+    [ -f /tmp/powersave-active ] || [ -f /tmp/hypr_performance_mode ] || [ -f /tmp/hyprland_power_save ] || return 1
+
+    local blur
+    blur=$(hyprctl getoption decoration:blur:enabled 2>/dev/null | head -1)
+    case "$blur" in
+        *true*) return 1 ;;   # desenfoque activo: modo normal, fondo translucido
+        *)      return 0 ;;   # sin desenfoque: modo sin efectos, fondo macizo
+    esac
 }
 
 if sin_efectos && [ -f "$macizo" ]; then

@@ -4952,41 +4952,14 @@ ShellRoot {
                                 }
                             }
 
-                            // Modo Ahorro de Energía
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 54
-                                radius: 14
-                                color: root.powerSaverEnabled ? root.colAccent : root.colSurface
-                                Behavior on color { ColorAnimation { duration: 150 } }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    spacing: 10
-                                    Text { text: "󰌪"; color: root.powerSaverEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 20 }
-                                    ColumnLayout {
-                                        spacing: 1
-                                        Text { text: "Power Saver"; color: root.powerSaverEnabled ? root.colBg : root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
-                                        Text { text: root.powerSaverEnabled ? "Eco Active" : "Disabled"; color: root.powerSaverEnabled ? Qt.rgba(root.colBg.r, root.colBg.g, root.colBg.b, 0.8) : root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                    }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.powerSaverEnabled = !root.powerSaverEnabled
-                                        root.runCmd("~/.local/bin/toggle-powersave")
-                                    }
-                                }
-                            }
-
-
                             // Batteries: como los otros cinco, una tarjeta mas de la cuadrícula. Abre el
                             // apartado con el detalle de cada pila. No se dibuja si esta maquina no tiene
                             // ninguna bateria.
                             Rectangle {
                             Layout.fillWidth: true
+                            // Con Power Saver fuera de la cuadricula, la bateria se queda sola en su
+                            // fila y ocupa las dos columnas.
+                            Layout.columnSpan: 2
                             height: 54
                             radius: 14
                             visible: (root.batt?.count ?? 0) > 0
@@ -5009,10 +4982,19 @@ ShellRoot {
                             elide: Text.ElideRight; Layout.fillWidth: true
                             }
                             }
+                            // Chevron como en la tarjeta de OTA: avisa de que la tarjeta abre algo.
                             Text {
-                            text: root.batt?.ac?.online ? "󰂄" : "󰁹"
-                            color: root.batt?.ac?.online ? root.colAccent : root.colMuted
-                            font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18
+                                text: "󰅂"
+                                color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 14
+                            }
+
+                            Text {
+                                text: root.batt?.ac?.online ? "󰂄" : "󰁹"
+                                color: root.batt?.ac?.online ? root.colAccent : root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 18
                             }
                             }
 

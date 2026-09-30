@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Reinicia la isla si quickshell sigue vivo pero sin capa en el compositor.
+#
+# systemd solo reinicia cuando el proceso MUERE (Restart=always). Ha pasado lo
+# contrario: el proceso estaba vivo, con el socket del compositor abierto y la
+# configuracion cargada (active, enabled, 310 MB, cero errores en el log) y sin
+# embargo Hyprland no listaba ninguna capa suya:
+#
+#   hyprctl layers | grep quickshell   ->  0
+#
+# La isla no se dibujaba en ningun monitor aunque el estado dijese "expandido", y
+# no habia forma de enterarse desde systemd. El dock tambien habia desaparecido de
+# las capas, asi que era el compositor y no el QML.
+#
+# Solo reinicia tras DOS comprobaciones seguidas sin capa, para no matar la isla
+# durante los segundos que tarda en aparecer al arrancar o justo despues de un
+# reinicio del compositor. El contador vive en /tmp.
+
+set -u
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+UNIDAD="waybar-island.service"
+ESTADO="${XDG_RUNTIME_DIR:-/tmp}/island-watchdog.state"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$HOME/.cache/island-watchdog.log"
+}
+
+command -v hyprctl >/dev/null 2>&1 || exit 0
+command -v systemctl >/dev/null 2>&1 || exit 0
+
+# Si la isla esta parada a proposito (parada), no hay nada que vigilar.
+systemctl --user is-active --quiet "$UNIDAD" || { rm -f "$ESTADO" 2>/dev/null; exit 0; }
+
+# Un monitor por ventana de la isla: si el compositor no lista al menos una capa
+# por monitor, la isla no esta en pantalla.
+monitores=$(hyprctl monitors -j 2>/dev/null | jq 'length' 2>/dev/null || echo 1)
+[ "$monitores" -ge 1 ] 2>/dev/null || monitores=1
+capas=$(hyprctl layers 2>/dev/null | grep -c "namespace: quickshell" || echo 0)
+
+if [ "$capas" -ge "$monitores" ]; then
+    rm -f "$ESTADO" 2>/dev/null
+    exit 0
+fi
+
+# Primera vez que se ve mal: se anota y no se toca nada todavia.
+if [ ! -f "$ESTADO" ]; then
+    echo 1 > "$ESTADO"
+    log "sin capa ($capas de $monitores), se comprueba otra vez en un rato"
+    exit 0
+fi
+
+veces=$(cat "$ESTADO" 2>/dev/null || echo 1)
+if [ "$veces" -lt 2 ]; then
+    echo $((veces + 1)) > "$ESTADO"
+    exit 0
+fi
+
+log "isla viva sin capa ($capas de $monitores) por segunda vez: reiniciando $UNIDAD"
+rm -f "$ESTADO" 2>/dev/null
+systemctl --user restart "$UNIDAD" >/dev/null 2>&1 || true
+exit 0

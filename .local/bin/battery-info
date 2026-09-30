@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Estado de las baterias en JSON para la isla.
+
+    {"count": 1, "ac": {...}, "devices": [{...}], "total_pct": 100, "total_w": 0.0}
+
+Si no hay ninguna bateria devuelve count 0 y devices vacio, y la seccion de
+baterias de la isla se oculta sola: en un escritorio fijo no tiene que aparecer
+una seccion vacia con la palabra "sin baterias".
+
+Los campos vienen de sysfs. No todos existen en todas las maquinas: una bateria
+de portatil suele tener energy_full y voltage_now, una de teclado tiene voltage
+nominal y little, y asi. Cada uno es opcional y se omite si no esta, para que la
+isla no muestre lineas en blanco.
+
+La carga y la corriente vienen en microamperios y los voltages en microvolts, y
+la energia en microwatios-hora, segun el estandar del kernel. Se pasan a W, A, V
+y Wh para que la isla muestre numeros normales. Todo lo que se calcula aqui es
+derivado: Wh/capacity, health = energy_full / energy_full_design, y el tiempo que
+falta dividiendo lo que queda entre lo que se consume ahora.
+"""
+
+import json
+import os
+import sys
+
+BASE = "/sys/class/power_supply"
+
+
+def read(path: str):
+    try:
+        with open(path) as f:
+            v = f.read().strip()
+    except OSError:
+        return None
+    return v if v else None
+
+
+def num(value, default=None):
+    if value is None:
+        return default
+    try:
+        f = float(value)
+    except ValueError:
+        return default
+    return int(f) if f.is_integer() else round(f, 2)
+
+
+def battery(name: str) -> dict:
+    d = os.path.join(BASE, name)
+
+    def g(f):
+        return read(os.path.join(d, f))
+
+    cap = num(g("capacity"))
+    energy_now = num(g("energy_now"))
+    energy_full = num(g("energy_full"))
+    energy_design = num(g("energy_full_design"))
+    power_now = num(g("power_now"))
+    current_now = num(g("current_now"))
+    voltage = num(g("voltage_now"))
+    threshold = num(g("charge_control_end_threshold"))
+    status = g("status") or "Unknown"
+
+    # Wh a partir de los microwatios-hora del kernel
+    wh = lambda v: round(v / 1e6, 2) if v is not None else None
+    out = {
+        "name": name,
+        "status": status,
+        "capacity": cap,
+        "technology": g("technology"),
+        "model": g("model_name") or g("manufacturer"),
+        "manufacturer": g("manufacturer"),
+        "cycles": num(g("cycle_count")),
+        "threshold": threshold,
+        "voltage": round(voltage / 1e6, 2) if voltage else None,
+        "energy_now": wh(energy_now),
+        "energy_full": wh(energy_full),
+        "energy_design": wh(energy_design),
+        "power_w": round(power_now / 1e6, 2) if power_now else None,
+        "current_a": round(current_now / 1e6, 3) if current_now else None,
+        "present": g("present") in ("1", "true", None) and (cap is not None or energy_now is not None),
+    }
+
+    # Salud: capacidad real frente a la de fabrica. Sin energy_design no hay dato.
+    if energy_full and energy_design and energy_design > 0:
+        out["health"] = min(100, round(energy_full / energy_design * 100))
+    else:
+        out["health"] = None
+
+    # Minutos que faltan para llena o para vacia, con el consumo de ahora.
+    # Si no hay consumo (cargando en el techo o dormida) no se inventa nada.
+    if power_now and power_now > 0:
+        if status == "Charging" and energy_full and energy_now is not None:
+            mins = (energy_full - energy_now) / power_now * 60
+            out["time_to_full"] = int(mins) if mins >= 0 else None
+        elif status == "Discharging" and energy_now is not None:
+            out["time_empty"] = int(energy_now / power_now * 60)
+        else:
+            out["time_to_full"] = None
+            out["time_empty"] = None
+    else:
+        out["time_to_full"] = None
+        out["time_empty"] = None
+
+    # Texto que se ve, para no repetir el if en la isla.
+    if out["time_empty"] is not None:
+        h, m = divmod(out["time_empty"], 60)
+        out["remaining"] = f"{h}h {m:02d}m" if h else f"{m}m"
+    elif out["time_to_full"] is not None:
+        h, m = divmod(out["time_to_full"], 60)
+        out["remaining"] = f"{h}h {m:02d}m" if h else f"{m}m"
+    else:
+        out["remaining"] = None
+
+    if status == "Charging":
+        out["state"] = "Charging"
+    elif status == "Discharging":
+        out["state"] = "On battery"
+    elif status == "Full":
+        out["state"] = "Full"
+    elif status == "Not charging":
+        out["state"] = "Not charging"
+    else:
+        out["state"] = status
+
+    # Icono segun el estado de la carga, como el kernel lo define con
+    # capacity_level, que es mas fino que el porcentaje.
+    level = g("capacity_level")
+    icon = {"Full": "󰁹", "High": "󰁹", "Medium": "󰁸", "Low": "󰁷",
+            "Critical": "󰁶", "None": "󰁺"}.get(level or "", "󰁹")
+    if status == "Charging":
+        icon = "󰂄"
+    elif status == "Not charging":
+        icon = "󰁷"
+    out["icon"] = icon
+    return out
+
+
+def main() -> None:
+    try:
+        entries = sorted(os.listdir(BASE))
+    except OSError:
+        print(json.dumps({"count": 0, "devices": [], "ac": {"present": False, "online": False},
+                          "total_pct": None, "total_w": None}))
+        return
+
+    devices = [battery(n) for n in entries
+               if read(os.path.join(BASE, n, "type")) == "Battery"]
+    devices = [d for d in devices if d.get("present")]
+    ac = {"present": False, "online": False}
+    for n in entries:
+        if read(os.path.join(BASE, n, "type")) == "Mains":
+            ac = {"present": True,
+                  "online": read(os.path.join(BASE, n, "online")) == "1"}
+            break
+
+    caps = [d["capacity"] for d in devices if d["capacity"] is not None]
+    watts = [d["power_w"] for d in devices if d["power_w"] is not None]
+
+    json.dump({
+        "count": len(devices),
+        "devices": devices,
+        "ac": ac,
+        "total_pct": int(sum(caps) / len(caps)) if caps else None,
+        "total_w": round(sum(watts), 2) if watts else None,
+    }, sys.stdout)
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

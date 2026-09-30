@@ -87,6 +87,70 @@ ShellRoot {
         var d = new Date()
         return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2)
     }
+    // ── Apps silenciadas ──
+    function notifMuted(app) {
+        let a = (app || "").toLowerCase().trim()
+        if (a === "") return false
+        return root.mutedApps.some(m => (m || "").toLowerCase() === a)
+    }
+
+
+    function notifToggleMute(app) {
+        let a = (app || "").toLowerCase().trim()
+        if (a === "") return
+        let lista = root.mutedApps.slice()
+        let i = lista.findIndex(m => (m || "").toLowerCase() === a)
+        if (i >= 0) lista.splice(i, 1)
+        else lista.push(a)
+        root.mutedApps = lista
+        if (i < 0) {
+            root.notifHistory = root.notifHistory.filter(n => (n.app || "").toLowerCase() !== a)
+        }
+        root.notifMuteSave(lista)
+    }
+
+    // Guardar la lista. Un app por linea en un fichero de texto plano, no JSON:
+    // el JSON exige escapar comillas dentro de la cadena del shell, y los nombres
+    // vienen de las notificaciones, o sea que no son datos de los que uno pueda
+    // fiarse. Aqui se sanean a [a-z0-9._ -] antes de escribir, asi que el
+    // comando no puede salir de los argumentos.
+    function notifMuteSave(lista) {
+        let limpio = []
+        for (let m of lista) {
+            let n = (m || "").toLowerCase().replace(/[^a-z0-9._ -]/g, "").trim()
+            if (n !== "") limpio.push(n)
+        }
+        let cmd = "mkdir -p $HOME/.config/rhythm && : > $HOME/.config/rhythm/muted-apps.txt"
+        for (let n of limpio) cmd += " && printf '%s\\n' " + n + " >> $HOME/.config/rhythm/muted-apps.txt"
+        root.runCmd(cmd)
+    }
+
+    // Apps que ya han hablado alguna vez, mas las silenciadas: asi se puede
+    // silenciar una app sin tener que esperar a que notifique otra vez.
+    function notifKnownApps() {
+        let seen = {}
+        for (let n of root.notifHistory) seen[(n.app || "System").toLowerCase()] = n.app || "System"
+        for (let m of root.mutedApps) seen[(m || "").toLowerCase()] = m
+        return Object.keys(seen).sort()
+    }
+
+    // Cargar la lista al arrancar la isla. Un app por linea.
+    Process {
+        id: muteLoadProc
+        running: true
+        command: ["bash", "-c", "cat $HOME/.config/rhythm/muted-apps.txt 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let lista = []
+                for (let linea of text.split("\n")) {
+                    let n = linea.trim()
+                    if (n !== "") lista.push(n)
+                }
+                root.mutedApps = lista
+            }
+        }
+    }
+
     function notifPush(app, summary, body) {
         var h = [{app: app || "System", summary: summary || "", body: body || "", time: root.notifTime()}].concat(root.notifHistory)
         root.notifHistory = h.slice(0, 30)
@@ -120,6 +184,14 @@ ShellRoot {
         actionsSupported: true
 
         onNotification: function(n) {
+            // App silenciada: se descarta aqui y no se guarda ni se avisa. Va antes
+            // que el filtro de palabras clave y que el DND, porque es una decision
+            // del usuario sobre esa app concreta y no sobre el estado global.
+            if (root.notifMuted(n.appName)) {
+                n.dismiss()
+                return
+            }
+
             // Do Not Disturb: suppress banner toast, keep server-side history
             if (root.dndEnabled) {
                 n.tracked = true
@@ -309,6 +381,15 @@ ShellRoot {
     property var recState: ({ recording: false, pid: 0, elapsed: 0, elapsed_str: "00:00", file: "" })
     property var privacyState: ({ mic: false, cam: false })
     property var sysStats: ({ cpu_pct: 0, ram_used: "0G", ram_total: "0G", ram_pct: 0, disk_used: "0G", disk_pct: 0 })
+
+    // Baterias. battery-info devuelve count 0 y devices vacio si esta maquina no
+    // tiene ninguna, y la seccion se oculta con visible en vez de con un texto de
+    // "sin baterias": en un escritorio fijo no tiene que aparecer nada.
+    property var batt: null
+
+    // Apps silenciadas: sus notificaciones se descartan al llegar, sin banner ni
+    // entrada en el historial. Un app por linea en muted-apps.txt.
+    property var mutedApps: []
     property bool wifiScanning: false
     property bool btScanning: false
     property bool showUnnamedBtDevices: false
@@ -321,6 +402,7 @@ ShellRoot {
         wifiProc.running = true
         btStatusProc.running = true
         perfProc.running = true
+        battProc.running = true
         kbProc.running = true
         muteProc.running = true
         audioSinksProc.running = true
@@ -947,6 +1029,34 @@ ShellRoot {
         onTriggered: {
             privacyStatusProc.running = true
         }
+    }
+
+    Process {
+        id: battProc
+        command: ["bash", "-c", "$HOME/.local/bin/battery-info"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.batt = JSON.parse(text.trim())
+                } catch(e) {}
+            }
+        }
+    }
+
+    // Solo con la isla abierta: leer sysfs cada 10 s no cuesta (unos 5 ms), pero
+    // tampoco tiene sentido pagarlo con la isla cerrada.
+    //
+    // OJO: aqui no se puede mirar islandWin. Las ventanas de la isla se crean una
+    // por monitor dentro de una Repeater, asi que ese id no existe en este ambito
+    // y el binding se quedaba en false para siempre: la seccion de baterias se
+    // quedaba vacia para siempre y sin ningun error que lo dijera.
+    Timer {
+        id: battTimer
+        interval: 10000
+        repeat: true
+        triggeredOnStart: true
+        running: root.anyPanelExpanded()
+        onTriggered: battProc.running = true
     }
 
     Process {
@@ -5031,6 +5141,188 @@ ShellRoot {
                             }
                         }
 
+                        // ── BATTERIES ──
+                        // Con todo lo que sysfs da: carga, estado, potencia,
+                        // voltaje, Wh, salud frente a la de fabrica, ciclos,
+                        // limite de carga, tiempo que falta y el cargador.
+                        // Sin bateria no se dibuja nada: count llega a 0.
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            visible: (root.batt?.count ?? 0) > 0
+                            // 28 de cabecera + 78 por bateria + 8 de separacion.
+                            // Hace falta declararlo: un Repeater no propaga el
+                            // implicitHeight de sus delegates al layout padre, y sin
+                            // esta linea el panel no crece, las tarjetas se dibujan
+                            // encima de los botones de abajo y se salen de la vista.
+                            Layout.preferredHeight: (root.batt?.count ?? 0) > 0 ? (28 + root.batt.count * 78 + 8) : 0
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Text { text: "󰁹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                Text {
+                                    text: "Batteries"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    visible: (root.batt?.count ?? 0) > 1
+                                    text: (root.batt?.total_pct ?? 0) + "% total"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                }
+                                Text {
+                                    text: (root.batt?.total_w ?? null) !== null && (root.batt?.total_w ?? 0) > 0 ? (root.batt.total_w) + " W" : (root.batt?.ac?.online ? "Charging" : "On battery")
+                                    color: root.batt?.ac?.online ? root.colAccent : root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                }
+                            }
+
+                            Repeater {
+                                model: root.batt?.devices ?? []
+
+                                delegate: Rectangle {
+                                    Layout.fillWidth: true
+                                    // Altura fija, en linea con el calculo de la
+                                    // seccion. Con preferredHeight + implicitHeight
+                                    // el Repeater no informaba de su alto y el
+                                    // contenido se salia del panel.
+                                    height: 78
+                                    radius: 12
+                                    color: root.colSurface
+                                    border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        id: battCard
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 6
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            Text {
+                                                text: modelData.icon
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 13
+                                            }
+                                            Text {
+                                                text: modelData.name + (modelData.model ? " · " + modelData.model : "")
+                                                color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.weight: Font.Bold
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                visible: modelData.remaining !== null && modelData.remaining !== undefined
+                                                text: modelData.remaining ?? ""
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                            }
+                                            Text {
+                                                text: modelData.state
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                            }
+                                            Text {
+                                                text: (modelData.capacity ?? 0) + "%"
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 11
+                                                font.weight: Font.Bold
+                                            }
+                                        }
+
+                                        // Barra con la marca del limite de carga
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 4
+                                            radius: 2
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.capacity ?? 0) / 100.0)))
+                                                radius: 2
+                                                color: (modelData.capacity ?? 100) <= 15 ? "#e05c5c" : ((modelData.capacity ?? 100) <= 30 ? "#e0a75c" : root.colAccent)
+                                                Behavior on width { NumberAnimation { duration: 200 } }
+                                            }
+                                            Rectangle {
+                                                visible: (modelData.threshold ?? 100) < 100
+                                                anchors.left: parent.left
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.threshold ?? 100) / 100.0)))
+                                                color: "transparent"
+                                                border.color: Qt.rgba(255, 255, 255, 0.35)
+                                                border.width: 1
+                                                radius: 2
+                                            }
+                                        }
+
+                                        Flow {
+                                            Layout.fillWidth: true
+                                            spacing: 10
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.power_w !== null && modelData.power_w !== undefined
+                                                Text { text: "Power"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: (modelData.power_w ?? 0) + " W"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.voltage !== null && modelData.voltage !== undefined
+                                                Text { text: "Volt"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: (modelData.voltage ?? 0) + " V"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.health !== null && modelData.health !== undefined
+                                                Text { text: "Health"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text {
+                                                    text: (modelData.health ?? 0) + "%"
+                                                    color: (modelData.health ?? 100) >= 90 ? root.colFg : "#e0a75c"
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                            }
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.energy_full !== null && modelData.energy_full !== undefined
+                                                Text { text: "Full"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: (modelData.energy_full ?? 0) + " Wh"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.cycles !== null && modelData.cycles !== undefined
+                                                Text { text: "Cycles"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: "" + (modelData.cycles ?? 0); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                            Row {
+                                                spacing: 3
+                                                visible: modelData.threshold !== null && modelData.threshold !== undefined
+                                                Text { text: "Limit"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: (modelData.threshold ?? 100) + "%"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Herramientas Hyprland
                         RowLayout {
                             Layout.fillWidth: true
@@ -5207,6 +5499,99 @@ ShellRoot {
                                                 root.runCmd("$HOME/.local/bin/open-notification-app '" + modelData.app + "'")
                                             }
                                         }
+                                    }
+                                }
+
+                                // ── MUTED APPS ──
+                                // Silenciar una app entera: sus notificaciones se
+                                // descartan al llegar y ni aparecen aqui. La lista
+                                // sale de las apps que ya han hablado mas las que
+                                // estan silenciadas, para poder quitar el silencio
+                                // sin esperar a que la app vuelva a notificar.
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    visible: root.notifKnownApps().length > 0
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Text {
+                                            text: root.mutedApps.length > 0 ? "󰝑" : "󰕾"
+                                            color: root.mutedApps.length > 0 ? "#e0a75c" : root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                        }
+                                        Text {
+                                            text: "Muted apps"
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            visible: root.mutedApps.length > 0
+                                            text: root.mutedApps.length + " active"
+                                            color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9
+                                        }
+                                    }
+
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        Repeater {
+                                            model: root.notifKnownApps()
+
+                                            delegate: Rectangle {
+                                                readonly property bool muteOn: root.notifMuted(modelData)
+
+                                                height: 26
+                                                width: muteLabel.implicitWidth + 26
+                                                radius: 13
+                                                color: muteOn ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.22) : root.colSurface
+                                                border.color: muteOn ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                                border.width: 1
+                                                Behavior on color { ColorAnimation { duration: 120 } }
+
+                                                Text {
+                                                    id: muteLabel
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 9
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: (parent.muteOn ? "\u{1F507} " : "\u{1F508} ") + modelData
+                                                    color: parent.muteOn ? root.colFg : root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        root.notifToggleMute(modelData)
+                                                        if (root.notifMuted(modelData)) muteLoadProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: root.mutedApps.length > 0
+                                        text: "Notifications from muted apps are discarded before they reach the list."
+                                        color: root.colMuted
+                                        opacity: 0.65
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 8
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 2
+                                        elide: Text.ElideRight
                                     }
                                 }
 

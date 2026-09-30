@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 # toggle-powersave - Power saving manager for Dynamic Island and Hyprland
 # Optimizes CPU frequency/EPP, display brightness, GPU effects and window/rofi opacity.
 # Maintains full animations and leaves Waybar battery in its original configuration.

@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Script de powermenu con detección automática de monitor activo
 # Basado en rofi-with-monitor-detection para mantener consistencia

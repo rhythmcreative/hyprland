@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Script adaptativo para rofi que detecta monitores automáticamente
 # Soporta: drun, run, window

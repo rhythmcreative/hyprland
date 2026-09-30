@@ -1231,12 +1231,12 @@ step_wallpapers() {
         fi
 
         if [ "$CHOICE" == "Download All Wallpapers (~600MB)" ] || [ "$CHOICE" == "all" ]; then
-            step_item "Cloning FireWalls collection (sparse, wallpapers only)..."
+            step_item "Cloning FireWalls collection (root + subcarpetas, ~850 imgs)..."
             rm -rf "$FW_DIR" || true
             if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                 && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
-                if compgen -G "$FW_DIR/Desktop/Wallpapers/*" > /dev/null; then
-                    cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/" || step_warn "No se pudieron copiar wallpapers."
+                if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
+                    find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp -n {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
                 else
                     step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
                 fi
@@ -1244,12 +1244,12 @@ step_wallpapers() {
                 step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
             fi
         elif [ "$CHOICE" == "Random Selection (50 Wallpapers)" ] || [ "$CHOICE" == "random" ]; then
-            step_item "Downloading 50 random wallpapers..."
-            local LIST_JSON
-            LIST_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/contents/Desktop/Wallpapers" 2>/dev/null || true)
+            step_item "Downloading 50 random wallpapers (root + Best-Collection)..."
+            local TREE_JSON
+            TREE_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)
             local URL_LIST=""
-            if [ -n "$LIST_JSON" ] && command -v jq >/dev/null 2>&1; then
-                URL_LIST=$(echo "$LIST_JSON" | jq -r '.[]?.download_url // empty' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
+            if [ -n "$TREE_JSON" ] && command -v jq >/dev/null 2>&1; then
+                URL_LIST=$(echo "$TREE_JSON" | jq -r '.tree[]? | select(.type=="blob") | .path | select(startswith("Desktop/Wallpapers/")) | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i")) | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
             fi
             if [ -n "$URL_LIST" ]; then
                 echo "$URL_LIST" | shuf -n 50 | while read -r url; do
@@ -1261,8 +1261,8 @@ step_wallpapers() {
                 rm -rf "$FW_DIR" || true
                 if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                     && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
-                    if compgen -G "$FW_DIR/Desktop/Wallpapers/*" > /dev/null; then
-                        cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/" || step_warn "No se pudieron copiar wallpapers."
+                    if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
+                        find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp -n {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
                     else
                         step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
                     fi

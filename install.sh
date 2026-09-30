@@ -1232,29 +1232,49 @@ step_wallpapers() {
 
         if [ "$CHOICE" == "Download All Wallpapers (~600MB)" ] || [ "$CHOICE" == "all" ]; then
             step_item "Cloning FireWalls collection (sparse, wallpapers only)..."
-            rm -rf "$FW_DIR"
-            git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1
-            (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1)
-            cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/"
+            rm -rf "$FW_DIR" || true
+            if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
+                && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
+                if compgen -G "$FW_DIR/Desktop/Wallpapers/*" > /dev/null; then
+                    cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/" || step_warn "No se pudieron copiar wallpapers."
+                else
+                    step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
+                fi
+            else
+                step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
+            fi
         elif [ "$CHOICE" == "Random Selection (50 Wallpapers)" ] || [ "$CHOICE" == "random" ]; then
             step_item "Downloading 50 random wallpapers..."
             local LIST_JSON
             LIST_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/contents/Desktop/Wallpapers" 2>/dev/null || true)
+            local URL_LIST=""
             if [ -n "$LIST_JSON" ] && command -v jq >/dev/null 2>&1; then
-                echo "$LIST_JSON" | jq -r '.[].download_url' 2>/dev/null | grep -E '\\.(jpg|jpeg|png|webp|gif)$' | shuf -n 50 | while read -r url; do
+                URL_LIST=$(echo "$LIST_JSON" | jq -r '.[]?.download_url // empty' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
+            fi
+            if [ -n "$URL_LIST" ]; then
+                echo "$URL_LIST" | shuf -n 50 | while read -r url; do
+                    [ -n "$url" ] || continue
                     curl -fsSL "$url" -o "$WALL_DIR/$(basename "$url")" >> "$LOG_FILE" 2>&1 || true
-                done
+                done || true
             else
-                step_warn "Could not fetch list, cloning full collection instead."
-                rm -rf "$FW_DIR"
-                git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1
-                (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1)
-                cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/"
+                step_warn "Could not fetch wallpaper list (API vacia/rate-limit), cloning full collection instead."
+                rm -rf "$FW_DIR" || true
+                if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
+                    && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
+                    if compgen -G "$FW_DIR/Desktop/Wallpapers/*" > /dev/null; then
+                        cp -r "$FW_DIR/Desktop/Wallpapers"/* "$WALL_DIR/" || step_warn "No se pudieron copiar wallpapers."
+                    else
+                        step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
+                    fi
+                else
+                    step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
+                fi
             fi
         fi
-        rm -rf "$TEMP_WALL"
+        rm -rf "$TEMP_WALL" || true
         step_ok "Wallpapers installed."
     fi
+    return 0
 }
 
 # --- SYSTEM SERVICES & FINISHING ---

@@ -287,6 +287,9 @@ ShellRoot {
     property int clipCount: 0
     property int clipCopiedId: -1
     property string clipToast: ""
+    // Resultado del ultimo cambio de limite de carga, para verlo debajo de la
+    // tarjeta. Vacio cuando no hay nada que decir.
+    property string battLimitMsg: ""
     property bool isMuted: false
 
     property var wifiList: []
@@ -1032,6 +1035,35 @@ ShellRoot {
         onTriggered: {
             privacyStatusProc.running = true
         }
+    }
+
+    // Aplicar el limite de carga de una bateria. battery-charge-limit escribe en
+    // el charge_control_end_threshold y COMPRUEBA que el valor se quedo puesto:
+    // algunos controladores lo ignoran en silencio, y sin comprobarlo la isla
+    // diria que el limite esta puesto y no lo estaria. Por eso el comando se
+    // rehace en cada clic con el valor y la bateria, y el proceso solo lee.
+    Process {
+        id: battLimitProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.battLimitMsg = text.trim()
+                battLimitMsgTimer.restart()
+                battProc.running = true
+            }
+        }
+        onExited: (code) => {
+            if (code !== 0 && root.battLimitMsg === "") {
+                root.battLimitMsg = "Could not set the limit"
+                battLimitMsgTimer.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: battLimitMsgTimer
+        interval: 4000
+        repeat: false
+        onTriggered: root.battLimitMsg = ""
     }
 
     Process {
@@ -5191,6 +5223,13 @@ ShellRoot {
                                 model: root.batt?.devices ?? []
 
                                 delegate: Rectangle {
+                                        id: battCardDel
+                                        // El limite pasa por una propiedad CON TIPO en vez
+                                        // de leerse de modelData: leerlo directo desde el
+                                        // delegate de dentro no se actualizaba cuando
+                                        // llegaba el JSON y ningun boton se resaltaba
+                                        // nunca. Con tipo int, QML avisa del cambio.
+                                        readonly property int umbral: (modelData && modelData.threshold !== null && modelData.threshold !== undefined) ? modelData.threshold : 100
                                     Layout.fillWidth: true
                                     // Altura fija, en linea con el calculo de la
                                     // seccion. Con preferredHeight + implicitHeight
@@ -5319,6 +5358,75 @@ ShellRoot {
                                                 visible: modelData.threshold !== null && modelData.threshold !== undefined
                                                 Text { text: "Limit"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                                 Text { text: (modelData.threshold ?? 100) + "%"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+
+                                            // ── Limite de carga ──
+                                            // Un boton por valor, y cada uno escribe en el
+                                            // charge_control_end_threshold de SU bateria, no en
+                                            // el de al lado: el limite va por dispositivo.
+                                            // El valor puesto sale resaltado. 100 es "sin
+                                            // limite" y se dice con palabras.
+                                            Row {
+                                                Layout.fillWidth: true
+                                                Layout.topMargin: 2
+                                                spacing: 6
+                                                visible: battCardDel.modelData.threshold !== null
+                                                      && battCardDel.modelData.threshold !== undefined
+
+                                                Repeater {
+                                                    model: [50, 60, 70, 80, 90, 100]
+
+                                                    delegate: Rectangle {
+                                                        id: limitBtn
+                                                        readonly property int valor: modelData
+                                                        // La comparacion se hace contra valor, que es un
+                                                        // int declarado, y no contra modelData: con
+                                                        // modelData la igualdad estricta salia false
+                                                        // siempre y ningun boton se resaltaba.
+                                                        readonly property bool puesto: valor === battCardDel.umbral
+                                                        readonly property string texto: valor === 100 ? "Off" : valor + "%"
+
+                                                        width: limitLabel.implicitWidth + 16
+                                                        height: 22
+                                                        radius: 11
+                                                        color: puesto ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                        border.color: puesto ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                                        border.width: 1
+                                                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                                                        Text {
+                                                            id: limitLabel
+                                                            anchors.centerIn: parent
+                                                            text: limitBtn.texto
+                                                            color: limitBtn.puesto ? root.colBg : root.colMuted
+                                                            font.family: "JetBrainsMono Nerd Font"
+                                                            font.pixelSize: 9
+                                                            font.weight: limitBtn.puesto ? Font.Bold : Font.Normal
+                                                        }
+
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                battLimitProc.command = ["bash", "-c",
+                                                                    "$HOME/.local/bin/battery-charge-limit "
+                                                                    + limitBtn.valor + " "
+                                                                    + battCardDel.modelData.name + " 2>&1"]
+                                                                battLimitProc.running = true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                visible: root.battLimitMsg !== ""
+                                                text: root.battLimitMsg
+                                                color: root.battLimitMsg.indexOf(battCardDel.modelData.name + " ") === 0 ? root.colAccent : "#e05c5c"
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 8
+                                                elide: Text.ElideRight
+                                            }
                                             }
                                         }
                                     }

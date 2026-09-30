@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Limite de carga de las baterias, para cualquier dispositivo.
+#
+#   battery-charge-limit              muestra el limite actual de cada bateria
+#   battery-charge-limit 80           pone el limite al 80 % en todas
+#   battery-charge-limit 80 BAT1      solo en BAT1
+#   battery-charge-limit off          quita el limite (100 %)
+#
+# Se escribe en /sys/class/power_supply/BAT*/charge_control_end_threshold, que es
+# la interfaz del kernel y funciona en cualquier portatil que la soporte, sin
+# depender de la marca. El fichero es de root, asi que el script se reejecuta
+# con sudo o pkexec una sola vez para todos los dispositivos, en vez de uno por
+# uno y con una contrasena por bateria.
+#
+# Se comprueba despues de escribir que el valor ha quedado puesto: algunos
+# controladores la ignoran en silencio si el numero no es uno de los que
+# aceptan, y sin comprobarlo la isla dira que el limite esta puesto y no lo
+# estara. Los limites que suelen aceptar van del 50 al 95 y el 100.
+
+set -u
+BASE="/sys/class/power_supply"
+
+baterias() {
+    for d in "$BASE"/BAT*; do
+        [ -d "$d" ] || continue
+        [ -e "$d/capacity" ] || continue
+        basename "$d"
+    done
+}
+
+limite_actual() {
+    local d="$BASE/$1/charge_control_end_threshold"
+    [ -e "$d" ] && cat "$d" 2>/dev/null || echo ""
+}
+
+# Sin argumentos: solo informar.
+if [ $# -eq 0 ]; then
+    for b in $(baterias); do
+        lim=$(limite_actual "$b")
+        printf '%s\t%s\n' "$b" "${lim:-sin limite}"
+    done
+    exit 0
+fi
+
+# Reejecucion con privilegios: este guion reejecutandose a si mismo con
+# --escribir, que salta toda la validacion y solo escribe.
+if [ "${1:-}" = "--escribir" ]; then
+    shift
+    _valor="$1"; shift
+    for _b in "$@"; do
+        echo "$_valor" > "$BASE/$_b/charge_control_end_threshold" 2>/dev/null
+    done
+    exit 0
+fi
+
+pct="$1"; shift
+
+# "off" o "max" significan quitar el limite.
+case "$pct" in
+    off|off-|max|full|100) valor=100 ;;
+    [0-9]*) valor="$pct" ;;
+    *) echo "battery-charge-limit: porcentaje no valido: $pct" >&2; exit 1 ;;
+esac
+
+if [ "$valor" -lt 20 ] 2>/dev/null || [ "$valor" -gt 100 ] 2>/dev/null; then
+    echo "battery-charge-limit: el limite va de 20 a 100" >&2
+    exit 1
+fi
+
+targets="$*"
+[ -n "$targets" ] || targets=$(baterias)
+[ -n "$targets" ] || { echo "battery-charge-limit: no hay baterias" >&2; exit 1; }
+
+escribir() {
+    local b
+    for b in $targets; do
+        echo "$valor" > "$BASE/$b/charge_control_end_threshold" 2>/dev/null
+    done
+}
+
+if [ "$(id -u)" = "0" ]; then
+    escribir
+else
+    # Un solo ascento de privilegios para todas las baterias. Se reejecuta este
+    # mismo guion con --escribir para no dejar un comando con formato en el
+    # arbol de procesos del root.
+    if sudo -n true 2>/dev/null; then
+        sudo -n "$0" --escribir "$valor" $targets 2>/dev/null
+    elif command -v pkexec >/dev/null 2>&1; then
+        pkexec "$0" --escribir "$valor" $targets 2>/dev/null
+    else
+        echo "battery-charge-limit: hace falta sudo o pkexec" >&2
+        exit 1
+    fi
+fi
+
+# Verificar. El exit code lo decide lo que quedo realmente puesto.
+fallos=0
+for b in $targets; do
+    ahora=$(limite_actual "$b")
+    if [ "$ahora" != "$valor" ]; then
+        echo "battery-charge-limit: $b se quedo en ${ahora:-desconocido}, no en $valor" >&2
+        fallos=$((fallos + 1))
+    else
+        echo "$b $valor"
+    fi
+done
+[ "$fallos" -eq 0 ] || exit 1
+exit 0

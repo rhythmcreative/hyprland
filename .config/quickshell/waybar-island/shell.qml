@@ -537,6 +537,20 @@ ShellRoot {
             root.refreshAllStates()
             return "hyprland"
         }
+        // Estado real del panel de una pantalla. Para poder preguntar por que no se
+        // ve la isla sin tener que adivinarlo por una captura.
+        function state(screenName: string): string {
+            let p = root.panelForScreen(screenName)
+            if (!p) return "unavailable"
+            return JSON.stringify({
+                expanded: p.expanded,
+                tab: p.currentTab,
+                sub: p.controlSubView,
+                hidden: root.hiddenScreens[screenName] === true,
+                fullscreen: root.fullscreenScreens[screenName] === true,
+                visible: p.visible
+            })
+        }
         function openBatteries(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 1, 7)
             if (!panel) return "unavailable"
@@ -5214,7 +5228,6 @@ ShellRoot {
                             }
                         }
 
-                        }
 
                         // Herramientas Hyprland
                         RowLayout {
@@ -5239,6 +5252,8 @@ ShellRoot {
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.runCmd("$HOME/.local/bin/notch-hypr-helper reload"); hyprRefreshTimer.restart(); } }
                             }
                         }
+                        }
+
                     // ── SUBSECCIÓN: BATERIAS ──
                     // Un apartado entero dentro de la pestaña Hyprland: una tarjeta por bateria con
                     // sus datos y sus botones de limite. Se llega pulsando la tarjeta Batteries de

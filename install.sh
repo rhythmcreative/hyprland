@@ -747,7 +747,7 @@ unified_app_search() {
 first_run_choices() {
     if [ "$AUTO_YES" = true ]; then
         INSTALL_MODE="custom"
-        PACMAN_INSTALL=("chromium" "vesktop" "visual-studio-code-bin")
+        PACMAN_INSTALL=("brave-bin" "vesktop" "visual-studio-code-bin")
         FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
         [ -z "$WALLPAPER_MODE" ] && WALLPAPER_MODE="random"
         SET_ZSH=true
@@ -797,7 +797,7 @@ first_run_choices() {
             )
             local SEL_BROWSERS
             SEL_BROWSERS=$(printf "%s\n" "${BROWSERS_LIST[@]}" | gum choose --no-limit --height 10 \
-                --selected="Chromium (chromium) [Arch]" \
+                --selected="Brave Browser (brave-bin) [AUR]" \
                 --header="Space = Toggle, Enter = Confirm Category" \
                 --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
 

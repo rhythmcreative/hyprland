@@ -955,11 +955,11 @@ first_run_choices() {
         WP_CHOICE=$(gum choose --height 6 \
             --header="Select wallpaper download mode:" \
             --cursor-prefix="> " \
-            "Random selection (3 packs)" \
-            "All packs (49 packs, ~4GB)" \
+            "Random selection (50, FireWalls root + Best-Collection)" \
+            "All FireWalls (root + Best-Collection, ~850 imgs)" \
             "Skip wallpaper download" || true)
         case "$WP_CHOICE" in
-            *"All packs"*)        WALLPAPER_MODE="all" ;;
+            *"All"*)              WALLPAPER_MODE="all" ;;
             *"Random"*)           WALLPAPER_MODE="random" ;;
             *"Skip"*)             WALLPAPER_MODE="none" ;;
             *)                    WALLPAPER_MODE="none" ;;
@@ -1227,12 +1227,12 @@ step_wallpapers() {
         local CHOICE="$MODE"
         if [ -z "$CHOICE" ]; then
             CHOICE=$(gum choose --header "Select download mode" \
-                "Download All Wallpapers (~600MB)" \
-                "Random Selection (50 Wallpapers)" \
+                "All FireWalls (root + Best-Collection, ~850 imgs)" \
+                "Random Selection (50, root + Best-Collection)" \
                 "Skip")
         fi
 
-        if [ "$CHOICE" == "Download All Wallpapers (~600MB)" ] || [ "$CHOICE" == "all" ]; then
+        if [[ "$CHOICE" == *"All FireWalls"* || "$CHOICE" == "all" || "$CHOICE" == "Download All Wallpapers (~600MB)" ]]; then
             step_item "Cloning FireWalls collection (root + subcarpetas, ~850 imgs)..."
             rm -rf "$FW_DIR" || true
             if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
@@ -1245,7 +1245,7 @@ step_wallpapers() {
             else
                 step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
             fi
-        elif [ "$CHOICE" == "Random Selection (50 Wallpapers)" ] || [ "$CHOICE" == "random" ]; then
+        elif [[ "$CHOICE" == *"Random"* || "$CHOICE" == "random" ]]; then
             step_item "Downloading 50 random wallpapers (root + Best-Collection)..."
             local TREE_JSON
             TREE_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)

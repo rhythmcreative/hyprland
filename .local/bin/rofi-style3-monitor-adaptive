@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Script de rofi launcher con detección automática de monitor
 # Usa style-3.rasi y se adapta a cada monitor

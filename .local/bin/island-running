@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 # Dice si la isla (waybar-island) esta corriendo. Uso:  island-running && ...
 #
 # Existe por el mismo motivo que se reescribio dock-procs: `pgrep -f` compara la

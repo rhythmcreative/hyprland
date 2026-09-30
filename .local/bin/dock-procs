@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="$HOME/.local/bin:$PATH"
 # Señalar las instancias REALES de rust-dock o waybar de un monitor.
 #
 # POR QUÉ EXISTE ESTO

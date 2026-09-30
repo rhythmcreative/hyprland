@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Menu interactivo de Bluetooth para Rofi y Hyprland
 # Tema y colores sincronizados con Pywal

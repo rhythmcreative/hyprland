@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Selector de Wallpapers Premium - Versión SÚPER RÁPIDA
 # Optimizado para carga instantánea y sincronización inmediata de UI/GTK

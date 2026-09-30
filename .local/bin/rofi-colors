@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 # Escribe el fondo macizo de los modos sin efectos con el color actual de pywal:
 #  colors-solid.rasi
 #

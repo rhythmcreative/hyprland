@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Visor interactivo de atajos de teclado para Hyprland
 # Tema y colores sincronizados dinamicamente con Pywal

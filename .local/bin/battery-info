@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Estado de las baterias en JSON para la isla.
 
-    {"count": 1, "ac": {...}, "devices": [{...}], "total_pct": 100, "total_w": 0.0}
+    {"count": 1, "ac": {...}, "devices": [{...}], "total_pct": 100, "total_w": 0.0,
+     "total_cycles": 0}
 
 Si no hay ninguna bateria devuelve count 0 y devices vacio, y la seccion de
 baterias de la isla se oculta sola: en un escritorio fijo no tiene que aparecer
@@ -156,6 +157,9 @@ def main() -> None:
 
     caps = [d["capacity"] for d in devices if d["capacity"] is not None]
     watts = [d["power_w"] for d in devices if d["power_w"] is not None]
+    # Con varias pilas se suman los ciclos de todas: es lo que interesa ver de un
+    # vistazo, cuantas veces se ha cargado la maquina en total.
+    cycles = [d["cycles"] for d in devices if d["cycles"] is not None]
 
     json.dump({
         "count": len(devices),
@@ -163,6 +167,7 @@ def main() -> None:
         "ac": ac,
         "total_pct": int(sum(caps) / len(caps)) if caps else None,
         "total_w": round(sum(watts), 2) if watts else None,
+        "total_cycles": sum(cycles) if cycles else None,
     }, sys.stdout)
     sys.stdout.write("\n")
 

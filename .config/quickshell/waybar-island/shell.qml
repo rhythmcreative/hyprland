@@ -537,6 +537,12 @@ ShellRoot {
             root.refreshAllStates()
             return "hyprland"
         }
+        function openBatteries(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 1, 7)
+            if (!panel) return "unavailable"
+            battProc.running = true
+            return "batteries"
+        }
         function openOta(screenName: string): string {
             let current = root.panelForScreen(screenName)
             if (!current) return "unavailable"
@@ -4975,26 +4981,32 @@ ShellRoot {
                             Layout.fillWidth: true
                             Text { text: "Batteries"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
                             Text {
+                            // Los ciclos van aqui tambien, no solo en el detalle: es el dato que
+                            // se mira de reojo. Con varias pilas se suman, como el porcentaje.
                             text: (root.batt?.count ?? 0) > 1
-                            ? (root.batt.count) + " devices · " + (root.batt.total_pct ?? 0) + "% average"
-                            : ((root.batt?.total_pct ?? 0) + "% · " + ((root.batt?.ac?.online) ? "Charging" : "On battery"))
+                            ? (root.batt.count) + " devices · " + (root.batt.total_pct ?? 0) + "% average · "
+                              + ((root.batt?.total_cycles ?? 0) + " cycles")
+                            : ((root.batt?.total_pct ?? 0) + "% · " + ((root.batt?.ac?.online) ? "Charging" : "On battery")
+                              + " · " + ((root.batt?.total_cycles ?? 0) + " cycles"))
                             color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
                             elide: Text.ElideRight; Layout.fillWidth: true
                             }
                             }
-                            // Chevron como en la tarjeta de OTA: avisa de que la tarjeta abre algo.
+
+                            // Separador + chevron, igual que las demas tarjetas: el icono de
+                            // carga sobraba aqui, el estado de red ya sale en el subtitulo.
+                            Rectangle {
+                                width: 1
+                                height: 16
+                                radius: 0.5
+                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                            }
+
                             Text {
                                 text: "󰅂"
                                 color: root.colMuted
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 14
-                            }
-
-                            Text {
-                                text: root.batt?.ac?.online ? "󰂄" : "󰁹"
-                                color: root.batt?.ac?.online ? root.colAccent : root.colMuted
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 18
                             }
                             }
 

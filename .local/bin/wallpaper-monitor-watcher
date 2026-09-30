@@ -1,7 +1,32 @@
 #!/bin/bash
-# Wallpaper monitor watcher - ensures wallpaper applies to all monitors on connection
+# Wallpaper monitor watcher: deja el fondo pintado en todos los monitores.
+#
+# Hay dos formas de que un monitor se quede sin fondo, y ninguna lanza un evento
+# utilizable:
+#
+#   - Se desconecta y vuelve. El compositor pone la superficie de awww en alfa 0
+#     y la deja ahi. awww sigue creyendo que la imagen esta puesta ("awww query"
+#     la lista bien), asi que ni awww ni este script se enteran por ahi.
+#   - Se apaga y se enciende. En el socket2 no existe evento dpms, solo
+#     monitoradded, monitorremoved, focusedmon, openwindow, closewindow,
+#     configreloaded y screencast.
+#
+# Por eso hay dos vias: los eventos del socket para lo que llega de golpe, y una
+# revision periodica que compara el alfa de cada superficie con la posicion y el
+# tamano de cada monitor (background-health).
+#
+# La revision periodica va en un subshell aparte a proposito. Antes estaba en el
+# bucle principal, debajo del `socat ... | while read`, y eso no llegaba a
+# ejecutarse nunca: socat se queda bloqueado leyendo el socket mientras el
+# compositor viva, asi que el bucle exterior no volvia a girar. El script llevaba
+# meses sin revisar nada.
 
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+LOG_FILE="$HOME/.cache/wallpaper-monitor-watcher.log"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE"
+}
 
 detect_socket() {
     local sig="${HYPRLAND_INSTANCE_SIGNATURE}"
@@ -16,42 +41,35 @@ repintar() {
     "$HOME/.local/bin/load-last-wallpaper-fast" >/dev/null 2>&1 &
 }
 
-# Revision periodica.
-#
-# Encender un monitor no dispara nada en el socket2: no existe evento dpms, solo
-# monitoradded, monitorremoved, focusedmon, openwindow, closewindow,
-# configreloaded y screencast. Asi que el watcher solo enteraba de un monitor NUEVO,
-# no de uno que ya estaba y se enciende, y el fondo se quedaba sin pintar.
-#
-# awww sigue creyendo que la imagen esta puesta —"awww query" la lista sin
-# problema— mientras la superficie del compositor esta en alfa 0, asi que la
-# unica senal fiable es el alfa de la capa, que es lo que comprueba
-# background-health.
-revisar() {
-    [ -x "$HOME/.local/bin/background-health" ] || return 0
-    local roto
-    roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
-    [ -n "$roto" ] || return 0
-    echo "$(date '+%Y-%m-%d %H:%M:%S') fondo sin pintar en: $(echo "$roto" | tr '\n' ' ')" >> "$LOG_FILE"
-    repintar
+# Revision periodica, en su propio hilo. Se queda en segundo plano y mira si
+# algun monitor se ha quedado sin fondo; si lo hay, lo repinta.
+revision_periodica() {
+    while true; do
+        sleep 10
+        [ -x "$HOME/.local/bin/background-health" ] || continue
+        roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
+        [ -n "$roto" ] || continue
+        log "fondo sin pintar en: $(echo "$roto" | tr '\n' ' ')  (repintando)"
+        repintar
+    done
 }
 
-LOG_FILE="$HOME/.cache/wallpaper-monitor-watcher.log"
+revision_periodica &
 
-contador=0
 while true; do
-    # Revision cada 5 vueltas del bucle exterior, unos 10 segundos.
-    contador=$((contador + 1))
-    if [ "$contador" -ge 5 ]; then
-        contador=0
-        revisar
-    fi
-
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
         socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do
             case "$event" in
                 monitoradded*)
+                    sleep 0.6
+                    repintar
+                    ;;
+                monitorremoved*)
+                    # Al desconectar un monitor, el compositor replantrea el
+                    # resto y sus superficies de fondo se pueden quedar en alfa
+                    # 0. Sin esto, al berikutnya el escritorio se queda en
+                    # negro hasta que se cambia el fondo a mano.
                     sleep 0.6
                     repintar
                     ;;

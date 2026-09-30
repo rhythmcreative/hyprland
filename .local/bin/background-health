@@ -27,10 +27,17 @@ layers=$(hyprctl layers 2>/dev/null) || exit 0
 awk '
   /^Monitor /            { mon = $2; sub(/:$/, "", mon) }
   /namespace: awww-daemon/ {
-      match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+, a: [0-9]+/) {
+      if (match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+, a: [0-9]+/)) {
           det = substr($0, RSTART, RLENGTH)
+          # "xywh: X Y W H, a: A" -> al partir por :, y , solo salen 4 trozos:
+          # "xywh", " X Y W H", " a", " A". Las cuatro medidas van juntas en un
+          # campo separadas por espacios, asi que hay que parting ese campo otra
+          # vez. Antes se leian como si fueran cuatro campos sueltos, y por eso
+          # las posiciones y el tamano salian a 0 y la comprobacion daba siempre
+          # "todo bien": el script no detectaba nunca un fondo sin pintar.
           split(det, f, /[:,]/)
-          x = f[2] + 0; y = f[3] + 0; w = f[4] + 0; h = f[5] + 0; a = f[7] + 0
+          split(f[2], g, " ")
+          x = g[1] + 0; y = g[2] + 0; w = g[3] + 0; h = g[4] + 0; a = f[4] + 0
           printf "%s\t%d,%d %dx%d %d\n", mon, x, y, w, h, a
       }
   }
@@ -39,12 +46,19 @@ awk '
 jq -r '.[] | select(.active == true or .dpmsStatus == true) | [.name, (.x|tostring), (.y|tostring), (.width|tostring), (.height|tostring)] | @tsv' \
     <<< "$mons" 2>/dev/null | while IFS=$'\t' read -r name x y w h; do
         [ -n "$name" ] || continue
-        # Superficie de fondo de awww en ESTE monitor con alfa a 1
-        good=$(awk -F'\t' -v m="$name" '$1 == m {
+        # Superficie de fondo de awww en ESTE monitor con alfa a 1.
+        # Las -v van ANTES del programa: despues las tomaba como nombres de
+        # fichero, asi que x/y/w/h nunca existian, la comparacion nunca se
+        # cumplia y todos los monitores salian como rotos siempre.
+        good=$(awk -F'\t' -v m="$name" -v x="$x" -v y="$y" -v w="$w" -v h="$h" '$1 == m {
                         split($2, p, " "); split(p[1], c, ",")
-                        if (c[1] == x && c[2] == y && p[2] == w "x" h && $3 == 1) found = 1
+                        # p[1]=posicion p[2]=tamano p[3]=alfa. El alfa va dentro de
+                        # $2 separado por un espacio, no en $3: con -F tab solo hay
+                        # dos campos, asi que se comparaba contra un $3 vacio y por
+                        # eso ningun monitor pasaba nunca la comprobacion.
+                        if (c[1] == x && c[2] == y && p[2] == w "x" h && p[3] == 1) found = 1
                     }
-                    END { print found + 0 }' x="$x" y="$y" w="$w" h="$h" "/tmp/.bg-layers.$$" 2>/dev/null)
+                    END { print found + 0 }' "/tmp/.bg-layers.$$" 2>/dev/null)
         [ "${good:-0}" = "1" ] || echo "$name"
     done
 

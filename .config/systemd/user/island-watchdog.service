@@ -1,0 +1,12 @@
+[Unit]
+Description=Reinicia la isla si quickshell sigue vivo pero sin capa
+# systemd solo reinicia cuando el proceso MUERE (Restart=always). Ha pasado lo
+# contrario varias veces: el proceso vivo, con el socket del compositor abierto y la
+# configuracion cargada (active, enabled, 300 MB, cero errores en el log) y sin
+# embargo Hyprland no listaba ninguna capa de quickshell, asi que la isla no se
+# dibujaba en ningun monitor aunque el estado dijese "expandido".
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/island-watchdog

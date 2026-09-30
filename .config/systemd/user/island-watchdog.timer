@@ -1,0 +1,15 @@
+[Unit]
+Description=Comprueba cada minuto que la isla siga en pantalla
+# island-watchdog solo reinicia si la falta de capa se repite dos veces seguidas,
+# con lo cual hace falta mas de un minuto para tocar nada. asi no se mata la isla
+# durante los segundos que tarda en aparecer al arrancar, ni justo despues de un
+# reinicio del compositor.
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=island-watchdog.service
+
+[Install]
+WantedBy=timers.target

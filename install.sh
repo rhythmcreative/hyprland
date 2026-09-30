@@ -1216,6 +1216,8 @@ step_wallpapers() {
         section "Wallpaper Packs"
         local WALL_DIR="$HOME/Pictures/Wallpapers"
         mkdir -p "$WALL_DIR"
+        # Limpieza: elimina wallpapers antiguos para dejar solo FireWalls
+        rm -rf "${WALL_DIR:?}/"* 2>/dev/null || true
         local TEMP_WALL="/tmp/wallpaper_install"
         mkdir -p "$TEMP_WALL"
         
@@ -1236,7 +1238,7 @@ step_wallpapers() {
             if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                 && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
                 if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
-                    find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp -n {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
+                    find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
                 else
                     step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
                 fi
@@ -1262,7 +1264,7 @@ step_wallpapers() {
                 if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                     && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
                     if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
-                        find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp -n {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
+                        find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
                     else
                         step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
                     fi

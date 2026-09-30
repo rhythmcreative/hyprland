@@ -94,7 +94,11 @@ if [ -n "$ACTIVE_MONITOR" ]; then
     fi
 fi
 
-rofi-themed $ROFI_ARGS
+_ROFI_LOG="$HOME/.cache/adaptive-rofi.log"
+_t0=$(date +%s)
+rofi-themed $ROFI_ARGS >>"$_ROFI_LOG" 2>&1
+_rc=$?
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] rofi $ROFI_ARGS -> exit=$_rc duracion=$(( $(date +%s) - _t0 ))s" >>"$_ROFI_LOG"
 
 if [ -n "$ACTIVE_MONITOR" ]; then
     [ "$_rust_was_visible" = true ] && "$HOME/.local/bin/dock-procs" rust-dock signal "$ACTIVE_MONITOR" USR2 &

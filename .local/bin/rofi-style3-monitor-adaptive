@@ -302,12 +302,23 @@ launch_rofi() {
     log_debug "Tema: $ADAPTED_STYLE"
     
     # El fondo lo pone rofi, no este script.
-    # Lanzar rofi con el tema adaptado
+    # Lanzar rofi con el tema adaptado (stderr capturado: antes el error real se perdia).
+    local _t0 _rc _dt
+    _t0=$(date +%s)
     rofi-themed -show drun \
          -theme "$ADAPTED_STYLE" \
-         -monitor "$ACTIVE_MONITOR"
-    
-    log_debug "Rofi cerrado"
+         -m "$ACTIVE_MONITOR" >>"$LOG_FILE" 2>&1
+    _rc=$?
+    _dt=$(( $(date +%s) - _t0 ))
+    log_debug "Rofi cerrado (exit=$_rc, duracion=${_dt}s)"
+    if [ "$_dt" -lt 2 ] && [ "$_rc" -ne 0 ]; then
+        log_debug "Cierre instantaneo: reintento con tema por defecto."
+        notify-send "Rofi" "Fallo tema $ADAPTED_STYLE (exit $_rc), reintentando..." 2>/dev/null || true
+        _t0=$(date +%s)
+        rofi-themed -show drun -m "$ACTIVE_MONITOR" >>"$LOG_FILE" 2>&1
+        _rc=$?
+        log_debug "Reintento cerrado (exit=$_rc, duracion=$(( $(date +%s) - _t0 ))s)"
+    fi
 }
 
 # Ejecutar rofi

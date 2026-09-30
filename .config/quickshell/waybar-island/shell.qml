@@ -287,8 +287,9 @@ ShellRoot {
     property int clipCount: 0
     property int clipCopiedId: -1
     property string clipToast: ""
-    // Resultado del ultimo cambio de limite de carga, para verlo debajo de la
-    // tarjeta. Vacio cuando no hay nada que decir.
+
+    // Resultado del ultimo cambio de limite de carga: sale debajo de los botones
+    // de la tarjeta y se borra solo a los 4 s.
     property string battLimitMsg: ""
     property bool isMuted: false
 
@@ -1037,11 +1038,10 @@ ShellRoot {
         }
     }
 
-    // Aplicar el limite de carga de una bateria. battery-charge-limit escribe en
-    // el charge_control_end_threshold y COMPRUEBA que el valor se quedo puesto:
-    // algunos controladores lo ignoran en silencio, y sin comprobarlo la isla
-    // diria que el limite esta puesto y no lo estaria. Por eso el comando se
-    // rehace en cada clic con el valor y la bateria, y el proceso solo lee.
+    // Aplicar el limite de carga de una bateria. battery-charge-limit escribe en el
+    // charge_control_end_threshold y COMPRUEBA que el valor se quedo puesto: hay
+    // controladores que lo ignoran en silencio, y sin comprobarlo la isla diria
+    // que el limite esta puesto y no lo esta.
     Process {
         id: battLimitProc
         stdout: StdioCollector {
@@ -5185,12 +5185,12 @@ ShellRoot {
                             Layout.fillWidth: true
                             spacing: 8
                             visible: (root.batt?.count ?? 0) > 0
-                            // 28 de cabecera + 78 por bateria + 8 de separacion.
+                            // 28 de cabecera + 116 por bateria + 8 de separacion.
                             // Hace falta declararlo: un Repeater no propaga el
                             // implicitHeight de sus delegates al layout padre, y sin
                             // esta linea el panel no crece, las tarjetas se dibujan
                             // encima de los botones de abajo y se salen de la vista.
-                            Layout.preferredHeight: (root.batt?.count ?? 0) > 0 ? (28 + root.batt.count * 78 + 8) : 0
+                            Layout.preferredHeight: (root.batt?.count ?? 0) > 0 ? (28 + root.batt.count * 116 + 8) : 0
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -5223,168 +5223,153 @@ ShellRoot {
                                 model: root.batt?.devices ?? []
 
                                 delegate: Rectangle {
-                                        id: battCardDel
-                                        // El limite pasa por una propiedad CON TIPO en vez
-                                        // de leerse de modelData: leerlo directo desde el
-                                        // delegate de dentro no se actualizaba cuando
-                                        // llegaba el JSON y ningun boton se resaltaba
-                                        // nunca. Con tipo int, QML avisa del cambio.
-                                        readonly property int umbral: (modelData && modelData.threshold !== null && modelData.threshold !== undefined) ? modelData.threshold : 100
+                                    id: battCardDel
+                                    // El limite y el nombre de la bateria pasan por propiedades CON TIPO.
+                                    // Leer modelData desde el delegate de dentro no es fiable: con el limite
+                                    // ningun boton se resaltaba, y al pulsar el nombre daba undefined y el
+                                    // comando se lanzaba contra una bateria inexistente.
+                                    readonly property int umbral: (modelData && modelData.threshold !== null && modelData.threshold !== undefined) ? modelData.threshold : 100
+                                    readonly property string batName: (modelData && modelData.name) ? modelData.name : ""
                                     Layout.fillWidth: true
-                                    // Altura fija, en linea con el calculo de la
-                                    // seccion. Con preferredHeight + implicitHeight
-                                    // el Repeater no informaba de su alto y el
-                                    // contenido se salia del panel.
-                                    height: 78
+                                    // 116 px: lo que ocupa la tarjeta con los datos y los botones de limite
+                                    // DENTRO. Con menos, los botones se salian de la tarjeta.
+                                    height: 116
                                     radius: 12
                                     color: root.colSurface
                                     border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
                                     border.width: 1
 
-                                    ColumnLayout {
-                                        id: battCard
-                                        anchors.fill: parent
-                                        anchors.margins: 10
-                                        spacing: 6
-
-                                        RowLayout {
-                                            Layout.fillWidth: true
+                                        ColumnLayout {
+                                            id: battCard
+                                            anchors.fill: parent
+                                            anchors.margins: 10
                                             spacing: 6
-                                            Text {
-                                                text: modelData.icon
-                                                color: root.colAccent
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 13
-                                            }
-                                            Text {
-                                                text: modelData.name + (modelData.model ? " · " + modelData.model : "")
-                                                color: root.colFg
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 10
-                                                font.weight: Font.Bold
-                                                elide: Text.ElideRight
+
+                                            RowLayout {
                                                 Layout.fillWidth: true
+                                                spacing: 6
+                                                Text {
+                                                    text: modelData.icon
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 13
+                                                }
+                                                Text {
+                                                    text: modelData.name + (modelData.model ? " · " + modelData.model : "")
+                                                    color: root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    visible: modelData.remaining !== null && modelData.remaining !== undefined
+                                                    text: modelData.remaining ?? ""
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                                Text {
+                                                    text: modelData.state
+                                                    color: root.colMuted
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                }
+                                                Text {
+                                                    text: (modelData.capacity ?? 0) + "%"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                }
                                             }
-                                            Text {
-                                                visible: modelData.remaining !== null && modelData.remaining !== undefined
-                                                text: modelData.remaining ?? ""
-                                                color: root.colMuted
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 9
-                                            }
-                                            Text {
-                                                text: modelData.state
-                                                color: root.colMuted
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 9
-                                            }
-                                            Text {
-                                                text: (modelData.capacity ?? 0) + "%"
-                                                color: root.colAccent
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 11
-                                                font.weight: Font.Bold
-                                            }
-                                        }
 
-                                        // Barra con la marca del limite de carga
-                                        Rectangle {
-                                            Layout.fillWidth: true
-                                            height: 4
-                                            radius: 2
-                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
                                             Rectangle {
-                                                anchors.left: parent.left
-                                                anchors.top: parent.top
-                                                anchors.bottom: parent.bottom
-                                                width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.capacity ?? 0) / 100.0)))
+                                                Layout.fillWidth: true
+                                                height: 4
                                                 radius: 2
-                                                color: (modelData.capacity ?? 100) <= 15 ? "#e05c5c" : ((modelData.capacity ?? 100) <= 30 ? "#e0a75c" : root.colAccent)
-                                                Behavior on width { NumberAnimation { duration: 200 } }
+                                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
+                                                Rectangle {
+                                                    anchors.left: parent.left
+                                                    anchors.top: parent.top
+                                                    anchors.bottom: parent.bottom
+                                                    width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.capacity ?? 0) / 100.0)))
+                                                    radius: 2
+                                                    color: (modelData.capacity ?? 100) <= 15 ? "#e05c5c" : ((modelData.capacity ?? 100) <= 30 ? "#e0a75c" : root.colAccent)
+                                                    Behavior on width { NumberAnimation { duration: 200 } }
+                                                }
+                                                Rectangle {
+                                                    visible: battCardDel.umbral < 100
+                                                    anchors.left: parent.left
+                                                    anchors.top: parent.top
+                                                    anchors.bottom: parent.bottom
+                                                    width: Math.max(0, Math.min(parent.width, parent.width * (battCardDel.umbral / 100.0)))
+                                                    color: "transparent"
+                                                    border.color: Qt.rgba(255, 255, 255, 0.35)
+                                                    border.width: 1
+                                                    radius: 2
+                                                }
                                             }
-                                            Rectangle {
-                                                visible: (modelData.threshold ?? 100) < 100
-                                                anchors.left: parent.left
-                                                anchors.top: parent.top
-                                                anchors.bottom: parent.bottom
-                                                width: Math.max(0, Math.min(parent.width, parent.width * ((modelData.threshold ?? 100) / 100.0)))
-                                                color: "transparent"
-                                                border.color: Qt.rgba(255, 255, 255, 0.35)
-                                                border.width: 1
-                                                radius: 2
-                                            }
-                                        }
 
-                                        Flow {
-                                            Layout.fillWidth: true
-                                            spacing: 10
+                                            Flow {
+                                                Layout.fillWidth: true
+                                                spacing: 10
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.power_w !== null && modelData.power_w !== undefined
+                                                visible: (modelData.power_w !== null && modelData.power_w !== undefined)
                                                 Text { text: "Power"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                                 Text { text: (modelData.power_w ?? 0) + " W"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                             }
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.voltage !== null && modelData.voltage !== undefined
+                                                visible: (modelData.voltage !== null && modelData.voltage !== undefined)
                                                 Text { text: "Volt"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                                 Text { text: (modelData.voltage ?? 0) + " V"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                             }
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.health !== null && modelData.health !== undefined
+                                                visible: (modelData.health !== null && modelData.health !== undefined)
                                                 Text { text: "Health"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                                Text {
-                                                    text: (modelData.health ?? 0) + "%"
-                                                    color: (modelData.health ?? 100) >= 90 ? root.colFg : "#e0a75c"
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 9
-                                                }
+                                                Text { text: (modelData.health ?? 0) + "%"; color: (modelData.health ?? 100) >= 90 ? root.colFg : "#e0a75c"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                             }
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.energy_full !== null && modelData.energy_full !== undefined
+                                                visible: (modelData.energy_full !== null && modelData.energy_full !== undefined)
                                                 Text { text: "Full"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                                 Text { text: (modelData.energy_full ?? 0) + " Wh"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                             }
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.cycles !== null && modelData.cycles !== undefined
+                                                visible: (modelData.cycles !== null && modelData.cycles !== undefined)
                                                 Text { text: "Cycles"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                                 Text { text: "" + (modelData.cycles ?? 0); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
                                             }
                                             Row {
                                                 spacing: 3
-                                                visible: modelData.threshold !== null && modelData.threshold !== undefined
+                                                visible: (modelData.threshold !== null && modelData.threshold !== undefined)
                                                 Text { text: "Limit"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                                Text { text: (modelData.threshold ?? 100) + "%"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                                Text { text: (battCardDel.umbral) + "%"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                            }
+                                            }
 
                                             // ── Limite de carga ──
-                                            // Un boton por valor, y cada uno escribe en el
-                                            // charge_control_end_threshold de SU bateria, no en
-                                            // el de al lado: el limite va por dispositivo.
-                                            // El valor puesto sale resaltado. 100 es "sin
-                                            // limite" y se dice con palabras.
+                                            // Un boton por valor, y cada uno escribe en el charge_control_end_threshold
+                                            // de SU bateria, no en el de al lado: el limite va por dispositivo. El valor
+                                            // puesto sale resaltado, y 100 es "sin limite" y se dice con palabras. Solo de
+                                            // 70 para arriba: por debajo el firmware de este portatil acepta el numero pero
+                                            // luego no lo respeta.
                                             Row {
-                                                Layout.fillWidth: true
+                                                Layout.alignment: Qt.AlignRight
                                                 Layout.topMargin: 2
                                                 spacing: 6
-                                                visible: battCardDel.modelData.threshold !== null
-                                                      && battCardDel.modelData.threshold !== undefined
-
                                                 Repeater {
-                                                    model: [50, 60, 70, 80, 90, 100]
-
+                                                    model: [70, 80, 90, 100]
                                                     delegate: Rectangle {
                                                         id: limitBtn
                                                         readonly property int valor: modelData
-                                                        // La comparacion se hace contra valor, que es un
-                                                        // int declarado, y no contra modelData: con
-                                                        // modelData la igualdad estricta salia false
-                                                        // siempre y ningun boton se resaltaba.
                                                         readonly property bool puesto: valor === battCardDel.umbral
                                                         readonly property string texto: valor === 100 ? "Off" : valor + "%"
-
                                                         width: limitLabel.implicitWidth + 16
                                                         height: 22
                                                         radius: 11
@@ -5392,7 +5377,6 @@ ShellRoot {
                                                         border.color: puesto ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
                                                         border.width: 1
                                                         Behavior on color { ColorAnimation { duration: 120 } }
-
                                                         Text {
                                                             id: limitLabel
                                                             anchors.centerIn: parent
@@ -5402,15 +5386,12 @@ ShellRoot {
                                                             font.pixelSize: 9
                                                             font.weight: limitBtn.puesto ? Font.Bold : Font.Normal
                                                         }
-
                                                         MouseArea {
                                                             anchors.fill: parent
                                                             cursorShape: Qt.PointingHandCursor
                                                             onClicked: {
                                                                 battLimitProc.command = ["bash", "-c",
-                                                                    "$HOME/.local/bin/battery-charge-limit "
-                                                                    + limitBtn.valor + " "
-                                                                    + battCardDel.modelData.name + " 2>&1"]
+                                                                    "$HOME/.local/bin/battery-charge-limit " + limitBtn.valor + " " + battCardDel.batName + " 2>&1"]
                                                                 battLimitProc.running = true
                                                             }
                                                         }
@@ -5422,14 +5403,12 @@ ShellRoot {
                                                 Layout.fillWidth: true
                                                 visible: root.battLimitMsg !== ""
                                                 text: root.battLimitMsg
-                                                color: root.battLimitMsg.indexOf(battCardDel.modelData.name + " ") === 0 ? root.colAccent : "#e05c5c"
+                                                color: root.battLimitMsg.indexOf(battCardDel.batName + " ") === 0 ? root.colAccent : "#e05c5c"
                                                 font.family: "JetBrainsMono Nerd Font"
                                                 font.pixelSize: 8
                                                 elide: Text.ElideRight
                                             }
-                                            }
                                         }
-                                    }
                                 }
                             }
                         }

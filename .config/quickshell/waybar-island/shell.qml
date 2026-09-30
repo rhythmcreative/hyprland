@@ -120,8 +120,11 @@ ShellRoot {
             let n = (m || "").toLowerCase().replace(/[^a-z0-9._ -]/g, "").trim()
             if (n !== "") limpio.push(n)
         }
+        // Cada nombre va entrecomillado: sin comillas, printf '%s\n' battery saver
+        // imprime DOS lineas y una app que se llama "Battery Saver" acaba guardada
+        // como dos apps distintas: battery y saver.
         let cmd = "mkdir -p $HOME/.config/rhythm && : > $HOME/.config/rhythm/muted-apps.txt"
-        for (let n of limpio) cmd += " && printf '%s\\n' " + n + " >> $HOME/.config/rhythm/muted-apps.txt"
+        for (let n of limpio) cmd += " && printf '%s\\n' '" + n.replace(/'/g, "'\\''") + "' >> $HOME/.config/rhythm/muted-apps.txt"
         root.runCmd(cmd)
     }
 
@@ -5517,7 +5520,7 @@ ShellRoot {
                                         Layout.fillWidth: true
                                         spacing: 6
                                         Text {
-                                            text: root.mutedApps.length > 0 ? "󰝑" : "󰕾"
+                                            text: "󰖔"
                                             color: root.mutedApps.length > 0 ? "#e0a75c" : root.colMuted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
@@ -5562,7 +5565,7 @@ ShellRoot {
                                                     anchors.left: parent.left
                                                     anchors.leftMargin: 9
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    text: (parent.muteOn ? "\u{1F507} " : "\u{1F508} ") + modelData
+                                                    text: (parent.muteOn ? "󰖔 " : "󰂚 ") + modelData
                                                     color: parent.muteOn ? root.colFg : root.colMuted
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 9
@@ -5573,8 +5576,12 @@ ShellRoot {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: {
-                                                        root.notifToggleMute(modelData)
-                                                        if (root.notifMuted(modelData)) muteLoadProc.running = true
+                                                        // El nombre se copia ANTES de tocar nada: al
+                                                        // silenciar, notifKnownApps() cambia y el
+                                                        // delegate se reconstruye, y después modelData
+                                                        // ya no vale.
+                                                        let app = modelData
+                                                        root.notifToggleMute(app)
                                                     }
                                                 }
                                             }

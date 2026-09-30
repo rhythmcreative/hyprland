@@ -34,27 +34,37 @@ systemctl --user is-active --quiet "$UNIDAD" || { rm -f "$ESTADO" 2>/dev/null; e
 
 # Un monitor por ventana de la isla: si el compositor no lista al menos una capa
 # por monitor, la isla no esta en pantalla.
-monitores=$(hyprctl monitors -j 2>/dev/null | jq 'length' 2>/dev/null || echo 1)
-[ "$monitores" -ge 1 ] 2>/dev/null || monitores=1
-capas=$(hyprctl layers 2>/dev/null | grep -c "namespace: quickshell" || echo 0)
+monitores=$(hyprctl monitors -j 2>/dev/null | jq 'length' 2>/dev/null | tr -cd '0-9')
+[ -n "$monitores" ] || monitores=1
+
+# OJO con grep -c: cuando no encuentra nada imprime 0 Y devuelve codigo 1, asi que
+# con un "|| echo 0" detras la variable se queda con "0\n0", que no es un numero.
+# La comparacion "-ge" falla con "integer expected", la_if da falso y el script
+# "-" ", ", "-" " nunca reiniciaba. De ahi que el log dijera "sin capa (0" en una
+# linea y "0 de 2)" en la siguiente.
+capas=$(hyprctl layers 2>/dev/null | grep -c "namespace: quickshell" | tr -cd '0-9')
+[ -n "$capas" ] || capas=0
 
 if [ "$capas" -ge "$monitores" ]; then
     rm -f "$ESTADO" 2>/dev/null
     exit 0
 fi
 
-# Primera vez que se ve mal: se anota y no se toca nada todavia.
-if [ ! -f "$ESTADO" ]; then
-    echo 1 > "$ESTADO"
-    log "sin capa ($capas de $monitores), se comprueba otra vez en un rato"
+# Primera vez que se ve mal: se anota y no se toca nada todavia. Asi se ignora el
+# margen de arranque, cuando la isla tarda un momento en aparecer.
+veces=$(tr -cd '0-9' < "$ESTADO" 2>/dev/null)
+[ -n "$veces" ] || veces=0
+
+if [ "$veces" -ge 1 ]; then
+    log "isla viva sin capa ($capas de $monitores) por segunda vez: reiniciando"
+    rm -f "$ESTADO" 2>/dev/null
+    systemctl --user restart "$UNIDAD" >/dev/null 2>&1 || true
     exit 0
 fi
 
-veces=$(cat "$ESTADO" 2>/dev/null || echo 1)
-if [ "$veces" -lt 2 ]; then
-    echo $((veces + 1)) > "$ESTADO"
-    exit 0
-fi
+echo 1 > "$ESTADO"
+log "sin capa ($capas de $monitores), se comprueba otra vez en un minuto"
+exit 0
 
 log "isla viva sin capa ($capas de $monitores) por segunda vez: reiniciando $UNIDAD"
 rm -f "$ESTADO" 2>/dev/null

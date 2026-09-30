@@ -1,0 +1,14 @@
+[Unit]
+Description=Vuelve a aplicar el limite de carga de la bateria
+# El kernel no guarda charge_control_end_threshold entre arranques: al reiniciar
+# vuelve a 100. Este servicio pone el valor guardado en
+# ~/.config/rhythm/battery-limit.conf, que es el que se elige desde la isla.
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/battery-charge-limit --apply
+RemainAfterExit=no
+
+[Install]
+WantedBy=default.target

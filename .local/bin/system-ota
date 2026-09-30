@@ -559,6 +559,13 @@ cmd_update() {
         for _src in "$REPO_DIR"/.local/bin/*; do
             [ -e "$_src" ] || continue
             _base=$(basename "$_src")
+            # __pycache__ no es un script: cp -f sobre un directorio falla y el
+            # conteo de fallos lo reportaba como problema del update. .gitignore
+            # lo esconde de git, pero este bucle recorre el disco, no el indice.
+            # install.sh ya lo filtraba.
+            case "$_base" in
+                __pycache__|*.pyc) continue ;;
+            esac
             if ! cp -f "$_src" "$HOME/.local/bin/$_base" 2>/dev/null; then
                 OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
                 echo "  [!] no desplegado: .local/bin/$_base"

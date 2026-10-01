@@ -5392,7 +5392,13 @@ ShellRoot {
                         spacing: 3
                         visible: (modelData.voltage !== null && modelData.voltage !== undefined)
                         Text { text: "Volt"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                        Text { text: (modelData.voltage ?? 0) + " V"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                        Text {
+                            // Sin toFixed sale "17.580000000000002 V": con una sola
+                            // bateria el voltaje ya viene redondeado de sysfs y no se
+                            // nota, pero con varias se ve el error de coma flotante.
+                            text: (modelData.voltage ?? 0).toFixed(2) + " V"
+                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                        }
                         }
                         Row {
                         spacing: 3

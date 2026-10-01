@@ -43,16 +43,48 @@ echo "$WALLPAPER_DIR" > ~/.cache/quickshell-last-wallpaper
 
 
 MONITORS=()
-if command -v hyprctl >/dev/null 2>&1; then
-    MONITORS=($(hyprctl monitors -j | jq -r '.[].name'))
-elif command -v xrandr >/dev/null 2>&1; then
-    MONITORS=($(xrandr --query | grep " connected" | awk '{print $1}'))
-else
-    MONITORS=("eDP-1")
+
+# Por que se descubre la firma de Hyprland aqui y no se da por puesta:
+#
+# La isla lanza este script con un Process desde su unidad de systemd, y systemd
+# NO hereda el entorno del compositor. Sin HYPRLAND_INSTANCE_SIGNATURE, hyprctl
+# contesta "HYPRLAND_INSTANCE_SIGNATURE not set!" y sale con codigo de error.
+# Antes solo se comprobaba `command -v hyprctl`, que si existe, asi que la
+# llamada se hacia igual y su fallo se tragaba: jq recibia el mensaje de error en
+# vez de JSON, MONITORS quedaba VACIO y la transicion se pedia solo para el
+# eDP-1 del fallback. De ahi que la animacion saliera en una pantalla y en la
+# otra el fondo se quedase como estuviera.
+#
+# No se arregla declarando la variable en la unidad: la firma cambia en cada
+# sesion de Hyprland y la unidad no se entera. Se descubre, como en
+# wallpaper-monitor-watcher.
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    if [ -d "$_runtime/hypr" ]; then
+        _sig=$(ls -t "$_runtime/hypr/" 2>/dev/null | head -n1)
+        [ -n "$_sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+    fi
+    unset _runtime _sig
 fi
 
-[[ ${#MONITORS[@]} -eq 0 ]] && MONITORS=("eDP-1")
-OUTPUTS=$(IFS=, ; echo "${MONITORS[*]}")
+# Ahora sí: hyprctl tiene que FUNCIONAR, no solo existir.
+if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then
+    MONITORS=($(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null))
+elif command -v xrandr >/dev/null 2>&1; then
+    MONITORS=($(xrandr --query 2>/dev/null | grep " connected" | awk '{print $1}'))
+fi
+
+if [ "${#MONITORS[@]}" -gt 0 ]; then
+    OUTPUTS=$(IFS=, ; echo "${MONITORS[*]}")
+    AWWW_OUTPUTS=(--outputs "$OUTPUTS")
+else
+    # Sin lista de salidas NO se pasa --outputs, y awww aplica a todas. Antes
+    # aquí se inventaba un "eDP-1": en una máquina sin panel interno ese nombre
+    # no existe, así que el fondo no se ponía en ninguna pantalla y no había
+    # ningún error que lo dijera.
+    AWWW_OUTPUTS=()
+    echo "wallpaper-apply: no se han podido detectar las salidas; se aplica a todas" >&2
+fi
 
 
 BLACK_PNG="/tmp/wallpaper-black.png"
@@ -61,7 +93,7 @@ if [[ ! -f "$BLACK_PNG" ]]; then
 fi
 
 if [[ -f "$BLACK_PNG" ]]; then
-    awww img --outputs "$OUTPUTS" \
+    awww img "${AWWW_OUTPUTS[@]}" \
         --transition-type fade \
         --transition-duration 0.8 \
         --transition-fps 60 \

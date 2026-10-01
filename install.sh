@@ -471,6 +471,56 @@ EOF
         sudo mkinitcpio -P >> "$LOG_FILE" 2>&1 || step_warn "mkinitcpio image generation encountered warnings."
         step_ok "NVIDIA system optimization complete."
     fi
+
+        # ── Security: sysctl y reglas de nftables de la seccion Security de la isla ──
+        # La isla tambien los escribe (boton Tighten y boton Turn on), pero se dejan
+        # aqui para que una instalacion limpia salga ya endurecida y con el
+        # cortafuegos cargado en el siguiente arranque.
+        step_item "Writing the hardening sysctl drop-in..."
+        sudo mkdir -p /etc/sysctl.d
+        cat << 'EOF' | sudo tee /etc/sysctl.d/60-rhythm-security.conf > /dev/null
+# Puesto por la seccion Security de la isla. Valores recomendados para
+# mitigacion de exploits en una workstation.
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+kernel.perf_event_paranoid = 2
+kernel.unprivileged_bpf_disabled = 2
+kernel.yama.ptrace_scope = 1
+vm.unprivileged_userfaultfd = 0
+EOF
+        sudo sysctl --system >> "$LOG_FILE" 2>&1 || true
+
+        step_item "Installing the nftables ruleset..."
+        sudo mkdir -p /etc/nftables.d
+        cat << 'EOF' | sudo tee /etc/nftables.d/rhythm.conf > /dev/null
+# Tabla de la seccion Security de la isla: deny por defecto, con lo justo para
+# que la red, el DHCP y el descubrimiento local sigan funcionando.
+table inet rhythm {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iif lo counter accept
+    ct state established,related counter accept
+    ip protocol icmp counter accept
+    ip6 nexthdr icmpv6 counter accept
+    udp sport 68 udp dport 67 counter accept
+    udp sport 5353 udp dport 5353 counter accept
+    udp sport 1900 udp dport 1900 counter accept
+    counter drop
+  }
+  chain forward { type filter hook forward priority filter; policy drop; }
+  chain output { type filter hook output priority filter; policy accept; }
+}
+EOF
+        if [ -f /etc/nftables.conf ] && ! grep -q 'nftables.d' /etc/nftables.conf 2>/dev/null; then
+            sudo cp /etc/nftables.conf /etc/nftables.conf.bak
+            cat << 'EOF' | sudo tee -a /etc/nftables.conf > /dev/null
+
+# Anadido por la seccion Security de la isla.
+include "/etc/nftables.d/*.conf"
+EOF
+        fi
+        sudo systemctl enable nftables.service >> "$LOG_FILE" 2>&1 || true
+
 }
 
 # --- RUST-DOCK COMPILATION & SETUP ---

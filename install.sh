@@ -48,18 +48,16 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
     fi
 fi
 
-# --- AJUSTES QUE EL USUARIO PUEDE CAMBIAR ---
+# El tema de cursor del login y las reglas de monitor del greeter viven en
+# rhythm-sddm-deploy, que es el unico sitio que escribe esos ficheros de
+# sistema. Aqui no se duplican: si estuvieran en los dos sitios, el installer
+# pondria una cosa y el OTA otra.
 #
-# Cursor del greeter. El login lo pinta SDDM, que corre como root y en su propia
-# VT: no ve nada de tu sesion, asi que el tema hay que darle de forma explicita.
-#
-# Ha de ser un nombre de tema de cursor instalado en /usr/share/icons, NO una
-# ruta. SDDM arranca su propio compositor, asi que el tema tiene que existir a
-# nivel de sistema para que root pueda leerlo.
-#
-# Variantes zurdas de Bibata: Bibata-Modern-Ice-Right. Si no hay ninguna
-# instalada, el login sale con el cursor por defecto y no falla: es cosmético.
-SDDM_CURSOR_THEME="Bibata-Modern-Ice"
+# Lo que hay en /usr y /etc no lo sincroniza el OTA por su cuenta
+# (rhythm-materialize solo va a ~/.config y ~/.local/bin), asi que ese mismo
+# script lo llama tambien system-ota. Sin eso, una actualizacion dejaba el
+# sddm.conf apuntando al start-hyprland de siempre y las piezas nuevas a medias,
+# que es peor que no tenerlas.
 
 LOG_FILE="/tmp/hyprland-install-${USER:-$(id -un)}.log"
 if ! touch "$LOG_FILE" 2>/dev/null; then
@@ -1521,42 +1519,21 @@ step_system() {
         # hyprland.lua deja de ser una config y pasa a ser una PLANTILLA: el
         # envoltorio sustituye la marca de monitor por las reglas y arranca
         # Hyprland con el resultado.
-        if [ -f "$DOTFILES_DIR/sddm/sddm-greeter-monitor" ]; then
-            sudo mkdir -p /usr/local/lib/rhythm
-            sudo cp -f "$DOTFILES_DIR/sddm/sddm-greeter-monitor" /usr/local/lib/rhythm/sddm-greeter-monitor
-            sudo chmod 755 /usr/local/lib/rhythm/sddm-greeter-monitor
-            sudo chown root:root /usr/local/lib/rhythm/sddm-greeter-monitor
-        fi
-        if [ -f "$DOTFILES_DIR/sddm/hyprland.lua" ]; then
-            sudo cp -f "$DOTFILES_DIR/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua
-            sudo chmod 644 /usr/share/sddm/hyprland.lua
-            sudo chown root:root /usr/share/sddm/hyprland.lua
-        fi
-        echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=/usr/local/lib/rhythm/sddm-greeter-monitor" \
-            | sudo tee /etc/sddm.conf.d/10-wayland.conf > /dev/null
-
-        # Cursor del login.
         #
-        # SDDM corre como root en su propia VT y no ve la sesion del usuario, de
-        # modo que el tema de cursor hay que pasarselo por el entorno. El
-        # drop-in de systemd es el sitio correcto porque el greeter y el
-        # compositor cuelgan los dos del servicio: ponerlo en el perfil de shell
-        # no llega, y ponerlo en la config de Hyprland tampoco, porque la config
-        # no es quien dibuja el cursor sino el cliente Qt que pinta el login.
-        if [ -n "$SDDM_CURSOR_THEME" ]; then
-            sudo mkdir -p /etc/systemd/system/sddm.service.d
-            echo -e "[Service]\nEnvironment=XCURSOR_THEME=$SDDM_CURSOR_THEME" \
-                | sudo tee /etc/systemd/system/sddm.service.d/cursor.conf > /dev/null
-            sudo chmod 644 /etc/systemd/system/sddm.service.d/cursor.conf
-            sudo systemctl daemon-reload 2>/dev/null || true
-            # No se comprueba que el tema exista para no tirar la instalacion
-            # abajo por algo cosmetico: si no esta, el login sale con el cursor
-            # por defecto. rhythm-doctor si avisa de ello.
-            if [ -d "/usr/share/icons/$SDDM_CURSOR_THEME/cursors" ]; then
-                step_ok "Cursor del login: $SDDM_CURSOR_THEME (se aplica al proximo inicio de sesion)."
+        # Las cuatro piezas de sistema (envoltorio, plantilla, sddm.conf y el
+        # drop-in del cursor) las escribe rhythm-sddm-deploy, no este installer.
+        # Es el mismo script que llama el OTA, y asi no pueden divergir: si
+        # aqui se pusiera el CompositorCommand a mano y el tema del cursor aqui,
+        # una actualizacion dejaria el sddm.conf de una forma y el cursor de
+        # otra.
+        if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
+            if "$HOME/.local/bin/rhythm-sddm-deploy" "$DOTFILES_DIR"; then
+                step_ok "SDDM greeter deployed (login on the internal panel only, cursor set)."
             else
-                step_warn "El tema de cursor '$SDDM_CURSOR_THEME' no esta en /usr/share/icons; el login usara el cursor por defecto."
+                step_warn "El greeter de SDDM quedo a medias. Mira ~/.cache/rhythm-sddm-deploy.log"
             fi
+        else
+            step_warn "rhythm-sddm-deploy no esta en ~/.local/bin; el login se quedaria como este."
         fi
 
         # Red de seguridad: si algun dia hay que volver a X11, se renombra este

@@ -571,7 +571,12 @@ cmd_update() {
     # Fichero a fichero y contando fallos. Un "cp -rf ... || true" a pelo tapaba
     # cualquier error: si un destino no se podia escribir, el update Terminaba
     # igual y no habia forma de saber que esos ficheros no se desplegaron.
-    local _src _dst _base
+    #
+    # Solo .local/bin se copia aqui. La parte de .config la hace
+    # rhythm-materialize mas abajo, porque es la que sabe respectar el overlay
+    # de ediciones del usuario; si se copiase aqui primero, el overlay ya no
+    # tendria nada que rescatar.
+    local _src _base
     if [ -d "$REPO_DIR/.local/bin" ]; then
         mkdir -p "$HOME/.local/bin"
         for _src in "$REPO_DIR"/.local/bin/*; do
@@ -592,31 +597,36 @@ cmd_update() {
         chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
     fi
 
-    if [ -d "$REPO_DIR/.config" ]; then
-        mkdir -p "$HOME/.config"
-        for _src in "$REPO_DIR"/.config/*; do
-            _base=$(basename "$_src")
-            if [ -d "$_src" ]; then
-                mkdir -p "$HOME/.config/$_base"
-                for _dst in "$_src"/*; do
-                    [ -e "$_dst" ] || continue
-                    if ! cp -rf "$_dst" "$HOME/.config/$_base/" 2>/dev/null; then
-                        OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
-                        echo "  [!] no desplegado: .config/$_base/$(basename "$_dst")"
-                    fi
-                done
-            else
-                if ! cp -f "$_src" "$HOME/.config/$_base" 2>/dev/null; then
-                    OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
-                    echo "  [!] no desplegado: .config/$_base"
-                fi
-            fi
-        done
+    # .config NO se copia aqui: lo hace rhythm-materialize, mas abajo, para no
+    # pisar por dos vias el overlay de ediciones del usuario.
+
+    # El overlay de ediciones del usuario se aplica DESPUES de la base, que es
+    # justo lo que este bloque de cpRAW sustituye: antes, un fichero editado a
+    # mano se pisaba con el del repo y el unico rastro era un .bak al lado.
+    #
+    # rhythm-materialize hace lo mismo que este cp mas tres cosas: mantiene un
+    # ledger de lo que puso en la ultima pasada, y si un fichero en ~/.config
+    # tiene bytes que no son ni lo que puso ni lo que envia el repo, lo copia al
+    # overlay ~/.local/state/rhythm/user_edits antes de sobrescribirlo y avisa.
+    #
+    # No se usa `|| true`: si el despliegue falla hay que notarlo, que es lo
+    # que este mismo update yaLesson-aprendido.
+    if [ -x "$HOME/.local/bin/rhythm-materialize" ]; then
+        local mat_out mat_rc=0
+        mat_out=$("$HOME/.local/bin/rhythm-materialize" 2>&1) || mat_rc=$?
+        [ -n "$mat_out" ] && echo "$mat_out" | sed 's/^/  /'
+        if [ "$mat_rc" -ne 0 ]; then
+            OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+            echo "  [!] el despliegue de configs reporto problemas (rc=$mat_rc)"
+        fi
+    else
+        echo "  [!] rhythm-materialize no esta instalado; nada desplegado."
+        OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
     fi
 
     if [ "$OTA_DEPLOY_FAILED" -gt 0 ]; then
         OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-        echo "  [!] $OTA_DEPLOY_FAILED fichero(s) no se pudieron desplegar."
+        echo "  [!] $OTA_DEPLOY_FAILED problema(s) en el despliegue."
     fi
 
     # Units were just replaced on disk, so systemd needs to re-read them, and any
@@ -682,6 +692,24 @@ cmd_update() {
 
     # Re-generate clean status
     generate_status_json "false" >/dev/null 2>&1 || true
+
+    # Reconciliacion final. Lo que se despliega fuera de ~/.config (por ejemplo
+    # /etc/sddm/Xsetup) no lo toca el update, asi que un fix ahi solo llega si
+    # alguien lo reconcilia. El doctor se encarga, y su salida cuenta como
+    # problema del update si algo quedo desfasado: es informacion accionable,
+    # no ruido.
+    if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
+        echo
+        echo "Reconciling state that deploy does not cover..."
+        local doc_out
+        if doc_out=$("$HOME/.local/bin/rhythm-doctor" --fix 2>&1); then
+            [ -n "$doc_out" ] && echo "$doc_out" | sed 's/^/  /'
+        else
+            echo "$doc_out" | sed 's/^/  /'
+            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+            echo "  [!] el doctor encontro problemas que no pudo corregir todos"
+        fi
+    fi
 
     # El resumen ya no afirma exito sin condiciones. Antes ponia "aplicado
     # correctamente" aunque el pull hubiera fallado, el despliegue hubiera dejado

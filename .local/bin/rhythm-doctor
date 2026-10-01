@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# rhythm-doctor: reconciliador idempotente del estado que el despliegue no
+# puede expresar en ficheros.
+#
+# El despliegue (install.sh / system-ota update) solo llega a ~/.config y
+# ~/.local/bin. Hay cosas que salen de ahi y por tanto nunca convergen: un
+# update las arregla en el repo y el usuario no las recibe nunca. Este guion es
+# la red de seguridad para eso.
+#
+# Idempotente: se puede ejecutar en cada update, y tambien a mano, sin miedo.
+# Cada comprobacion mira el estado real contra la copia que envia el repo y
+# re-pone solo lo que difiere.
+#
+#   rhythm-doctor            revisa e informa
+#   rhythm-doctor --fix      revisa y corrige lo corregible
+#   rhythm-doctor --verify   solo verifica, nunca escribe (para CI)
+
+set -uo pipefail
+
+MODE="${1:-check}"
+case "$MODE" in
+    --verify) MODE=verify ;;
+    --fix)    MODE=fix ;;
+    check|--check|"") MODE=check ;;
+esac
+
+# Repo de los dotfiles: misma resolucion que system-ota.
+REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
+if [ ! -d "$REPO_DIR/.git" ]; then
+    _self=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -n "$_self" ] && REPO_DIR="$_self"
+fi
+
+PROBLEMS=0
+FIXED=0
+DRY="" [ "$MODE" = "fix" ] || DRY="echo would"
+
+ok()   { printf '  \033[32mok\033[0m    %s\n' "$1"; }
+warn() { printf '  \033[33mwarn\033[0m  %s\n' "$1"; }
+bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; PROBLEMS=$((PROBLEMS+1)); }
+fixed(){ printf '  \033[32mfixed\033[0m %s\n' "$1"; FIXED=$((FIXED+1)); }
+note() { printf '        %s\n' "$1"; }
+
+echo "rhythm-doctor: $MODE (repo: $REPO_DIR)"
+
+if [ ! -d "$REPO_DIR" ]; then
+    echo "  no encuentro el repo de dotfiles en $REPO_DIR" >&2
+    exit 1
+fi
+
+# ────────────────────────────────────────────────────────────────────────────
+# 1. /etc/sddm.conf.d/xsetup.conf
+#
+# Es lo unico que se instala FUERA de ~/.config, en un directorio de root, y
+# se hace una sola vez. Una correccion en sddm/Xsetup llega al repo pero no a
+# ninguna maquina que ya habia instalado, que es el fallo clasico de un
+# install-once: fija cada maquina en el release con el que se instalo.
+# ────────────────────────────────────────────────────────────────────────────
+check_xsetup() {
+    # Ojo con las rutas: /etc/sddm.conf.d/xsetup.conf esta DESHABILITADO a
+    # proposito (el login es Wayland, asi que Xsetup no debe correr), y el
+    # script de verdad va a /etc/sddm/Xsetup. Mirar el otro path daria un FAIL
+    # falso en una maquina perfectamente bien.
+    local shipped="$REPO_DIR/sddm/Xsetup"
+    local live="/etc/sddm/Xsetup"
+
+    if [ ! -f "$shipped" ]; then
+        warn "sddm/Xsetup no esta en el repo, nada que verificar"
+        return
+    fi
+    if [ ! -e "$live" ]; then
+        bad "/etc/sddm/Xsetup no existe"
+        note "se copia en el paso de SDDM del instalador; si el greeter va bien, no hace falta"
+        return
+    fi
+    if diff -q "$shipped" "$live" >/dev/null 2>&1; then
+        ok "/etc/sddm/Xsetup al dia"
+    else
+        bad "/etc/sddm/Xsetup desfasado (el repo lo arrastro en updates)"
+    fi
+
+    # El .disabled tiene que seguir desactivado: si alguien lo rehabilita sin
+    # querer, el greeter intenta arrancar X11 en una sesion Wayland.
+    if [ -e /etc/sddm.conf.d/xsetup.conf.disabled ]; then
+        ok "xsetup.conf.disabled presente (X11 sigue apagado, correcto)"
+    else
+        note "no hay xsetup.conf.disabled; si el login es Wayland deberia existir"
+    fi
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+# 2. Verificacion de entrega
+#
+# Lo que el repo despliega tiene que existir en la maquina. Si algo no llega,
+# es que hay un config que nadie recibe, y eso no se nota hasta que un usuario
+# pregunta por una tecla que no hace nada.
+# ────────────────────────────────────────────────────────────────────────────
+check_delivery() {
+    local missing=0
+
+    # Unidades de usuario: cada ExecStart tiene que existir y ser ejecutable.
+    for u in "$REPO_DIR"/.config/systemd/user/*.service; do
+        [ -f "$u" ] || continue
+        local name unit
+        name=$(basename "$u")
+        unit="$HOME/.config/systemd/user/$name"
+        if [ ! -f "$unit" ]; then
+            bad "unidad no desplegada: $name"
+            missing=$((missing+1))
+            continue
+        fi
+        # El ExecStart del repo, con %h resuelto.
+        local exe
+        exe=$(grep -m1 '^ExecStart=' "$u" | sed 's/^ExecStart=//; s/^-\?//' | awk '{print $1}' | sed "s|%h|$HOME|g")
+        case "$exe" in
+            /*) ;;
+            *) continue ;;
+        esac
+        if [ ! -x "$exe" ]; then
+            bad "$name apunta a algo no ejecutable: $exe"
+            missing=$((missing+1))
+        fi
+    done
+
+    if [ "$missing" -eq 0 ]; then
+        ok "todas las unidades desplegadas apuntan a ejecutables reales"
+    fi
+
+    # Scripts de ~/.local/bin referenciados por las unidades.
+    for b in "$REPO_DIR"/.local/bin/*; do
+        [ -f "$b" ] || continue
+        local base
+        base=$(basename "$b")
+        # Solo los que la unit ejecuta; el resto se copia igual.
+        grep -rqs "$base" "$REPO_DIR"/.config/systemd/user/ || continue
+        if [ ! -x "$HOME/.local/bin/$base" ]; then
+            bad "script no desplegado o no ejecutable: $base"
+            missing=$((missing+1))
+        fi
+    done
+    [ "$missing" -eq 0 ] && ok "scripts referenciados por las unidades, presentes"
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+# 3. Estado legible que el despliegue no debe pisar
+#
+# Ryoku llama a esto "nunca escribas en una ruta que las herramientas del
+# usuario escriben". El repo manda .config/rhythm/ para la isla; si el estado
+# mutable viviera ahi, un update podria pisarlo.
+# ────────────────────────────────────────────────────────────────────────────
+check_state_separation() {
+    local conf="$HOME/.config/rhythm/battery-limit.conf"
+    # XDG_STATE_HOME puede no existir, y con `set -u` referring a el sin
+    # guarding es un fallo antes de empezar.
+    local state="${XDG_STATE_HOME:-$HOME/.local/state}/rhythm/battery-limit.conf"
+
+    if [ -f "$conf" ] && [ ! -f "$state" ]; then
+        bad "battery-limit.conf sigue en ~/.config (estado en un sitio que el update re-pone)"
+        note "se migra solo al aplicar un limite nuevo, o a mano:"
+        note "  mkdir -p \$(dirname $state) && mv $conf $state"
+    elif [ -f "$state" ]; then
+        ok "battery-limit.conf en ~/.local/state"
+    else
+        note "sin limite de bateria configurado (normal si nunca se eligio uno)"
+    fi
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+# 4. Conf que el usuario haya editado y el update va a pisar
+#
+# Detecta los ficheros de ~/.config que difieren del repo. No es un fallo: es
+# informacion, porque con el overlay de user_edits estos se conservan, y sin
+# el overlay hay que saber cuales son antes del update.
+# ────────────────────────────────────────────────────────────────────────────
+check_local_edits() {
+    local diverged=0
+    for f in "$REPO_DIR"/.config/hypr/*.conf; do
+        [ -f "$f" ] || continue
+        local rel live
+        rel=".config/hypr/$(basename "$f")"
+        live="$HOME/$rel"
+        [ -f "$live" ] || continue
+        if ! diff -q "$f" "$live" >/dev/null 2>&1; then
+            diverged=$((diverged+1))
+            warn "$rel editado a mano (el update lo pondra del repo)"
+        fi
+    done
+    [ "$diverged" -eq 0 ] && ok "sin ediciones locales en .config/hypr"
+}
+
+echo
+check_xsetup
+check_delivery
+check_state_separation
+check_local_edits
+
+echo
+if [ "$PROBLEMS" -eq 0 ]; then
+    if [ "$FIXED" -gt 0 ]; then
+        echo "doctor: $FIXED corregido(s), sin problemas pendientes."
+    else
+        echo "doctor: todo correcto."
+    fi
+    exit 0
+else
+    echo "doctor: $PROBLEMS problema(s).$([ "$MODE" = "fix" ] && echo " Corrige los marcados FAIL." || echo " Usa --fix para los corregibles.")"
+    exit 1
+fi

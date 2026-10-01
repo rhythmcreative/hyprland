@@ -397,3 +397,41 @@ hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh
 
 -- Omarchy-style toggle (Do Not Disturb)
 hl.bind(mainMod .. " + CONTROL + D", hl.dsp.exec_cmd("~/.local/bin/toggle-dnd"), { locked = true })
+
+-- ── Ediciones del usuario, cargadas AL FINAL ─────────────────────────────────
+--
+-- Este fichero entero viene del repo y el update lo re-pone. Lo que quieras
+-- cambiar sin que te lo pisen va en user.lua, que se carga aqui y por eso gana:
+-- todo lo de arriba sigue en pie, y lo tuyo se aplica encima.
+--
+-- Patrón de Ryoku, que es la razon de que esto sea un fichero y no un `if`: si
+-- sustituyes hyprland.lua entero por una copia tuya, dejas de recibir los
+-- cambios de arriba. Si solo escribes user.lua, cada bind, regla o ajuste nuevo
+-- del repo te sigue llegando y solo pierdes el control de lo que pones tu.
+local function cargar_user()
+    local home = os.getenv("HOME") or ""
+    local candidatas = {
+        home .. "/.config/hypr/user.lua",
+        home .. "/.local/state/rhythm/user_edits/.config/hypr/user.lua",
+    }
+    for _, ruta in ipairs(candidatas) do
+        local f = io.open(ruta, "r")
+        if f then
+            f:close()
+            local chunk, err = loadfile(ruta)
+            if chunk then
+                local ok, e = pcall(chunk)
+                if not ok then
+                    -- Un error tuyo no debe tumbar el escritorio entero: solo
+                    -- se avisa y se sigue con la base.
+                    print("[hyprland] user.lua error: " .. tostring(e))
+                end
+            else
+                print("[hyprland] user.lua ilegible: " .. tostring(err))
+            end
+            return
+        end
+    end
+end
+
+cargar_user()

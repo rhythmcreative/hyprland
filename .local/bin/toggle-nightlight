@@ -42,17 +42,25 @@ save_settings() {
     mv -f "$tmp" "$CONFIG_FILE"
 }
 
-is_on() { pgrep -x hyprsunset >/dev/null 2>&1; }
+# El estado es el del servicio, no un pgrep. Con un pgrep habia dos falsos
+# positivos: un hyprsunset de otra sesion contaba como activo, y uno a medio
+# morir seguia contando durante unos segundos.
+SUNSET_UNIT="rhythm-hyprsunset.service"
+
+is_on() { systemctl --user is-active --quiet "$SUNSET_UNIT"; }
 
 start_nightlight() {
     read_settings
-    if is_on; then
-        hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || true
-        hyprctl hyprsunset gamma "$GAMMA" >/dev/null 2>&1 || true
-    else
-        nohup hyprsunset -t "$TEMPERATURE" -g "$GAMMA" >/dev/null 2>&1 &
-    fi
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    systemctl --user start "$SUNSET_UNIT" >/dev/null 2>&1 || return 1
+    return 0
 }
+
+stop_nightlight() {
+    systemctl --user stop "$SUNSET_UNIT" >/dev/null 2>&1 || true
+}
+
+
 
 set_temperature() {
     local value="${1:-}"
@@ -64,7 +72,10 @@ set_temperature() {
     TEMPERATURE="$value"
     save_settings
     if is_on; then
-        hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || start_nightlight
+        # El servicio lee la conf al arrancar, asi que reiniciarlo es lo que
+        # hace que el valor nuevo entre. hyprctl hyprsunset solo vale si el
+        # proceso ya esta hablando por su socket.
+        systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
     fi
     echo "$TEMPERATURE"
 }
@@ -79,7 +90,7 @@ set_gamma() {
     GAMMA="$value"
     save_settings
     if is_on; then
-        hyprctl hyprsunset gamma "$GAMMA" >/dev/null 2>&1 || start_nightlight
+        systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
     fi
     echo "$GAMMA"
 }
@@ -96,16 +107,20 @@ case "$ACTION" in
             "$enabled" "$TEMPERATURE" "$GAMMA" "$schedule_enabled" "$SCHEDULE_START" "$SCHEDULE_END"
         ;;
     on)
-        start_nightlight
-        echo "on"
+        if start_nightlight; then
+            echo "on"
+        else
+            echo "Could not start the Night Light service." >&2
+            exit 1
+        fi
         ;;
     off)
-        pkill -x hyprsunset 2>/dev/null || true
+        stop_nightlight
         echo "off"
         ;;
     toggle)
         if is_on; then
-            pkill -x hyprsunset 2>/dev/null || true
+            stop_nightlight
             echo "off"
         else
             start_nightlight
@@ -140,21 +155,31 @@ case "$ACTION" in
                 SCHEDULE_START="$start_time"
                 SCHEDULE_END="$end_time"
                 save_settings
-                # La unidad la despliega el instalador en ~/.config/systemd/user;
-                # tras un install recien hecho el gestor de usuario todavia no la
-                # conoce, asi que recargar antes de arrancarla.
+                # Las unidades las despliega el instalador en ~/.config/systemd/user;
+                # tras un install recien hecho el gestor de usuario todavia no las
+                # conoce, asi que recargar antes de activarlas.
+                #
+                # Lo que se activa es el TIMER, no el servicio. El servicio es de
+                # una sola pasada y el timer la repite cada minuto. Antes era un
+                # servicio permanente con un bucle dentro, y como el script se
+                # reescribia en una actualizacion, bash dejaba de ejecutar la
+                # parte que aplica y el horario se quedaba sin hacer nada.
                 systemctl --user daemon-reload >/dev/null 2>&1 || true
-                if ! systemctl --user start rhythm-nightlight-schedule.service; then
+                if ! systemctl --user enable --now rhythm-nightlight-schedule.timer; then
                     SCHEDULE="off"
                     save_settings
-                    echo "Could not start the Night Light schedule service." >&2
+                    echo "Could not start the Night Light schedule timer." >&2
                     exit 1
                 fi
+                # Comprobacion inmediata, para que el boton no espere al primer
+                # tick: si ya estamos dentro de la ventana, se enciende ya.
+                systemctl --user start rhythm-nightlight-schedule.service >/dev/null 2>&1 || true
                 echo "schedule-on"
                 ;;
             off)
                 SCHEDULE="off"
                 save_settings
+                systemctl --user disable --now rhythm-nightlight-schedule.timer 2>/dev/null || true
                 systemctl --user stop rhythm-nightlight-schedule.service 2>/dev/null || true
                 echo "schedule-off"
                 ;;

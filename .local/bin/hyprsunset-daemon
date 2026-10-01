@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Lanza hyprsunset con los valores guardados en night-light.conf.
+#
+# Existe para que hyprsunset viva en su propia unidad de systemd y no como hijo
+# suelto de otro proceso. La diferencia no es academica: systemd mata el cgroup
+# entero cuando termina un servicio Type=oneshot, asi que un "nohup hyprsunset &"
+# lanzado desde ahi muere en el acto. Medido: 0 procesos al cabo de 2 segundos.
+#
+# Con esto el Night Light es un servicio de verdad, se puede parar, arrancar y
+# consultar, y el horario decide cuando esta activo.
+
+set -uo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/night-light.conf"
+TEMP=4500
+GAMMA=100
+
+if [ -r "$CONF" ]; then
+    t=$(awk -F= '$1 == "temperature" {print $2; exit}' "$CONF" 2>/dev/null)
+    g=$(awk -F= '$1 == "gamma" {print $2; exit}' "$CONF" 2>/dev/null)
+    [[ "$t" =~ ^[0-9]+$ ]] && [ "$t" -ge 1000 ] && [ "$t" -le 20000 ] && TEMP="$t"
+    [[ "$g" =~ ^[0-9]+$ ]] && [ "$g" -ge 20 ] && [ "$g" -le 100 ] && GAMMA="$g"
+fi
+
+# exec para que hyprsunset SEIGA el proceso principal de la unidad: asi systemd
+# lo vigila, lo puede parar y su codigo de salida es el suyo.
+exec hyprsunset -t "$TEMP" -g "$GAMMA"

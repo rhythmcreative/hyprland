@@ -1,35 +1,72 @@
 #!/usr/bin/env bash
-# Apply an explicitly configured Night Light time window.
-# No schedule is enabled by default; toggle-nightlight starts this only after
-# the user supplies both HH:MM times in the Quickshell submenu.
+# Aplica la ventana horaria del Night Light que se haya configurado.
+#
+# Esto antes era un bucle "while true" con "sleep 30" dentro de un servicio
+# permanent. Eso era un error de arquitectura: bash va leyendo el script por
+# offset de bytes, asi que si el script se reescribe mientras corre (una
+# actualizacion de dotfiles, un stow, un OTA) el bucle se queda leyendo desde
+# una posicion que ya no corresponde y deja de ejecutar el codigo de aplicar.
+# Pasaron casi 5 horas con el horario puesto y el Night Light apagado, sin que
+# nada fallara ni apareciera un error: el bucle simplemente no hacia nada.
+#
+# Ahora es una sola comprobacion y la repite un timer de systemd. No hay
+# proceso largo que se pueda corromper, y ademas cada pasada deja rastro en el
+# journal, que es como se diagnostica esto.
+#
+# No hay horario por defecto. El boton de la isla lo activa, y solo si estan
+# las dos horas puestas.
 
-set -u
+set -uo pipefail
+
 HELPER="$HOME/.local/bin/toggle-nightlight"
 
-while true; do
-    settings=$("$HELPER" settings 2>/dev/null || echo '{}')
-    enabled=$(jq -r '.schedule_enabled // false' <<< "$settings" 2>/dev/null || echo false)
-    [ "$enabled" = true ] || exit 0
+log() { printf 'night-light-schedule: %s\n' "$*"; }
 
-    start=$(jq -r '.schedule_start // ""' <<< "$settings" 2>/dev/null || true)
-    end=$(jq -r '.schedule_end // ""' <<< "$settings" 2>/dev/null || true)
-    now=$(date +%H%M)
-    start_num=${start/:/}
-    end_num=${end/:/}
+settings=$("$HELPER" settings 2>/dev/null || echo '{}')
+enabled=$(jq -r '.schedule_enabled // false' <<< "$settings" 2>/dev/null || echo false)
 
-    # Supports same-day windows (20:00-23:30) and overnight windows (21:00-07:00).
-    desired=off
-    if [[ "$start_num" =~ ^[0-9]{4}$ && "$end_num" =~ ^[0-9]{4}$ ]] && [ "$start_num" != "$end_num" ]; then
-        if [ "$start_num" -lt "$end_num" ]; then
-            [ "$now" -ge "$start_num" ] && [ "$now" -lt "$end_num" ] && desired=on
-        else
-            { [ "$now" -ge "$start_num" ] || [ "$now" -lt "$end_num" ]; } && desired=on
-        fi
+if [ "$enabled" != "true" ]; then
+    log "no schedule, nothing to do"
+    exit 0
+fi
+
+start=$(jq -r '.schedule_start // ""' <<< "$settings" 2>/dev/null || true)
+end=$(jq -r '.schedule_end // ""' <<< "$settings" 2>/dev/null || true)
+now=$(date +%H%M)
+start_num=${start//:/}
+end_num=${end//:/}
+
+if [[ ! "$start_num" =~ ^[0-9]{4}$ || ! "$end_num" =~ ^[0-9]{4}$ ]] || [ "$start_num" = "$end_num" ]; then
+    log "bad window start=[$start] end=[$end], nothing to do"
+    exit 0
+fi
+
+# Admite ventana dentro del mismo dia (20:00-23:30) y ventana que cruza
+# medianoche (21:00-07:00), que es el caso normal de un night light.
+desired=off
+if [ "$start_num" -lt "$end_num" ]; then
+    if [ "$now" -ge "$start_num" ] && [ "$now" -lt "$end_num" ]; then
+        desired=on
     fi
-
-    current=$("$HELPER" status 2>/dev/null || echo off)
-    if [ "$desired" != "$current" ]; then
-        "$HELPER" "$desired" >/dev/null 2>&1 || true
+else
+    if [ "$now" -ge "$start_num" ] || [ "$now" -lt "$end_num" ]; then
+        desired=on
     fi
-    sleep 30
-done
+fi
+
+current=$("$HELPER" status 2>/dev/null || echo off)
+
+if [ "$desired" = "$current" ]; then
+    log "already $current (window $start -> $end, now $now)"
+    exit 0
+fi
+
+# Sin "|| true" y sin tapar la salida: si hyprsunset no arranca, el error tiene
+# que verse en el journal en vez de desaparecer.
+if "$HELPER" "$desired"; then
+    log "changed $current -> $desired (window $start -> $end, now $now)"
+    exit 0
+fi
+
+log "FAILED to switch $current -> $desired"
+exit 1

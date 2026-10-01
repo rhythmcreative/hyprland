@@ -1,12 +1,17 @@
 [Unit]
-Description=Rhythm Night Light scheduled on/off service
-After=default.target
+Description=Rhythm Night Light scheduled on/off check
+Documentation=man:gammastep(1)
+# El compositor tiene que estar delante: hyprsunset necesita hablar con Hyprland
+# por su socket, y sin esto puede fallar en un login recien arrancado.
+After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
-Type=simple
+Type=oneshot
 ExecStart=%h/.local/bin/night-light-schedule
-Restart=on-failure
-RestartSec=5s
+# hyprsunset se lanza en segundo plano desde toggle-nightlight y sobrevive a
+# que este proceso termine, asi que aqui no hay nada que esperar.
+TimeoutStartSec=20
 
 [Install]
 WantedBy=default.target

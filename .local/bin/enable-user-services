@@ -38,7 +38,13 @@ dir="$HOME/.config/systemd/user"
 # habilitarlo no cuesta nada, y con eso el horario sobrevive a un reinicio: los
 # ajustes ya se guardaban en ~/.config/rhythm/night-light.conf, lo que no pasaba
 # es que nadie arrancase el servicio al iniciar sesion.
-excluidas="rhythm-caffeine.service blueman-applet.service pipewire-session-manager.service"
+excluidas="rhythm-caffeine.service blueman-applet.service pipewire-session-manager.service rhythm-hyprsunset.service"
+
+# rhythm-hyprsunset.service TAMPOCO se habilita aqui, y esto es importante: es
+# el proceso que aplica el Night Light, asi que habilitarlo lo encenderia en
+# cada arranque sin mirar si el usuario lo quiere. Quien lo arranca es
+# "toggle-nightlight on", y el horario, mediante el timer. El timer si se
+# habilita, porque el script sale con codigo 0 si no hay horario puesto.
 
 if ! command -v systemctl >/dev/null 2>&1; then
     echo "enable-user-services: systemctl no disponible"

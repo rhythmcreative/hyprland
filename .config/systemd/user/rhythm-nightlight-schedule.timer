@@ -1,0 +1,18 @@
+[Unit]
+Description=Check the Rhythm Night Light schedule every minute
+Documentation=man:gammastep(1)
+
+[Timer]
+# Cada minuto es suficiente: la ventana del horario tiene granularidad de
+# minutos, y asi el cambio se ve como mucho un minuto tarde.
+OnBootSec=45s
+OnUnitActiveSec=60s
+# Que arranque solo al iniciar sesion es justo lo que faltaba antes: el
+# servicio estaba enabled, pero como era un bucle permanente que se
+# corrompia al reescribir el script, en la practica no se encendia solo.
+Persistent=false
+AccuracySec=10s
+Unit=rhythm-nightlight-schedule.service
+
+[Install]
+WantedBy=timers.target

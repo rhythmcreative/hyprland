@@ -1,0 +1,17 @@
+[Unit]
+Description=Night Light gamma ramp (hyprsunset)
+Documentation=man:hyprsunset(1)
+# hyprsunset habla con Hyprland por su socket: sin graphical-session delante
+# puede fallar en un login recien arrancado.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=%h/.local/bin/hyprsunset-daemon
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target

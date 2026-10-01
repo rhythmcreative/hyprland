@@ -44,7 +44,7 @@ HARDENING = [
 ]
 
 CLIP_CONF = os.path.expanduser("~/.config/rhythm/clipboard-expiry.conf")
-FLATPAK_CONF = os.path.expanduser("~/.config/rhythm/flatpak-perms.txt")
+KILL_FILE = os.path.expanduser("~/.config/rhythm/sensors-killed")
 
 
 def leer_sysctl(key):
@@ -139,16 +139,49 @@ def firewall():
 
 
 # ── sensores ────────────────────────────────────────────────────────────────
-def sensores():
+def nodos_audio():
+    """Sinks y sources de wpctl, con su id, su nombre y si estan muteados.
+
+    El formato de "wpctl status" es de columnas con dibujitos:
+        |  *   87. HUAWEI FreeBuds 7i       [vol: 0.53]
+        |      57. Ryzen HD Audio ...       [MUTED]
+    El asterisco marca el que esta por defecto, y el mute sale como [MUTED]
+    en vez de [vol: x]. Conviene fiarse del dibujo, no de la posicion: cuenta.
+    """
     rc, out, _ = esc("wpctl", "status")
-    mic = cam = False
-    if rc == 0:
-        bajo = out.lower()
-        mic = "muted" in bajo and any(
-            l.strip().startswith("●") or "[muted]" in l for l in out.splitlines()
-            if ".monitor" in l or "input" in l or "capture" in l
-        )
-    # el estado real lo da privacy-status, que ya existia para los iconos
+    nodos = {"sink": [], "source": []}
+    if rc != 0:
+        return nodos
+    seccion = None
+    for linea in out.splitlines():
+        t = linea.strip()
+        for etiqueta, clave in (("Sinks:", "sink"), ("Sources:", "source")):
+            if t.endswith(etiqueta):
+                seccion = clave
+                break
+        if seccion is None:
+            continue
+        if t.startswith("Streams:") or t.startswith("Filters:") or t.startswith("Devices:"):
+            seccion = None
+            continue
+        # "87. Nombre [vol: 0.53]" o "100. bluez_input... [Audio/Source]"
+        if ". " not in t or "[" not in t:
+            continue
+        cab, cola = t.split(". ", 1)
+        num = "".join(c for c in cab if c.isdigit())
+        if not num:
+            continue
+        nombre = cola[:cola.rindex("[")].strip()
+        nodos[seccion].append({
+            "id": num,
+            "name": nombre,
+            "muted": "MUTED" in cola,
+        })
+    return nodos
+
+
+def sensores():
+    # El estado pasivo de los indicadores sale de privacy-status, que ya existia.
     rc2, out2, _ = esc(os.path.expanduser("~/.local/bin/privacy-status"))
     estado = {}
     if rc2 == 0:
@@ -156,10 +189,16 @@ def sensores():
             estado = json.loads(out2.strip() or "{}")
         except ValueError:
             estado = {}
+    nodos = nodos_audio()
     return {
         "mic": bool(estado.get("mic")),
         "cam": bool(estado.get("cam")),
-        "killed": bool(estado.get("killed")),
+        # El interruptor esta puesto si queda el fichero con los nodos muteados.
+        "killed": os.path.exists(KILL_FILE),
+        "muted_sinks": sum(1 for n in nodos["sink"] if n["muted"]),
+        "muted_sources": sum(1 for n in nodos["source"] if n["muted"]),
+        "total_sinks": len(nodos["sink"]),
+        "total_sources": len(nodos["source"]),
     }
 
 
@@ -197,6 +236,12 @@ def clipboard():
 
 # ── flatpak ─────────────────────────────────────────────────────────────────
 def flatpak():
+    """Apps flatpak con los permisos que tienen concedidos.
+
+    "flatpak info --show-permissions" no lista un permiso por linea, sino una
+    seccion [Context] con linea tipo "shared=ipc;network;", y dentro de cada
+    una van varios valores separados por punto y coma. Hay que partirlos todos.
+    """
     rc, out, _ = esc("flatpak", "list", "--app", "--columns=application")
     if rc != 0:
         return {"apps": [], "count": 0, "available": False}
@@ -208,16 +253,26 @@ def flatpak():
         permisos = []
         rc2, out2, _ = esc("flatpak", "info", "--show-permissions", app)
         if rc2 == 0:
+            en_context = False
             for l in out2.splitlines():
-                s = l.strip()
-                if s.startswith("files="):
-                    permisos.append({"kind": "files", "value": s[6:]})
-                elif s.startswith("socket="):
-                    permisos.append({"kind": "socket", "value": s[7:]})
-                elif s.startswith("device="):
-                    permisos.append({"kind": "device", "value": s[7:]})
-                elif s.startswith("share="):
-                    permisos.append({"kind": "share", "value": s[6:]})
+                t = l.strip()
+                if t.startswith("["):
+                    en_context = (t == "[Context]")
+                    continue
+                if not en_context or "=" not in t:
+                    continue
+                clave, _, valores = t.partition("=")
+                clave = clave.strip()
+                if clave in ("unset-environment", "env", "build", "runtime"):
+                    # no son permisos, son variables de entorno
+                    continue
+                for v in valores.split(";"):
+                    v = v.strip()
+                    if v and v not in ("none",):
+                        revocable = clave in ("shared", "filesystems", "files",
+                                              "features")
+                        permisos.append({"kind": clave, "value": v,
+                                         "revocable": revocable})
         apps.append({"id": app, "permissions": permisos, "count": len(permisos)})
     return {"apps": apps, "count": len(apps), "available": True}
 
@@ -309,40 +364,36 @@ table inet rhythm {
 
     if accion == "firewall-off":
         root("nft", "delete", "table", "inet", "rhythm")
+        # El fichero persistente es de root: sin sudo, PermissionError.
         if os.path.exists("/etc/nftables.d/rhythm.conf"):
-            os.remove("/etc/nftables.d/rhythm.conf")
+            root("rm", "-f", "/etc/nftables.d/rhythm.conf")
         print("cortafuegos quitado: la red vuelve a estar abierta")
         return 0
 
     if accion in ("sensors-kill", "sensors-restore"):
-        destino = os.path.expanduser("~/.config/rhythm/sensors-killed")
+        nodos = nodos_audio()
         if accion == "sensors-kill":
-            rc, out, _ = esc("wpctl", "status")
-            mudados = []
-            for linea in out.splitlines():
-                s = linea.strip()
-                if s.startswith("●"):
-                    sink = s.split()[-1]
-                    esc("wpctl", "set-mute", sink, "1")
-                    mudados.append(sink)
-                elif s.startswith("×") and "Stream" in out:
-                    pass
-            # los sources de captura tambien
-            rc2, out2, _ = esc("wpctl", "status")
-            with open(destino, "w") as f:
-                f.write("\n".join(mudados))
-            print("sensores silenciados: %d" % len(mudados))
+            muteados = []
+            for clave in ("sink", "source"):
+                for n in nodos[clave]:
+                    esc("wpctl", "set-mute", n["id"], "1")
+                    if n["id"] not in muteados:
+                        muteados.append(n["id"])
+            os.makedirs(os.path.dirname(KILL_FILE), exist_ok=True)
+            with open(KILL_FILE, "w") as f:
+                f.write("\n".join(muteados))
+            print("silenciados %d nodos de audio" % len(muteados))
         else:
             try:
-                with open(destino) as f:
-                    mudados = [x for x in f.read().splitlines() if x]
+                with open(KILL_FILE) as f:
+                    muteados = [x for x in f.read().splitlines() if x]
             except OSError:
-                mudados = []
-            for sink in mudados:
-                esc("wpctl", "set-mute", sink, "0")
-            if os.path.exists(destino):
-                os.remove(destino)
-            print("sensores restaurados: %d" % len(mudados))
+                print("no habia ningun interruptor puesto")
+                return 0
+            for nid in muteados:
+                esc("wpctl", "set-mute", nid, "0")
+            os.remove(KILL_FILE)
+            print("restaurados %d nodos de audio" % len(muteados))
         return 0
 
     if accion == "clipboard-clear":
@@ -358,6 +409,70 @@ table inet rhythm {
             return 1
         escribir_clipboard(args[0])
         print("caducidad: %s minutos" % args[0])
+        return 0
+
+    if accion == "flatpak-revoke":
+        # "flatpak override" REEMPLAZA la lista entera de cada categoria, no
+        # añade ni quita un elemento. Asi que para quitar un permiso hay que
+        # reescribir la lista sin el, no poner un "no": con --socket=none se
+        # quedaria sin Wayland y la app no abriria ventana.
+        if len(args) < 3:
+            print("uso: flatpak-revoke <app> <clave> <valor>")
+            return 1
+        app, clave, valor = args[0], args[1], args[2]
+        rc, info, _ = esc("flatpak", "info", "--show-permissions", app)
+        if rc != 0:
+            print("no se pudo leer los permisos de " + app)
+            return 1
+        actuales = {}
+        en_context = False
+        for l in info.splitlines():
+            t = l.strip()
+            if t.startswith("["):
+                en_context = (t == "[Context]")
+                continue
+            if en_context and "=" in t:
+                k, _, v = t.partition("=")
+                actuales[k.strip()] = [x.strip() for x in v.split(";") if x.strip()]
+
+        if clave not in actuales or valor not in actuales[clave]:
+            print("%s no tiene %s=%s" % (app, clave, valor))
+            return 1
+
+        # Comprobado en esta maquina con flatpak 1.x: hay tres categorias que se
+        # pueden quitar y dos que NO.
+        #
+        #   shared      --unshare=      funciona
+        #   filesystems --nofilesystem= funciona
+        #   features    --disallow=     funciona
+        #   sockets     NO hay forma negativa: --socket solo anade, y --socket=none
+        #               no existe en esta version
+        #   devices     igual que sockets
+        #
+        # Poner un boton que revoque un socket y se quede sin hacer nada es peor
+        # que no ponerlo, asi que esas dos categorias lo dicen claramente.
+        if clave in ("sockets", "devices"):
+            print("%s: flatpak no deja quitar %s=%s uno a uno" % (app, clave, valor))
+            print("solo se puede resetear la app con: flatpak override --user --reset " + app)
+            return 1
+
+        if clave == "shared":
+            rc, _, err = esc("flatpak", "override", "--user", app,
+                             "--unshare=" + valor)
+        elif clave in ("filesystems", "files"):
+            rc, _, err = esc("flatpak", "override", "--user", app,
+                             "--nofilesystem=" + valor)
+        elif clave == "features":
+            rc, _, err = esc("flatpak", "override", "--user", app,
+                             "--disallow=" + valor)
+        else:
+            print("esa categoria no se sabe revocar: " + clave)
+            return 1
+
+        if rc != 0:
+            print("flatpak: " + (err or "fallo"))
+            return 1
+        print("%s: %s=%s revocado" % (app, clave, valor))
         return 0
 
     print("accion desconocida: " + accion)

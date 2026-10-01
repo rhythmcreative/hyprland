@@ -394,6 +394,11 @@ ShellRoot {
     // "sin baterias": en un escritorio fijo no tiene que aparecer nada.
     property var batt: null
 
+    // Apps nativas aisladas con bubblewrap. Lo lee isolated-app list, que
+    // devuelve el perfil de cada una: strict (sin red y con la home
+    // reducida), nonet (todo aislado pero con red) u off (sin aislar).
+    property var isoApps: ({ apps: [], count: 0, with_network: 0, without_network: 0 })
+
     // Apps silenciadas: sus notificaciones se descartan al llegar, sin banner ni
     // entrada en el historial. Un app por linea en muted-apps.txt.
     property var mutedApps: []
@@ -550,6 +555,12 @@ ShellRoot {
                 fullscreen: root.fullscreenScreens[screenName] === true,
                 visible: p.visible
             })
+        }
+        function openIsolation(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 0, 8)
+            if (!panel) return "unavailable"
+            isoProc.running = true
+            return "isolation"
         }
         function openBatteries(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 1, 7)
@@ -1084,6 +1095,37 @@ ShellRoot {
         interval: 4000
         repeat: false
         onTriggered: root.battLimitMsg = ""
+    }
+
+    // App Isolation: lee el estado de las apps aisladas. Este bloque es el que
+    // mantiene al dia la tarjeta y el apartado de aislamiento.
+    Process {
+        id: isoProc
+        command: ["bash", "-c", "$HOME/.local/bin/isolated-app list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.isoApps = JSON.parse(text.trim())
+                } catch (e) {}
+            }
+        }
+    }
+
+    // Cambiar el perfil de una app relanza la lectura al terminar, para que los
+    // botones se repinten con el perfil nuevo sin esperar al siguiente tick.
+    Process {
+        id: isoSetProc
+        stdout: StdioCollector {
+            onStreamFinished: isoProc.running = true
+        }
+    }
+
+    Timer {
+        id: isoTimer
+        interval: 4000
+        repeat: true
+        running: true
+        onTriggered: isoProc.running = true
     }
 
     Process {
@@ -3161,6 +3203,54 @@ ShellRoot {
                                         root.runCmd("~/.local/bin/toggle-dnd")
                                     }
                                 }
+
+                    // App Isolation: apps de pacman metidas en bubblewrap, con su
+                    // propia copia de procesos, ficheros y red. La cuenta sale de
+                    // isolated-app, y el apartado de abajo cambia los perfiles.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 54
+                        radius: 14
+                        color: root.colSurface
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+                            Text { text: "󰅓"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 20 }
+                            ColumnLayout {
+                                spacing: 1
+                                Layout.fillWidth: true
+                                Text { text: "App Isolation"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                Text {
+                                    text: (root.isoApps?.count ?? 0) === 0
+                                    ? "No apps registered"
+                                    : ((root.isoApps.count) + " registered · " + (root.isoApps.without_network ?? 0) + " offline · " + (root.isoApps.with_network ?? 0) + " online")
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                    elide: Text.ElideRight; Layout.fillWidth: true
+                                }
+                            }
+                            Rectangle {
+                                width: 1; height: 16
+                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
+                            }
+                            Text {
+                                text: "󰅂"
+                                color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 14
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                islandWin.controlSubView = 8
+                                isoProc.running = true
+                            }
+                        }
+                    }
                             }
                         }
 
@@ -3532,6 +3622,142 @@ ShellRoot {
                             }
                         }
 
+                    }
+
+                    // ── 4. SUBAPARTADO: AISLAMIENTO DE APLICACIONES ──
+                    // Una fila por app aislada con sus tres perfiles. Strict deja
+                    // la app sin red y con la home reducida a sus propias carpetas,
+                    // nonet es lo mismo pero con red, y off la deja sin aislar. El
+                    // cambio lo escribe isolated-app set y relee el JSON al terminar.
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: islandWin.currentTab === 0 && islandWin.controlSubView === 8
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 8; spacing: 6
+                                Text { text: "󰅓"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                Text { text: "App Isolation"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: "bubblewrap · per app"
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
+
+                        Text {
+                            text: (root.isoApps?.count ?? 0) === 0
+                            ? "No apps registered. Add one with: isolated-app add <app> <profile> <folders> <command>"
+                            : "Each app runs in its own namespaces: processes, filesystem and network."
+                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                            wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+
+                        Repeater {
+                            model: root.isoApps?.apps ?? []
+                            delegate: Rectangle {
+                                id: isoRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                height: 78
+                                radius: 12
+                                color: root.colSurface
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Text {
+                                            text: modelData.name
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12; font.weight: Font.Bold
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            text: (modelData.profile === "strict")
+                                            ? "no network"
+                                            : ((modelData.profile === "nonet") ? "isolated, with net" : "not isolated")
+                                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "sees: " + (modelData.data || "no data folders")
+                                        color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                        elide: Text.ElideLeft; Layout.fillWidth: true
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        // Un boton por perfil. El pulsado escribe el perfil y
+                                        // relee la lista, asi que el boton activo se ve solo.
+                                        Repeater {
+                                            model: [
+                                                { key: "strict", label: "Strict" },
+                                                { key: "nonet", label: "With net" },
+                                                { key: "off", label: "Off" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                required property string key
+                                                required property string label
+                                                Layout.fillWidth: true
+                                                height: 30
+                                                radius: 8
+                                                color: modelData.key === isoRow.modelData.profile
+                                                      ? root.colAccent
+                                                      : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: label
+                                                    color: modelData.key === isoRow.modelData.profile ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Bold
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        isoSetProc.command = ["bash", "-c",
+                                                            "$HOME/.local/bin/isolated-app set ' + isoRow.modelData.name + ' '" + modelData.key + "'"]
+                                                        isoSetProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.centerIn: parent; spacing: 6
+                                Text { text: "<- Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
                     }
 
                     // ── 3. SUBSECCIÓN: REDES WI-FI (CONTROL) ──

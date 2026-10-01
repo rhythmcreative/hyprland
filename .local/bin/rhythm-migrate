@@ -6,7 +6,15 @@
 set -euo pipefail
 
 REPO_DIR="${RHYTHM_REPO:-$HOME/hyprland}"
-[ -d "$REPO_DIR/migrations" ] || REPO_DIR="/home/rhythmcreative/hyprland"
+# Antes el fallback era /home/rhythmcreative/hyprland fijo: si el repo no estaba
+# en $HOME/hyprland, las migraciones se leian del repo de otro usuario. Ahora se
+# deduce del sitio donde vive este propio script.
+if [ ! -d "$REPO_DIR/migrations" ]; then
+    _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$_self_repo" ] && [ -d "$_self_repo/migrations" ]; then
+        REPO_DIR="$_self_repo"
+    fi
+fi
 STATE_DIR="$HOME/.local/state/rhythm/migrations"
 mkdir -p "$STATE_DIR"
 

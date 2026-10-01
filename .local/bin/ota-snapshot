@@ -11,7 +11,13 @@ KEEP=5
 HOME_SNAP_BASE="$HOME/.snapshots"
 ROOT_SNAP_BASE="/.snapshots"
 BACKUP_BASE="$HOME/.config.backup"
-REPO_DIR="/home/rhythmcreative/hyprland"
+REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
+if [ ! -d "$REPO_DIR/.git" ]; then
+    _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$_self_repo" ] && [ -d "$_self_repo/.git" ]; then
+        REPO_DIR="$_self_repo"
+    fi
+fi
 
 usage() {
     cat << 'EOF'

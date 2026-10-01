@@ -5,7 +5,25 @@
 
 set -euo pipefail
 
-REPO_DIR="/home/rhythmcreative/hyprland"
+# Repo de los dotfiles.
+#
+# Antes estaba fijo en /home/rhythmcreative/hyprland, sin fallback ni override:
+# cualquier usuario que no se llamara rhythmcreative consultaba y actualizaba
+# desde ESE repo, no desde el suyo. El update hace "cp -f" de los ficheros de
+# ahi hacia ~/.local/bin, asi que el error no era solo de lectura.
+#
+# El instalador clona en el HOME del usuario, que es donde esta de verdad. Se
+# acepta el override por entorno para quien lo clonee en otro sitio.
+REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
+if [ ! -d "$REPO_DIR/.git" ]; then
+    #Segunda opcion: si el usuario clonó el repo en otro nombre, se busca por
+    # el remoto al que apunta este propio script, que es el unico repo de
+    # dotfiles que puede ser.
+    _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$_self_repo" ] && [ -d "$_self_repo/.git" ]; then
+        REPO_DIR="$_self_repo"
+    fi
+fi
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
 STATUS_FILE="/tmp/ota-status.json"
 BACKUP_BASE="$HOME/.config.backup"

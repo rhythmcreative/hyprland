@@ -707,7 +707,15 @@ debug_versions() {
     if [ -n "$ota" ]; then
         echo "system-ota: $ota"
     fi
-    for v in "$HOME/.version" "$(dirname "$BIN_DIR")/.version" "/home/rhythmcreative/hyprland/.version"; do
+    # Antes el tercer candidate era /home/rhythmcreative/hyprland/.version fijo,
+    # asi que un usuario cualquiera acababa leyendo (y al reportar) la version
+    # del repo de otro. Se deduce del repo donde vive este script.
+    local repo_ver=""
+    local self_repo
+    self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -n "$self_repo" ] && repo_ver="$self_repo/.version"
+    for v in "$HOME/.version" "$(dirname "$BIN_DIR")/.version" "$repo_ver"; do
+        [ -n "$v" ] || continue
         if [ -f "$v" ]; then echo "dotfiles version ($v): $(tr -d '[:space:]' < "$v")"; fi
     done
 }

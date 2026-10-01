@@ -25,3 +25,19 @@ __pycache__/
 
 # Estado del overlay y del ledger de materialize. Es de la maquina, no del repo.
 user_edits/
+
+# Ficheros de color que genera pywal y los scripts sync-*.
+#
+# Estaban versionados con los colores del momento en que se escribieron, y el
+# deploy los ponia encima de los que pywal acababa de generar: tras cualquier
+# update los colores volvian a los viejos. Se generan en la maquina.
+.config/gtk-3.0/gtk.css
+.config/gtk-3.0/nm-applet-waybar.css
+.config/gtk-3.0/settings.ini
+.config/gtk-4.0/gtk.css
+.config/gtk-4.0/nm-applet-waybar.css
+.config/gtk-4.0/settings.ini
+.config/rofi/colors-pywal.rasi
+.config/rofi/style-3-pywal.rasi
+.config/mako/config
+.config/waybar/colors-pywal.css

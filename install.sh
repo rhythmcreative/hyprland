@@ -125,7 +125,7 @@ Options:
   -h, --help                 Show this help message and exit
 
 One-line installation:
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+  bash -c "$(curl -fsSL --connect-timeout 10 --max-time 60 https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
 
 Examples:
   ./install.sh --update
@@ -294,6 +294,15 @@ preflight_checks() {
         exit 1
     fi
 
+    # Autenticar una vez aqui para que las ~45 llamadas a sudo que hay mas abajo
+    # no pidan la contrasena una por una. El timestamp de sudo dura 15 minutos y
+    # algunos bloques tardan mas (compilar kernel headers, instalar paquetes AUR),
+    # asi que ademas se refresca antes de cada paso largo.
+    if ! sudo -v; then
+        echo "ERROR: Se necesita autenticacion de sudo para instalar paquetes."
+        exit 1
+    fi
+
     if [ ! -f /etc/arch-release ]; then
         echo "ERROR: This installer is only compatible with Arch Linux."
         exit 1
@@ -337,6 +346,10 @@ install_yay() {
         sudo pacman -S --needed --noconfirm base-devel git >> "$LOG_FILE" 2>&1
         rm -rf /tmp/yay
         git clone https://aur.archlinux.org/yay.git /tmp/yay >> "$LOG_FILE" 2>&1
+        # makepkg puede tardar mas de los 15 minutos del timestamp de sudo, y
+        # al packagear llama a sudo por su cuenta. Refrescar aqui evita que
+        # pida la contrasena a mitad del build.
+        sudo -v
         (cd /tmp/yay && makepkg -si --noconfirm) >> "$LOG_FILE" 2>&1
         rm -rf /tmp/yay
         cd "$DOTFILES_DIR"
@@ -382,6 +395,7 @@ auto_detect_drivers() {
         done
         if [ ${#KERNEL_HEADERS[@]} -gt 0 ]; then
             step_item "Installing matching kernel headers: ${KERNEL_HEADERS[*]}..."
+            sudo -v
             sudo pacman -S --needed --noconfirm "${KERNEL_HEADERS[@]}" >> "$LOG_FILE" 2>&1 || true
         fi
 
@@ -1103,11 +1117,20 @@ step_dotfiles() {
     # reinstalacion se perdia el de nwg-displays: se movia entero a .bak y la
     # comprobacion de "si ya existe" se hacia despues de copiar, cuando el
     # fichero ya no estaba donde tocaba.
+    #
+    # Va a un mktemp y no a ~/.cache: es un temporal de esta sola ejecucion, y
+    # ~/.cache/rhythm-install lo puede borrar cualquier limpieza automatica a
+    # mitad de la instalacion, con lo que el monitors.conf se perderia sin
+    # haber aviso. monitors.conf lo genera nwg-displays y rehacerlo a mano es
+    # lo masmolesto de todo el setup.
     local saved_monitors=""
     if [ -f "$HOME/.config/hypr/monitors.conf" ]; then
-        mkdir -p "$HOME/.cache/rhythm-install"
-        cp -f "$HOME/.config/hypr/monitors.conf" "$HOME/.cache/rhythm-install/monitors.conf.saved"
-        saved_monitors="$HOME/.cache/rhythm-install/monitors.conf.saved"
+        saved_monitors=$(mktemp "/tmp/rhythm-monitors.XXXXXX.conf") || saved_monitors=""
+        if [ -n "$saved_monitors" ]; then
+            cp -f "$HOME/.config/hypr/monitors.conf" "$saved_monitors"
+        else
+            step_warn "No se pudo apartar monitors.conf; se sobrescribira."
+        fi
     fi
 
     step_item "Linking configurations into ~/.config/..."
@@ -1154,7 +1177,14 @@ step_dotfiles() {
     # Restore the saved monitors.conf, if we had one
     if [ -n "$saved_monitors" ] && [ -f "$saved_monitors" ]; then
         cp -f "$saved_monitors" "$HOME/.config/hypr/monitors.conf"
-        step_ok "Preserved existing monitors.conf."
+        # Comprobar que ha llegado entero: si no, se ha perdido la configuracion
+        # de monitores, que es lo mas caro de rehacer de todo el setup.
+        if [ -s "$HOME/.config/hypr/monitors.conf" ]; then
+            step_ok "Preserved existing monitors.conf."
+        else
+            step_warn "monitors.conf quedo vacio al restaurarlo; revisa nwg-displays."
+        fi
+        rm -f "$saved_monitors"
     elif [ -f "$HOME/.config/hypr.bak/monitors.conf" ] && [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
         cp -f "$HOME/.config/hypr.bak/monitors.conf" "$HOME/.config/hypr/monitors.conf"
         step_ok "Preserved existing monitors.conf from backup."
@@ -1325,7 +1355,7 @@ step_wallpapers() {
         elif [[ "$CHOICE" == *"Random"* || "$CHOICE" == "random" ]]; then
             step_item "Downloading 50 random wallpapers (root + Best-Collection)..."
             local TREE_JSON
-            TREE_JSON=$(curl -fsSL "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)
+            TREE_JSON=$(curl -fsSL --connect-timeout 10 --max-time 60 "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)
             local URL_LIST=""
             if [ -n "$TREE_JSON" ] && command -v jq >/dev/null 2>&1; then
                 URL_LIST=$(echo "$TREE_JSON" | jq -r '.tree[]? | select(.type=="blob") | .path | select(startswith("Desktop/Wallpapers/")) | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i")) | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
@@ -1333,7 +1363,7 @@ step_wallpapers() {
             if [ -n "$URL_LIST" ]; then
                 echo "$URL_LIST" | shuf -n 50 | while read -r url; do
                     [ -n "$url" ] || continue
-                    curl -fsSL "$url" -o "$WALL_DIR/$(basename "$url")" >> "$LOG_FILE" 2>&1 || true
+                    curl -fsSL --connect-timeout 10 --max-time 120 "$url" -o "$WALL_DIR/$(basename "$url")" >> "$LOG_FILE" 2>&1 || true
                 done || true
             else
                 step_warn "Could not fetch wallpaper list (API vacia/rate-limit), cloning full collection instead."
@@ -1599,6 +1629,15 @@ if [ "$RESUME_MODE" = true ]; then
     clear_logo
     gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" "Resuming installation"
     if [ -f "$STEP_MARKER" ]; then
+        if grep -qxF "finished" "$STEP_MARKER" 2>/dev/null; then
+            # La instalacion anterior llego a terminarse, asi que --resume no
+            # tiene nada que reanudar. Saltarselo todo haria creer al usuario
+            # que se ha instalado todo, cuando en realidad no se ha ejecutado
+            # ni un solo paso en esta ejecucion.
+            gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "La instalacion anterior ya se completo."
+            gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Ejecuta el instalador sin --resume para instalarlo de verdad."
+            exit 1
+        fi
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Steps already done: $(wc -l < "$STEP_MARKER")"
     else
         gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "No step marker found, so nothing is skipped."

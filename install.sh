@@ -1361,10 +1361,36 @@ step_wallpapers() {
                 URL_LIST=$(echo "$TREE_JSON" | jq -r '.tree[]? | select(.type=="blob") | .path | select(startswith("Desktop/Wallpapers/")) | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i")) | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
             fi
             if [ -n "$URL_LIST" ]; then
-                echo "$URL_LIST" | shuf -n 50 | while read -r url; do
-                    [ -n "$url" ] || continue
-                    curl -fsSL --connect-timeout 10 --max-time 120 "$url" -o "$WALL_DIR/$(basename "$url")" >> "$LOG_FILE" 2>&1 || true
-                done || true
+                # En paralelo, no en serie. Antes era un `while read` con un
+                # curl cada vez: 50 ficheros x ~1 s cada uno = casi un minuto
+                # de reloj, casi todos en espera de red.
+                #
+                # La concurrencia va acotada a proposito (-P 6).Meterle 50 a la
+                # vez no es mas rapido de forma utilizable: GitHub corta por
+                # tasa y acabariaFallando mas descargas que las que ahorra,
+                # y se pelea por el ancho de banda con el resto del instalador.
+                local _wp_urls
+                _wp_urls=$(echo "$URL_LIST" | shuf -n 50)
+                local _wp_n
+                _wp_n=$(echo "$_wp_urls" | grep -c . || true)
+
+                step_item "Downloading $_wp_n wallpapers (6 in parallel)..."
+                export WALL_DIR LOG_FILE
+                # -P 6 en paralelo, -I {} una linea por invocacion, y el cuerpo
+                # va en un `sh -c` para que xargs lo ejecute en un subshell con
+                # las variables del entorno ya exportadas.
+                printf '%s\n' "$_wp_urls" | grep . | xargs -P 6 -I {} sh -c '
+                    url="$1"
+                    dest="$WALL_DIR/$(basename "$url")"
+                    # Descarga a un temporal y renombra al final: si se corta a
+                    # mitad, no queda un .png corrupto que luego parezca bueno.
+                    tmp="$dest.part.$$"
+                    if curl -fsSL --connect-timeout 10 --max-time 120 "$url" -o "$tmp" >>"$LOG_FILE" 2>&1; then
+                        mv -f "$tmp" "$dest"
+                    else
+                        rm -f "$tmp"
+                    fi
+                ' _ {} || true
             else
                 step_warn "Could not fetch wallpaper list (API vacia/rate-limit), cloning full collection instead."
                 rm -rf "$FW_DIR" || true

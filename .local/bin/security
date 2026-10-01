@@ -22,8 +22,11 @@ Las piezas y de donde sale cada una:
   isolation   apps nativas metidas en bubblewrap (lo escribe isolated-app).
 """
 
+import glob
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 
@@ -288,6 +291,198 @@ def isolation():
         return {"apps": [], "count": 0, "with_network": 0, "without_network": 0}
 
 
+# Donde suele guardar cada app sus datos. Se usa para proposing las carpetas al
+# aislarla, en vez de obligar a escribirlas a mano. Solo se montan las que
+# existen de verdad, y ademas las de solo lectura.
+CARPETAS_TIPICAS = [
+    "~/.config/{app}",
+    "~/.config/{app}/*",
+    "~/.cache/{app}",
+    "~/.local/share/{app}",
+    "~/.local/state/{app}",
+    "~/{app}",
+    "~/.mozilla/firefox",
+    "~/.mozilla/firefox/*",
+    "~/.config/BraveSoftware",
+    "~/.config/BraveSoftware/*",
+    "~/.config/chromium",
+    "~/.cache/BraveSoftware",
+    "~/.cache/chromium",
+    "~/.config/TelegramDesktop",
+    "~/.local/share/TelegramDesktop",
+    "~/.var/app/*",
+]
+
+# Apps que necesitan cosas que el aislamiento no da. No se ofrecen para aislar
+# porque se romparian, y es mejor decirlo que dejar un boton que falla.
+NO_AISLAR = {
+    "virtualbox": "needs /dev/kvm and kernel modules",
+    "steam": "manages its own sandbox and its own runtime",
+    "virt-manager": "needs /dev/kvm",
+    "wofi": "is the launcher itself",
+    "rofi": "is the launcher itself",
+    "anyrun": "is the launcher itself",
+    "waybar": "is the bar itself",
+    "quickshell": "is the island itself",
+    "nwg-bar": "is the bar itself",
+    "nwg-panel": "is the bar itself",
+    "xfce4-appfinder": "is the launcher itself",
+    "catfish": "",
+}
+
+# Apps que de verdad conviene aislar: las que tocan la red y datos personales.
+# Las de configuracion del sistema no aportan nada y solo se rompen, asi que no
+# salen en la lista de la isla (pero siguen contando en el total).
+PRIORIDAD = (
+    "brave", "brave-browser", "brave-origin-nightly", "chromium", "chromium-browser",
+    "firefox", "epiphany", "vivaldi", "opera",
+    "telegram-desktop", "vesktop", "discord", "slack", "signal-desktop", "hexchat",
+    "thunderbird", "zapzap", "evolution", "kmail",
+    "kitty", "alacritty", "foot", "ghostty", "wezterm",
+    "syncthing", "nextcloud", "dropbox",
+    "keepassxc", "bitwarden", "org.vaultwarden.desktop",
+)
+
+
+def lanzadores():
+    """Todos los lanzadores graficos de la sesion, con su binario y su origen."""
+    salida = []
+    dirs = ["/usr/share/applications",
+            os.path.expanduser("~/.local/share/applications"),
+            "/var/lib/flatpak/exports/share/applications",
+            os.path.expanduser("~/.local/share/flatpak/exports/share/applications")]
+    vistos = set()
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        for nombre in sorted(os.listdir(d)):
+            if not nombre.endswith(".desktop") or nombre in vistos:
+                continue
+            ruta = os.path.join(d, nombre)
+            try:
+                txt = open(ruta, errors="replace").read()
+            except OSError:
+                continue
+            if re.search(r"^NoDisplay=true", txt, re.M):
+                continue
+            if not re.search(r"^Type=Application", txt, re.M):
+                continue
+            if re.search(r"^Terminal=true", txt, re.M):
+                continue
+            m = re.search(r"^Name=(.+)$", txt, re.M)
+            e = re.search(r"^Exec=(.+)$", txt, re.M)
+            if not e:
+                continue
+            visto = vistos.add(nombre)
+            execs = e.group(1).strip()
+            # el ejecutable es el primer token; si es env, el segundo
+            partes = execs.split()
+            binario = partes[0] if partes else ""
+            if binario == "env" and len(partes) > 1:
+                binario = partes[1]
+            elif binario in ("/usr/bin/env",):
+                binario = partes[1] if len(partes) > 1 else binario
+            salida.append({
+                "desktop": nombre[:-len(".desktop")],
+                "name": m.group(1).strip() if m else nombre,
+                "bin": os.path.basename(binario),
+                "path": binario if binario.startswith("/") else "",
+                "dir": d,
+                "flatpak": "flatpak" in d,
+                "user": d.startswith(os.path.expanduser("~")),
+            })
+    return salida
+
+
+def registro_aislamiento():
+    conf = os.path.expanduser("~/.config/rhythm/isolated-apps.conf")
+    datos = {}
+    if os.path.exists(conf):
+        for linea in open(conf):
+            p = linea.strip().split("|")
+            if len(p) >= 4:
+                datos[os.path.basename(p[0])] = {
+                    "profile": p[1], "data": p[2], "command": p[3]}
+    return datos
+
+
+def propone_carpetas(app):
+    """Carpetas de datos que existen de verdad para esa app."""
+    encontradas = []
+    for patron in CARPETAS_TIPICAS:
+        ruta = os.path.expanduser(patron.format(app=app))
+        if "*" in patron:
+            import glob as _glob
+            for coincidencia in sorted(_glob.glob(ruta)):
+                encontrada = coincidencia
+                if not any(encontrada.startswith(x) for x in encontradas):
+                    encontradas.append(encontrada)
+        elif os.path.isdir(ruta):
+            encontradas.append(ruta)
+    return encontradas
+
+
+def verificadas():
+    """Apps que se han comprobado de verdad con isolated-app test."""
+    marca = os.path.expanduser("~/.config/rhythm/isolated-verified.conf")
+    datos = {}
+    try:
+        for l in open(marca):
+            if "=" in l:
+                k, _, v = l.strip().partition("=")
+                datos[k] = v
+    except OSError:
+        pass
+    return datos
+
+
+def app_audit():
+    registro = registro_aislamiento()
+    apps = []
+    for l in lanzadores():
+        app = l["bin"]
+        if not app or app.startswith("-"):
+            continue
+        entry = registro.get(app)
+        bloqueado = NO_AISLAR.get(app)
+        existe = bool(shutil.which(app)) or os.path.exists(l["path"])
+        verificado = ""
+        if entry:
+            verificado = verificadas().get(app, "")
+        apps.append({
+            "desktop": l["desktop"],
+            "name": l["name"],
+            "bin": app,
+            "flatpak": l["flatpak"],
+            "isolated": entry is not None,
+            "profile": entry["profile"] if entry else "",
+            "no_isolar": bloqueado if bloqueado is not None else "",
+            "exists": existe,
+            "launcher": os.path.exists(os.path.expanduser(
+                "~/.local/share/applications/aislada-%s.desktop" % app)),
+            "verified": verificado,
+        })
+    # sin duplicar por binario
+    unicos = {}
+    for a in apps:
+        unicos.setdefault(a["bin"], a)
+    lista = list(unicos.values())
+    aisladas = sum(1 for a in lista if a["isolated"])
+    prioridad = [a for a in lista
+                 if not a["isolated"] and not a["flatpak"] and not a["no_isolar"]
+                 and any(a["bin"].startswith(p) or a["bin"] == p
+                         for p in PRIORIDAD)]
+    return {
+        "priority": prioridad,
+        "priority_count": len(prioridad),
+        "apps": lista,
+        "total": len(lista),
+        "isolated": aisladas,
+        "not_isolated": len(lista) - aisladas,
+        "flatpak_already": sum(1 for a in lista if a["flatpak"]),
+    }
+
+
 def scan():
     return {
         "hardening": hardening(),
@@ -296,6 +491,7 @@ def scan():
         "clipboard": clipboard(),
         "flatpak": flatpak(),
         "isolation": isolation(),
+        "audit": app_audit(),
     }
 
 
@@ -473,6 +669,87 @@ table inet rhythm {
             print("flatpak: " + (err or "fallo"))
             return 1
         print("%s: %s=%s revocado" % (app, clave, valor))
+        return 0
+
+    if accion == "isolate":
+        # isolate <app> [perfil] : deduce las carpetas de datos, la registra y
+        # escribe el lanzador del menu para que se lance ya aislada.
+        if not args:
+            print("uso: isolate <app> [strict|nonet|off]")
+            return 1
+        app = args[0]
+        perfil = args[1] if len(args) > 1 else "nonet"
+        if perfil not in ("strict", "nonet", "off"):
+            print("perfil no valido: " + perfil)
+            return 1
+        if app in NO_AISLAR:
+            print("%s no se aísla: %s" % (app, NO_AISLAR[app]))
+            return 1
+        if not (shutil.which(app) or any(a["bin"] == app for a in lanzadores())):
+            print("no encuentro el binario " + app)
+            return 1
+        carpetas = propone_carpetas(app)
+        orden = app
+        # Los navegadores abren directorios que estan en la home, asi que sin
+        # darlos la app arranca pero no puede leer ni escribir nada.
+        for extra in ("~/Downloads", "~/Documents", "~/Pictures", "~/Videos",
+                      "~/Music", "~/Desktop"):
+            ruta = os.path.expanduser(extra)
+            if os.path.isdir(ruta) and not any(ruta in c for c in carpetas):
+                carpetas.append(ruta)
+        rc, _, err = esc(os.path.expanduser("~/.local/bin/isolated-app"), "add",
+                         app, perfil, ";".join(carpetas), orden)
+        if rc != 0:
+            print("isolated-app: " + (err or "fallo"))
+            return 1
+        rc2, _, _ = esc(os.path.expanduser("~/.local/bin/isolated-app"), "desktop", app)
+        print("%s aislada (%s), %d carpetas" % (app, perfil, len(carpetas)))
+        if rc2 != 0:
+            print("ojo: no hay .desktop para %s, aislado solo desde la terminal" % app)
+        return 0
+
+    if accion == "unisolate":
+        if not args:
+            print("uso: unisolate <app>")
+            return 1
+        app = args[0]
+        esc(os.path.expanduser("~/.local/bin/isolated-app"), "remove", app)
+        lanz = os.path.expanduser("~/.local/share/applications/aislada-%s.desktop" % app)
+        if os.path.exists(lanz):
+            os.remove(lanz)
+        print("%s ya no está aislada" % app)
+        return 0
+
+    if accion == "verify":
+        # verify <app> : lanza el chequeo de isolated-app test dentro de la
+        # sandbox y guarda si aguanta, para que la isla no diga "funciona" a
+        # algo que en realidad no se ha podido abrir nunca.
+        if not args:
+            print("uso: verify <app>")
+            return 1
+        app = args[0]
+        marca = os.path.expanduser("~/.config/rhythm/isolated-verified.conf")
+        os.makedirs(os.path.dirname(marca), exist_ok=True)
+        rc, out, _ = esc(os.path.expanduser("~/.local/bin/isolated-app"), "test", app)
+        lineas = {}
+        try:
+            for l in open(marca):
+                if "=" in l:
+                    k, _, v = l.strip().partition("=")
+                    lineas[k] = v
+        except OSError:
+            pass
+        if rc == 0 and out.strip():
+            lineas[app] = "ok"
+            print("%s: aguanta la sandbox" % app)
+            for l in out.splitlines():
+                print("  " + l.strip())
+        else:
+            lineas[app] = "fallo"
+            print("%s: NO aguanta la sandbox" % app)
+        with open(marca, "w") as f:
+            for k, v in lineas.items():
+                f.write("%s=%s\n" % (k, v))
         return 0
 
     print("accion desconocida: " + accion)

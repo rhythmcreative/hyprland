@@ -15,3 +15,13 @@ __pycache__/
 # como si fueran scripts de verdad.
 *.bak-*
 *.bak
+
+# Overrides del usuario. No deben entrar en el repo nunca: si user.lua o
+# user.conf estan versionados, el update los despliega y machaca lo que el
+# usuario tenga ahi, que es justo lo que el overlay de user_edits evita.
+# El .example si se versiona, para que se vea como se usa.
+.config/hypr/user.lua
+.config/kitty/user.conf
+
+# Estado del overlay y del ledger de materialize. Es de la maquina, no del repo.
+user_edits/

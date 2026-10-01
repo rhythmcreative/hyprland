@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# rhythm-materialize: despliega la config base del repo y encima las
+# ediciones del usuario, sin perder unas ni otras.
+#
+# El modelo, dos arboles:
+#
+#   base        ~/.config            lo envia el repo, se re-pone entero
+#   user_edits  ~/.local/state/rhythm/user_edits   disperso, solo lo tuyo
+#
+# El overlay se aplica AL FINAL, asi que un fichero ahi gana en su ruta espejo.
+# Hyprland carga la base y despues user.lua; kitty globincluye user.conf. La
+# base esta debajo, asi que un bind nuevo de arriba te llega igual, y el tuyo
+# gana en lo que pone.
+#
+# Lo que mas importa: si editas A MANO un fichero que el repo envia, esto lo
+# nota. Los bytes no coinciden ni con lo que se puso la ultima vez ni con lo
+# que envia el repo, asi que antes de pisar copia ese fichero al overlay como
+# fork y avisa. No se pierde trabajo nunca.
+#
+#   rhythm-materialize            despliega
+#   rhythm-materialize --dry-run  dice que haria, no toca nada
+#   rhythm-materialize --status   solo informa
+
+set -uo pipefail
+
+MODE="${1:-apply}"
+DRY=0
+case "$MODE" in
+    --dry-run) DRY=1 ;;
+    --status)  MODE=status ;;
+esac
+
+REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
+if [ ! -d "$REPO_DIR/.git" ]; then
+    _self=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -n "$_self" ] && REPO_DIR="$_self"
+fi
+
+OVERLAY="$HOME/.local/state/rhythm/user_edits"
+LEDGER="$HOME/.local/state/rhythm/materialized.ledger"
+
+COPIED=0; SKIPPED=0; FORKED=0; APPLIED=0
+
+if [ "$DRY" = 1 ]; then echo "(dry-run: no se escribe nada)"; fi
+run() { if [ "$DRY" = 1 ]; then echo "  haria: $*"; else "$@" 2>/dev/null; fi; }
+
+# Si un fichero ya desplegado cambio respecto a lo que se puso la ultima vez,
+# es edicion del usuario: se copia al overlay antes de pisarlo.
+rescatar_edicion() {
+    local live="$1" shipped="$2" rel="$3"
+    [ -f "$live" ] || return 0
+    # El ledger es un DIRECTORIO con una copia de lo que se puso. `[ -f ]` sobre un
+# directorio siempre es falso, con lo que esta guarda hacia fuera y nunca se
+# rescataba ninguna edicion.
+[ -d "$LEDGER" ] || return 0
+
+    local previo="$LEDGER/$rel"
+    [ -f "$previo" ] || return 0
+
+    # Igual a lo de la ultima vez: no es edicion suya.
+    cmp -s "$live" "$previo" && return 0
+    # Ya esta en el overlay: otro fork anterior, no duplicar.
+    [ -f "$OVERLAY/$rel" ] && return 0
+
+    mkdir -p "$(dirname "$OVERLAY/$rel")" 2>/dev/null
+    if [ "$DRY" = 1 ]; then
+        echo "  AVISO: $rel lo editaste a mano, se guardaria como fork en el overlay"
+    elif cp -p "$live" "$OVERLAY/$rel" 2>/dev/null; then
+        printf '  fork: %s (tu edicion guardada en el overlay)\n' "$rel"
+        FORKED=$((FORKED+1))
+    fi
+}
+
+registrar() {
+    [ "$DRY" = 1 ] && return 0
+    mkdir -p "$(dirname "$LEDGER/$1")" 2>/dev/null
+    cp -p "$2" "$LEDGER/$1" 2>/dev/null || true
+}
+
+# ── .config ──────────────────────────────────────────────────────────────────
+desplegar_config() {
+    local src="$REPO_DIR/.config"
+    [ -d "$src" ] || return 0
+    mkdir -p "$HOME/.config"
+
+    local item name rel target
+    for item in "$src"/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        rel=".config/$name"
+        target="$HOME/.config/$name"
+
+        if [ -d "$item" ]; then
+            # Directorio: Fusionar fichero a fichero, para no replaces lo que
+            # solo existe en el destino.
+            mkdir -p "$target"
+            local f
+            for f in "$item"/*; do
+                [ -f "$f" ] || continue
+                local relf="$rel/$(basename "$f")"
+                if [ -f "$target/$(basename "$f")" ]; then
+                    if cmp -s "$f" "$target/$(basename "$f")"; then
+                        SKIPPED=$((SKIPPED+1)); continue
+                    fi
+                    # Rescatar ANTES de sobrescribir: en cuanto se copia el
+                    # fichero del repo, la edicion del usuario ya no esta en
+                    # ningun sitio y no hay forma de compararla con el ledger.
+                    rescatar_edicion "$target/$(basename "$f")" "$f" "$relf"
+                fi
+                run cp -f "$f" "$target/$(basename "$f")"
+                registrar "$relf" "$target/$(basename "$f")"
+            done
+        else
+            if [ -f "$target" ]; then
+                if cmp -s "$item" "$target"; then
+                    SKIPPED=$((SKIPPED+1))
+                    continue
+                fi
+                rescatar_edicion "$target" "$item" "$rel"
+            fi
+            run cp -f "$item" "$target"
+            registrar "$rel" "$target"
+        fi
+        COPIED=$((COPIED+1))
+    done
+}
+
+# ── overlay ──────────────────────────────────────────────────────────────────
+aplicar_overlay() {
+    [ -d "$OVERLAY" ] || return 0
+    # El overlay se espeja sobre ~/.config entero, y los forks viven a
+    # user_edits/.config/... Es decir, hay que recorrer TODO el arbol con
+    # `find`, no solo un nivel: un recorrido de un nivel encuentra
+    # user_edits/.config y se queda ahi, sin aplicar nada.
+    local f rel
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        # /…/user_edits/<algo>  ->  <algo> bajo ~/.config
+        rel="${f#"$OVERLAY"/}"
+        case "$rel" in
+            .config/*) ;;
+            .local/bin/*) ;;
+            *) continue ;;
+        esac
+        mkdir -p "$HOME/$(dirname "$rel")" 2>/dev/null
+        run cp -f "$f" "$HOME/$rel"
+        APPLIED=$((APPLIED+1))
+    done < <(find "$OVERLAY" -type f 2>/dev/null)
+}
+
+# ── .local/bin ───────────────────────────────────────────────────────────────
+desplegar_bin() {
+    local src="$REPO_DIR/.local/bin"
+    [ -d "$src" ] || return 0
+    mkdir -p "$HOME/.local/bin"
+    local f
+    for f in "$src"/*; do
+        [ -f "$f" ] || continue
+        run cp -f "$f" "$HOME/.local/bin/$(basename "$f")"
+        run chmod 755 "$HOME/.local/bin/$(basename "$f")"
+        COPIED=$((COPIED+1))
+    done
+}
+
+# ── informacion ──────────────────────────────────────────────────────────────
+estado() {
+    echo "user_edits: $OVERLAY"
+    if [ -d "$OVERLAY" ]; then
+        local n
+        n=$(find "$OVERLAY" -type f 2>/dev/null | wc -l)
+        echo "  $n fichero(s) de override:"
+        find "$OVERLAY" -type f 2>/dev/null | sed "s|$OVERLAY/|    |"
+    else
+        echo "  (vacio: todo lo que hay en ~/.config viene del repo)"
+    fi
+
+    echo
+    echo "ledger: $LEDGER"
+    if [ -f "$LEDGER" ]; then
+        echo "  $(find "$LEDGER" -type f 2>/dev/null | wc -l) fichero(s) registrados"
+    else
+        echo "  (vacio: es la primera vez que se despliega)"
+    fi
+}
+
+case "$MODE" in
+    status) estado ;;
+    *)
+        if [ "$MODE" != "--status" ]; then
+            desplegar_config
+            desplegar_bin
+            aplicar_overlay
+            echo "materialize: $COPIED del repo, $SKIPPED sin cambios, $APPLIED del overlay"
+            [ "$FORKED" -gt 0 ] && echo "materialize: $FORKED edicion(es) tuyas guardada(s) como fork"
+        fi
+        ;;
+esac

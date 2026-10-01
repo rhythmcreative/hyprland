@@ -1,0 +1,29 @@
+-- user.lua: tus cambios al compositor.
+--
+-- Este fichero NO viene del repo, así que el update no lo toca. Se carga AL
+-- FINAL de hyprland.lua, de modo que todo lo de la base sigue funcionando y lo
+-- que escribas aquí gana en lo que overlaps.
+--
+-- Ventaja frente a editar hyprland.lua directamente: si sustituyes ese
+-- fichero por una copia tuya, dejas de recibir los binds, reglas y ajustes que
+-- el repo añada. Con esto, un bind nuevo del repo te sigue llegando y solo
+-- pierdes el control de lo que escribes aquí.
+--
+-- Ejemplos (comenta los que no Uses):
+--
+--   -- Un atajo nuevo. El modificador principal es SUPER.
+--   hl.bind("SUPER + RETURN", hl.dsp.exec("kitty -e zsh"), { desc = "Terminal" })
+--
+--   -- Quitar un atajo que trae la base: se re-declara apuntando a nada.
+--   hl.bind("SUPER + Q", hl.dsp.nop(), { desc = "desactivado" })
+--
+--   -- Una regla de ventana.
+--   hl.rule({ match = { class = "firefox" }, border_size = 3 })
+--
+--   -- Una animacion distinta para tu gusto.
+--   hl.animation({ leaf = "windows", enabled = true, speed = 3, bezier = "easeOutQuint" })
+--
+-- Estos ejemplos estan comentados a proposito: un user.lua vacio no cambia
+-- nada, y asi el escritorio arranca exactamente igual que sin el.
+
+print("[hyprland] user.lua cargado (sin cambios: todo comentado)")

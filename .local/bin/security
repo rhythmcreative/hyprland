@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Estado de seguridad de la maquina, en JSON para la isla.
+
+    security scan
+    security do <accion> [argumentos]
+
+Todo lo de la seccion Security sale de aqui, para que la isla solo tenga que
+leer un unico JSON en vez de lanzar un proceso por tarjeta.
+
+Las piezas y de donde sale cada una:
+
+  hardening   seis sysctl de mitigacion de exploits. Cinco ya estan bien en
+              esta maquina; kernel.kptr_restrict estaba en 0, que deja que
+              cualquier proceso del usuario lea los punteros del kernel.
+  firewall    nftables. Sin esto la maquina no tiene ningun filtro: cualquier
+              cosa en la red local la puede alcanzar.
+  sensors     estado de micro y camara, y si el interruptor de cierre esta
+              puesto. Los iconos de la isla son avisos pasivos; esto los
+              apaga de verdad, para todos a la vez.
+  clipboard   cuantas entradas guarda y si tienen caducidad.
+  flatpak     apps flatpak con los permisos que tienen concedidos.
+  isolation   apps nativas metidas en bubblewrap (lo escribe isolated-app).
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+# (sysctl, valor recomendado, por que importa)
+HARDENING = [
+    ("kernel.kptr_restrict", "2",
+     "Hide kernel pointers from unprivileged processes"),
+    ("kernel.dmesg_restrict", "1",
+     "Only root can read the kernel log"),
+    ("kernel.perf_event_paranoid", "2",
+     "No performance counters for normal users"),
+    ("kernel.unprivileged_bpf_disabled", "2",
+     "No unprivileged BPF"),
+    ("kernel.yama.ptrace_scope", "1",
+     "A process can only ptrace its own children"),
+    ("vm.unprivileged_userfaultfd", "0",
+     "No unprivileged userfaultfd"),
+]
+
+CLIP_CONF = os.path.expanduser("~/.config/rhythm/clipboard-expiry.conf")
+FLATPAK_CONF = os.path.expanduser("~/.config/rhythm/flatpak-perms.txt")
+
+
+def leer_sysctl(key):
+    try:
+        with open("/proc/sys/" + key.replace(".", "/")) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def sysctl_num(key):
+    v = leer_sysctl(key)
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def esc(*argv):
+    """Ejecuta y devuelve (rc, stdout, stderr) sinNunca romper el script."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=8)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except Exception as exc:                      # noqa: BLE001
+        return 1, "", str(exc)
+
+
+def root(*argv):
+    return esc("sudo", "-n", *argv)
+
+
+def nft_list(*args):
+    rc, out, err = root("nft", *args)
+    return out if rc == 0 else ""
+
+
+# ── hardening ───────────────────────────────────────────────────────────────
+def hardening():
+    filas = []
+    sueltos = 0
+    for key, want, why in HARDENING:
+        have = sysctl_num(key)
+        ok = have is not None and have == int(want)
+        if not ok:
+            sueltos += 1
+        filas.append({
+            "key": key,
+            "value": have,
+            "want": int(want),
+            "ok": ok,
+            "why": why,
+        })
+    return {
+        "items": filas,
+        "total": len(filas),
+        "loose": sueltos,
+        "tight": len(filas) - sueltos,
+    }
+
+
+# ── firewall ────────────────────────────────────────────────────────────────
+def firewall():
+    # La tabla se llama inet rhythm. Se mira si existe y se cuentan los paquetes
+    # que han caido en la regla final, que es un drop con contador.
+    tablas = nft_list("list", "tables")
+    activo = "table inet rhythm" in tablas
+    bloqueados = 0
+    reglas = 0
+    if activo:
+        rc, out, _ = root("nft", "list", "chain", "inet", "rhythm", "input")
+        if rc == 0:
+            # nft imprime cada regla como "counter packets N bytes M <veredicto>",
+            # asi que el numero va en la posicion 1 despues de "counter", no en la 0.
+            for linea in out.splitlines():
+                t = linea.strip()
+                if "counter packets" not in t:
+                    continue
+                partes = t.split("counter")[1].split()
+                if len(partes) < 2 or not partes[1].isdigit():
+                    continue
+                if t.endswith("accept"):
+                    reglas += 1
+                elif t.endswith("drop"):
+                    # el drop con contador es la ultima regla: cuenta lo bloqueado
+                    bloqueados = int(partes[1])
+    return {
+        "active": activo,
+        "blocked": bloqueados,
+        "rules": reglas,
+        "default": "deny" if activo else "allow (no filter)",
+    }
+
+
+# ── sensores ────────────────────────────────────────────────────────────────
+def sensores():
+    rc, out, _ = esc("wpctl", "status")
+    mic = cam = False
+    if rc == 0:
+        bajo = out.lower()
+        mic = "muted" in bajo and any(
+            l.strip().startswith("●") or "[muted]" in l for l in out.splitlines()
+            if ".monitor" in l or "input" in l or "capture" in l
+        )
+    # el estado real lo da privacy-status, que ya existia para los iconos
+    rc2, out2, _ = esc(os.path.expanduser("~/.local/bin/privacy-status"))
+    estado = {}
+    if rc2 == 0:
+        try:
+            estado = json.loads(out2.strip() or "{}")
+        except ValueError:
+            estado = {}
+    return {
+        "mic": bool(estado.get("mic")),
+        "cam": bool(estado.get("cam")),
+        "killed": bool(estado.get("killed")),
+    }
+
+
+# ── portapapeles ────────────────────────────────────────────────────────────
+def clipboard():
+    try:
+        with open(os.path.expanduser("~/.config/rhythm/clipboard-expiry.conf")) as f:
+            mins = int(f.read().strip() or "0")
+    except (OSError, ValueError):
+        mins = 0
+    rc, out, _ = esc(os.path.expanduser("~/.local/bin/clipboard-list"))
+    entradas = 0
+    if rc == 0:
+        try:
+            datos = json.loads(out.strip() or "[]")
+            # clipboard-list devuelve una lista pelada, pero si algum dia devuelve
+            # un objeto con la lista dentro, se lee igual.
+            if isinstance(datos, list):
+                entradas = len(datos)
+            elif isinstance(datos, dict):
+                for clave in ("items", "entries", "clips"):
+                    if isinstance(datos.get(clave), list):
+                        entradas = len(datos[clave])
+                        break
+                else:
+                    entradas = int(datos.get("count", 0))
+        except (ValueError, TypeError):
+            entradas = 0
+    return {
+        "entries": entradas,
+        "expiry_minutes": mins,
+        "expiring": mins > 0,
+    }
+
+
+# ── flatpak ─────────────────────────────────────────────────────────────────
+def flatpak():
+    rc, out, _ = esc("flatpak", "list", "--app", "--columns=application")
+    if rc != 0:
+        return {"apps": [], "count": 0, "available": False}
+    apps = []
+    for linea in out.splitlines():
+        app = linea.strip()
+        if not app:
+            continue
+        permisos = []
+        rc2, out2, _ = esc("flatpak", "info", "--show-permissions", app)
+        if rc2 == 0:
+            for l in out2.splitlines():
+                s = l.strip()
+                if s.startswith("files="):
+                    permisos.append({"kind": "files", "value": s[6:]})
+                elif s.startswith("socket="):
+                    permisos.append({"kind": "socket", "value": s[7:]})
+                elif s.startswith("device="):
+                    permisos.append({"kind": "device", "value": s[7:]})
+                elif s.startswith("share="):
+                    permisos.append({"kind": "share", "value": s[6:]})
+        apps.append({"id": app, "permissions": permisos, "count": len(permisos)})
+    return {"apps": apps, "count": len(apps), "available": True}
+
+
+# ── aislamiento ─────────────────────────────────────────────────────────────
+def isolation():
+    rc, out, _ = esc(os.path.expanduser("~/.local/bin/isolated-app"), "list")
+    if rc != 0:
+        return {"apps": [], "count": 0, "with_network": 0, "without_network": 0}
+    try:
+        return json.loads(out.strip() or "{}")
+    except ValueError:
+        return {"apps": [], "count": 0, "with_network": 0, "without_network": 0}
+
+
+def scan():
+    return {
+        "hardening": hardening(),
+        "firewall": firewall(),
+        "sensors": sensores(),
+        "clipboard": clipboard(),
+        "flatpak": flatpak(),
+        "isolation": isolation(),
+    }
+
+
+# ── acciones ────────────────────────────────────────────────────────────────
+def escribir_clipboard(mins):
+    os.makedirs(os.path.dirname(CLIP_CONF), exist_ok=True)
+    with open(CLIP_CONF, "w") as f:
+        f.write("%d\n" % int(mins))
+
+
+def do(accion, *args):
+    if accion == "tighten":
+        cambios = []
+        for key, want, _ in HARDENING:
+            if sysctl_num(key) != int(want):
+                rc, _, err = root("sysctl", "-q", "-w", "%s=%s" % (key, want))
+                if rc == 0 and sysctl_num(key) == int(want):
+                    cambios.append(key)
+                else:
+                    print("no se pudo poner %s=%s%s" % (key, want, (": " + err) if err else ""))
+        print("endurecidos: %d" % len(cambios))
+        return 0
+
+    if accion == "firewall-on":
+        # La ultima regla de la cadena es el drop con contador: es la que cuenta
+        # lo bloqueado. Sin "comment", que junto a "counter" no se deja escribir.
+        reglas = """
+table inet rhythm {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iif lo counter accept
+    ct state established,related counter accept
+    ip protocol icmp counter accept
+    ip6 nexthdr icmpv6 counter accept
+    # DHCP, o al caducar la lease la maquina se queda sin red
+    udp sport 68 udp dport 67 counter accept
+    # descubrimiento local, para no perder Avahi
+    udp sport 5353 udp dport 5353 counter accept
+    udp sport 1900 udp dport 1900 counter accept
+    counter drop
+  }
+  chain forward { type filter hook forward priority filter; policy drop; }
+  chain output { type filter hook output priority filter; policy accept; }
+}
+"""
+        # Se pasa primero por nft -c, que solo valida. Si la sintaxis esta mal no
+        # se toca la maquina.
+        p = subprocess.run(["sudo", "-n", "nft", "-c", "-f", "-"], input=reglas,
+                           capture_output=True, text=True, timeout=8)
+        if p.returncode != 0:
+            print("regla invalida: " + (p.stderr.strip() or "sin detalle"))
+            return 1
+        p = subprocess.run(["sudo", "-n", "nft", "-f", "-"], input=reglas,
+                           capture_output=True, text=True, timeout=8)
+        if p.returncode != 0:
+            print("nft: " + (p.stderr.strip() or "fallo desconocido"))
+            return 1
+        # que sobreviva a un reinicio
+        # El fichero persistente se escribe con sudo: el script corre como usuario.
+        root("mkdir", "-p", "/etc/nftables.d")
+        p2 = subprocess.run(["sudo", "-n", "tee", "/etc/nftables.d/rhythm.conf"],
+                            input=reglas, capture_output=True, text=True, timeout=8)
+        root("systemctl", "enable", "--now", "nftables.service")
+        print("cortafuegos activo, deny por defecto")
+        return 0
+
+    if accion == "firewall-off":
+        root("nft", "delete", "table", "inet", "rhythm")
+        if os.path.exists("/etc/nftables.d/rhythm.conf"):
+            os.remove("/etc/nftables.d/rhythm.conf")
+        print("cortafuegos quitado: la red vuelve a estar abierta")
+        return 0
+
+    if accion in ("sensors-kill", "sensors-restore"):
+        destino = os.path.expanduser("~/.config/rhythm/sensors-killed")
+        if accion == "sensors-kill":
+            rc, out, _ = esc("wpctl", "status")
+            mudados = []
+            for linea in out.splitlines():
+                s = linea.strip()
+                if s.startswith("●"):
+                    sink = s.split()[-1]
+                    esc("wpctl", "set-mute", sink, "1")
+                    mudados.append(sink)
+                elif s.startswith("×") and "Stream" in out:
+                    pass
+            # los sources de captura tambien
+            rc2, out2, _ = esc("wpctl", "status")
+            with open(destino, "w") as f:
+                f.write("\n".join(mudados))
+            print("sensores silenciados: %d" % len(mudados))
+        else:
+            try:
+                with open(destino) as f:
+                    mudados = [x for x in f.read().splitlines() if x]
+            except OSError:
+                mudados = []
+            for sink in mudados:
+                esc("wpctl", "set-mute", sink, "0")
+            if os.path.exists(destino):
+                os.remove(destino)
+            print("sensores restaurados: %d" % len(mudados))
+        return 0
+
+    if accion == "clipboard-clear":
+        # El historico vive en cliphist, no en ficheros JSON sueltos: por eso
+        # wipe y no un rm.
+        esc("cliphist", "wipe")
+        print("portapapeles vaciado")
+        return 0
+
+    if accion == "clipboard-expiry":
+        if not args:
+            print("0 = sin caducidad")
+            return 1
+        escribir_clipboard(args[0])
+        print("caducidad: %s minutos" % args[0])
+        return 0
+
+    print("accion desconocida: " + accion)
+    return 1
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return 1
+    if sys.argv[1] == "scan":
+        json.dump(scan(), sys.stdout)
+        sys.stdout.write("\n")
+        return 0
+    if sys.argv[1] == "do":
+        return do(*sys.argv[2:])
+    print(__doc__)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

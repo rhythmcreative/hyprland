@@ -65,6 +65,38 @@ PACMAN_INSTALL=()
 FLATPAK_INSTALL=()
 SET_ZSH=true
 UPDATE_MODE=false
+RESUME_MODE=false
+# Marca de pasos completados, para poder reanudar una instalacion que se corto.
+# Antes no existia: al volver a ejecutar el instalador empezaba otra vez desde el
+# principio, y el sincronizador de dotfiles movia cada carpeta a .bak y ponia la
+# del repo encima, con lo que una segunda ejecucion destruia el .bak bueno y
+# cualquier cambio local que no estuviera en el repo.
+STEP_MARKER="${XDG_CACHE_HOME:-$HOME/.cache}/rhythm-install.steps"
+
+# Devuelve 0 si el paso ya se completo en una ejecucion anterior y estamos
+# reanudando.
+step_done() {
+    [ "$RESUME_MODE" = true ] || return 1
+    [ -f "$STEP_MARKER" ] || return 1
+    grep -qxF "$1" "$STEP_MARKER" 2>/dev/null
+}
+
+# Anota un paso como completado.
+mark_step() {
+    mkdir -p "$(dirname "$STEP_MARKER")" 2>/dev/null || return 0
+    grep -qxF "$1" "$STEP_MARKER" 2>/dev/null || printf '%s\n' "$1" >> "$STEP_MARKER"
+}
+
+# Envoltorio de un paso: si estamos reanudando y ya se hizo, se salta.
+run_step() {
+    local nombre="$1"; shift
+    if step_done "$nombre"; then
+        section "$nombre (skipped: already done)"
+        return 0
+    fi
+    "$@"
+    mark_step "$nombre"
+}
 
 show_help() {
     cat << 'EOF'
@@ -86,6 +118,10 @@ Options:
   --skip-flatpaks            Skip Flatpak package installation
   --skip-apps                Skip optional application selection menu
   --replace-configs-all      Directly overwrite existing configs without .bak backups
+  --resume                   Continue an interrupted install: steps already done
+                             are skipped, and configs that are already identical
+                             to the repo are left alone instead of being backed
+                             up and overwritten
   -h, --help                 Show this help message and exit
 
 One-line installation:
@@ -93,6 +129,7 @@ One-line installation:
 
 Examples:
   ./install.sh --update
+  ./install.sh --resume
   ./install.sh --preview
   ./install.sh -y --no-reboot --skip-wallpapers
   ./install.sh --gpu nvidia --wallpapers random
@@ -104,6 +141,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -u|--update|update)
             UPDATE_MODE=true
+            shift
+            ;;
+        --resume|resume)
+            RESUME_MODE=true
             shift
             ;;
         -y|--yes)
@@ -1057,28 +1098,64 @@ step_dotfiles() {
     
     cd "$DOTFILES_DIR"
 
+    # El monitors.conf se aparta antes de tocar nada y se vuelve a poner al final.
+    # Antes solo se restauraba si no existia ya, y como el repo no lo trae, en una
+    # reinstalacion se perdia el de nwg-displays: se movia entero a .bak y la
+    # comprobacion de "si ya existe" se hacia despues de copiar, cuando el
+    # fichero ya no estaba donde tocaba.
+    local saved_monitors=""
+    if [ -f "$HOME/.config/hypr/monitors.conf" ]; then
+        mkdir -p "$HOME/.cache/rhythm-install"
+        cp -f "$HOME/.config/hypr/monitors.conf" "$HOME/.cache/rhythm-install/monitors.conf.saved"
+        saved_monitors="$HOME/.cache/rhythm-install/monitors.conf.saved"
+    fi
+
     step_item "Linking configurations into ~/.config/..."
+    local synced=0 skipped=0 backed=0
     for item in .config/*; do
         [ -e "$item" ] || continue
         local name
         name=$(basename "$item")
         local target="$HOME/.config/$name"
-        
+
         if [ -e "$target" ]; then
+            # Si ya es identico a lo del repo, no se toca. Esto es lo que
+            # hace que reanudar una instalacion cortada no destroce nada: la
+            # mayoria ya estan desplegadas y son iguales.
+            if diff -rq "$item" "$target" >/dev/null 2>&1; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
             if [ "$REPLACE_CONFIGS_ALL" = true ]; then
                 rm -rf "$target"
             else
-                rm -rf "$target.bak"
-                mv "$target" "$target.bak"
+                # El .bak anterior NO se borra. Se le añade la fecha, para que
+                # al reanudar no se pierda el .bak de la instalacion
+                # anterior: antes un "rm -rf .bak" hacia que en la segunda
+                # ejecucion el .bak fuera una copia de los dotfiles, que no
+                # sirve para deshacer nada.
+                local stamp
+                stamp=$(date +%Y%m%d-%H%M%S)
+                if [ -e "$target.bak" ]; then
+                    mv "$target" "$target.bak-$stamp"
+                else
+                    mv "$target" "$target.bak"
+                fi
+                backed=$((backed + 1))
             fi
         fi
-        
-        cp -r "$DOTFILES_DIR/.config/$name" "$target"
-    done
-    step_ok "Config files synchronized."
 
-    # Restore existing monitors.conf if backed up, or generate default
-    if [ -f "$HOME/.config/hypr.bak/monitors.conf" ] && [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
+        cp -r "$DOTFILES_DIR/.config/$name" "$target"
+        synced=$((synced + 1))
+    done
+    step_ok "Config files synchronized ($synced deployed, $skipped already in place, $backed backed up)."
+
+    # Restore the saved monitors.conf, if we had one
+    if [ -n "$saved_monitors" ] && [ -f "$saved_monitors" ]; then
+        cp -f "$saved_monitors" "$HOME/.config/hypr/monitors.conf"
+        step_ok "Preserved existing monitors.conf."
+    elif [ -f "$HOME/.config/hypr.bak/monitors.conf" ] && [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
         cp -f "$HOME/.config/hypr.bak/monitors.conf" "$HOME/.config/hypr/monitors.conf"
         step_ok "Preserved existing monitors.conf from backup."
     elif [ ! -f "$HOME/.config/hypr/monitors.conf" ]; then
@@ -1518,16 +1595,29 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
+if [ "$RESUME_MODE" = true ]; then
+    clear_logo
+    gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" "Resuming installation"
+    if [ -f "$STEP_MARKER" ]; then
+        gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Steps already done: $(wc -l < "$STEP_MARKER")"
+    else
+        gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "No step marker found, so nothing is skipped."
+    fi
+    echo ""
+fi
+
 preflight_checks
 check_existing_installation
-install_yay
-first_run_choices
+run_step "aur-helper" install_yay
+run_step "software-choices" first_run_choices
 
-step_software
-step_applications
-step_dotfiles
-step_wallpapers
-step_system
+run_step "software" step_software
+run_step "applications" step_applications
+run_step "dotfiles" step_dotfiles
+run_step "wallpapers" step_wallpapers
+run_step "system" step_system
+
+mark_step "finished"
 
 # Calibrate colors
 if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then

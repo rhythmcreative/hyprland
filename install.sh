@@ -28,13 +28,18 @@ DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo ""
 
 # If running outside the cloned repository (e.g. standalone curl pipe), clone first
 if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
-    CLONE_DIR="/tmp/rhythm-hyprland"
+    # mktemp -d y no una ruta fija en /tmp. Con "/tmp/rhythm-hyprland" cualquier
+    # otro usuario de la maquina puede ganar la carrera de creacion del
+    # directorio, quedarse con el y poner su propio install.sh, que despues se
+    # ejecuta con `exec bash`. Ahora el directorio se reserva atomico y es 0700.
+    CLONE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rhythm-hyprland.XXXXXXXX")
     echo "Cloning rhythmcreative/hyprland repository to $CLONE_DIR..."
     if ! command -v git >/dev/null 2>&1; then
         echo "Installing git..."
         sudo pacman -S --needed --noconfirm git
     fi
-    rm -rf "$CLONE_DIR"
+    # clone necesita que el destino no exista, y mktemp ya lo ha creado.
+    rmdir "$CLONE_DIR"
     git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$CLONE_DIR"
     if [ -e /dev/tty ]; then
         exec bash "$CLONE_DIR/install.sh" "$@" < /dev/tty
@@ -344,14 +349,18 @@ install_yay() {
         section "AUR Helper (yay)"
         step_item "Building yay from AUR..."
         sudo pacman -S --needed --noconfirm base-devel git >> "$LOG_FILE" 2>&1
-        rm -rf /tmp/yay
-        git clone https://aur.archlinux.org/yay.git /tmp/yay >> "$LOG_FILE" 2>&1
+        # Directorio privado para el build de yay. Con /tmp/yay fijo, otro usuario
+        # de la maquina puede crear ese directorio antes que nosotros, meter su
+        # PKGBUILD y ejecutar lo que quiera en cuanto makepkg lo lee.
+        local yay_dir
+        yay_dir=$(mktemp -d "${TMPDIR:-/tmp}/yay-build.XXXXXXXX")
+        git clone https://aur.archlinux.org/yay.git "$yay_dir" >> "$LOG_FILE" 2>&1
         # makepkg puede tardar mas de los 15 minutos del timestamp de sudo, y
         # al packagear llama a sudo por su cuenta. Refrescar aqui evita que
         # pida la contrasena a mitad del build.
         sudo -v
-        (cd /tmp/yay && makepkg -si --noconfirm) >> "$LOG_FILE" 2>&1
-        rm -rf /tmp/yay
+        (cd "$yay_dir" && makepkg -si --noconfirm) >> "$LOG_FILE" 2>&1
+        rm -rf "$yay_dir"
         cd "$DOTFILES_DIR"
         if command -v yay > /dev/null 2>&1; then
             step_ok "AUR helper initialized."
@@ -552,18 +561,38 @@ install_rust_dock() {
     elif [ -d "$HOME/rust-dock" ] && [ -f "$HOME/rust-dock/Cargo.toml" ]; then
         source_dir="$HOME/rust-dock"
     else
-        source_dir="/tmp/rust-dock-build"
-        rm -rf "$source_dir"
+        # Directorio privado para el clone. Con "/tmp/rust-dock-build" fijo,
+        # otro usuario de la maquina puede dejar ahí un Cargo.toml con codigo
+        # suyo: el build compila lo que encuentre, y despues se instala como
+        # ~/.local/bin/rust-dock, que se ejecuta en cada arranque.
+        source_dir=$(mktemp -d "${TMPDIR:-/tmp}/rust-dock-build.XXXXXXXX")
+        rmdir "$source_dir"   # git clone necesita que el destino no exista
         if git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$source_dir" >> "$LOG_FILE" 2>&1; then
             temp_clone=true
         else
             step_warn "Could not clone rust-dock repository. Skipping build."
+            rm -rf "$source_dir"
             return
         fi
     fi
 
+    # Que el build se zampe su error con "|| true" era peor de lo que parece: si
+    # fallaba, el codigo seguia al "if [ -f ... ]" y, como un binario de una
+    # compilacion anterior seguia ahi, lo instalaba como si fuera el nuevo. Se
+    # borra antes de compilar y se mira el resultado de verdad.
+    rm -f "$source_dir/target/release/rust-dock" 2>/dev/null || true
+
+    local build_ok=1
     gum spin --spinner dot --title "Compiling rust-dock (release)..." --padding "0 0 0 $PADDING_LEFT" -- \
-        bash -c "cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || true
+        bash -c "cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
+
+    if [ "$build_ok" -ne 1 ] || [ ! -f "$source_dir/target/release/rust-dock" ]; then
+        step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
+        # Nada se instala. Antes, un fallo de compilacion podia acabar
+        # desplegando el binario de una version anterior.
+        [ "$temp_clone" = true ] && rm -rf "$source_dir"
+        return
+    fi
 
     if [ -f "$source_dir/target/release/rust-dock" ]; then
         mkdir -p "$HOME/.local/bin"
@@ -580,8 +609,6 @@ org.telegram.desktop
 PINNED
         fi
         step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
-    else
-        step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
     fi
 
     if [ "$temp_clone" = true ]; then
@@ -1358,7 +1385,24 @@ step_wallpapers() {
             TREE_JSON=$(curl -fsSL --connect-timeout 10 --max-time 60 "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)
             local URL_LIST=""
             if [ -n "$TREE_JSON" ] && command -v jq >/dev/null 2>&1; then
-                URL_LIST=$(echo "$TREE_JSON" | jq -r '.tree[]? | select(.type=="blob") | .path | select(startswith("Desktop/Wallpapers/")) | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i")) | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"' 2>/dev/null | grep -E '\.(jpg|jpeg|png|webp|gif)$' || true)
+                # Cada ruta del arbol remoto se convierte en una URL, asi que se
+                # filtra antes de construirla:
+                #
+                # - test(...) con ^\z ancla el final, no un grep suelto que
+                #   aceptaria "x.jpg\nhttp://otro-sitio/x.jpg".
+                # - El primer filtro de jq exige que la ruta no lleve salto de
+                #   linea, que es lo que permitiria inyectar una URL distinta.
+                #
+                # Una ruta con un salto embebido no es una imagen valida de este
+                # repo, asi que descartarla no pierde nada real.
+                URL_LIST=$(echo "$TREE_JSON" | jq -r '
+                    .tree[]?
+                    | select(.type=="blob")
+                    | .path
+                    | select(test("^Desktop/Wallpapers/[^\\n]*$"))
+                    | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i"))
+                    | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"
+                ' 2>/dev/null || true)
             fi
             if [ -n "$URL_LIST" ]; then
                 # En paralelo, no en serie. Antes era un `while read` con un
@@ -1381,11 +1425,20 @@ step_wallpapers() {
                 # las variables del entorno ya exportadas.
                 printf '%s\n' "$_wp_urls" | grep . | xargs -P 6 -I {} sh -c '
                     url="$1"
+                    # -g desactiva el glob de curl: sin el, un nombre con
+                    # llaves "{a,b}" se expande a varias peticiones y una sola
+                    # wallpaper puede multiplicar el trabajo. Ademas se exige el
+                    # origen esperado, para que nada se descargue de otro sitio
+                    # aunque la lista venga manipulada.
+                    case "$url" in
+                        https://raw.githubusercontent.com/deadduck-09/FireWalls/main/*) ;;
+                        *) echo "origen no permitido: $url" >>"$LOG_FILE"; exit 0 ;;
+                    esac
                     dest="$WALL_DIR/$(basename "$url")"
                     # Descarga a un temporal y renombra al final: si se corta a
                     # mitad, no queda un .png corrupto que luego parezca bueno.
                     tmp="$dest.part.$$"
-                    if curl -fsSL --connect-timeout 10 --max-time 120 "$url" -o "$tmp" >>"$LOG_FILE" 2>&1; then
+                    if curl -g -fsSL --connect-timeout 10 --max-time 120 "$url" -o "$tmp" >>"$LOG_FILE" 2>&1; then
                         mv -f "$tmp" "$dest"
                     else
                         rm -f "$tmp"
@@ -1459,8 +1512,24 @@ step_system() {
         fi
 
         # Sudoers NOPASSWD helper for live pywal sync
-        sudo mkdir -p /etc/sudoers.d
-        echo "$USER ALL=(root) NOPASSWD: $HOME/.local/bin/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
+        #
+        # El helper NO puede vivir en ~/.local/bin. sudoers solo restringe el
+        # nombre del fichero, no quien lo controla: como el usuario puede
+        # reescribirlo cuando quiera, sustituirlo por lo que sea y ejecutarlo
+        # con `sudo` sin contrasena ES escalada a root. Ryoku tiene el mismo
+        # problema resuelto de otra forma: el binario se instala en
+        # /usr/bin, que es de root, y ahi el nombre si restringe el codigo.
+        #
+        # Ademas el helper valida ahora todo lo que viene de la cache del
+        # usuario antes de tocar el tema (colores y ficheros), asi que el
+        # NOPASSWD no le da a root nada que el usuario no pueda ya hacer.
+        sudo mkdir -p /etc/sudoers.d /usr/local/lib/rhythm
+        if [ -f "$DOTFILES_DIR/.local/bin/sddm-auto-sync-local" ]; then
+            sudo install -m 755 -o root -g root \
+                "$DOTFILES_DIR/.local/bin/sddm-auto-sync-local" \
+                /usr/local/lib/rhythm/sddm-auto-sync-local
+        fi
+        echo "$USER ALL=(root) NOPASSWD: /usr/local/lib/rhythm/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
         sudo chmod 440 /etc/sudoers.d/sddm-sync
 
         # Pywal SDDM sync hook

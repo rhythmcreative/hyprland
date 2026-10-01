@@ -41,7 +41,7 @@ enable_powersave() {
     fi
 
     # 4. Set kitty background opacity to 1.0 for solid dark terminal (no background bleed)
-    for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
+    for kconf in "$HOME/.config/kitty/kitty.conf"; do
         if [ -f "$kconf" ]; then
             sed -i 's/background_opacity [0-9.]*/background_opacity 1.0/' "$kconf" 2>/dev/null || true
         fi
@@ -93,7 +93,7 @@ disable_powersave() {
     fi
 
     # 4. Restore kitty background opacity to 0.85
-    for kconf in "$HOME/.config/kitty/kitty.conf" "/home/rhythmcreative/.config/kitty/kitty.conf"; do
+    for kconf in "$HOME/.config/kitty/kitty.conf"; do
         if [ -f "$kconf" ]; then
             sed -i 's/background_opacity [0-9.]*/background_opacity 0.85/' "$kconf" 2>/dev/null || true
         fi

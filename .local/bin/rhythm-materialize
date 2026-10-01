@@ -222,7 +222,16 @@ case "$MODE" in
             desplegar_bin
             aplicar_overlay
             echo "materialize: $COPIED del repo, $SKIPPED sin cambios, $APPLIED del overlay"
-            [ "$FORKED" -gt 0 ] && echo "materialize: $FORKED edicion(es) tuyas guardada(s) como fork"
+            # Con `&&` al final de la linea, cuando no hay forks el test es
+            # falso y el case se cierra con codigo 1. system-ota lee ese
+            # codigo, lo contaba como despliegue fallido y任何一个 update
+            # acababa avisando de problemas aunque todo estuviera bien.
+            if [ "$FORKED" -gt 0 ]; then
+                echo "materialize: $FORKED edicion(es) tuyas guardada(s) como fork"
+            fi
         fi
         ;;
 esac
+
+# Sin forks que rescatar, el despliegue fue correcto: sale 0 siempre.
+exit 0

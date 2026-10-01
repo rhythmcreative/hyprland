@@ -5,9 +5,9 @@
 
 echo "Iniciando sincronización completa del sistema de colores..."
 
-# First, update waybar colors if pywal colors have changed
+# Primero, actualizar los colores de waybar si pywal ha cambiado
 echo "Actualizando colores de waybar..."
-if [[ -f "$HOME/.local/bin/sync-waybar-pywal" ]]; then
+if [ -f "$HOME/.local/bin/sync-waybar-pywal" ]; then
     "$HOME/.local/bin/sync-waybar-pywal"
 else
     # Solo si sync-waybar-pywal no existe, hacer un reinicio simple
@@ -21,19 +21,23 @@ else
     fi
 fi
 
-# Reload dunst with new pywal colors
+# Recargar dunst con los nuevos colores de pywal
+#
+# Este bloque solo se ejecutaba si habia dunst instalado; en este equipo las
+# notificaciones son de mako, asi que en la practica nunca llego a correr. Por
+# eso el fallo de abajo llevaba tiempo sin verse.
 echo "Recargando dunst con nuevos colores..."
-if [[ -f "$HOME/.config/dunst/scripts/reload-dunst.sh" ]]; then
-    "$HOME/.config/dunst/scripts/reload-dunst.sh" &
-    dunst_pid=$!
-    # Esperar máximo 8 segundos para dunst
-    if timeout 8 wait $dunst_pid 2>/dev/null; then
-        echo "Dunst sincronizado exitosamente"
-    else
+if [ -f "$HOME/.config/dunst/scripts/reload-dunst.sh" ]; then
+    # OJO: `wait` es un builtin del shell, no un binario, asi que
+    # `timeout 8 wait $pid` no puede funcionar: timeout responde
+    # "failed to run command 'wait': No such file or directory" y sale 127.
+    # Para acotar la espera hay que darsela al propio wait con su flag -n, o
+    # dejar que el comando corra sin limite: timeout no puede envolver un builtin.
+    timeout 8 "$HOME/.config/dunst/scripts/reload-dunst.sh"
+    if [ $? -eq 124 ]; then
         echo "Dunst sync continuando en segundo plano..."
-        disown $dunst_pid 2>/dev/null || true
     fi
-elif [[ -f "$HOME/.config/wal/done.d/dunst-restart.sh" ]]; then
+elif [ -f "$HOME/.config/wal/done.d/dunst-restart.sh" ]; then
     "$HOME/.config/wal/done.d/dunst-restart.sh" &
     disown
     echo "Dunst recarga iniciada con script de pywal"

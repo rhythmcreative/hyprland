@@ -5,6 +5,8 @@
 #   battery-charge-limit 80           pone el limite al 80 % en todas
 #   battery-charge-limit 80 BAT1      solo en BAT1
 #   battery-charge-limit off          quita el limite (100 %)
+#   battery-charge-limit --apply      reaplica el limite guardado en
+#                                     ~/.config/rhythm/battery-limit.conf
 #
 # Se escribe en /sys/class/power_supply/BAT*/charge_control_end_threshold, que es
 # la interfaz del kernel y funciona en cualquier portatil que la soporte, sin
@@ -19,6 +21,19 @@
 
 set -u
 BASE="/sys/class/power_supply"
+
+# Fichero con el limite elegido desde la isla, que --apply vuelve a poner.
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/battery-limit.conf"
+
+# Lee charge_limit de ese fichero. Acepta "80", "off", "max"... con o sin
+# espacios alrededor del "=", que es como lo puede haber escrito a mano.
+leer_conf() {
+    [ -r "$CONF" ] || return 1
+    local v
+    v=$(sed -n 's/^[[:space:]]*charge_limit[[:space:]]*=[[:space:]]*//p' "$CONF" | head -n1)
+    [ -n "$v" ] || return 1
+    printf '%s' "$v"
+}
 
 baterias() {
     for d in "$BASE"/BAT*; do
@@ -40,6 +55,44 @@ if [ $# -eq 0 ]; then
         printf '%s\t%s\n' "$b" "${lim:-sin limite}"
     done
     exit 0
+fi
+
+# --apply: reaplica el limite guardado en el conf.
+#
+# El kernel no guarda charge_control_end_threshold entre arranques, asi que al
+# reiniciar vuelve a 100. rhythm-battery-limit.service llama a esto en cada
+# arranque para volver a dejar el limite como estaba.
+#
+# A proposito NO hace falta ningun argumento mas: lo lee todo del conf. Si se
+# pasara el valor por aqui, la unidad tendria que duplicar la ruta del fichero
+# y podrian desincronizarse.
+if [ "${1:-}" = "--apply" ]; then
+    if ! pct=$(leer_conf); then
+        # Sin conf no hay nada que reaplicar. No es un fallo: recien instalar,
+        # o si el usuario todavia no ha elegido limite. Salir 0 para que la
+        # unidad no se quede en failed y ensucie `systemctl --failed`.
+        echo "battery-charge-limit: sin $CONF, nada que aplicar" >&2
+        exit 0
+    fi
+
+    # Se normaliza con las mismas reglas que un argumento normal, para que un
+    # conf con "off" o "95" se comporten igual que escribiendolo a mano.
+    case "$pct" in
+        off|off-|max|full|100) pct=100 ;;
+        [0-9]*) ;;
+        *) echo "battery-charge-limit: valor no valido en $CONF: $pct" >&2; exit 1 ;;
+    esac
+    if [ "$pct" -lt 20 ] 2>/dev/null || [ "$pct" -gt 100 ] 2>/dev/null; then
+        echo "battery-charge-limit: el limite va de 20 a 100" >&2
+        exit 1
+    fi
+
+    targets=$(baterias)
+    if [ -z "$targets" ]; then
+        echo "battery-charge-limit: no hay baterias" >&2
+        exit 1
+    fi
+    set -- "$pct" $targets
 fi
 
 # Reejecucion con privilegios: este guion reejecutandose a si mismo con

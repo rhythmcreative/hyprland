@@ -1,10 +1,12 @@
 [Unit]
 Description=Night Light gamma ramp (hyprsunset)
 Documentation=man:hyprsunset(1)
-# hyprsunset habla con Hyprland por su socket: sin graphical-session delante
-# puede fallar en un login recien arrancado.
-After=graphical-session.target
-PartOf=graphical-session.target
+# Sin After= ni PartOf= contra graphical-session.target: en esta maquina ese
+# target esta inactivo, asi que no sirve para ordenar nada, y PartOf= era un
+# riesgo: si algo tocara ese target, apagaria la luz. El que hace de red de
+# seguridad es el timer del horario, que cada minuto comprueba y relanza esto si
+# no esta activo. Medido: recovers en 40 s.
+StartLimitIntervalSec=0
 
 [Service]
 Type=exec

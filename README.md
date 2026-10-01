@@ -216,7 +216,6 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + F` | Interactive keybindings cheatsheet |
 | `Super + X` | Quick compositor settings |
 | `Super + A` | Application launcher |
-| `Super + R` | Run command | Rofi command runner |
 | `Super + E` | File manager (Thunar) |
 | `Super + Q` | Close focused window |
 | `Super + BackSpace` | Power menu (reboot / shutdown / sleep) |
@@ -237,7 +236,6 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + N` | Wi-Fi menu | Select and connect to networks |
 | `Super + B` | Bluetooth menu | Pair and connect devices |
 | `Super + A` | Application launcher | Rofi grid launcher |
-| `Super + R` | Run command | Rofi command runner |
 | `Super + E` | File manager | Opens Thunar |
 | `Super + Q` | Close window | Closes focused window |
 | `Super + W` | Toggle floating | Switches between tiled and floating |

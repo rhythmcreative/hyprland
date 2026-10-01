@@ -61,7 +61,6 @@ SUPER + N                 │ Wi-Fi Network Menu               │ Network
 SUPER + B                 │ Bluetooth Devices Menu           │ Network
 SUPER + SHIFT + N         │ Notification Center              │ System
 SUPER + A                 │ Application Launcher             │ Rofi
-SUPER + R                 │ Run Command                      │ Rofi
 SUPER + E                 │ File Manager (Thunar)            │ Files
 SUPER + Q                 │ Close Active Window              │ Window
 SUPER + W                 │ Toggle Floating Window           │ Window
@@ -142,9 +141,6 @@ if [ -n "$selected" ]; then
             ;;
         *"SUPER + A"*)
             "$HOME/.local/bin/rofi-style3-monitor-adaptive" &
-            ;;
-        *"SUPER + R"*)
-            "$HOME/.local/bin/adaptive-rofi" run &
             ;;
         *"SUPER + E"*)
             thunar &

@@ -60,6 +60,58 @@ fi
 
 export QT_QPA_PLATFORM="wayland"
 
+# HYPRLAND_INSTANCE_SIGNATURE
+#
+# El lanzador ya resolvia el socket de Wayland, pero no la firma de Hyprland, y
+# por eso la isla corria con CERO variables HYPRLAND_*. Eso no hacia falta para
+# pintar la isla, pero si para todo lo que la isla lanza: cada Process que
+# quickshell crea hereda su entorno, asi que cualquier script que use hyprctl
+# (island-fullscreens, wallpaper-apply, background-health...) recibe
+# "HYPRLAND_INSTANCE_SIGNATURE not set!" y falla en silencio. De ahi que la
+# transicion del fondo saliera solo en el panel interno, o que la isla no se
+# ocultara con un video a pantalla completa.
+#
+# No se puede declarar en la unidad: la firma cambia en cada sesion y la unidad
+# no se entera de cual es. Se espera igual que se espera la pantalla, y si
+# Hyprland no aparece se arranca igualmente: la isla tiene que salir aunque el
+# compositor no este, porque si no no habria forma de recuperarlo desde ella.
+buscar_firma() {
+    local d s
+    # Se recorre en orden de mas reciente a mas antiguo (ls -t), no con el glob:
+    # la firma tiene forma hash_pid_arranque, asi que el glob las ordenaria por
+    # una firma vieja sin borrar, el orden no garantiza nada. En un login nuevo
+    # puede haber una firma vieja sin borrar y hay que quedarse con la ultima.
+    for d in $(ls -t "$XDG_RUNTIME_DIR"/hypr/ 2>/dev/null); do
+        [ -d "$XDG_RUNTIME_DIR/hypr/$d" ] || continue
+        s="$d"
+        [ -n "$s" ] || continue
+        # Hyprland crea el directorio antes de tener los sockets, asi que
+        # fijarse solo en el nombre daria una firma que todavia no existe.
+        [ -S "$XDG_RUNTIME_DIR/hypr/$d.socket2.sock" ] || continue
+        printf '%s\n' "$s"
+        return 0
+    done
+    return 1
+}
+
+esperar_firma() {
+    local i
+    for ((i = 1; i <= 60; i++)); do
+        if HYPRLAND_INSTANCE_SIGNATURE="$(buscar_firma)"; then
+            export HYPRLAND_INSTANCE_SIGNATURE
+            [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
+if HYPRLAND_INSTANCE_SIGNATURE="$(buscar_firma)"; then
+    export HYPRLAND_INSTANCE_SIGNATURE
+elif ! esperar_firma; then
+    echo "quickshell-island: aviso, no se encontro la firma de Hyprland; hyprctl no funcionara en la isla" >&2
+fi
+
 # Si corre bajo un servicio systemd activo y se invoco manualmente, delegar reinicio
 if [ -z "$INVOCATION_ID" ] && systemctl --user is-active waybar-island.service >/dev/null 2>&1; then
     exec systemctl --user restart waybar-island.service

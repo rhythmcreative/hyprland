@@ -568,6 +568,14 @@ ShellRoot {
         }
         // Abre el apartado de aislamiento de aplicaciones.
         // Abre la seccion Security.
+        // Abre cualquier combinacion de pestana y subapartado. Sirve para
+        // probarlos todos sin tener que hacer clic, que es como se revisan.
+        function openSub(screenName: string, tab: int, sub: int): string {
+            let panel = root.setPanelState(screenName, true, tab, sub)
+            if (!panel) return "unavailable"
+            secProc.running = true
+            return "tab " + tab + " sub " + sub
+        }
         function openSecurity(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 4, 0)
             if (!panel) return "unavailable"
@@ -3688,7 +3696,12 @@ ShellRoot {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 10
-                        visible: islandWin.currentTab === 0 && islandWin.controlSubView === 8
+                        // Se abre desde Control y tambien desde Security, asi que la comprobacion
+                        // de la pestana admite las dos. Con currentTab === 0 a secas
+                        // el boton de la tarjeta de Security no hacia nada: el panel se
+                        // quedaba vacio porque ningun contenedor se drawaba.
+                        visible: (islandWin.currentTab === 0 || islandWin.currentTab === 4)
+                                 && islandWin.controlSubView === 8
 
                         Rectangle {
                             Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
@@ -3815,6 +3828,167 @@ ShellRoot {
                             }
                         }
                     }
+
+                    // ── 5. SUBAPARTADO: PERMISOS DE FLATPAK ──
+                    // Los cuatro apps de flatpak con sus permisos, y boton para revocar los que
+                    // flatpak deja quitar. Los de sockets y devices no se pueden quitar uno a
+                    // uno (no hay forma negativa en flatpak 1.x), asi que salen sin boton en vez
+                    // de un boton que no haria nada.
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        // Se abre desde Control y tambien desde Security, asi que la comprobacion
+                        // de la pestana admite las dos. Con currentTab === 0 a secas
+                        // el boton de la tarjeta de Security no hacia nada: el panel se
+                        // quedaba vacio porque ningun contenedor se drawaba.
+                        visible: (islandWin.currentTab === 0 || islandWin.currentTab === 4)
+                                 && islandWin.controlSubView === 9
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 8; spacing: 6
+                                Text { text: "󰆠"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                Text { text: "Flatpak Permissions"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: (root.sec?.flatpak?.count ?? 0) + " apps"
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
+
+                        Text {
+                            text: "Flatpak already runs each app inside its own sandbox. "
+                                  + "These are the extra permissions each one has been granted."
+                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+
+                        Repeater {
+                            model: root.sec?.flatpak?.apps ?? []
+                            delegate: Rectangle {
+                                id: fpRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                // El alto sale del ColumnLayout de dentro. Con un Flow dentro no habria
+                                // forma de calcularlo: un Flow no declara implicitHeight, y las
+                                // tarjetas se solapaban unas con otras. Por eso los permisos van como
+                                // texto envuelto y lo revocable son botones, no chips.
+                                height: fpCol.implicitHeight + 20
+                                radius: 12
+                                color: root.colSurface
+
+                                // Si la app tiene ese permiso, y si ademas se puede quitar.
+                                function tiene(clave, valor) {
+                                    for (let i = 0; i < (modelData.permissions || []).length; i++) {
+                                        let p = modelData.permissions[i]
+                                        if (p.kind === clave && p.value === valor) return p.revocable
+                                    }
+                                    return false
+                                }
+
+                                function lista() {
+                                    let out = []
+                                    for (let i = 0; i < (modelData.permissions || []).length; i++) {
+                                        let p = modelData.permissions[i]
+                                        out.push(p.kind + "=" + p.value)
+                                    }
+                                    return out.join("  ·  ")
+                                }
+
+                                ColumnLayout {
+                                    id: fpCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 10
+                                    spacing: 7
+
+                                    Text {
+                                        text: fpRow.modelData.id
+                                        color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11; font.weight: Font.Bold
+                                        elide: Text.ElideRight; Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: fpRow.lista()
+                                        color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 9
+                                        wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        // Solo los que flatpak deja quitar de verdad. Los sockets y
+                                        // los devices no salen: no hay forma de revocarlos uno a uno
+                                        // en flatpak 1.x, y un boton que no hace nada es peor que no
+                                        // tenerlo.
+                                        Repeater {
+                                            model: [
+                                                { kind: "shared", value: "network", label: "Revoke network" },
+                                                { kind: "filesystems", value: "host", label: "Revoke host files" },
+                                                { kind: "features", value: "devel", label: "Revoke devel" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                visible: fpRow.tiene(modelData.kind, modelData.value)
+                                                Layout.preferredWidth: revokeTxt.implicitWidth + 20
+                                                height: 28
+                                                radius: 8
+                                                color: Qt.rgba(224, 167, 92, 0.14)
+                                                border.width: 1
+                                                border.color: Qt.rgba(224, 167, 92, 0.35)
+
+                                                Text {
+                                                    id: revokeTxt
+                                                    anchors.centerIn: parent
+                                                    text: modelData.label
+                                                    color: "#e0a75c"
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9; font.weight: Font.Bold
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        secActProc.command = ["bash", "-c",
+                                                            "$HOME/.local/bin/security do flatpak-revoke "
+                                                            + fpRow.modelData.id + " "
+                                                            + modelData.kind + " " + modelData.value]
+                                                        secActProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.centerIn: parent; spacing: 6
+                                Text { text: "<- Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
+                    }
+
 
                     // ── 3. SUBSECCIÓN: REDES WI-FI (CONTROL) ──
                     ColumnLayout {

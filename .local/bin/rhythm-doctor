@@ -188,9 +188,29 @@ check_local_edits() {
     [ "$diverged" -eq 0 ] && ok "sin ediciones locales en .config/hypr"
 }
 
+# El greeter de SDDM vive en /usr y /etc, que el update NO sincroniza (solo
+# ~/.config y ~/.local/bin). Sin esta comprobacion, un despliegue a medias
+# pasava desapercibido: el sddm.conf del sistema apuntando al start-hyprland de
+# siempre, sin envoltorio y sin cursor, mientras el repo ya traia la
+# plantilla nueva.
+check_greeter() {
+    if [ ! -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
+        bad "rhythm-sddm-deploy no esta en ~/.local/bin; el greeter no se puede desplegar"
+        return
+    fi
+    local out
+    out=$("$HOME/.local/bin/rhythm-sddm-deploy" --check 2>&1)
+    local rc=$?
+    echo "$out" | sed 's/^/  /'
+    if [ "$rc" -ne 0 ]; then
+        warn "el greeter de SDDM no coincide con el repo: sudo ~/.local/bin/rhythm-sddm-deploy"
+    fi
+}
+
 echo
 check_xsetup
 check_delivery
+check_greeter
 check_state_separation
 check_local_edits
 

@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+# Despliega las piezas de SISTEMA del greeter de SDDM.
+#
+# POR QUE EXISTE ESTE SCRIPT Y NO ESTA EN EL INSTALLER
+# ---------------------------------------------------
+# El login se pinta con tres ficheros que NO viven en ~/.config, sino en /usr y
+# en /etc:
+#
+#   /usr/local/lib/rhythm/sddm-greeter-monitor   el envoltorio que decide que
+#                                                 salida se enciende
+#   /usr/share/sddm/hyprland.lua                  la plantilla que ese
+#                                                 envoltorio rellena
+#   /etc/sddm.conf.d/10-wayland.conf              quien llama al envoltorio
+#   /etc/systemd/system/sddm.service.d/cursor.conf  el tema de cursor del login
+#
+# El installer los desplegaba, pero el OTA no: rhythm-materialize solo sincroniza
+# ~/.config y ~/.local/bin. O sea que tras una actualizacion, el sddm.conf
+# seguia apuntando al start-hyprland de siempre y las tres piezas nuevas se
+# quedaban a medias, que es peor que no tenerlas: el repositorio ya trae la
+# plantilla con la marca de monitor, pero el sddm.conf deployed no la usa.
+#
+# Este script es el unico sitio que escribe esos cuatro ficheros, y lo usan los
+# dos caminos: el installer y el OTA. Una sola fuente de verdad.
+#
+# USO
+#   rhythm-sddm-deploy            aplica
+#   rhythm-sddm-deploy --check    solo compara con lo desplegado (sin sudo, lo
+#                                 puede llamar rhythm-doctor)
+#
+# CONFIANZA
+# ---------
+# Copia ficheros del repo, que es del usuario, a rutas de root. install.sh ya lo
+# hacia con el mismo repo, asi que no se abre ninguna capacidad nueva: quien
+# pueda escribir en el repo ya podia escalar ejecutando el installer. Lo que si
+# se evita es hacerlo en segundo plano desde un timer sin que nadie lo pidiera,
+# asi que --check es lo que el doctor usa para avisar, no un despliegue
+# automatico.
+
+set -uo pipefail
+
+# El repo puede llegar como argumento, no solo por el entorno. Tiene que ser un
+# argumento porque al re-ejecutarse con sudo se pierde el entorno y el HOME pasa
+# a ser /root: con RHYTHM_DOTFILES_DIR en el entorno, sudo lo borra y el script
+# iba a buscar las plantillas en /root/hyprland, que no existe. Se vio:
+# desplegaba los conf y decia que faltaban el envoltorio y la plantilla.
+#
+#   rhythm-sddm-deploy [repo]            aplica
+#   rhythm-sddm-deploy [repo] --check    solo compara (sin sudo)
+REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
+modo_check=0
+for arg in "$@"; do
+    case "$arg" in
+        --check) modo_check=1 ;;
+        "") ;;
+        *) REPO_DIR="$arg" ;;
+    esac
+done
+[ -d "$REPO_DIR/sddm" ] || REPO_DIR="$HOME/hyprland"
+
+# El log tiene que quedarse en el home del usuario, no en el de root, que es
+# donde cae si el script se re-ejecuta con sudo.
+LOGHOME="$HOME"
+if [ -n "${SUDO_USER:-}" ]; then
+    _h=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
+    [ -n "$_h" ] && LOGHOME="$_h"
+    unset _h
+fi
+[ -d "$LOGHOME" ] || LOGHOME=/tmp
+LOG="$LOGHOME/.cache/rhythm-sddm-deploy.log"
+log() { mkdir -p "$(dirname "$LOG")" 2>/dev/null; echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$LOG" >&2; }
+
+# ── ajustes que el usuario puede cambiar ─────────────────────────────────────
+#
+# Tema de cursor del login. Ha de ser un NOMBRE de tema instalado en
+# /usr/share/icons, no una ruta: el greeter corre como root y en su propia VT, y
+# su compositor es el suyo, asi que no ve nada de la sesion.
+#
+# Variantes zurdas de Bibata: Bibata-Modern-Ice-Right. Si el tema no esta
+# instalado, el login sale con el cursor por defecto: es cosmetico y no se
+# avisa como error.
+SDDM_CURSOR_THEME="Bibata-Modern-Ice"
+
+# ── contenido generado ──────────────────────────────────────────────────────
+
+conf_sddm() {
+    cat <<EOF
+[General]
+DisplayServer=wayland
+
+[Wayland]
+CompositorCommand=/usr/local/lib/rhythm/sddm-greeter-monitor
+EOF
+}
+
+conf_cursor() {
+    cat <<EOF
+[Service]
+Environment=XCURSOR_THEME=$SDDM_CURSOR_THEME
+EOF
+}
+
+conf_tema() {
+    cat <<EOF
+[Theme]
+Current=sddm-astronaut-theme
+EOF
+}
+
+# ── comparación (sin sudo) ──────────────────────────────────────────────────
+
+fallos=0
+avisa() { echo "  $1"; }
+marca() { if [ "$fallos" -eq 0 ]; then echo "  OK"; else echo "  FAIL"; fi; }
+
+comparar_fichero() {
+    local desc="$1" instalado="$2" origen="$3"
+    if [ ! -e "$instalado" ]; then
+        avisa "$desc: no esta desplegado ($instalado)"; fallos=$((fallos + 1)); return
+    fi
+    if [ ! -e "$origen" ]; then
+        avisa "$desc: no encuentro el origen ($origen)"; fallos=$((fallos + 1)); return
+    fi
+    if cmp -s "$origen" "$instalado"; then
+        avisa "$desc: correcto"
+    else
+        avisa "$desc: desplegado pero distinto del repo"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# Para el contenido que se genera: la funcion escribe el fichero entero, con su
+# salto de linea final, y se compara contra ese temporal.
+#
+# Antes se hacia `esperado=$(cat fichero)` y luego `printf '%s' "$esperado"`, y
+# eso NUNCA cuadraba: la sustitucion de comando se come el salto de linea final,
+# el temporal acababa un byte mas corto que el fichero real y cmp reportaba
+# diferencia siempre. Daba igual que estuviera todo en su sitio.
+comparar_generado() {
+    local desc="$1" instalado="$2"
+    shift 2
+    local tmp
+    tmp=$(mktemp)
+    "$@" >"$tmp"
+    comparar_fichero "$desc" "$instalado" "$tmp"
+    rm -f "$tmp"
+}
+
+if [ "$modo_check" -eq 1 ]; then
+    echo "SDDM greeter:"
+    comparar_fichero "envoltorio" \
+        /usr/local/lib/rhythm/sddm-greeter-monitor \
+        "$REPO_DIR/sddm/sddm-greeter-monitor"
+    comparar_fichero "plantilla" \
+        /usr/share/sddm/hyprland.lua \
+        "$REPO_DIR/sddm/hyprland.lua"
+    comparar_generado "sddm.conf" /etc/sddm.conf.d/10-wayland.conf conf_sddm
+    comparar_generado "cursor del login" \
+        /etc/systemd/system/sddm.service.d/cursor.conf conf_cursor
+    comparar_generado "tema" /etc/sddm.conf.d/theme.conf conf_tema
+    comparar_fichero "Xsetup (reserva para X11)" \
+        /etc/sddm/Xsetup \
+        "$REPO_DIR/sddm/Xsetup"
+
+    if [ -d /usr/share/icons/"$SDDM_CURSOR_THEME"/cursors ]; then
+        avisa "el tema de cursor '$SDDM_CURSOR_THEME' esta instalado"
+    else
+        avisa "el tema de cursor '$SDDM_CURSOR_THEME' NO esta en /usr/share/icons: el login usara el cursor por defecto"
+        fallos=$((fallos + 1))
+    fi
+    marca
+    exit "$([ "$fallos" -eq 0 ] && echo 0 || echo 1)"
+fi
+
+# ── despliegue ──────────────────────────────────────────────────────────────
+
+if [ "$(id -u)" -ne 0 ]; then
+    # En un terminal se pide la contrasena; en un timer no hay quien la escriba,
+    # asi que se dice con claridad en vez de colgarse esperando.
+    if [ -t 0 ] && [ -t 1 ]; then
+        exec sudo "$0" "$@"
+    fi
+    if sudo -n true 2>/dev/null; then
+        exec sudo -n "$0" "$@"
+    fi
+    log "hace falta sudo con contrasena; ejecuta a mano:  sudo $0"
+    exit 1
+fi
+
+[ -d /usr/local/lib/rhythm ] || mkdir -p /usr/local/lib/rhythm
+[ -d /etc/sddm.conf.d ] || mkdir -p /etc/sddm.conf.d
+[ -d /etc/systemd/system/sddm.service.d ] || mkdir -p /etc/systemd/system/sddm.service.d
+
+fallo=0
+
+if [ -f "$REPO_DIR/sddm/sddm-greeter-monitor" ]; then
+    # install -T y no cp: si en el repo hubiera un symlink, cp lo seguiria y
+    # acabaria linking a donde apunte. install -T trata el destino como fichero
+    # normal, asi que el contenido sale del repo o no se copia.
+    install -T -m 755 "$REPO_DIR/sddm/sddm-greeter-monitor" \
+        /usr/local/lib/rhythm/sddm-greeter-monitor || fallo=1
+    chown root:root /usr/local/lib/rhythm/sddm-greeter-monitor 2>/dev/null
+else
+    log "falta $REPO_DIR/sddm/sddm-greeter-monitor"; fallo=1
+fi
+
+if [ -f "$REPO_DIR/sddm/hyprland.lua" ]; then
+    install -T -m 644 "$REPO_DIR/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua || fallo=1
+    chown root:root /usr/share/sddm/hyprland.lua 2>/dev/null
+else
+    log "falta $REPO_DIR/sddm/hyprland.lua"; fallo=1
+fi
+
+conf_sddm > /etc/sddm.conf.d/10-wayland.conf || fallo=1
+chmod 644 /etc/sddm.conf.d/10-wayland.conf 2>/dev/null
+
+conf_tema > /etc/sddm.conf.d/theme.conf || fallo=1
+chmod 644 /etc/sddm.conf.d/theme.conf 2>/dev/null
+
+# Xsetup es la red de seguridad por si hay que volver a X11. Vive en /etc, asi
+# que sin esto tampoco lo actualizaba el OTA.
+if [ -f "$REPO_DIR/sddm/Xsetup" ]; then
+    install -T -m 755 "$REPO_DIR/sddm/Xsetup" /etc/sddm/Xsetup || fallo=1
+    chown root:root /etc/sddm/Xsetup 2>/dev/null
+else
+    log "falta $REPO_DIR/sddm/Xsetup"; fallo=1
+fi
+
+# LO QUE ESTE SCRIPT NO DESPLIEGA, A PROPOSITO
+#
+# /usr/share/sddm/themes/sddm-astronaut-theme/ queda fuera. No es un descuido: el
+# tema lo modifica pywal en caliente (los colores van ahi dentro) y la
+# integracion de pywal escribe ficheros dentro. Si cada actualizacion copiara el
+# tema del repo, cada update borraria los colores que pywal acaba de generar, y
+# el login y el escritorio se verian con colores distintos hasta el siguiente
+# resync. El tema se instala una vez y se deja que las herramientas lo
+# actualicen.
+
+if [ -n "$SDDM_CURSOR_THEME" ]; then
+    conf_cursor > /etc/systemd/system/sddm.service.d/cursor.conf || fallo=1
+    chmod 644 /etc/systemd/system/sddm.service.d/cursor.conf 2>/dev/null
+    if [ -d "/usr/share/icons/$SDDM_CURSOR_THEME/cursors" ]; then
+        log "cursor del login: $SDDM_CURSOR_THEME (se aplica al proximo arranque)"
+    else
+        log "AVISO: el tema '$SDDM_CURSOR_THEME' no esta instalado; el login usara el cursor por defecto"
+    fi
+fi
+
+# El drop-in del cursor es del servicio de SDDM, asi que la recarga es del
+# gestor de sistema, no del de usuario. Sin esto, el fichero esta pero systemd
+# no lo mira hasta el siguiente apagado.
+systemctl daemon-reload >/dev/null 2>&1 || log "aviso: daemon-reload fallo"
+
+if [ "$fallo" -eq 0 ]; then
+    log "greeter de SDDM desplegado"
+    exit 0
+fi
+log "el despliegue del greeter termino con errores"
+exit 1

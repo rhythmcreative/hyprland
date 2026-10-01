@@ -624,6 +624,30 @@ cmd_update() {
         OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
     fi
 
+    # Piezas de SISTEMA del greeter de SDDM.
+    #
+    # rhythm-materialize solo sincroniza ~/.config y ~/.local/bin, asi que lo
+    # que vive en /usr y /etc no lo tocaba nadie mas que install.sh. Con el
+    # greeter nuevo eso dejaba el sistema a medias: el sddm.conf del sistema
+    # seguia apuntando a start-hyprland, sin el envoltorio que decide que
+    # salida se enciende, y sin el drop-in del cursor. Y a medias es peor que
+    # sin cambios, porque el repo ya trae la plantilla nueva.
+    #
+    # rhythm-sddm-deploy es el unico sitio que escribe esos cuatro ficheros, y
+    # lo usan tambien el installer. Si el despliegue falla por falta de sudo, no
+    # se para la OTA: se avisa y se sigue, que un login feo no debe impedir
+    # actualizar todo lo demas.
+    if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
+        if "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >/dev/null 2>&1; then
+            echo "  SDDM greeter deployed."
+        else
+            echo "  [!] el greeter de SDDM no se pudo desplegar (quiza falta sudo con contrasena)."
+            echo "      sudo ~/.local/bin/rhythm-sddm-deploy"
+        fi
+    else
+        echo "  [!] rhythm-sddm-deploy no esta instalado; las piezas de /usr y /etc se quedan como estan."
+    fi
+
     # Los ficheros de color que pywal genera (gtk 3/4 css y settings, rofi,
     # mako) estan versionados en el repo con los colores del momento en que se
     #escribieron. materialize los acaba de desplegar, asi que tras cualquier update

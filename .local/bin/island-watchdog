@@ -65,8 +65,3 @@ fi
 echo 1 > "$ESTADO"
 log "sin capa ($capas de $monitores), se comprueba otra vez en un minuto"
 exit 0
-
-log "isla viva sin capa ($capas de $monitores) por segunda vez: reiniciando $UNIDAD"
-rm -f "$ESTADO" 2>/dev/null
-systemctl --user restart "$UNIDAD" >/dev/null 2>&1 || true
-exit 0

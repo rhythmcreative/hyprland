@@ -12,6 +12,36 @@ THEME_DIR="${SCRIPT_DIR}"
 BACKGROUNDS_DIR="$THEME_DIR/Backgrounds"
 PROCESSED_DIR="$BACKGROUNDS_DIR/processed"
 
+# ── Validación de lo que viene del usuario ───────────────────────────────────
+#
+# Este script corre como root (lo invoca el hook de pywal con sudo) y lee
+# rutas de la cache del usuario. Root puede leer ficheros que el usuario no
+# puede, asi que sin comprobar, un symlink en la cache pointed a un fichero
+# protegido acaba publicandose en un destino 644 de lectura para todos.
+#
+# Un wallpaper tiene que ser un fichero regular dentro de la cache, no un
+# enlace. Los colores tienen que ser #rrggbb.
+imagen_legible_por_el_usuario() {
+    local f="$1"
+    [ -f "$f" ] || return 1
+    [ -L "$f" ] && return 1              # symlink directo: descartado
+    # USER_HOME lo define el bloque de abajo, antes de que se llame a esta
+    # funcion; se usa ${...:-} por si alguien la invoca antes.
+    local home="${USER_HOME:-$HOME}"
+    case "$f" in
+        "$home"/.cache/*)  return 0 ;;
+        "$home"/Pictures/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+color_valido() {
+    case "$1" in
+        '#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Determinar el HOME del usuario real (no root) si se ejecuta con sudo
 if [[ $(id -u) -eq 0 ]] && [[ -n "$SUDO_USER" ]]; then
     USER_HOME="/home/$SUDO_USER"
@@ -66,11 +96,24 @@ get_current_wallpaper() {
 process_background() {
     local input_image="$1"
     local output_image="$PROCESSED_DIR/current_bg_80_50.png"
+
+    # Root no debe leer ficheros que el usuario no puede, ni publicarlos en un
+    # destino 644. Antes, un symlink en la cache del usuario hacia un fichero
+    # protegido hacia que su contenido acabara legible por cualquiera.
+    if ! imagen_legible_por_el_usuario "$input_image"; then
+        echo "Rechazado: $(basename "$input_image") no es una imagen legible por el usuario dentro de su cache." >&2
+        return 1
+    fi
     
     echo "Procesando background: $input_image"
     
     if [[ ! -f "$input_image" ]]; then
         echo "Error: No se encontró la imagen: $input_image"
+        return 1
+    fi
+    # La segunda barrera, por si la primera se evita llamandola directamente.
+    if [[ -L "$input_image" ]]; then
+        echo "Error: la imagen es un enlace simbolico; no se procesa." >&2
         return 1
     fi
     
@@ -105,6 +148,15 @@ get_pywal_colors() {
     text_color="${colors[15]:-$DEFAULT_TEXT_COLOR}"  # Color más claro para texto
     highlight_color="${colors[1]:-$DEFAULT_HIGHLIGHT_COLOR}"
     placeholder_color="${colors[8]:-#bbbbbb}"  # Color gris medio
+
+    # Estos valores van despues a la configuracion del tema. Si el fichero
+    # .cache/wal/colors lo controla el usuario, un token raro aqui acaba en un
+    # fichero de configuracion como root. Se valida el formato y, si no cuadra,
+    # se usa el color por defecto.
+    color_valido "$bg_color"          || bg_color="$DEFAULT_BG_COLOR"
+    color_valido "$text_color"        || text_color="$DEFAULT_TEXT_COLOR"
+    color_valido "$highlight_color"  || highlight_color="$DEFAULT_HIGHLIGHT_COLOR"
+    color_valido "$placeholder_color" || placeholder_color="#bbbbbb"
     
     echo "Colores obtenidos de pywal:"
     echo "  Background: $bg_color"

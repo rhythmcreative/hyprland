@@ -1,5 +1,13 @@
 #!/bin/bash
-# Wrapper para ejecutar sddm-auto-sync-local con privilegios sin interacción
-# Usa sudo con la entrada NOPASSWD configurada por el instalador
+# Wrapper para ejecutar sddm-auto-sync-local con privilegios sin interacción.
+# Usa la entrada NOPASSWD que configura el instalador.
 
-exec sudo "$HOME"/.local/bin/sddm-auto-sync-local "$@"
+# El helper vive en /usr/local/lib/rhythm, que es de root, y no en
+# ~/.local/bin.
+#
+# No es un cambio de sabor: si el helper estuviese en el HOME, el usuario
+# podria reescribirlo y ejecutarlo con `sudo` sin contrasena, que es escalada
+# a root. El sudoers solo restringe la RUTA, no el contenido, asi que la ruta
+# tiene que estar en un sitio que el usuario no controla. Esta es la misma
+# solucion que usa Ryoku, que fija su helper en /usr/bin a proposito.
+exec sudo /usr/local/lib/rhythm/sddm-auto-sync-local "$@"

@@ -25,6 +25,54 @@ fi
 CURRENT_WP_CACHE="$REAL_HOME/.cache/current-wallpaper"
 PYWAL_SH="$REAL_HOME/.cache/wal/colors.sh"
 
+# Todo lo que viene de la cache del usuario se valida antes de tocar nada.
+#
+# Este guion corre como root con un sudoers NOPASSWD, asi que cualquier valor
+# que llegue sin comprobar acaba en un programa de sed o en un cp con los
+# permisos de root.
+#
+# 1. Colores: un color es "#rrggbb". Nada mas. Al entrar en un `sed s|...|...|`
+#    un valor con un `|` cierra el patron y lo que viene despues se ejecuta:
+#    GNU sed entiende `s|texto|e comando|` y lanza el comando. Un colors.sh con
+#    `color4='x|e id > /tmp/pwned #'` es ejecucion de comandos como root solo
+#    por cambiar el color del tema.
+validar_color() {
+    case "$1" in
+        '#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Devuelve el valor si es un color valido, o nada si no lo es.
+color_o_nada() {
+    local v
+    v=$(grep "^$1=" "$PYWAL_SH" 2>/dev/null | head -n1 | cut -d"'" -f2)
+    if validar_color "$v"; then printf '%s' "$v"; fi
+}
+
+# 2. Ficheros: el wallpaper se copia con los permisos de root y se deja legible
+#    para todos. Si la cache apunta con un symlink a un fichero protegido (por
+#    ejemplo /etc/shadow), su contenido se publica. Se comprueba que sea un
+#    fichero regular y que este dentro de la cache del usuario, y que el propio
+#    usuario pueda leerlo: root no debe leer cosas que el usuario no puede.
+wallpaper_legible_para_el_usuario() {
+    local f="$1"
+    [ -f "$f" ] || return 1            # -f sigue symlinks, pero exige regular
+    [ -L "$f" ] && return 1            # y un symlink directo se descarta
+    # Solo rutas de las que el wallpaper puede venir de verdad. Pictures va
+    # aparte porque es donde el instalador deja los wallpapers descargados: si
+    # solo se aceptase .cache, el wallpaper real del usuario (en
+    # ~/Pictures/Wallpapers/) se rechazaria siempre y el login se quedaria con
+    # el fondo por defecto.
+    case "$f" in
+        "$REAL_HOME"/.cache/*|"$REAL_HOME"/Pictures/*) ;;
+        *) return 1 ;;
+    esac
+    # Legible por el usuario delegado, no solo por root.
+    [ -r "$f" ] || return 1
+    return 0
+}
+
 # Verificar que somos root
 if [ "$EUID" -ne 0 ]; then
     echo "Este script debe ejecutarse como root"
@@ -42,10 +90,18 @@ else
     echo "No se encontró cache de wallpaper. Usando fondo por defecto: $CURRENT_WP"
 fi
 
-# Si el wallpaper detectado no existe, usar el del tema como último recurso
+# Si el wallpaper detectado no existe, o no es un fichero normal y legible por
+# el usuario, usar el del tema como último recurso.
+#
+# Antes solo se comprobaba que existiera: un symlink a /etc/shadow existia, se
+# copiaba con permisos de root a un destino 644 y se publicaba su contenido.
 if [ ! -f "$CURRENT_WP" ]; then
     CURRENT_WP="$SDDM_THEME_DIR/Backgrounds/current_wallpaper.jpg"
     echo "El archivo de wallpaper no existe. Usando fondo del tema."
+elif ! wallpaper_legible_para_el_usuario "$CURRENT_WP"; then
+    echo "El wallpaper indicado no es un fichero normal dentro de la cache, o el usuario no puede leerlo." >&2
+    echo "Rechazado: $(basename "$CURRENT_WP")" >&2
+    CURRENT_WP="$SDDM_THEME_DIR/Backgrounds/current_wallpaper.jpg"
 fi
 
 echo "Sincronizando wallpaper: $(basename "$CURRENT_WP")"
@@ -63,23 +119,34 @@ chmod 644 "$TARGET_WP"
 # 3. Sincronizar colores de Pywal
 PYWAL_SH="$REAL_HOME/.cache/wal/colors.sh"
 if [ -f "$PYWAL_SH" ]; then
-    # Leer colores sin importar el entorno
-    background=$(grep '^background=' "$PYWAL_SH" | cut -d"'" -f2)
-    foreground=$(grep '^foreground=' "$PYWAL_SH" | cut -d"'" -f2)
-    color4=$(grep '^color4=' "$PYWAL_SH" | cut -d"'" -f2)
-    color8=$(grep '^color8=' "$PYWAL_SH" | cut -d"'" -f2)
-    color1=$(grep '^color1=' "$PYWAL_SH" | cut -d"'" -f2)
+    # Cada color pasa por validar_color. Un valor que no sea "#rrggbb" se
+    # descarta y se queda vacio, de modo que nunca llega al programa de sed.
+    #
+    # El `|| true` en el grep estaba porque colors.sh es del usuario y podria no
+    # existir, pero tambien se tragaba el fallo del case. Ahora el case decide.
+    background=$(color_o_nada background)
+    foreground=$(color_o_nada foreground)
+    color4=$(color_o_nada color4)
+    color8=$(color_o_nada color8)
+    color1=$(color_o_nada color1)
 
     echo "Aplicando colores de Pywal a SDDM..."
-    
+    for c in background foreground color4 color8 color1; do
+        eval "v=\$$c"
+        [ -n "$v" ] || echo "  aviso: $c no es un color valido en colors.sh, se deja el del tema"
+    done
+
+    # Lo que llega al sed ya ha pasado el filtro: solo puede contener # y
+    # hexadecimales, asi que no hay forma de cerrar el patron con un `|`.
     for config_file in "$THEME_CONFIG" "$SDDM_THEME_DIR/Themes/theme1.conf"; do
         if [ -f "$config_file" ]; then
+            # vacio = no se toca esa linea, se conserva lo que hubiera
+            [ -n "$color4" ]      && sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$config_file"
+            [ -n "$background" ]  && sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$config_file"
+            [ -n "$foreground" ]  && sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$config_file"
+            [ -n "$color8" ]      && sed -i "s|^PlaceholderColor=.*|PlaceholderColor=\"$color8\"|" "$config_file"
+            [ -n "$color1" ]      && sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$color1\"|" "$config_file"
             sed -i "s|^Background=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|" "$config_file"
-            sed -i "s|^HighlightColor=.*|HighlightColor=\"$color4\"|" "$config_file"
-            sed -i "s|^BackgroundColor=.*|BackgroundColor=\"$background\"|" "$config_file"
-            sed -i "s|^TextColor=.*|TextColor=\"$foreground\"|" "$config_file"
-            sed -i "s|^PlaceholderColor=.*|PlaceholderColor=\"$color8\"|" "$config_file"
-            sed -i "s|^SystemButtonsIconColor=.*|SystemButtonsIconColor=\"$color1\"|" "$config_file"
             sed -i "s|^DimBackground=.*|DimBackground=\"0.60\"|" "$config_file"
             sed -i "s|^FullBlur=.*|FullBlur=\"true\"|" "$config_file"
             sed -i "s|^PartialBlur=.*|PartialBlur=\"false\"|" "$config_file"

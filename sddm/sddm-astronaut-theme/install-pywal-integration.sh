@@ -156,7 +156,18 @@ fi
 EOF
     
     chmod +x "$script_path"
-    chown "$SUDO_USER:$SUDO_USER" "$script_path"
+    # chown -h no sigue el enlace, y ademas se comprueba antes que no haya uno.
+    #
+    # Esta ruta la controla el usuario. Con un `chown` normal, un symlink aqui
+    # puesto que apunte a /usr/share/sddm/themes/.../pywal-sync.sh (o al
+    # ejecutable que sea) hace que root le ceda la propiedad de ese fichero de
+    # sistema. Con la propiedad en manos del usuario, sustituir su contenido
+    # es escalar a root, porque ese ejecutable lo autoriza un NOPASSWD.
+    if [ -L "$script_path" ]; then
+        echo "Aviso: $script_path es un enlace simbolico; se sustituye por un fichero real."
+        rm -f "$script_path"
+    fi
+    chown -h "$SUDO_USER:$SUDO_USER" "$script_path" 2>/dev/null || true
     
     # Crear archivo .desktop para autostart
     cat > "$autostart_file" << EOF
@@ -170,7 +181,8 @@ NoDisplay=true
 X-GNOME-Autostart-enabled=true
 EOF
     
-    chown "$SUDO_USER:$SUDO_USER" "$autostart_file"
+    rm -f "$autostart_file" 2>/dev/null || true   # el cat de arriba ya lo creo; evita que sea un symlink previo
+    chown -h "$SUDO_USER:$SUDO_USER" "$autostart_file"
     
     print_success "Script de autostart creado en $autostart_file"
 }
@@ -203,7 +215,15 @@ fi
 EOF
     
     chmod +x "$hook_script"
-    chown "$SUDO_USER:$SUDO_USER" "$hook_script"
+    # Mismo motivo que antes: si esta ruta es un symlink puesto por el usuario,
+    # un chown normal le cede la propiedad a otro fichero de sistema.
+    if [ -L "$hook_script" ]; then
+        echo "Aviso: $hook_script es un enlace simbolico; se sustituye por un fichero real."
+        rm -f "$hook_script"
+        printf '#!/bin/bash\n' > "$hook_script"
+        chmod +x "$hook_script"
+    fi
+    chown -h "$SUDO_USER:$SUDO_USER" "$hook_script" 2>/dev/null || true
     
     print_success "Hook de pywal creado en $hook_script"
 }

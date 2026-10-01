@@ -117,7 +117,15 @@ reconcile_docks() {
 #
 # El enfriamiento evita martillear: relanzar mata TODAS las barras con pkill -9
 # y las reconstruye, asi que si algo no converge no se repite cada 15s.
-COOLDOWN_FILE="/tmp/.waybar-reconcile-cooldown"
+# El enfriamiento va en el runtime dir del usuario, que es 0700 y propio, y
+# no en /tmp con un nombre adivinable.
+#
+# En /tmp, otro usuario de la maquina podia crear este fichero primero con un
+# contenido como `$(id > /tmp/x)`, y la linea de abajo lo metia en $((now -
+# last)): bash expande el valor como expresion aritmetica, y ahi una
+# sustitucion de comando se ejecuta. Es decir, escribir en un fichero de /tmp
+# significa ejecutar como este usuario.
+COOLDOWN_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.rust-dock-reconcile-cooldown"
 reconcile_waybar() {
     [ -x "$HOME/.config/waybar/launch.sh" ] || return 0
     command -v hyprctl >/dev/null 2>&1 || return 0
@@ -158,7 +166,14 @@ reconcile_waybar() {
 
     local now last
     now=$(date +%s)
+    # El contenido tiene que ser un numero entero. Aunque el fichero ya no este
+    # en un sitio que otro usuario pueda escribir, validar aqui evita que un
+    # fichero corrupto (o uno de una version anterior) acabe en una expresion
+    # aritmetica con algo que no es un numero.
     last=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+    case "$last" in
+        ''|*[!0-9]*) last=0 ;;
+    esac
     # 90s: se autorrecupera solo, pero no se martillea.
     [ $((now - last)) -lt 90 ] && return 0
     printf '%s\n' "$now" > "$COOLDOWN_FILE" 2>/dev/null || true

@@ -341,7 +341,6 @@ hl.bind(mainMod .. " + Prior", hl.dsp.exec_cmd("~/.local/bin/pywal-wallpaper-syn
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-selector"))
 hl.bind(mainMod .. " + CONTROL + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-selector"))
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/wallpaper-change-adaptive"))
-hl.bind(mainMod .. " + ALT + W", hl.dsp.exec_cmd("~/.local/bin/wallpaper-changer-with-waybar-sync"))
 
 -- Focus
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))

@@ -216,12 +216,11 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + F` | Interactive keybindings cheatsheet |
 | `Super + X` | Quick compositor settings |
 | `Super + A` | Application launcher |
+| `Super + R` | Run command | Rofi command runner |
 | `Super + E` | File manager (Thunar) |
 | `Super + Q` | Close focused window |
 | `Super + BackSpace` | Power menu (reboot / shutdown / sleep) |
 | `Super + Ctrl + D` | Do Not Disturb toggle |
-| `Super + grave / T` | Dropdown scratchpad terminal *(via `Super + F`)* |
-| `Super + C` | Floating calculator scratchpad |
 | `Super + Alt + 1/2/3` | Layout presets (code / reading / float) *(via `Super + F`)* |
 | `Super + Esc` | Panic mode (hide all + mute) *(via `Super + F`)* |
 
@@ -253,10 +252,7 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + Shift + Print` | Full screenshot | Instant capture |
 | `Super + Shift + W` | Wallpaper selector | Visual wallpaper picker |
 | `Super + Shift + B` | Random wallpaper | Sets a random wallpaper |
-| `Super + Alt + W` | Change wallpaper | Changes wallpaper and resyncs Waybar |
 | `Super + Shift + G` | Performance mode | Toggles animations and blur for gaming |
-| `Super + grave / T` | Scratchpad terminal | Quake-style dropdown terminal |
-| `Super + C` | Scratchpad calculator | Floating calculator |
 | `Super + Alt + 1/2/3` | Layout presets | Code, reading and float window layouts |
 | `Super + Ctrl + D` | Do Not Disturb | Silence notifications, keeps history |
 | `Super + Ctrl + W` | Wallpaper selector *(via `Super + F`)* | Visual wallpaper picker |

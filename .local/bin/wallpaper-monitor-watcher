@@ -29,12 +29,39 @@ log() {
 }
 
 detect_socket() {
-    local sig="${HYPRLAND_INSTANCE_SIGNATURE}"
-    if [ -z "$sig" ]; then
-        sig=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
-    fi
+    # Se descubre de nuevo en cada vuelta y no se usa la variable exportada:
+    # si Hyprland se reinicia cambia la firma, y leer la de siempre dejaria el
+    # watcher conectado a un socket que ya no existe.
+    local sig
+    sig=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
+    [ -z "$sig" ] && sig="${HYPRLAND_INSTANCE_SIGNATURE:-}"
     echo "$RUNTIME/hypr/$sig/.socket2.sock"
 }
+
+# POR QUE ESTO VA AQUI Y NO EN LA UNIDAD DE SYSTEMD
+# ------------------------------------------------
+# Este watcher lo arranca systemd --user, y systemd no hereda el entorno del
+# compositor: el servicio se lanzaba con CERO variables HYPRLAND_*. Sin
+# HYPRLAND_INSTANCE_SIGNATURE, hyprctl contesta "HYPRLAND_INSTANCE_SIGNATURE
+# not set!" y background-health, que hace `hyprctl monitors -j ... || exit 0`,
+# sale con la salida VACIA. El watcher lee vacio como "no hay nada roto", asi
+# que la revision periodica no detectaba nunca un fondo sin pintar.
+#
+# O sea: el script llevaba meses announcing que se vigilaba el fondo y no
+# hacia nada. El unico camino que funcionaba era el de los eventos del socket.
+#
+# No se arregla declarando la variable en la unidad porque la firma cambia en
+# cada sesion de Hyprland y la unidad no se entera: habria que reescribirla en
+# cada arranque. Resolverla aqui y exportarla vale para las dos vias.
+SIG=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
+if [ -z "$SIG" ] && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    SIG="$HYPRLAND_INSTANCE_SIGNATURE"
+fi
+if [ -n "$SIG" ]; then
+    export HYPRLAND_INSTANCE_SIGNATURE="$SIG"
+else
+    log "AVISO: no se encuentra la firma de Hyprland; la revision periodica no podra usar hyprctl"
+fi
 
 repintar() {
     [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ] || return 0

@@ -1,0 +1,196 @@
+#!/bin/sh
+# Decide que salida debe pintar el login de SDDM y arranca Hyprland con ello.
+#
+# POR QUE ESTO NO ESTA EN LA CONFIG
+# ---------------------------------
+# La regla "el login solo en el panel" no se puede escribir tal cual en
+# hyprland.lua porque tiene que ser condicional: con la tapa cerrada no hay
+# panel interno, y una regla que lo apagase sin mirar dejaria el login sin
+# ninguna pantalla. La condicion no se puede resolver dentro de la config
+# porque esta version de Hyprland (0.56) no expone getMonitors en Lua, asi que
+# la unica fuente fiable en ese punto es /sys/class/drm, que ya esta poblado
+# cuando SDDM arranca el compositor en su VT.
+#
+# Ademas hay una razon de orden: la config se parsea cuando Hyprland ya esta
+# initializing el backend, y una consulta al socket en ese momento es una
+# carrera. /sys no tiene esa carrera.
+#
+# QUE HACE
+# --------
+#   1. Lista los conectores DRM conectados y se queda con el nombre (la parte
+#      que va tras "cardN-"), no con la tarjeta: aqui conviven DOS conectores
+#      eDP, card0-eDP-2 y card1-eDP-1, y el que sirve es el segundo. Buscar por
+#      "la primera eDP" habria apagado la pantalla equivocada segun como se
+#      numeren las GPUs.
+#   2. Si hay panel, genera una regla por salida: el panel con su modo
+#      preferido y todo lo demas apagado. Si no hay panel, no apaga nada y deja
+#      que Hyprland encienda lo que encuentre, que es el caso de la tapa
+#      cerrada con el monitor externo.
+#   3. Sustituye la marca @@MONITOR@@ de la plantilla y arranca Hyprland.
+#
+# Los nombres de conector vienen del kernel, pero aun asi se validan: este
+# fichero lo ejecuta root en el arranque y lo que sale de aqui se escribe en un
+# fichero que Hyprland va a interpretar como config.
+
+set -eu
+
+PLANTILLA="${RHYTHM_SDDM_PLANTILLA:-/usr/share/sddm/hyprland.lua}"
+
+# DONDE SE ESCRIBE LA CONFIG GENERADA
+#
+# NO puede ser /run. El greeter no corre como root: SDDM abre su sesion PAM
+# como el usuario "sddm", asi que /run (755 root:root) no le deja crear nada
+# ahi y el compositor no llega a arrancar nunca. Tampoco sirve /run/sddm, que es
+# 711 de root.
+#
+# El fichero tiene que sobrevivir al exec (Hyprland lo lee al arrancar y no lo
+# vuelve a pedir), asi que no se puede borrar despues. Por eso se reusa siempre
+# el mismo nombre en vez de uno temporal: como mucho queda un fichero por
+# arranque, y el siguiente login lo sobrescribe.
+elegir_directorio() {
+    for candidato in "${XDG_RUNTIME_DIR:-}" "/run/user/$(id -u)" /tmp; do
+        [ -n "$candidato" ] || continue
+        [ -d "$candidato" ] || continue
+        [ -w "$candidato" ] || continue
+        printf '%s\n' "$candidato"
+        return 0
+    done
+    return 1
+}
+
+if ! WORK=$(elegir_directorio); then
+    echo "sddm-greeter-monitor: no hay ningun directorio escribible para la config" >&2
+    exit 1
+fi
+
+GENERADO="${RHYTHM_SDDM_CONFIG:-$WORK/sddm-hyprland-greeter.lua}"
+
+# La raiz de DRM se puede apuntar a otro sitio para poder probar los dos casos
+# (con panel y con la tapa cerrada) sin desenchufar nada. En el arranque normal
+# no se define y vale /sys.
+DRM="${RHYTHM_SDDM_DRM:-/sys/class/drm}"
+
+# Un conector valido solo tiene letras, digitos,guion y guion bajo.
+CONECTOR_VALIDO='^[A-Za-z0-9_-]+$'
+
+conectados() {
+    for estado in "$DRM"/card*-*/status; do
+        [ -r "$estado" ] || continue
+        [ "$(cat "$estado" 2>/dev/null || echo desconocido)" = "connected" ] || continue
+        nombre="${estado%/status}"
+        nombre="${nombre##*/}"
+        case "$nombre" in
+            card*-*) ;;
+            *) continue ;;
+        esac
+        # La tarjeta se guarda aparte porque hace falta para AQ_DRM_DEVICES:
+        # aqui conviven dos GPU y el panel NO esta en la primera.
+        tarjeta="${nombre%%-*}"
+        # quita el prefijo de tarjeta: card1-eDP-1 -> eDP-1
+        nombre="${nombre#card*-}"
+        case "$nombre" in
+            *[!A-Za-z0-9_-]*) continue ;;
+        esac
+        case "$tarjeta" in
+            *[!A-Za-z0-9_-]*) continue ;;
+        esac
+        printf '%s %s\n' "$tarjeta" "$nombre"
+    done
+}
+
+es_panel() {
+    case "$1" in
+        eDP-*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+hay_panel=0
+salidas=""
+tarjeta_panel=""
+
+# Se lee linea a linea y NO con for $(...): cada linea son dos palabras
+# (tarjeta y conector) y el bucle de palabras las separaria, dejando "card1" y
+# "eDP-1" como dos conectores distintos. Ya paso: se terminaba apagando "card0"
+# y "card1" como si fueran monitores, y AQ_DRM_DEVICES se quedaba con el
+# conector en vez de con la tarjeta.
+lista=$(mktemp)
+conectados >"$lista"
+while read -r tarjeta c; do
+    [ -n "$c" ] || continue
+    salidas="$salidas $c"
+    if es_panel "$c"; then
+        hay_panel=1
+        tarjeta_panel="$tarjeta"
+    fi
+done <"$lista"
+rm -f "$lista"
+
+# AQ_DRM_DEVICES: el greeter se limita a la GPU del panel.
+#
+# Motivo: con las dos GPUs activas, Aquamarine arranca su camino multi-GPU
+# (initMgpu) y crea un renderizador por tarjeta. Al tearing down, el destructor
+# de CDRMRenderer llama a eglDestroyContext yahy SEGV dentro de libaquamarine.
+# Pasa en TODOS los arranques: hay coredumps de /usr/bin/Hyprland con uid 962
+# (el usuario sddm) en los cuatro ultimos, siempre al pararse el login.
+#
+# No se restringe en el caso "sin panel" a proposito: si el externo cuelga de la
+# otra GPU, quitarla dejaria el login sin ninguna pantalla.
+if [ "$hay_panel" -eq 1 ] && [ -n "$tarjeta_panel" ]; then
+    AQ_DRM_DEVICES="$tarjeta_panel"
+    export AQ_DRM_DEVICES
+fi
+
+# Escribe las reglas en un temporal para poder inyectarlas linea a linea.
+reglas=$(mktemp)
+trap 'rm -f "$reglas"' EXIT INT TERM
+
+if [ "$hay_panel" -eq 1 ]; then
+    # El panel manda. Todo lo demas se apaga: el login se ve una vez y sin
+    # encender la dGPU entera por duplicar la misma pantalla.
+    for c in $salidas; do
+        if es_panel "$c"; then
+            # La escala se fija a 1 a proposito: Hyprland usa 1.5 por defecto en
+            # 1080p y el tema del greeter esta hecho en pixeles fijos, asi que a
+            # 1.5 sale con todo enorme.
+            echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+        else
+            # Ojo al campo: en el parser de Hyprland 0.56 apagar una salida NO
+            # es mode = "disable" (da error al aplicar) ni enable = false (el
+            # campo no existe), sino disabled = true. Comprobado con
+            # hyprctl eval sobre una salida ficticia.
+            echo "hl.monitor({ output = \"$c\", disabled = true })" >>"$reglas"
+        fi
+    done
+    modo="panel"
+else
+    # Sin panel no se apaga nada: si la tapa esta cerrada, el externo es la
+    # unica pantalla que queda y un login en negro deja al usuario fuera.
+    for c in $salidas; do
+        echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+    done
+    modo="sin-panel"
+fi
+
+if [ ! -r "$PLANTILLA" ]; then
+    echo "sddm-greeter-monitor: no se encuentra la plantilla $PLANTILLA" >&2
+    exit 1
+fi
+
+# Sustituye la marca por las reglas. Si no hay ninguna, la lista monitor se
+# queda vacia y Hyprland aplica sus modos preferidos: peor que la regla
+# correcta, pero el login arranca en vez de romperse.
+awk -v fichero="$reglas" '
+    /@@MONITOR@@/ {
+        while ((getline linea < fichero) > 0) print linea
+        close(fichero)
+        next
+    }
+    { print }
+' "$PLANTILLA" >"$GENERADO"
+chmod 644 "$GENERADO"
+
+registro="${RHYTHM_SDDM_LOG:-$WORK/sddm-greeter-monitor.log}"
+{ echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] reglas=$(wc -l <"$reglas") config=$GENERADO AQ_DRM_DEVICES=${AQ_DRM_DEVICES:-(sin restringir)}" >"$registro"; } 2>/dev/null || true
+
+exec start-hyprland -- --config "$GENERADO"

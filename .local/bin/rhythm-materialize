@@ -41,6 +41,32 @@ LEDGER="$HOME/.local/state/rhythm/materialized.ledger"
 
 COPIED=0; SKIPPED=0; FORKED=0; APPLIED=0
 
+# Ficheros que pywal (u otra herramienta) regenera por su cuenta.
+#
+# El overlay no puede tocar estos. Si un fichero generado acaba rescatado como
+# fork, el overlay se aplica encima cada vez y pisa lo que la herramienta acaba
+# de escribir: se ve en vivo, pywal ponia el color bueno y el siguiente
+# materialize devolvia el viejo. Peor: nunca se vuelve a sincronizar el color,
+# porque el overlay gana siempre.
+#
+# Se comparan por ruta relativa completa, porque "settings.ini" existe en gtk-3.0
+# y en gtk-4.0 y los dos estan generados.
+generados_por_herramientas() {
+    case "$1" in
+        .config/rofi/colors-pywal.rasi)        return 0 ;;
+        .config/rofi/style-3-pywal.rasi)       return 0 ;;
+        .config/gtk-3.0/gtk.css)              return 0 ;;
+        .config/gtk-3.0/nm-applet-waybar.css) return 0 ;;
+        .config/gtk-3.0/settings.ini)          return 0 ;;
+        .config/gtk-4.0/gtk.css)              return 0 ;;
+        .config/gtk-4.0/nm-applet-waybar.css) return 0 ;;
+        .config/gtk-4.0/settings.ini)          return 0 ;;
+        .config/mako/config)                   return 0 ;;
+        .cache/wal/*)                          return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 if [ "$DRY" = 1 ]; then echo "(dry-run: no se escribe nada)"; fi
 run() { if [ "$DRY" = 1 ]; then echo "  haria: $*"; else "$@" 2>/dev/null; fi; }
 
@@ -48,6 +74,8 @@ run() { if [ "$DRY" = 1 ]; then echo "  haria: $*"; else "$@" 2>/dev/null; fi; }
 # es edicion del usuario: se copia al overlay antes de pisarlo.
 rescatar_edicion() {
     local live="$1" shipped="$2" rel="$3"
+    # Nada que rescatar en ficheros que otra herramienta regenera.
+    generados_por_herramientas "$rel" && return 0
     [ -f "$live" ] || return 0
     # El ledger es un DIRECTORIO con una copia de lo que se puso. `[ -f ]` sobre un
 # directorio siempre es falso, con lo que esta guarda hacia fuera y nunca se
@@ -142,6 +170,9 @@ aplicar_overlay() {
             .local/bin/*) ;;
             *) continue ;;
         esac
+        # Los generados por pywal y compañía van straight del repo: el overlay
+        # aplicandose encima impediria que se sincronizaran nunca mas.
+        generados_por_herramientas "$rel" && continue
         mkdir -p "$HOME/$(dirname "$rel")" 2>/dev/null
         run cp -f "$f" "$HOME/$rel"
         APPLIED=$((APPLIED+1))

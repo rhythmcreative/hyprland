@@ -394,6 +394,16 @@ ShellRoot {
     // "sin baterias": en un escritorio fijo no tiene que aparecer nada.
     property var batt: null
 
+    // Todo el estado de la seccion Security en un unico JSON, para que la
+    // isla lance un solo proceso en vez de uno por tarjeta.
+    property var sec: ({ hardening: { items: [], total: 0, tight: 0, loose: 0 },
+                            firewall: { active: false, blocked: 0, rules: 0, default: "" },
+                            sensors: { mic: false, cam: false, killed: false },
+                            clipboard: { entries: 0, expiry_minutes: 0, expiring: false },
+                            flatpak: { apps: [], count: 0, available: false },
+                            isolation: { apps: [], count: 0, with_network: 0, without_network: 0 } })
+    property string secMsg: ""
+
     // Apps nativas aisladas con bubblewrap. Lo lee isolated-app list, que da
     // el perfil de cada una: strict (sin red y con la home reducida), nonet
     // (todo aislado pero con red) u off (sin aislar).
@@ -557,6 +567,14 @@ ShellRoot {
             })
         }
         // Abre el apartado de aislamiento de aplicaciones.
+        // Abre la seccion Security.
+        function openSecurity(screenName: string): string {
+            let panel = root.setPanelState(screenName, true, 4, 0)
+            if (!panel) return "unavailable"
+            secProc.running = true
+            return "security"
+        }
+
         function openIsolation(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 0, 8)
             if (!panel) return "unavailable"
@@ -1130,6 +1148,52 @@ ShellRoot {
         onTriggered: isoProc.running = true
     }
 
+    // Seccion Security: un solo proceso lee todo el estado y otro ejecuta las
+    // acciones, asi que la isla no lanza un script por cada boton.
+    Process {
+        id: secProc
+        command: ["bash", "-c", "$HOME/.local/bin/security scan"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.sec = JSON.parse(text.trim())
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: secActProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.secMsg = text.trim()
+                secMsgTimer.restart()
+                secProc.running = true
+            }
+        }
+        onExited: (code) => {
+            if (code !== 0 && root.secMsg === "") {
+                root.secMsg = "The command failed"
+                secMsgTimer.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: secMsgTimer
+        interval: 2600
+        repeat: false
+        onTriggered: root.secMsg = ""
+    }
+
+    Timer {
+        id: secTimer
+        interval: 6000
+        repeat: true
+        running: true
+        onTriggered: secProc.running = true
+    }
+
     Process {
         id: battProc
         command: ["bash", "-c", "$HOME/.local/bin/battery-info"]
@@ -1542,7 +1606,7 @@ ShellRoot {
 
 
             readonly property real ala: 16
-            width: islandWin.expanded ? 660 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
+            width: islandWin.expanded ? 760 : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
             height: islandWin.expanded ? Math.min(800, islandContentCol.implicitHeight + 52) : (root.notifActive ? 56 : 36)
 
             Behavior on width {
@@ -2109,9 +2173,9 @@ ShellRoot {
 
                         // Tab 0: Control & Sistema
                         Rectangle {
-                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
-                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
-                            width: 136
+                            // 5 x 125 + 4 x 12 = 673, dentro de los 684 que deja laolumna.
+                            // isla ensanchada a 760. Antes eran 4 de 136.erecha.
+                            width: 125
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 0 ? root.colAccent : root.colSurface
@@ -2147,9 +2211,9 @@ ShellRoot {
 
                         // Tab 1: Hyprland Settings
                         Rectangle {
-                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
-                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
-                            width: 136
+                            // 5 x 125 + 4 x 12 = 673, dentro de los 684 que deja laolumna.
+                            // isla ensanchada a 760. Antes eran 4 de 136.erecha.
+                            width: 125
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 1 ? root.colAccent : root.colSurface
@@ -2183,11 +2247,49 @@ ShellRoot {
                             }
                         }
 
+                        // Security va en el centro de la barra, con currentTab 4:
+                        // renumerar los otros cuatro, que se referencian en
+                        // montanas de sitios de todo el archivo, no compensa.
+                        Rectangle {
+                            width: 125
+                            height: 34
+                            radius: 17
+                            color: islandWin.currentTab === 4 ? root.colAccent : root.colSurface
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                Text {
+                                    text: "󰅵"
+                                    color: islandWin.currentTab === 4 ? root.colBg : root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 14
+                                }
+                                Text {
+                                    text: "Security"
+                                    color: islandWin.currentTab === 4 ? root.colBg : root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.weight: Font.Bold
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    islandWin.currentTab = 4
+                                    islandWin.controlSubView = 0
+                                    secProc.running = true
+                                }
+                            }
+                        }
                         // Tab 2: Alerts
                         Rectangle {
-                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
-                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
-                            width: 136
+                            // 5 x 125 + 4 x 12 = 673, dentro de los 684 que deja laolumna.
+                            // isla ensanchada a 760. Antes eran 4 de 136.erecha.
+                            width: 125
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 2 ? root.colAccent : root.colSurface
@@ -2240,9 +2342,9 @@ ShellRoot {
 
                         // Tab 3: Portapapeles (opcion aparte de Alertas, arriba)
                         Rectangle {
-                            // 4 x 136 + 3 x 12 = 580, dentro de los 584 de la columna.
-                            // Con 140 eran 596 y Qt empujaba todo 12 px a la derecha.
-                            width: 136
+                            // 5 x 125 + 4 x 12 = 673, dentro de los 684 que deja laolumna.
+                            // isla ensanchada a 760. Antes eran 4 de 136.erecha.
+                            width: 125
                             height: 34
                             radius: 17
                             color: islandWin.currentTab === 3 ? root.colAccent : root.colSurface
@@ -3143,77 +3245,6 @@ ShellRoot {
                                     }
                                 }
                             }
-                            // App Isolation: apps de pacman metidas en bubblewrap, con su propia copia
-                            // de procesos, de ficheros y de red. El apartado de abajo cambia los perfiles.
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 54
-                                radius: 16
-                                color: root.colSurface
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 10
-                                    Rectangle {
-                                        width: 34; height: 34; radius: 17
-                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "󰅵"
-                                            color: root.colAccent
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 17
-                                        }
-                                    }
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 1
-                                        Text {
-                                            text: "App Isolation"
-                                            color: root.colFg
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 11
-                                            font.weight: Font.Bold
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-                                        Text {
-                                            text: (root.isoApps?.count ?? 0) === 0
-                                            ? "No apps registered"
-                                            : ((root.isoApps.count) + " registered · " + (root.isoApps.without_network ?? 0) + " offline · " + (root.isoApps.with_network ?? 0) + " online")
-                                            color: root.colMuted
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 9
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-                                    Rectangle {
-                                        width: 1; height: 16
-                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
-                                    }
-                                    Text {
-                                        text: "󰅂"
-                                        color: root.colMuted
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 14
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: isoHoverTab0
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        islandWin.controlSubView = 8
-                                        isoProc.running = true
-                                    }
-                                }
-                            }
-
                             // Do Not Disturb Tile (Material 3 Card)
                             Rectangle {
                                 Layout.fillWidth: true
@@ -6193,6 +6224,384 @@ Flickable {
                             }
                         }
 
+                    }
+
+                    // ── TAB 4: SECURITY ──
+                    // Todo lo de privacidad y aislamiento en una sola pestana: las seis
+                    // mitigaciones de exploit, el cortafuegos, el cierre de sensores, los
+                    // permisos de flatpak, la caducidad del portapapeles y las apps aisladas.
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        visible: islandWin.currentTab === 4 && islandWin.controlSubView === 0
+                        opacity: islandWin.tabFade
+
+                        // Aviso de la ultima accion, debajo de la cabecera.
+                        Text {
+                            text: root.secMsg
+                            visible: root.secMsg !== ""
+                            color: root.colAccent; font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                        }
+
+                            ColumnLayout {
+                        Layout.fillWidth: true
+
+                                spacing: 10
+
+                                // ── 1. EXPLOIT PROTECTION ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: (root.sec?.hardening?.loose ?? 0) === 0
+                                                  ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                                                  : Qt.rgba(224, 167, 92, 0.2)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰄳"
+                                                color: (root.sec?.hardening?.loose ?? 0) === 0 ? root.colAccent : "#e0a75c"
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "Exploit Protection"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.hardening?.loose ?? 0) === 0
+                                                ? "All 6 mitigations active"
+                                                : ((root.sec?.hardening?.tight ?? 0) + " of 6 active · " + (root.sec.hardening.loose) + " loose")
+                                                color: (root.sec?.hardening?.loose ?? 0) === 0 ? root.colMuted : "#e0a75c"
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 92; height: 30; radius: 8
+                                            color: (root.sec?.hardening?.loose ?? 0) === 0
+                                                  ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                  : root.colAccent
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Tighten"
+                                                color: (root.sec?.hardening?.loose ?? 0) === 0 ? root.colMuted : root.colBg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10; font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    secActProc.command = ["bash", "-c",
+                                                        "$HOME/.local/bin/security do tighten"]
+                                                    secActProc.running = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // ── 2. FIREWALL ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: (root.sec?.firewall?.active ?? false)
+                                                  ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                                                  : Qt.rgba(224, 92, 92, 0.2)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰴻"
+                                                color: (root.sec?.firewall?.active ?? false) ? root.colAccent : "#e05c5c"
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "Firewall"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.firewall?.active ?? false)
+                                                ? ("deny by default · " + (root.sec.firewall.blocked ?? 0) + " blocked")
+                                                : "Off · nothing is filtered"
+                                                color: (root.sec?.firewall?.active ?? false) ? root.colMuted : "#e05c5c"
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 92; height: 30; radius: 8
+                                            color: (root.sec?.firewall?.active ?? false)
+                                                  ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                  : root.colAccent
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: (root.sec?.firewall?.active ?? false) ? "Turn off" : "Turn on"
+                                                color: (root.sec?.firewall?.active ?? false) ? root.colMuted : root.colBg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10; font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    secActProc.command = ["bash", "-c",
+                                                        (root.sec?.firewall?.active ?? false)
+                                                        ? "$HOME/.local/bin/security do firewall-off"
+                                                        : "$HOME/.local/bin/security do firewall-on"]
+                                                    secActProc.running = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // ── 3. SENSOR KILL SWITCH ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: (root.sec?.sensors?.killed ?? false)
+                                                  ? Qt.rgba(224, 92, 92, 0.2)
+                                                  : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰅶"
+                                                color: (root.sec?.sensors?.killed ?? false) ? "#e05c5c" : root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "Sensor Kill Switch"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.sensors?.killed ?? false)
+                                                ? "Mic and camera off for everything"
+                                                : "Mic on · camera off · indicators only"
+                                                color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 92; height: 30; radius: 8
+                                            color: (root.sec?.sensors?.killed ?? false)
+                                                  ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                  : root.colAccent
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: (root.sec?.sensors?.killed ?? false) ? "Restore" : "Kill"
+                                                color: (root.sec?.sensors?.killed ?? false) ? root.colMuted : root.colBg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10; font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    secActProc.command = ["bash", "-c",
+                                                        "$HOME/.local/bin/security do "
+                                                        + ((root.sec?.sensors?.killed ?? false) ? "sensors-restore" : "sensors-kill")]
+                                                    secActProc.running = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // ── 4. CLIPBOARD EXPIRY ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰋗"
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "Clipboard Expiry"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.clipboard?.expiring ?? false)
+                                                ? ((root.sec.clipboard.entries ?? 0) + " kept · clears in " + (root.sec.clipboard.expiry_minutes) + " min")
+                                                : ((root.sec?.clipboard?.entries ?? 0) + " kept forever")
+                                                color: (root.sec?.clipboard?.expiring ?? false) ? root.colMuted : "#e0a75c"
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        // 10 y 60 min, y limpiar ya. Con 0 no hay caducidad.
+                                        Repeater {
+                                            model: [
+                                                { key: "0", label: "Forever" },
+                                                { key: "10", label: "10 min" },
+                                                { key: "60", label: "1 hour" },
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.preferredWidth: 62; height: 30; radius: 8
+                                                color: String(root.sec?.clipboard?.expiry_minutes ?? 0) === modelData.key
+                                                      ? root.colAccent
+                                                      : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                                Text {
+                                                    anchors.centerIn: parent; text: modelData.label
+                                                    color: String(root.sec?.clipboard?.expiry_minutes ?? 0) === modelData.key ? root.colBg : root.colFg
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9; font.weight: Font.Bold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        secActProc.command = ["bash", "-c",
+                                                            "$HOME/.local/bin/security do clipboard-expiry " + modelData.key]
+                                                        secActProc.running = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 62; height: 30; radius: 8
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                            Text {
+                                                anchors.centerIn: parent; text: "Clear"
+                                                color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9; font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    secActProc.command = ["bash", "-c",
+                                                        "$HOME/.local/bin/security do clipboard-clear"]
+                                                    secActProc.running = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // ── 5. FLATPAK PERMISSIONS ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰆠"
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "Flatpak Permissions"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.flatpak?.available ?? false)
+                                                ? ((root.sec.flatpak.count) + " apps · each one already sandboxed")
+                                                : "flatpak not available"
+                                                color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        Text {
+                                            text: "󰅂"; color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            islandWin.controlSubView = 9
+                                            secProc.running = true
+                                        }
+                                    }
+                                }
+
+                                // ── 6. APP ISOLATION ──
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17
+                                            color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "󰅵"
+                                                color: root.colAccent
+                                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                            }
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 1
+                                            Text {
+                                                text: "App Isolation"; color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 12; font.weight: Font.Bold
+                                            }
+                                            Text {
+                                                text: (root.sec?.isolation?.count ?? 0) === 0
+                                                ? "No apps registered"
+                                                : ((root.sec.isolation.count) + " registered · " + (root.sec.isolation.without_network ?? 0) + " offline · " + (root.sec.isolation.with_network ?? 0) + " online")
+                                                color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                                elide: Text.ElideRight; Layout.fillWidth: true
+                                            }
+                                        }
+                                        Text {
+                                            text: "󰅂"; color: root.colMuted
+                                            font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            islandWin.controlSubView = 8
+                                            secProc.running = true
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "On Linux the sandbox is bubblewrap: each app gets its own "
+                                          + "processes, filesystem and network. App Isolation runs native apps "
+                                          + "inside it, one profile per app."
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                }
+                            }
                     }
 
                     // ── 5. SUBSECCIÓN: NIGHT LIGHT ──

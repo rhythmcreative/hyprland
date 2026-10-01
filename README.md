@@ -203,6 +203,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/
 
 Press **`Super + F`** anytime on your desktop to search all shortcuts interactively.
 
+> Most entries below are direct keybindings and fire on their own. The ones marked
+> *(via `Super + F`)* are **not** bound to a key: they are actions the cheat sheet
+> runs for you. Press `Super + F`, find the entry, hit enter. The three scripts
+> behind them are `panic-mode`, `toggle-scratchpad` and `layout-preset`.
+
 | Shortcut | Action |
 |---|---|
 | `Super + Return` | Launch terminal (Kitty) |
@@ -215,10 +220,10 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + Q` | Close focused window |
 | `Super + BackSpace` | Power menu (reboot / shutdown / sleep) |
 | `Super + Ctrl + D` | Do Not Disturb toggle |
-| `Super + grave / T` | Dropdown scratchpad terminal |
+| `Super + grave / T` | Dropdown scratchpad terminal *(via `Super + F`)* |
 | `Super + C` | Floating calculator scratchpad |
-| `Super + Alt + 1/2/3` | Layout presets (code / reading / float) |
-| `Super + Esc` | Panic mode (hide all + mute) |
+| `Super + Alt + 1/2/3` | Layout presets (code / reading / float) *(via `Super + F`)* |
+| `Super + Esc` | Panic mode (hide all + mute) *(via `Super + F`)* |
 
 <details>
   <summary><b>View complete keybindings list (30+ shortcuts)</b></summary>
@@ -254,7 +259,7 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 | `Super + C` | Scratchpad calculator | Floating calculator |
 | `Super + Alt + 1/2/3` | Layout presets | Code, reading and float window layouts |
 | `Super + Ctrl + D` | Do Not Disturb | Silence notifications, keeps history |
-| `Super + Ctrl + W` | Wallpaper selector | Visual wallpaper picker |
+| `Super + Ctrl + W` | Wallpaper selector *(via `Super + F`)* | Visual wallpaper picker |
 | `Super + Alt + M` | Noise suppression | RNNoise mic filter toggle |
 | `Super + Esc` | Panic mode | Hide windows and mute instantly |
 | `Super + 1 .. 0` | Switch workspace | Move to workspace 1 through 10 |

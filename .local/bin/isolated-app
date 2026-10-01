@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+# Aislar una aplicacion nativa dentro de bubblewrap.
+#
+# En Android cada app corre en su propio espacio de nombres y en Linux no hay
+# nada nativo que hacer eso. Lo que hay es bubblewrap, que ya viene instalado
+# porque flatpak lo usa por dentro. Con el se puede lanzar cualquier binario de
+# pacman con sus propios namespaces de proceso, red, ficheros e IPC.
+#
+# Medido en esta maquina, dentro contra fuera:
+#     PIDs visibles     5   frente a   447
+#     montajes         14  frente a   27
+#     interfaces de red 1  frente a   3
+#
+# Los perfiles son tres:
+#     strict   sin red y con la home reducida a las carpetas del programa
+#     nonet    igual que strict pero con red
+#     off      sin aislar, por si una app se rompe aislada
+#
+# Los datos de cada app viven en ~/.config/rhythm/isolated-apps.conf, con una
+# linea por app y los campos separados por "|":
+#
+#     nombre|perfil|carpetas de datos separadas por ;|orden a ejecutar
+#
+# La tarjeta "App Isolation" de la isla llama a este script, asi que el formato
+# del fichero y el del JSON de "list" no se tocan a mano.
+
+set -uo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/isolated-apps.conf"
+
+# Sin red hace falta resolver por DNS, asi que se copia el de la maquina: asi
+# el shell resuelve igual que fuera, pero no puede abrir conexiones por su cuenta.
+RESOLV="/etc/resolv.conf"
+
+perfil_valido() {
+    case "$1" in
+        strict|nonet|off) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Devuelve 0 si la app existe en el fichero de configuracion.
+app_existe() {
+    [ -f "$CONF" ] || return 1
+    grep -q "^$1|" "$CONF" 2>/dev/null
+}
+
+campo() {
+    # campo <linea> <numero>
+    printf '%s' "$1" | cut -d'|' -f"$2"
+}
+
+construir_bwrap() {
+    # construir_bwrap <perfil> <carpetas de datos> <orden>
+    local perfil="$1" datos="$2" orden="$3"
+    local args=(--unshare-all --die-with-parent --new-session)
+
+    # El sistema de ficheros base: solo lectura, porque una app aislada no debe
+    # poder cambiar un binario del sistema ni un archivo de configuracion suyo.
+    args+=(--ro-bind /usr /usr --ro-bind /etc /etc)
+    # /opt lo traen muchas apps fuera de la distribucion. Brave por ejemplo es
+    # un script en /usr/bin que acaba en /opt/brave.com, y sin esto el envoltorio
+    # falla con "No such file or directory" aunque /usr este montado.
+    [ -d /opt ] && args+=(--ro-bind /opt /opt)
+    # Arch tiene el /usr fusionado: /bin, /lib y /lib64 son symlinks, y sin
+    # recrearlos dentro de la sandbox no existe ningun interprete de shell.
+    args+=(--symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64)
+
+    # Ficheros pseudo y dispositivos. /tmp va montado de verdad porque las apps
+    # necesitan escribir ahi, y /dev/shm aparte porque --dev no lo trae y
+    # Wayland lo usa para las texturas: sin el, hay ventanas que salen a negro.
+    args+=(--proc /proc --dev /dev --bind /tmp /tmp)
+    [ -d /dev/shm ] && args+=(--bind /dev/shm /dev/shm)
+
+    # La GPU. Sin esto los navegadores y los reproductores salen por software
+    # o directamente no abren ventana.
+    [ -d /dev/dri ] && args+=(--dev-bind /dev/dri /dev/dri)
+
+    # Y /sys entero, en solo lectura, porque sin el se cae el Vulkan. Probado:
+    # sin /sys, mpv responde "Failed initializing vulkan device" y se rinde. Y
+    # estrecharlo a /sys/devices + /sys/class/drm NO basta: hace falta mas de
+    # /sys del que parece, asi que va entero. Es lo unico de la maquina que se
+    # queda fuera del aislamiento, y solo el modelo de dispositivos.
+    [ -d /sys ] && args+=(--ro-bind /sys /sys)
+
+    # Red: --unshare-all ya deja solo loopback. Con el perfil nonet se
+    # devuelve la red real de la maquina.
+    [ "$perfil" = "nonet" ] && args+=(--share-net)
+
+    # La home se tapa entera y se vuelve a montar solo lo que la app necesita.
+    # El orden importa: si el tmpfs va despues de los binds, los tapa.
+    args+=(--tmpfs "$HOME")
+
+    local IFS=';'
+    local -a carpetas
+    read -r -a carpetas <<< "$datos"
+    for c in "${carpetas[@]}"; do
+        [ -n "$c" ] || continue
+        [ -e "$c" ] || mkdir -p "$c" 2>/dev/null
+        args+=(--bind "$c" "$c")
+    done
+    unset IFS
+
+    # La sesion grafica: solo los sockets que hacen falta, no toda la carpeta.
+    # wayland-1 para dibujar y bus para DBus. Nada mas de $XDG_RUNTIME_DIR.
+    local rt="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    [ -S "$rt/wayland-1" ] && args+=(--bind "$rt/wayland-1" "$rt/wayland-1")
+    [ -S "$rt/wayland-0" ] && args+=(--bind "$rt/wayland-0" "$rt/wayland-0")
+    [ -S "$rt/bus" ] && args+=(--bind "$rt/bus" "$rt/bus")
+    [ -f "$rt/pulse/native" ] && { mkdir -p "$rt/pulse" 2>/dev/null; args+=(--bind "$rt/pulse" "$rt/pulse"); }
+    [ -d /run/user/$(id -u)/pipewire-0 ] && args+=(--bind "/run/user/$(id -u)/pipewire-0" "/run/user/$(id -u)/pipewire-0")
+
+    # Variables de entorno minimas. Sin DISPLAY ni WAYLAND_DISPLAY la app no
+    # sabe donde dibujar, que es el fallo mas comun al aislar.
+    args+=(--setenv HOME "$HOME" --setenv USER "${USER:-$(id -un)}")
+    args+=(--setenv XDG_RUNTIME_DIR "$rt" --setenv XDG_SESSION_TYPE wayland)
+    args+=(--setenv WAYLAND_DISPLAY "${WAYLAND_DISPLAY:-wayland-1}")
+    args+=(--setenv DISPLAY "${DISPLAY:-}")
+    args+=(--setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin")
+    args+=(--setenv DBUS_SESSION_BUS_ADDRESS "unix:path=$rt/bus")
+    [ -f "$RESOLV" ] && args+=(--ro-bind "$RESOLV" "$RESOLV")
+    [ -r /etc/hosts ] && args+=(--ro-bind /etc/hosts /etc/hosts)
+
+    printf '%s\n' "${args[@]}"
+}
+
+json_escapar() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+listar() {
+    printf '{\n  "apps": [\n'
+    local primero=1
+    if [ -f "$CONF" ]; then
+        while IFS='|' read -r nombre perfil datos orden; do
+            [ -n "$nombre" ] || continue
+            [ "$primero" = 1 ] || printf ',\n'
+            primero=0
+            printf '    {"name": "%s", "profile": "%s", "data": "%s", "command": "%s"}' \
+                "$(json_escapar "$nombre")" \
+                "$(json_escapar "$perfil")" \
+                "$(json_escapar "$datos")" \
+                "$(json_escapar "$orden")"
+        done < "$CONF"
+    fi
+    printf '\n  ],\n  "count": %d,\n' "$(grep -c . "$CONF" 2>/dev/null || echo 0)"
+    local conred=0 sinred=0
+    if [ -f "$CONF" ]; then
+        conred=$(grep -c '|nonet|' "$CONF" 2>/dev/null || echo 0)
+        sinred=$(grep -c '|strict|' "$CONF" 2>/dev/null || echo 0)
+    fi
+    printf '  "with_network": %d,\n  "without_network": %d\n}\n' "$conred" "$sinred"
+}
+
+generar_desktop() {
+    # Busca el .desktop original de la app y escribe una copia en el home del
+    # usuario con el Exec apuntando al envoltorio. No se toca nada del sistema:
+    # lo de /usr/share/applications se pisa con lo de ~/.local/share/applications.
+    local app="$1" original destino
+    original=$(grep -rlE "^Exec=.*[/ ]$app([^a-zA-Z0-9]|$)" /usr/share/applications 2>/dev/null | head -1)
+    [ -n "$original" ] || original=$(grep -rlE "^Exec=.*[/ ]$app([^a-zA-Z0-9]|$)" /var/lib/flatpak/exports/share/applications 2>/dev/null | head -1)
+    if [ -z "$original" ]; then
+        echo "no hay ningun .desktop para $app" >&2
+        return 1
+    fi
+    destino="$HOME/.local/share/applications/aislada-$app.desktop"
+    mkdir -p "$HOME/.local/share/applications"
+    awk -v w="$HOME/.local/bin/isolated-app run $app" -v a="$app" '
+        /^Exec=/ {
+            n = split($0, partes, "=")
+            resto = substr($0, length(partes[1]) + 2)
+            print "Exec=" w " " resto
+            next
+        }
+        { print }
+    ' "$original" > "$destino"
+    chmod +x "$destino"
+    echo "$app: lanzador aislado escrito"
+    grep -m1 '^Exec=' "$destino" | sed 's/^/    /'
+}
+
+usage() {
+    cat >&2 <<'EOF'
+uso:
+  isolated-app run <app> [args...]      lanza la app aislada
+  isolated-app list                      JSON con todas las apps y su perfil
+  isolated-app set <app> <perfil>       cambia el perfil (strict|nonet|off)
+  isolated-app add <app> <perfil> <datos> <orden>
+  isolated-app remove <app>
+  isolated-app desktop <app>            lanzador en el menu que usa el envoltorio
+  isolated-app test <app>                informa de lo que ve la app aislada
+EOF
+    exit 1
+}
+
+[ $# -ge 1 ] || usage
+accion="$1"; shift
+
+case "$accion" in
+list)
+    listar
+    ;;
+
+run)
+    [ $# -ge 1 ] || usage
+    app="$1"; shift
+    app_existe "$app" || { echo "no esta en $CONF: $app" >&2; exit 1; }
+    linea=$(grep "^$app|" "$CONF" | head -1)
+    perfil=$(campo "$linea" 2)
+    datos=$(campo "$linea" 3)
+    orden=$(campo "$linea" 4)
+    perfil_valido "$perfil" || { echo "perfil no valido: $perfil" >&2; exit 1; }
+    # Ojo con el paso de argumentos: con sh -c el primer argumento tras -- se
+    # come el $0, asi que los ficheros que se le pasen a la app hay que
+    # expandirlos DENTRO del comando. Si no, mpv los recibe como $0 y solo
+    # enseña la ayuda y se sale.
+    if [ "$perfil" = "off" ]; then
+        exec /bin/sh -c "$orden \"\$@\"" -- "$@"
+    fi
+    mapfile -t bw < <(construir_bwrap "$perfil" "$datos" "$orden")
+    exec /usr/bin/bwrap "${bw[@]}" -- /bin/sh -c "$orden \"\$@\"" -- "$@"
+    ;;
+
+test)
+    [ $# -ge 1 ] || usage
+    app="$1"
+    app_existe "$app" || { echo "no esta en $CONF: $app" >&2; exit 1; }
+    linea=$(grep "^$app|" "$CONF" | head -1)
+    perfil=$(campo "$linea" 2)
+    datos=$(campo "$linea" 3)
+    orden=$(campo "$linea" 4)
+    mapfile -t bw < <(construir_bwrap "$perfil" "$datos" "$orden")
+    /usr/bin/bwrap "${bw[@]}" -- /bin/sh -c '
+        echo "  app:       $0"
+        echo "  perfil:    $1"
+        echo "  PIDs:      $(ls /proc | grep -cE "^[0-9]+$")"
+        echo "  montajes:  $(findmnt -n 2>/dev/null | wc -l)"
+        echo "  red:       $(ip -o link show 2>/dev/null | grep -c ":") interfaces"
+        echo "  ip:        $(ip -o -4 addr show scope global 2>/dev/null | grep -oE "inet [0-9.]+" | head -1)"
+        echo "  home:      $(ls -A "$HOME" 2>/dev/null | wc -l) entradas visibles"
+        echo "  wayland:   ${WAYLAND_DISPLAY:-sin definir}"
+        echo "  gpu:       $(ls /dev/dri 2>/dev/null | tr "\n" " ")"
+    ' "$app" "$perfil"
+    ;;
+
+set)
+    [ $# -ge 2 ] || usage
+    app="$1"; perfil="$2"
+    perfil_valido "$perfil" || { echo "perfil no valido: $perfil" >&2; exit 1; }
+    app_existe "$app" || { echo "no esta en $CONF: $app" >&2; exit 1; }
+    [ -f "$CONF" ] || touch "$CONF"
+    tmp=$(mktemp)
+    awk -F'|' -v OFS='|' -v a="$app" -v p="$perfil" \
+        '{ if ($1==a) $2=p; print }' "$CONF" > "$tmp"
+    cp "$tmp" "$CONF"; rm -f "$tmp"
+    echo "$app: $perfil"
+    ;;
+
+add)
+    [ $# -ge 4 ] || usage
+    app="$1"; perfil="$2"; datos="$3"; shift 3; orden="$*"
+    perfil_valido "$perfil" || { echo "perfil no valido: $perfil" >&2; exit 1; }
+    mkdir -p "$(dirname "$CONF")"
+    [ -f "$CONF" ] || : > "$CONF"
+    tmp=$(mktemp)
+    grep -v "^$app|" "$CONF" > "$tmp" 2>/dev/null || true
+    printf '%s|%s|%s|%s\n' "$app" "$perfil" "$datos" "$orden" >> "$tmp"
+    cp "$tmp" "$CONF"; rm -f "$tmp"
+    echo "$app anadida con perfil $perfil"
+    ;;
+
+desktop)
+    [ $# -ge 1 ] || usage
+    generar_desktop "$1"
+    ;;
+
+remove)
+    [ $# -ge 1 ] || usage
+    app="$1"
+    [ -f "$CONF" ] || { echo "no hay $CONF" >&2; exit 1; }
+    tmp=$(mktemp)
+    grep -v "^$app|" "$CONF" > "$tmp" 2>/dev/null || true
+    cp "$tmp" "$CONF"; rm -f "$tmp"
+    echo "$app eliminada"
+    ;;
+
+*)
+    usage
+    ;;
+esac

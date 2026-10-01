@@ -292,6 +292,60 @@ Press **`Super + F`** anytime on your desktop to search all shortcuts interactiv
 
 ---
 
+<details>
+  <summary><b>Making it yours without losing it on update</b></summary>
+
+Everything under `~/.config` comes from this repo and is refreshed on every
+update. There is one place for your own changes, and it is loaded last, so it
+wins without opting out of anything new the repo adds.
+
+| File | For |
+|---|---|
+| `~/.config/hypr/user.lua` | Extra keybinds, window rules, animation tweaks |
+| `~/.config/kitty/user.conf` | Terminal settings |
+
+Both are gitignored, so an update can never ship them over the top. Hyprland
+loads `user.lua` through `loadfile` inside `pcall`, so a typo there drops only
+your part and not the whole desktop. `user.lua.example` ships commented, with
+the usual cases.
+
+If you edit a repo-owned file by hand anyway, `rhythm-materialize` notices that
+its bytes match neither what it laid last time nor what the repo ships, moves it
+into `~/.local/state/rhythm/user_edits/` before overwriting, and tells you. The
+edit survives as a fork of that one file.
+
+Colour files (GTK 3/4, Rofi, Mako) are deliberately not in this repo. They are
+generated on your machine by pywal, so an update cannot revert them to a stale
+palette.
+
+</details>
+
+<details>
+  <summary><b>Maintenance</b></summary>
+
+| Command | What it does |
+|---|---|
+| `system-ota update` | Pull the repo, deploy, resync colours, reconcile, reload services |
+| `rhythm-doctor` | Report anything drifted or not delivered |
+| `rhythm-doctor --fix` | Repair what is repairable |
+| `rhythm-materialize --status` | Show your overrides and the deploy ledger |
+| `rhythm` | Unified CLI, 11 groups |
+
+`rhythm-doctor` exists because a deploy structurally cannot reach everything:
+`/etc/sddm/Xsetup` is installed once outside `~/.config`, so before the doctor a
+fix to it reached the repo and no machine that had already installed. It runs at
+the end of every update, and its findings count as update problems rather than
+being silently dropped.
+
+State lives under `~/.local/state/rhythm/`, not `~/.config`, so the deploy can
+never overwrite it. The battery charge limit is there too, reapplied at every
+login by `rhythm-battery-limit.service`, because the kernel does not keep
+`charge_control_end_threshold` across reboots.
+
+</details>
+
+---
+
 <p align="center">
  Made with ❤️ from rhythmcreative
 </p>

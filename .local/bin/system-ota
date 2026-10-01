@@ -624,6 +624,21 @@ cmd_update() {
         OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
     fi
 
+    # Los ficheros de color que pywal genera (gtk 3/4 css y settings, rofi,
+    # mako) estan versionados en el repo con los colores del momento en que se
+    #escribieron. materialize los acaba de desplegar, asi que tras cualquier update
+    # esos ficheros volvian a los colores viejos aunque pywal ya hubiera
+    # generado otros.
+    #
+    # install.sh ya fazia deploy y luego sync; aqui faltaba ese segundo paso.
+    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+        echo "Resyncing pywal colours after deploy..."
+        if ! "$HOME/.local/bin/modern-pywal-sync" >> "$LOG_FILE" 2>&1; then
+            echo "  [!] modern-pywal-sync fallo; los colores pueden estar desfasados."
+            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+        fi
+    fi
+
     if [ "$OTA_DEPLOY_FAILED" -gt 0 ]; then
         OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
         echo "  [!] $OTA_DEPLOY_FAILED problema(s) en el despliegue."

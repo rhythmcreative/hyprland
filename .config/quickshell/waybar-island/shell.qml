@@ -404,6 +404,18 @@ ShellRoot {
                             isolation: { apps: [], count: 0, with_network: 0, without_network: 0 } })
     property string secMsg: ""
 
+    // Solo las apps aisladas, para la lista de la auditoria. Se calcula aqui
+    // porque un Repeater no puede filtrar un array de objetos por una
+    // condicion sin anidar un Repeater dentro de otro.
+    function aisladas() {
+        let out = []
+        let apps = root.sec?.audit?.apps ?? []
+        for (let i = 0; i < apps.length; i++) {
+            if (apps[i].isolated) out.push(apps[i])
+        }
+        return out
+    }
+
     // Apps nativas aisladas con bubblewrap. Lo lee isolated-app list, que da
     // el perfil de cada una: strict (sin red y con la home reducida), nonet
     // (todo aislado pero con red) u off (sin aislar).
@@ -3976,6 +3988,207 @@ ShellRoot {
                             }
                         }
 
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.centerIn: parent; spacing: 6
+                                Text { text: "<- Back"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
+                    }
+
+                    // ── 6. SUBAPARTADO: AUDITORIA DE APLICACIONES ──
+                    // Cuantas de las apps que tienen lanzador estan aisladas con bubblewrap, y
+                    // cuales no. Las que tocan la red o datos personales salen arriba con un
+                    // boton para aislarlas; el resto se cuenta pero no se ofrece, porque aislar
+                    // un configurador del sistema no aporta nada y solo se rompe.
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: (islandWin.currentTab === 0 || islandWin.currentTab === 4)
+                                                 && islandWin.controlSubView === 10
+
+                        Rectangle {
+                            Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 8; spacing: 6
+                                Text { text: "󰼹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                Text { text: "App Audit"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11; font.weight: Font.Bold }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: ((root.sec?.audit?.isolated ?? 0) + " of " + (root.sec?.audit?.total ?? 0) + " isolated")
+                                    color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: islandWin.controlSubView = 0
+                            }
+                        }
+
+                        Text {
+                            text: "Native apps run through bubblewrap, each in its own namespaces. "
+                                  + "Flatpak apps are already sandboxed. Apps marked verified were "
+                                  + "actually launched and opened a window inside the sandbox."
+                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+
+                        // ── Las que quedan pendientes, que son las que de verdad tocan la red ──
+                        Text {
+                            text: (root.sec?.audit?.priority_count ?? 0) === 0
+                            ? "Nothing pending: every app that touches the network is isolated."
+                            : ("Not isolated yet: " + (root.sec.audit.priority_count) + " apps with network access")
+                            color: (root.sec?.audit?.priority_count ?? 0) === 0 ? root.colMuted : "#e0a75c"
+                            font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10
+                            font.weight: Font.Bold; Layout.fillWidth: true
+                        }
+
+                        Repeater {
+                            model: root.sec?.audit?.priority ?? []
+                            delegate: Rectangle {
+                                id: pendRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                height: 52
+                                radius: 12
+                                color: root.colSurface
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 1
+                                        Text {
+                                            text: pendRow.modelData.name
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11; font.weight: Font.Bold
+                                            elide: Text.ElideRight; Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: "not isolated · " + pendRow.modelData.bin
+                                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: 76; height: 30; radius: 8
+                                        color: root.colAccent
+                                        Text {
+                                            anchors.centerIn: parent; text: "Isolate"
+                                            color: root.colBg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10; font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                secActProc.command = ["bash", "-c",
+                                                    "$HOME/.local/bin/security do isolate "
+                                                    + pendRow.modelData.bin + " nonet"]
+                                                secActProc.running = true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Las que ya estan aisladas, con su perfil y si se han comprobado ──
+                        Text {
+                            text: "Isolated"
+                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10; font.weight: Font.Bold; Layout.fillWidth: true
+                        }
+
+                        Repeater {
+                            model: root.aisladas()
+                            delegate: Rectangle {
+                                id: iso2Row
+                                required property var modelData
+                                Layout.fillWidth: true
+                                height: 50
+                                radius: 12
+                                color: root.colSurface
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 1
+                                        Text {
+                                            text: iso2Row.modelData.name
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11; font.weight: Font.Bold
+                                            elide: Text.ElideRight; Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: (iso2Row.modelData.profile === "strict")
+                                            ? "no network"
+                                            : ((iso2Row.modelData.profile === "off") ? "not isolated" : "isolated, with network")
+                                            color: root.colMuted; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9; Layout.fillWidth: true
+                                        }
+                                    }
+                                    // Distingue "comprobada" de "solo registrada": una app
+                                    // registrada puede que nunca haya llegado a abrir ventana.
+                                    Text {
+                                        text: iso2Row.modelData.verified === "ok"
+                                        ? "OK"
+                                        : ((iso2Row.modelData.verified === "fallo") ? "broken" : "untested")
+                                        color: iso2Row.modelData.verified === "ok"
+                                              ? root.colAccent
+                                              : ((iso2Row.modelData.verified === "fallo") ? "#e05c5c" : root.colMuted)
+                                        font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                        font.weight: Font.Bold
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: 64; height: 28; radius: 8
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: iso2Row.modelData.verified === "ok" ? "Test" : "Check"
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9; font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                secActProc.command = ["bash", "-c",
+                                                    "$HOME/.local/bin/security do verify "
+                                                    + iso2Row.modelData.bin]
+                                                secActProc.running = true
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: 64; height: 28; radius: 8
+                                        color: Qt.rgba(224, 92, 92, 0.14)
+                                        Text {
+                                            anchors.centerIn: parent; text: "Drop"
+                                            color: "#e05c5c"; font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 9; font.weight: Font.Bold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                secActProc.command = ["bash", "-c",
+                                                    "$HOME/.local/bin/security do unisolate "
+                                                    + iso2Row.modelData.bin]
+                                                secActProc.running = true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Rectangle {
                             Layout.fillWidth: true; height: 36; radius: 10; color: root.colSurface
                             RowLayout {
@@ -6423,6 +6636,58 @@ Flickable {
                         Layout.fillWidth: true
 
                                 spacing: 10
+
+
+                    // ── 7. APP AUDIT ──
+                    // Cuantas de las apps con lanzador estan aisladas. El detalle con los
+                    // botones para aislar o quitar el aislamiento esta en el subapartado.
+                    Rectangle {
+                        Layout.fillWidth: true; height: 54; radius: 14; color: root.colSurface
+
+                        RowLayout {
+                            anchors.fill: parent; anchors.margins: 10; spacing: 10
+                            Rectangle {
+                                width: 34; height: 34; radius: 17
+                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰼹"
+                                    color: root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 1
+                                Text {
+                                    text: "App Audit"; color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12; font.weight: Font.Bold
+                                }
+                                Text {
+                                    text: (root.sec?.audit?.total ?? 0) + " apps · "
+                                          + (root.sec?.audit?.isolated ?? 0) + " isolated · "
+                                          + ((root.sec?.audit?.priority_count ?? 0) === 0
+                                             ? "nothing pending"
+                                             : ((root.sec.audit.priority_count) + " with network open"))
+                                    color: (root.sec?.audit?.priority_count ?? 0) === 0 ? root.colMuted : "#e0a75c"
+                                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                                    elide: Text.ElideRight; Layout.fillWidth: true
+                                }
+                            }
+                            Text {
+                                text: "󰅂"; color: root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                islandWin.controlSubView = 10
+                                secProc.running = true
+                            }
+                        }
+                    }
 
                                 // ── 1. EXPLOIT PROTECTION ──
                                 Rectangle {

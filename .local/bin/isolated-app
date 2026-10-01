@@ -157,19 +157,25 @@ generar_desktop() {
     # usuario con el Exec apuntando al envoltorio. No se toca nada del sistema:
     # lo de /usr/share/applications se pisa con lo de ~/.local/share/applications.
     local app="$1" original destino
-    original=$(grep -rlE "^Exec=.*[/ ]$app([^a-zA-Z0-9]|$)" /usr/share/applications 2>/dev/null | head -1)
-    [ -n "$original" ] || original=$(grep -rlE "^Exec=.*[/ ]$app([^a-zA-Z0-9]|$)" /var/lib/flatpak/exports/share/applications 2>/dev/null | head -1)
+    original=$(grep -rlE "^Exec=(.*[/ ])?$app([^a-zA-Z0-9]|$)" /usr/share/applications 2>/dev/null | head -1)
+    [ -n "$original" ] || original=$(grep -rlE "^Exec=(.*[/ ])?$app([^a-zA-Z0-9]|$)" /var/lib/flatpak/exports/share/applications 2>/dev/null | head -1)
     if [ -z "$original" ]; then
         echo "no hay ningun .desktop para $app" >&2
         return 1
     fi
     destino="$HOME/.local/share/applications/aislada-$app.desktop"
     mkdir -p "$HOME/.local/share/applications"
-    awk -v w="$HOME/.local/bin/isolated-app run $app" -v a="$app" '
+    # Del Exec original solo interesan los codigos de campo (%U, %F, %u...): el
+    # binario y las banderas fijas ya estan en el comando del registro, asi que
+    # copiarlos aqui los duplicaria y la app arrancaria con el nombre dos veces.
+    awk -v w="$HOME/.local/bin/isolated-app run $app" '
         /^Exec=/ {
-            n = split($0, partes, "=")
-            resto = substr($0, length(partes[1]) + 2)
-            print "Exec=" w " " resto
+            n = index($0, "=")
+            campos = ""
+            for (i = 2; i <= NF; i++) {
+                if ($i ~ /^%/) campos = campos " " $i
+            }
+            print "Exec=" w campos
             next
         }
         { print }

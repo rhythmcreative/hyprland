@@ -23,16 +23,43 @@ set -u
 BASE="/sys/class/power_supply"
 
 # Fichero con el limite elegido desde la isla, que --apply vuelve a poner.
-CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/battery-limit.conf"
+#
+# Vive en ~/.local/state y no en ~/.config porque es estado mutable de la
+# maquina, no configuracion del usuario: el repo despliega .config/rhythm/ (la
+# isla lee ahi) y meter estado dentro de un directorio que el update re-pone
+# es la Via rapida a que un dia lo pise. La ruta vieja se sigue leyendo si
+# existe, para no perder el valor de quien ya lo tenga puesto a mano.
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/rhythm"
+CONF_NEW="$STATE_DIR/battery-limit.conf"
+CONF_OLD="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/battery-limit.conf"
+CONF="$CONF_NEW"
+
+migrar_conf() {
+    # Si solo existe en la ruta vieja, se lleva a la nueva. Se hace al leer,
+    # no en el arranque del sistema, para que mover el fichero no dependa de
+    # cuando se ejecuta esto.
+    if [ ! -f "$CONF_NEW" ] && [ -f "$CONF_OLD" ]; then
+        mkdir -p "$STATE_DIR" 2>/dev/null && mv "$CONF_OLD" "$CONF_NEW" 2>/dev/null
+    fi
+}
 
 # Lee charge_limit de ese fichero. Acepta "80", "off", "max"... con o sin
 # espacios alrededor del "=", que es como lo puede haber escrito a mano.
 leer_conf() {
+    migrar_conf
     [ -r "$CONF" ] || return 1
     local v
     v=$(sed -n 's/^[[:space:]]*charge_limit[[:space:]]*=[[:space:]]*//p' "$CONF" | head -n1)
     [ -n "$v" ] || return 1
     printf '%s' "$v"
+}
+
+# Guarda el limite para que --apply lo vuelva a poner tras un reinicio. Sin
+# esto la isla escribia en el kernel y el valor se perdia al reiniciar, que es
+# justo lo que rhythm-battery-limit.service existe para arreglar.
+guardar_conf() {
+    mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+    printf 'charge_limit=%s\n' "$1" > "$CONF" 2>/dev/null || true
 }
 
 baterias() {
@@ -93,6 +120,9 @@ if [ "${1:-}" = "--apply" ]; then
         exit 1
     fi
     set -- "$pct" $targets
+    # Marca de que este limite viene del conf y no de una eleccion nueva: no
+    # se vuelve a guardar, o un conf corrupto se reescribiria a si mismo.
+    _DESDE_CONF=1
 fi
 
 # Reejecucion con privilegios: este guion reejecutandose a si mismo con
@@ -123,6 +153,14 @@ fi
 targets="$*"
 [ -n "$targets" ] || targets=$(baterias)
 [ -n "$targets" ] || { echo "battery-charge-limit: no hay baterias" >&2; exit 1; }
+
+# Una eleccion explicita se guarda para que sobreviva a un reinicio. Antes la
+# isla escribia solo en el kernel: el limite se perdia al apagar, y
+# rhythm-battery-limit.service no tenia de donde leerlo porque nadie escribia
+# el conf. Eso es justo lo que rompia la unit en cada arranque.
+if [ "${_DESDE_CONF:-0}" != "1" ] && [ "$valor" != "100" ]; then
+    guardar_conf "$valor"
+fi
 
 escribir() {
     local b

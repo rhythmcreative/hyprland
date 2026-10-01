@@ -1,17 +1,19 @@
 [Unit]
 Description=Rhythm Night Light scheduled on/off check
-Documentation=man:gammastep(1)
-# El compositor tiene que estar delante: hyprsunset necesita hablar con Hyprland
-# por su socket, y sin esto puede fallar en un login recien arrancado.
-After=graphical-session.target
-PartOf=graphical-session.target
+Documentation=man:hyprsunset(1)
+# hyprsunset necesita hablar con Hyprland por su socket, pero aqui no se
+# ordena contra graphical-session.target porque en esta maquina ese target esta
+# inactivo y no sirve para nada. La seguridad la da el timer: si la primera
+# pasada falla porque el compositor aun no esta, la siguiente dentro de 60s lo
+# relanza. StartLimitIntervalSec=0 para que systemd no deje de reintentar solo.
 
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/night-light-schedule
-# hyprsunset se lanza en segundo plano desde toggle-nightlight y sobrevive a
-# que este proceso termine, asi que aqui no hay nada que esperar.
+# hyprsunset va en su propia unidad, asi que aqui no hay nada que esperar: este
+# proceso solo lanza o para rhythm-hyprsunset.service y se termina.
 TimeoutStartSec=20
+StartLimitIntervalSec=0
 
 [Install]
 WantedBy=default.target

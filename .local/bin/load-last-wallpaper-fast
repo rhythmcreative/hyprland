@@ -11,6 +11,34 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
+# El entorno del compositor se resuelve aqui y no se da por puesto porque los
+# dos watchers de monitor (wallpaper-monitor-watcher y rust-dock-monitor-watcher,
+# ambos desde unidades de systemd de usuario) lanzan este script. systemd no
+# hereda nada del compositor, asi que sin esto no hay ni WAYLAND_DISPLAY ni
+# HYPRLAND_INSTANCE_SIGNATURE.
+#
+# Sin WAYLAND_DISPLAY el cliente de awww busca su socket en
+# $XDG_RUNTIME_DIR/wayland-0-awww-daemon.sock y cae en "not found", porque en
+# este portatil el compositor toma wayland-1. Entonces ni el `awww query` de la
+# comprobacion de abajo, ni el `awww-daemon` de arranque, ni el repintado que se
+# pide despues llegaban a nada: el fondo no se ponia solo en ninguna pantalla.
+# El fallo no se notaba porque todo va con >/dev/null 2>&1 || true.
+#
+# wallpaper-selector y wallpaper-random ya hacian esto; este camino, que es el
+# automatico, se quedaba sin el. wallpaper-backend tambien lo resuelve por su
+# cuenta, pero aqui hace falta antes, para la comprobacion del daemon.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "$WAYLAND_DISPLAY" ]; then
+    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww-daemon' | head -n1)
+    if [ -n "$_wl" ]; then export WAYLAND_DISPLAY=$(basename "$_wl"); fi
+    unset _wl
+fi
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    _sig=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$_sig" ]; then export HYPRLAND_INSTANCE_SIGNATURE="$_sig"; fi
+    unset _sig
+fi
+
 # Verificación de daemon (soporta awww)
 DAEMON_RUNNING=false
 if awww query > /dev/null 2>&1 || pgrep -x "awww-daemon" > /dev/null; then

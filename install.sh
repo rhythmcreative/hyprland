@@ -1283,6 +1283,39 @@ MONCONF
         fi
     done
 
+    # Stamp the installed version.
+    #
+    # Solo ota-updater escribia ~/.version, y solo al ACTUALIZAR. En una
+    # instalacion limpia no existia, asi que rhythm caia al tercer candidato:
+    # `git describe --tags --always`, que sin un tag alcanza devuelve un hash de
+    # commit. El status de la OTA de unrecien instalado decia "e5169c6" en lugar de
+    # una version, y `rhythm` no tenia forma de saber si habia algo que actualizar.
+    #
+    # Se escribe DESPUES de desplegar, y con el .version del repo. Si no esta, se
+    # cae al tag mas alto, que es lo que hay que preferir si los dos no coinciden:
+    # .version llega tarde al repo cuando se etiqueta una release, y en ese
+    # intervalo el tag es el numero bueno.
+    step_item "Stamping the installed version..."
+    local stamped="" del_fichero="" del_tag=""
+    if [ -f "$DOTFILES_DIR/.version" ]; then
+        del_fichero=$(tr -d '[:space:]' < "$DOTFILES_DIR/.version")
+    fi
+    if [ -d "$DOTFILES_DIR/.git" ]; then
+        del_tag=$(git -C "$DOTFILES_DIR" tag --list 'v*' 2>/dev/null | sed 's/^v//' | sort -V | tail -n1 || true)
+    fi
+    # Se queda con el MAYOR de los dos, no con el primero que aparezca. Medido:
+    # con .version en 0.22 y el tag en v0.23,UDI en el orden de antes sellaba 0.22
+    # y rhythm se creeia dos versiones por detras de donde estaba. El .version
+    # llega tarde al repo cuando se etiqueta una release, y en ese intervalo el
+    # tag es el numero bueno.
+    stamped=$(printf '%s\n%s\n' "$del_fichero" "$del_tag" | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -n1 || true)
+    if [ -n "$stamped" ]; then
+        printf '%s\n' "$stamped" > "$HOME/.version"
+        step_ok "Installed version stamped: $stamped"
+    else
+        step_warn "Could not determine the version; ~/.version not written."
+    fi
+
     # Replace hardcoded home paths with real current user path
     step_item "Adapting file paths to current user ($USER)..."
     grep -rIl "/home/rhythmcreative" "$HOME/.config" "$HOME/.local/bin" "$HOME/.bashrc" "$HOME/.zshrc" 2>/dev/null | while read -r file; do

@@ -87,7 +87,26 @@ buscar_firma() {
         [ -n "$s" ] || continue
         # Hyprland crea el directorio antes de tener los sockets, asi que
         # fijarse solo en el nombre daria una firma que todavia no existe.
-        [ -S "$XDG_RUNTIME_DIR/hypr/$d.socket2.sock" ] || continue
+        #
+        # El socket NO esta al lado del directorio, esta DENTRO y con un punto
+        # delante: hypr/<firma>/.socket2.sock. Antes se miraba
+        # hypr/<firma>.socket2.sock, que no existe, y por eso buscar_firma nunca
+        # encontraba la firma: la isla arrancaba con HYPRLAND_INSTANCE_SIGNATURE
+        # vacia y todo lo que lanza desde dentro (island-fullscreens,
+        # wallpaper-apply, background-health) se caia con
+        # "HYPRLAND_INSTANCE_SIGNATURE not set!". Medido en esta maquina:
+        #
+        #   hypr/<firma>/.socket2.sock   -> si es socket
+        #   hypr/<firma>.socket2.sock    -> no existe
+        #
+        # Se miran las dos formas porque Hyprland las ha cambiado entre
+        # versiones, y si no se encuentra ninguna no es motivo para no arrancar.
+        if [ -S "$XDG_RUNTIME_DIR/hypr/$d/.socket2.sock" ] ||
+           [ -S "$XDG_RUNTIME_DIR/hypr/$d.socket2.sock" ]; then
+            :
+        else
+            continue
+        fi
         printf '%s\n' "$s"
         return 0
     done

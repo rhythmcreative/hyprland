@@ -44,7 +44,7 @@ note() { printf '        %s\n' "$1"; }
 echo "rhythm-doctor: $MODE (repo: $REPO_DIR)"
 
 if [ ! -d "$REPO_DIR" ]; then
-    echo "  no encuentro el repo de dotfiles en $REPO_DIR" >&2
+    echo "  can't find the dotfiles repo at $REPO_DIR" >&2
     exit 1
 fi
 
@@ -65,26 +65,26 @@ check_xsetup() {
     local live="/etc/sddm/Xsetup"
 
     if [ ! -f "$shipped" ]; then
-        warn "sddm/Xsetup no esta en el repo, nada que verificar"
+        warn "sddm/Xsetup is not in the repo, nothing to verify"
         return
     fi
     if [ ! -e "$live" ]; then
-        bad "/etc/sddm/Xsetup no existe"
-        note "se copia en el paso de SDDM del instalador; si el greeter va bien, no hace falta"
+        bad "/etc/sddm/Xsetup does not exist"
+        note "it is copied in the installer's SDDM step; if the greeter works, it isn't needed"
         return
     fi
     if diff -q "$shipped" "$live" >/dev/null 2>&1; then
-        ok "/etc/sddm/Xsetup al dia"
+        ok "/etc/sddm/Xsetup is up to date"
     else
-        bad "/etc/sddm/Xsetup desfasado (el repo lo arrastro en updates)"
+        bad "/etc/sddm/Xsetup is out of date (the repo moved it in updates)"
     fi
 
     # El .disabled tiene que seguir desactivado: si alguien lo rehabilita sin
     # querer, el greeter intenta arrancar X11 en una sesion Wayland.
     if [ -e /etc/sddm.conf.d/xsetup.conf.disabled ]; then
-        ok "xsetup.conf.disabled presente (X11 sigue apagado, correcto)"
+        ok "xsetup.conf.disabled is present (X11 stays off, correct)"
     else
-        note "no hay xsetup.conf.disabled; si el login es Wayland deberia existir"
+        note "no xsetup.conf.disabled; if the login is Wayland it should exist"
     fi
 }
 
@@ -105,7 +105,7 @@ check_delivery() {
         name=$(basename "$u")
         unit="$HOME/.config/systemd/user/$name"
         if [ ! -f "$unit" ]; then
-            bad "unidad no desplegada: $name"
+            bad "unit not deployed: $name"
             missing=$((missing+1))
             continue
         fi
@@ -117,13 +117,13 @@ check_delivery() {
             *) continue ;;
         esac
         if [ ! -x "$exe" ]; then
-            bad "$name apunta a algo no ejecutable: $exe"
+            bad "$name points at something not executable: $exe"
             missing=$((missing+1))
         fi
     done
 
     if [ "$missing" -eq 0 ]; then
-        ok "todas las unidades desplegadas apuntan a ejecutables reales"
+        ok "all deployed units point at real executables"
     fi
 
     # Scripts de ~/.local/bin referenciados por las unidades.
@@ -134,11 +134,11 @@ check_delivery() {
         # Solo los que la unit ejecuta; el resto se copia igual.
         grep -rqs "$base" "$REPO_DIR"/.config/systemd/user/ || continue
         if [ ! -x "$HOME/.local/bin/$base" ]; then
-            bad "script no desplegado o no ejecutable: $base"
+            bad "script not deployed or not executable: $base"
             missing=$((missing+1))
         fi
     done
-    [ "$missing" -eq 0 ] && ok "scripts referenciados por las unidades, presentes"
+    [ "$missing" -eq 0 ] && ok "scripts referenced by the units are present"
 }
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -155,13 +155,13 @@ check_state_separation() {
     local state="${XDG_STATE_HOME:-$HOME/.local/state}/rhythm/battery-limit.conf"
 
     if [ -f "$conf" ] && [ ! -f "$state" ]; then
-        bad "battery-limit.conf sigue en ~/.config (estado en un sitio que el update re-pone)"
-        note "se migra solo al aplicar un limite nuevo, o a mano:"
+        bad "battery-limit.conf is still in ~/.config (state in a place the update overwrites)"
+        note "it migrates by itself when a new limit is applied, or by hand:"
         note "  mkdir -p \$(dirname $state) && mv $conf $state"
     elif [ -f "$state" ]; then
-        ok "battery-limit.conf en ~/.local/state"
+        ok "battery-limit.conf in ~/.local/state"
     else
-        note "sin limite de bateria configurado (normal si nunca se eligio uno)"
+        note "no battery limit set (normal if none was ever chosen)"
     fi
 }
 
@@ -182,10 +182,10 @@ check_local_edits() {
         [ -f "$live" ] || continue
         if ! diff -q "$f" "$live" >/dev/null 2>&1; then
             diverged=$((diverged+1))
-            warn "$rel editado a mano (el update lo pondra del repo)"
+            warn "$rel was edited by hand (the update will take it from the repo)"
         fi
     done
-    [ "$diverged" -eq 0 ] && ok "sin ediciones locales en .config/hypr"
+    [ "$diverged" -eq 0 ] && ok "no local edits in .config/hypr"
 }
 
 # El greeter de SDDM vive en /usr y /etc, que el update NO sincroniza (solo
@@ -195,7 +195,7 @@ check_local_edits() {
 # plantilla nueva.
 check_greeter() {
     if [ ! -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
-        bad "rhythm-sddm-deploy no esta en ~/.local/bin; el greeter no se puede desplegar"
+        bad "rhythm-sddm-deploy is not in ~/.local/bin; the greeter can't be deployed"
         return
     fi
     local out
@@ -203,7 +203,7 @@ check_greeter() {
     local rc=$?
     echo "$out" | sed 's/^/  /'
     if [ "$rc" -ne 0 ]; then
-        warn "el greeter de SDDM no coincide con el repo: sudo ~/.local/bin/rhythm-sddm-deploy"
+        warn "the SDDM greeter doesn't match the repo: sudo ~/.local/bin/rhythm-sddm-deploy"
     fi
 }
 
@@ -217,12 +217,12 @@ check_local_edits
 echo
 if [ "$PROBLEMS" -eq 0 ]; then
     if [ "$FIXED" -gt 0 ]; then
-        echo "doctor: $FIXED corregido(s), sin problemas pendientes."
+        echo "doctor: $FIXED fixed, nothing pending."
     else
-        echo "doctor: todo correcto."
+        echo "doctor: everything correct."
     fi
     exit 0
 else
-    echo "doctor: $PROBLEMS problema(s).$([ "$MODE" = "fix" ] && echo " Corrige los marcados FAIL." || echo " Usa --fix para los corregibles.")"
+    echo "doctor: $PROBLEMS problem(s).$([ "$MODE" = "fix" ] && echo " Fix the ones marked FAIL." || echo " Use --fix for the fixable ones.")"
     exit 1
 fi

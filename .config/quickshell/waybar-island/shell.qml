@@ -1784,44 +1784,58 @@ ShellRoot {
                     }
 
                     // Unread notifications badge (adaptive count)
-                    Row {
+                    // El contador de notificaciones va dentro de un MouseArea y no al
+                    // reves por una razon concreta: antes el MouseArea era un hijo mas
+                    // del Row, con anchors.fill: parent, y dentro de un Row eso no
+                    // existe. Quickshell lo avisa —
+                    //
+                    //   Cannot specify left, right, horizontalCenter, fill or centerIn
+                    //   anchors for items inside Row. Row will not function.
+                    //
+                    // — y el area pulsable se quedaba en cero: el contador se veia pero
+                    // no se podia pulsar. En un Row el tamano de un hijo sale de
+                    // implicitWidth e implicitHeight, nunca de un anclaje.
+                    MouseArea {
                         visible: root.notifUnread > 0 && !islandWin.expanded && !root.notifActive
-                        spacing: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        Text {
-                            text: "󰂚"
-                            color: root.colAccent
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
+                        implicitWidth: badgeNotif.implicitWidth
+                        implicitHeight: badgeNotif.implicitHeight
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.notifOpenCenter(islandWin.modelData.name)
+
+                        Row {
+                            id: badgeNotif
+                            spacing: 4
                             anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Rectangle {
-                            height: 16
-                            width: Math.max(16, notifCountLbl.implicitWidth + 10)
-                            radius: 8
-                            color: root.colAccent
                             Text {
-                                id: notifCountLbl
-                                anchors.centerIn: parent
-                                text: root.notifUnread > 9 ? "9+" : root.notifUnread
-                                color: root.colBg
+                                text: "󰂚"
+                                color: root.colAccent
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 10
-                                font.weight: Font.Bold
+                                font.pixelSize: 11
+                                anchors.verticalCenter: parent.verticalCenter
                             }
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Rectangle {
-                            width: 1
-                            height: 12
-                            color: root.colMuted
-                            opacity: 0.4
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.notifOpenCenter(islandWin.modelData.name)
+                            Rectangle {
+                                height: 16
+                                width: Math.max(16, notifCountLbl.implicitWidth + 10)
+                                radius: 8
+                                color: root.colAccent
+                                Text {
+                                    id: notifCountLbl
+                                    anchors.centerIn: parent
+                                    text: root.notifUnread > 9 ? "9+" : root.notifUnread
+                                    color: root.colBg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Rectangle {
+                                width: 1
+                                height: 12
+                                color: root.colMuted
+                                opacity: 0.4
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
                     }
 

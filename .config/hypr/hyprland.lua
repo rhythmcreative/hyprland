@@ -300,6 +300,20 @@ hl.layer_rule({
     match = { namespace = "rust-dock" },
     animation = "slide bottom",
 })
+-- La isla es la capa `quickshell` (su proceso se llama asi aunque el binario sea
+-- quickshell-island), y se escondia y se revelaba DESTRUYENDO la capa, sin
+-- animacion: waybar entra deslizando y la Isla aparecia de golpe. Con esta regla
+-- entra por arriba, como la barra, que es lo que hacia falta para que se leyeran
+-- como una sola cosa.
+--
+-- La capa de la isla ocupa la pantalla entera en los dos monitores, no solo la
+-- franja de arriba: el animarse la mueve entera. Es lo que se quiere, porque el
+-- resto va en alfa 0 y solo se ve la Isla.
+hl.layer_rule({
+    name  = "island-slide",
+    match = { namespace = "quickshell" },
+    animation = "slide top",
+})
 
 -- Plugins config is in hyprland.conf (hyprbars) and hyprexpo defaults are fine
 

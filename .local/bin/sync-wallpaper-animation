@@ -18,6 +18,22 @@ fi
 
 echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
 
+# Cuantas capas de cada barra hay ahora, para saber cuantas tienen que volver.
+#
+# Se cuentan ANTES de esconder nada porque la paleta (paso 3) mata y relanza
+# waybar y rust-dock, asi que a mitad del cambio sus capas desaparecen aunque este
+# script no las haya tocado. Sin este dato no hay forma de distinguir "todavia no
+# ha vuelto" de "no estaba".
+contar_capas() {
+    local n
+    n=$(hyprctl layers 2>/dev/null | grep -c "namespace: $1")
+    [ -n "$n" ] || n=0
+    printf '%s\n' "$n"
+}
+
+BARRAS_ANTES_WAYBAR=$(contar_capas waybar)
+BARRAS_ANTES_DOCK=$(contar_capas rust-dock)
+
 # 1. ANIMACION DE SALIDA: Ocultar barras suavemente
 "$HOME/.local/bin/wallpaper-bars" hide
 
@@ -53,5 +69,42 @@ wait $PYWAL_PID 2>/dev/null || true
 sleep 0.5
 
 # 5. ANIMACION DE ENTRADA SINCRONIZADA: Revelar Waybar, Dynamic Island y Rust-Dock al unisono
+#
+# Primero se espera a que las OTRAS barras esten de vuelta, y la isla se revela la
+# ultima, ya a la vez. Sin esta espera la isla no se sincronizaba con la animacion:
+#
+#   modern-pywal-sync NO espera a sus propios reinicios. Relanza waybar con
+#   (( ... ) &) y rust-dock con setsid ... &, y devuelve en cuanto los ha
+#   lanzado. El `wait` de arriba solo espera a modern-pywal-sync, no a las barras.
+#   Medido en esta maquina con hyprctl layers muestreado cada 20 ms:
+#
+#     0.35 s  la isla se oculta (quickshell 2 -> 1)
+#     2.59 s  modern-pywal-sync mata waybar (pkill -x waybar)
+#     3.28 s  la isla se revela                       <-- aqui
+#     4.05 s  waybar vuelve (launch.sh --force)       <-- casi 1 s despues
+#
+#   Es decir, la isla aparecia sola y un segundo mas tarde salia la barra: no era
+#   una entrada al unisono sino dos entradas separadas. Se veia la isla con la
+#   paleta nueva sobre una pantalla sin barra, y luego la barra.
+#
+# El tope evita que la isla se quede escondida si alguna barra no arranca: en ese
+# caso se revela igualmente, que es lo de siempre. Si hyprctl no esta disponible o
+# no habia ninguna barra que esperar, no se espera nada y no cambia el
+# comportamiento.
+esperar_barras() {
+    local i
+    command -v hyprctl >/dev/null 2>&1 || return 0
+    for ((i = 0; i < 40; i++)); do
+        if [ "$(contar_capas waybar)" -ge "$BARRAS_ANTES_WAYBAR" ] &&
+           [ "$(contar_capas rust-dock)" -ge "$BARRAS_ANTES_DOCK" ]; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 0
+}
+
+esperar_barras
+
 "$HOME/.local/bin/wallpaper-bars" show
 

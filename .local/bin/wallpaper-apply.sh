@@ -58,6 +58,12 @@ MONITORS=()
 # No se arregla declarando la variable en la unidad: la firma cambia en cada
 # sesion de Hyprland y la unidad no se entera. Se descubre, como en
 # wallpaper-monitor-watcher.
+#
+# Wayland se descubre por el mismo motivo y porque sin el NO BASTA con la firma:
+# el cliente de awww saca la ruta de su socket de $WAYLAND_DISPLAY y, si no esta,
+# cae en wayland-0. Aqui el compositor toma wayland-1, asi que sin esto el
+# `awww img` de mas abajo no llegaba al daemon y no pintaba ninguna pantalla,
+# aunque la lista de MONITORS fuera correcta y no hubiera ni un error visible.
 if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
     _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     if [ -d "$_runtime/hypr" ]; then
@@ -66,6 +72,14 @@ if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
     fi
     unset _runtime _sig
 fi
+
+_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    _wl=$(ls -t "$_runtime"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww-daemon' | head -n1)
+    [ -n "$_wl" ] && export WAYLAND_DISPLAY="$(basename "$_wl")"
+    unset _wl
+fi
+unset _runtime
 
 # Ahora sí: hyprctl tiene que FUNCIONAR, no solo existir.
 if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then

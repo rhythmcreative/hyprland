@@ -21,13 +21,23 @@ echo "$WALLPAPER_IMAGE" > ~/.cache/quickshell-last-wallpaper
 # mensaje de error y MONITORS queda vacio. Con la lista vacia la imagen se pedia
 # solo para el "eDP-1" del fallback, que en otra maquina no existe. Se descubre
 # la firma aqui; el detalle esta en wallpaper-apply.sh.
+#
+# Wayland tambien, y por el mismo motivo: con la firma puesta pero sin
+# WAYLAND_DISPLAY el `awww img` de abajo busca el socket en wayland-0, que no es
+# el de este compositor, y no pinta nada en ninguna pantalla sin decir nada.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-    _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    if [ -d "$_runtime/hypr" ]; then
-        _sig=$(ls -t "$_runtime/hypr/" 2>/dev/null | head -n1)
+    if [ -d "$XDG_RUNTIME_DIR/hypr" ]; then
+        _sig=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
         [ -n "$_sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+        unset _sig
     fi
-    unset _runtime _sig
+fi
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww-daemon' | head -n1)
+    [ -n "$_wl" ] && export WAYLAND_DISPLAY="$(basename "$_wl")"
+    unset _wl
 fi
 
 MONITORS=()

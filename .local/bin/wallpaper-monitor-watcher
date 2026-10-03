@@ -53,15 +53,38 @@ detect_socket() {
 # No se arregla declarando la variable en la unidad porque la firma cambia en
 # cada sesion de Hyprland y la unidad no se entera: habria que reescribirla en
 # cada arranque. Resolverla aqui y exportarla vale para las dos vias.
-SIG=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
-if [ -z "$SIG" ] && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-    SIG="$HYPRLAND_INSTANCE_SIGNATURE"
-fi
-if [ -n "$SIG" ]; then
-    export HYPRLAND_INSTANCE_SIGNATURE="$SIG"
-else
-    log "AVISO: no se encuentra la firma de Hyprland; la revision periodica no podra usar hyprctl"
-fi
+# El entorno del compositor se resuelve DENTRO de cada vuelta, no una vez al
+# arrancar. Esto es lo que hacia que la revision periodica estuviera muerta:
+#
+# La unidad es WantedBy=default.target, asi que systemd --user arranca este script
+# al abrirse la sesion del usuario, y en ese momento Hyprland todavia no ha
+# arrancado: $RUNTIME/hypr/ esta vacio. El script lo resolvia una unica vez aqui
+# arriba, no encontraba firma, avisaba, y se quedaba sin
+# HYPRLAND_INSTANCE_SIGNATURE PARA SIEMPRE. Con la variable sin puesto,
+# background-health hace `hyprctl ... || exit 0`, sale con la lista vacia, y el
+# watcher lee vacio como "no hay nada roto": la revision periodica no detectaba
+# nunca un fondo sin pintar. El log lo delata:
+#
+#   17:13:24 AVISO: no se encuentra la firma de Hyprland; la revision periodica
+#          no podra usar hyprctl
+#
+# y despues de esa linea no hay ni una sola revision mas en todo el arranque.
+#
+# Resolverlo en cada vuelta lo deja indiferente a cuando arranco systemd, que es
+# lo unico que importa: el descubrimiento ya se hacia para el socket
+# (detect_socket) y lo unico que faltaba era hacerlo tambien para hyprctl.
+#
+# WAYLAND_DISPLAY va aqui por el mismo motivo y por el mismo bug: lo necesita
+# el cliente de awww, que sin la variable cae en wayland-0 y no encuentra su
+# socket si el compositor esta en wayland-1.
+resolver_entorno() {
+    local sig wl
+    sig=$(ls -t "$RUNTIME/hypr/" 2>/dev/null | head -n1)
+    [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+    wl=$(ls -t "$RUNTIME"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww-daemon' | head -n1)
+    [ -n "$wl" ] && export WAYLAND_DISPLAY="$(basename "$wl")"
+    return 0
+}
 
 repintar() {
     [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ] || return 0
@@ -71,8 +94,20 @@ repintar() {
 # Revision periodica, en su propio hilo. Se queda en segundo plano y mira si
 # algun monitor se ha quedado sin fondo; si lo hay, lo repinta.
 revision_periodica() {
+    # Se avisa una vez, no en cada vuelta: si no, cada 10 s fills el log con lo
+    # mismo mientras no haya compositor, que es justo cuando menos pasa nada.
+    local avisado=0
     while true; do
         sleep 10
+        resolver_entorno
+        if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+            if [ "$avisado" -eq 0 ]; then
+                log "AVISO: todavia no hay compositor; la revision periodica espera"
+                avisado=1
+            fi
+            continue
+        fi
+        avisado=0
         [ -x "$HOME/.local/bin/background-health" ] || continue
         roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
         [ -n "$roto" ] || continue
@@ -84,6 +119,7 @@ revision_periodica() {
 revision_periodica &
 
 while true; do
+    resolver_entorno
     SOCKET=$(detect_socket)
     if [ -S "$SOCKET" ]; then
         socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while read -r event; do

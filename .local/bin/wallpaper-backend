@@ -14,6 +14,44 @@ FRAME_FILE="/tmp/wallpaper-frame.png"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backend] $1" >> "$LOG_FILE"; }
 
+# Por que se resuelve aqui el entorno del compositor y no se da por puesto:
+#
+# El cliente de awww saca la ruta de su socket de $WAYLAND_DISPLAY
+# ($XDG_RUNTIME_DIR/$WAYLAND_DISPLAY-awww-daemon.sock). Si la variable no esta,
+# awww CAE en wayland-0, y en este portatil el compositor toma wayland-1: todo
+# `awww img` salia con "Socket file .../wayland-0-awww-daemon.sock not found" y
+# no pintaba NINGUNA pantalla.
+#
+# No se notaba porque las llamadas van con `>/dev/null 2>&1 || true` y el log de
+# "static applied via awww" se escribia igual, sin comprobar nada. De ahi que el
+# fondo se quedase en la pantalla del login, las demas quedaran en negro, y el
+# watcher de monitores repintase en bucle cada 10s durante minutos sin que
+# jamais saliera nada.
+#
+# La isla y los dos watchers de monitor lanzan este script desde unidades de
+# systemd de usuario, que no heredan nada del compositor.
+# wallpaper-selector y wallpaper-random ya resuelven esto; el camino automatico,
+# que es el que tiene que poner el fondo solo, no.
+#
+# Se descubren con `ls -t` y no con un nombre fijo: tanto la firma como el
+# numero de socket cambian entre sesiones, y un "wayland-1" escrito a mano
+# seria el mismo bug con otra forma. El `-t` importa porque en un equipo con
+# varias instancias el mas reciente es el vivo.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww-daemon' | head -n1)
+    if [ -n "$_wl" ]; then export WAYLAND_DISPLAY="$(basename "$_wl")"; fi
+    unset _wl
+fi
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    _sig=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    if [ -n "$_sig" ]; then export HYPRLAND_INSTANCE_SIGNATURE="$_sig"; fi
+    unset _sig
+fi
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    log "AVISO: no se encuentra el socket de Wayland; awww no va a pintar nada"
+fi
+
 is_animated() {
     local f="$1"
     local ext="${f##*.}"
@@ -54,18 +92,28 @@ apply_static() {
     local f="$1" trans="$2"
     stop_mpvpaper
     ensure_awww
+    # El resultado se mira de verdad. Antes el log de abajo se escribia siempre,
+    # con un `|| true` debajo, de modo que un `awww img` que no habia llegado al
+    # daemon dejaba un "static applied via awww" que era mentira. Con el log
+    # mintiendo no habia forma de enterarse de que el fondo no se ponia en
+    # ninguna pantalla, y por eso el fallo era tan silencioso.
+    local ok=1
     if [ "$trans" = "login" ]; then
         awww img "$f" --transition-type wave --transition-angle 120 --transition-duration 2.2 --transition-fps 60 >/dev/null 2>&1 || \
-        awww img "$f" >/dev/null 2>&1 || true
+        awww img "$f" >/dev/null 2>&1 || ok=0
     elif [ "$trans" = "yes" ]; then
         awww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
-        awww img "$f" >/dev/null 2>&1 || true
+        awww img "$f" >/dev/null 2>&1 || ok=0
     else
-        awww img "$f" >/dev/null 2>&1 || true
+        awww img "$f" >/dev/null 2>&1 || ok=0
     fi
     echo "awww" > "$BACKEND_FILE"
     echo "$f" > "$PYWAL_SRC"
-    log "static applied via awww: $(basename "$f")"
+    if [ "$ok" = "1" ]; then
+        log "static applied via awww: $(basename "$f")"
+    else
+        log "ERROR: awww no pinto $(basename "$f") (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<sin>}); el fondo sigue como estaba"
+    fi
 }
 
 apply_animated() {
@@ -78,7 +126,14 @@ apply_animated() {
     stop_mpvpaper
     local mons
     mons=$(monitors)
-    [ -z "$mons" ] && mons="eDP-1"
+    # mpvpaper no admite "todas": hay que darle un nombre por monitor. Antes, si
+    # la lista salia vacia, se inventaba un "eDP-1" y se pintaba solo ahi: en una
+    # maquina sin panel interno ese nombre no existe y el fondo no se ponia en
+    # ninguna pantalla, sin un solo error que lo dijera. Es el mismo fallo que ya
+    # se quito de wallpaper-apply.sh. Ahora se dice en voz alta y se avisa.
+    if [ -z "$mons" ]; then
+        log "AVISO: no se han podido detectar los monitores; mpvpaper no se lanza"
+    fi
     # shellcheck disable=SC2086
     while IFS= read -r mon; do
         [ -z "$mon" ] && continue

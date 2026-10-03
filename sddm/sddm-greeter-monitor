@@ -83,8 +83,8 @@ conectados() {
             card*-*) ;;
             *) continue ;;
         esac
-        # La tarjeta se guarda aparte porque hace falta para AQ_DRM_DEVICES:
-        # aqui conviven dos GPU y el panel NO esta en la primera.
+        # La tarjeta se guarda aparte porque hace falta mas abajo, para saber en
+        # que GPU esta el panel: aqui conviven dos y no esta en la primera.
         tarjeta="${nombre%%-*}"
         # quita el prefijo de tarjeta: card1-eDP-1 -> eDP-1
         nombre="${nombre#card*-}"
@@ -112,8 +112,8 @@ tarjeta_panel=""
 # Se lee linea a linea y NO con for $(...): cada linea son dos palabras
 # (tarjeta y conector) y el bucle de palabras las separaria, dejando "card1" y
 # "eDP-1" como dos conectores distintos. Ya paso: se terminaba apagando "card0"
-# y "card1" como si fueran monitores, y AQ_DRM_DEVICES se quedaba con el
-# conector en vez de con la tarjeta.
+# y "card1" como si fueran monitores, y el monitor se apagaba por la tarjeta
+# entera en vez de por el conector.
 lista=$(mktemp)
 conectados >"$lista"
 while read -r tarjeta c; do
@@ -126,20 +126,33 @@ while read -r tarjeta c; do
 done <"$lista"
 rm -f "$lista"
 
-# AQ_DRM_DEVICES: el greeter se limita a la GPU del panel.
+# AQ_DRM_DEVICES: NO se pone. Y esto es lo que hacia que el login no arrancara.
 #
-# Motivo: con las dos GPUs activas, Aquamarine arranca su camino multi-GPU
-# (initMgpu) y crea un renderizador por tarjeta. Al tearing down, el destructor
-# de CDRMRenderer llama a eglDestroyContext yahy SEGV dentro de libaquamarine.
-# Pasa en TODOS los arranques: hay coredumps de /usr/bin/Hyprland con uid 962
-# (el usuario sddm) en los cuatro ultimos, siempre al pararse el login.
+# La variable existe en Aquamarine para desambiguar que render node se usa cuando
+# hay mas de una GPU. Aqui se ponia a la tarjeta del panel (card1, la AMD) para
+# que Aquamarine no creara un renderizador por tarjeta y para que el destructor
+# de CDRMRenderer no reventara con un SEGV en eglDestroyContext al pararse el
+# login. Motivo logico. El problema es que restringirla aqui hace que Aquamarine
+# no pueda crear el backend en absoluto:
 #
-# No se restringe en el caso "sin panel" a proposito: si el externo cuelga de la
-# otra GPU, quitarla dejaria el login sin ninguna pantalla.
-if [ "$hay_panel" -eq 1 ] && [ -n "$tarjeta_panel" ]; then
-    AQ_DRM_DEVICES="$tarjeta_panel"
-    export AQ_DRM_DEVICES
-fi
+#     terminate called after throwing an instance of 'std::runtime_error'
+#       what():  CBackend::create() failed!
+#
+# Hyprland lanza eso dentro de CCompositor::initServer, nadie lo captura,
+# std::terminate() llama a abort() y el proceso muere con SIGABRT. SDDM lo
+# reintenta cada 15 s: en un arranque medido, 78 coredumps de Hyprland con uid
+# 962 (sddm) y el login dando un bote tras otro, sin llegar a verse.
+#
+# O sea que la variable arreglo un fallo que solo pasaba al PARAR el login, y a
+# cambio decia que el login no ARRANCARA. Mal negocio.
+#
+# Medido el 2026-10-03, mismo greeter y misma config, cambiando solo esto:
+#
+#     con AQ_DRM_DEVICES=card1   78 coredumps en el arranque, greeter en bucle
+#     sin AQ_DRM_DEVICES         0 coredumps, greeter estable y quieto
+#
+# El SEGV del teardown, si vuelve, es cosmetico: pasa cuando el login ya se esta
+# cerrando. Se deja para el final en vez de pagar con no poder entrar.
 
 # Escribe las reglas en un temporal para poder inyectarlas linea a linea.
 reglas=$(mktemp)
@@ -191,6 +204,6 @@ awk -v fichero="$reglas" '
 chmod 644 "$GENERADO"
 
 registro="${RHYTHM_SDDM_LOG:-$WORK/sddm-greeter-monitor.log}"
-{ echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] reglas=$(wc -l <"$reglas") config=$GENERADO AQ_DRM_DEVICES=${AQ_DRM_DEVICES:-(sin restringir)}" >"$registro"; } 2>/dev/null || true
+{ echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] panel=${tarjeta_panel:-(ninguno)} reglas=$(wc -l <"$reglas") config=$GENERADO" >"$registro"; } 2>/dev/null || true
 
 exec start-hyprland -- --config "$GENERADO"

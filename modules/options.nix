@@ -19,10 +19,11 @@
       type = lib.types.enum [ "auto" "nvidia" "amd" "intel" ];
       default = "auto";
       description = ''
-        GPU stack to configure. "auto" enables modesetting-friendly
-        defaults and the NVIDIA proprietary stack only when an NVIDIA
-        device is present; there is no lspci probing at build time, so
-        set this explicitly when the hardware is known.
+        GPU stack to configure. "auto" only enables generic modesetting and
+        firmware; the vendor stacks need an explicit value because NixOS
+        resolves drivers at build time and cannot probe PCI IDs the way
+        install.sh does with lspci. NVIDIA also needs allowUnfree, so it is
+        never pulled in silently.
       '';
     };
 

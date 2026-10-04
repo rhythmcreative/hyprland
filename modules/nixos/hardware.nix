@@ -8,7 +8,6 @@
 
 let
   cfg = config.rhythm;
-  nvidia = cfg.gpu == "nvidia";
 in
 {
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -22,7 +21,7 @@ in
       # the hardware is known (see hosts/example).
     }
 
-    (lib.mkIf (nvidia || cfg.gpu == "auto") {
+    (lib.mkIf (cfg.gpu == "nvidia") {
       services.xserver.videoDrivers = [ "nvidia" ];
       hardware.nvidia = {
         modesetting.enable = true;

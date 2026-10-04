@@ -59,10 +59,14 @@ fi
 # sddm.conf apuntando al start-hyprland de siempre y las piezas nuevas a medias,
 # que es peor que no tenerlas.
 
-LOG_FILE="/tmp/hyprland-install-${USER:-$(id -un)}.log"
-if ! touch "$LOG_FILE" 2>/dev/null; then
-    LOG_FILE=$(mktemp /tmp/hyprland-install-XXXXXX.log 2>/dev/null || echo "$HOME/.cache/hyprland-install.log")
-    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+# El log va a un mktemp y no a "/tmp/hyprland-install-$USER.log", que se puede
+# adivinar de sobra. En esa ruta fija, otro usuario del equipo crea el fichero
+# como enlace simbolico que apunte a ~/.bashrc o a lo que sea, y el ": >" de
+# abajo lo deja en cero. Con mktemp no hay forma de saber el nombre de antes.
+LOG_FILE=$(mktemp "/tmp/hyprland-install-${USER:-$(id -un)}.XXXXXX.log" 2>/dev/null || true)
+if [ -z "$LOG_FILE" ] || ! touch "$LOG_FILE" 2>/dev/null; then
+    mkdir -p "$HOME/.cache" 2>/dev/null || true
+    LOG_FILE="$HOME/.cache/hyprland-install.log"
 fi
 : > "$LOG_FILE" 2>/dev/null || true
 
@@ -1396,7 +1400,12 @@ step_wallpapers() {
         mkdir -p "$WALL_DIR"
         # Limpieza: elimina wallpapers antiguos para dejar solo FireWalls
         rm -rf "${WALL_DIR:?}/"* 2>/dev/null || true
-        local TEMP_WALL="/tmp/wallpaper_install"
+        # Directorio privado y con nombre aleatorio, como el resto de temporales
+        # del script. Con "/tmp/wallpaper_install" fijo, otro usuario del equipo
+        # puede dejar ese directorio ya hecho y con "firewalls" apuntando donde
+        # quiera, y el clone de abajo acaba escribiendo ahi dentro.
+        local TEMP_WALL
+        TEMP_WALL=$(mktemp -d "${TMPDIR:-/tmp}/wallpaper_install.XXXXXXXX") || TEMP_WALL="$HOME/.cache/wallpaper_install.$$"
         mkdir -p "$TEMP_WALL"
         
         local FW_REPO="https://github.com/deadduck-09/FireWalls.git"

@@ -206,4 +206,31 @@ chmod 644 "$GENERADO"
 registro="${RHYTHM_SDDM_LOG:-$WORK/sddm-greeter-monitor.log}"
 { echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] panel=${tarjeta_panel:-(ninguno)} reglas=$(wc -l <"$reglas") config=$GENERADO" >"$registro"; } 2>/dev/null || true
 
+# Espera a que el Hyprland de la sesion anterior termine de desmontarse.
+#
+# Al salir de sesion, SDDM rearranca el greeter enseguida. Si el compositor del
+# usuario aun no ha soltado DRM/KMS, el nuevo falla CBackend::create() igual que
+# con el bug de AQ_DRM_DEVICES y SDDM reintenta contra una pantalla negra: el
+# login "a veces no sale". En este punto ningun Hyprland deberia estar corriendo
+# —el del greeter arranca abajo, con el exec— asi que cualquiera que haya es la
+# sesion anterior apagandose. Con tope: si en 12 s sigue ahi, se arranca igual y
+# queda escrito, que un arranque tardio vale mas que no arrancar.
+espera=0
+if command -v pgrep >/dev/null 2>&1; then
+    while pgrep -x Hyprland >/dev/null 2>&1 && [ "$espera" -lt 12 ]; do
+        sleep 1
+        espera=$((espera + 1))
+    done
+fi
+
+# Log persistente para los arranques que fallan al salir de sesion. El de $WORK
+# se borra con la sesion y no sirve para diagnosticar despues; este sobrevive.
+# Con tope de lineas para que un bucle de reintentos no llene el disco. Todo con
+# red de seguridad: si no se puede escribir, se arranca igual.
+LOG_FIJO="${RHYTHM_SDDM_LOG_FIJO:-/var/log/sddm-greeter-monitor.log}"
+if touch "$LOG_FIJO" 2>/dev/null; then
+    echo "$(date '+%F %T') modo=$modo espera=${espera}s salidas=[${salidas# }] config=$GENERADO" >>"$LOG_FIJO" 2>/dev/null || true
+    tail -n 200 "$LOG_FIJO" >"$LOG_FIJO.tmp" 2>/dev/null && mv "$LOG_FIJO.tmp" "$LOG_FIJO" 2>/dev/null || true
+fi
+
 exec start-hyprland -- --config "$GENERADO"

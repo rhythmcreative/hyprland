@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # --- Rhythm Hyprland Installer (Omarchy Style Presentation) ---
-# Automated, modular, and resilient deployment for Arch Linux & Hyprland
+# Automated, modular, and resilient deployment for Arch Linux & Hyprland.
+# NixOS does not use this script: it deploys the same desktop through
+# flake.nix (the preflight below detects it and points there).
 
 set -eEo pipefail
 
@@ -323,8 +325,24 @@ preflight_checks() {
         exit 1
     fi
 
+    if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
+        # NixOS does not go through this installer at all: no pacman, no
+        # /usr writes, nothing imperative. The same desktop deploys through
+        # the flake (see docs/nixos.md). Running the Arch steps here would
+        # only break a NixOS system, so stop with directions, not an error.
+        cat << 'EOF'
+This machine runs NixOS, which uses the flake instead of this installer.
+
+  sudo nixos-rebuild switch --flake /path/to/hyprland#asus
+
+Copy hosts/asus/configuration.nix and homes/rhythm/home.nix first and set
+username, gpu and monitors. Full guide: docs/nixos.md
+EOF
+        exit 0
+    fi
+
     if [ ! -f /etc/arch-release ]; then
-        echo "ERROR: This installer is only compatible with Arch Linux."
+        echo "ERROR: This installer is only compatible with Arch Linux (NixOS uses the flake, see docs/nixos.md)."
         exit 1
     fi
 

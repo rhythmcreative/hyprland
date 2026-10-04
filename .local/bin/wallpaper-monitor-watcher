@@ -94,6 +94,14 @@ repintar() {
 # Revision periodica, en su propio hilo. Se queda en segundo plano y mira si
 # algun monitor se ha quedado sin fondo; si lo hay, lo repinta.
 revision_periodica() {
+    # Cuantas vueltas seguidas lleva roto. Si tres repintados no lo arreglan, el
+    # problema no es que falte pintar sino que el daemon esta atascado: awww
+    # acepta el `awww img` (devuelve 0) pero la superficie se queda en alfa 0, y
+    # repetir lo mismo no la mueve. Asi se vio el 2026-10-03: DP-6 repintado
+    # cada 10 s durante minutos sin salir del negro. Al tercer intento se
+    # reinicia el daemon, que vuelve a registrar las superficies desde cero, y
+    # se repinta encima. Solo para fondo estatico (awww); con video no aplica.
+    local seguidas=0
     # Se avisa una vez, no en cada vuelta: si no, cada 10 s fills el log con lo
     # mismo mientras no haya compositor, que es justo cuando menos pasa nada.
     local avisado=0
@@ -110,9 +118,17 @@ revision_periodica() {
         avisado=0
         [ -x "$HOME/.local/bin/background-health" ] || continue
         roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
-        [ -n "$roto" ] || continue
+        if [ -z "$roto" ]; then seguidas=0; continue; fi
         log "fondo sin pintar en: $(echo "$roto" | tr '\n' ' ')  (repintando)"
         repintar
+        seguidas=$((seguidas + 1))
+        if [ "$seguidas" -ge 3 ] && [ "$("$HOME/.local/bin/wallpaper-backend" backend 2>/dev/null)" = "awww" ]; then
+            log "tres repintados sin efecto en: $(echo "$roto" | tr '\n' ' ') (reiniciando awww-daemon)"
+            pkill -x awww-daemon 2>/dev/null || true
+            sleep 1
+            repintar
+            seguidas=0
+        fi
     done
 }
 
@@ -127,14 +143,28 @@ while true; do
                 monitoradded*)
                     sleep 0.6
                     repintar
+                    # Verificar que ha vuelto. Si a los pocos segundos sigue sin
+                    # fondo, queda escrito con fecha: antes el repintado iba a
+                    # >/dev/null y un fallo aqui no dejaba rastro, asi que "a
+                    # veces no vuelve" era indistinguible de "no se repinto".
+                    ( sleep 8
+                      resolver_entorno
+                      roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
+                      [ -n "$roto" ] && log "tras monitoradded sigue sin fondo en: $(echo "$roto" | tr '\n' ' ')"
+                    ) &
                     ;;
                 monitorremoved*)
                     # Al desconectar un monitor, el compositor replantrea el
                     # resto y sus superficies de fondo se pueden quedar en alfa
-                    # 0. Sin esto, al berikutnya el escritorio se queda en
+                    # 0. Sin esto, al volver el escritorio se queda en
                     # negro hasta que se cambia el fondo a mano.
                     sleep 0.6
                     repintar
+                    ( sleep 8
+                      resolver_entorno
+                      roto=$("$HOME/.local/bin/background-health" 2>/dev/null)
+                      [ -n "$roto" ] && log "tras monitorremoved sigue sin fondo en: $(echo "$roto" | tr '\n' ' ')"
+                    ) &
                     ;;
             esac
         done

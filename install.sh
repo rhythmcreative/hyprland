@@ -28,21 +28,148 @@ trap 'handle_error $LINENO' ERR
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
-# NixOS never goes through this installer, not even the bootstrap below: no
-# pacman, no /usr writes, nothing imperative. Fail fast here, before cloning
-# 28 MB for nothing: whichever ref you curled (main, beta, a tag), the answer
-# is the same flake. The full check with sudo and deps lives in
-# preflight_checks; this one needs nothing but /etc.
+# NixOS does not use the Arch steps below at all. Instead of stopping with
+# directions, this same command deploys the desktop by itself: it detects
+# user, host and GPU, writes a minimal system flake under /etc/nixos that
+# consumes flake.nix from this repo, and rebuilds. Three questions with
+# defaults at most; ENTER accepts everything.
 if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
-    cat << 'EOF'
-This machine runs NixOS, which uses the flake instead of this installer.
+    install_nixos() {
+        [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
+        sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
 
-  sudo nixos-rebuild switch --flake /path/to/hyprland#asus
+        # git comes with NixOS most of the time; otherwise fetch it through
+        # nix itself so this stays a one-command install.
+        if ! command -v git >/dev/null 2>&1; then
+            echo "Installing git through nix..."
+            NIX_CONFIG="experimental-features = nix-command flakes" \
+                nix --extra-experimental-features "nix-command flakes" \
+                profile install nixpkgs#git 2>/dev/null || {
+                    echo "ERROR: could not get git. Install it and retry."; exit 1; }
+            export PATH="$HOME/.nix-profile/bin:$PATH"
+        fi
 
-Copy hosts/asus/configuration.nix and homes/rhythm/home.nix first and set
-username, gpu and monitors. Full guide: docs/nixos.md
-EOF
-    exit 0
+        # Flakes on, persistently, so later rebuilds just work.
+        if ! grep -q "experimental-features.*flakes" /etc/nix/nix.conf 2>/dev/null; then
+            echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+            sudo systemctl restart nix-daemon 2>/dev/null || true
+        fi
+
+        local repo="$HOME/hyprland"
+        if [ ! -d "$repo/.git" ]; then
+            echo "Cloning the desktop into $repo..."
+            git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
+        else
+            echo "Using existing checkout at $repo."
+        fi
+
+        # Lo minimo: usuario, maquina y grafica, todo con valor propuesto.
+        local user="$USER" host guess_gpu ans="" rel
+        host=$(hostname 2>/dev/null || echo rhythm-nixos)
+        rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || echo "25.11")
+        guess_gpu="auto"
+        for dev in /sys/bus/pci/devices/*; do
+            [ "$(cat "$dev/class" 2>/dev/null)" = "0x030000" ] || [ "$(cat "$dev/class" 2>/dev/null)" = "0x030200" ] || continue
+            case "$(cat "$dev/vendor" 2>/dev/null)" in
+                0x10de) guess_gpu="nvidia" ;;
+                0x1002) [ "$guess_gpu" = "auto" ] && guess_gpu="amd" ;;
+                0x8086) [ "$guess_gpu" = "auto" ] && guess_gpu="intel" ;;
+            esac
+        done
+        if [ -t 0 ]; then
+            read -rp "User [$user]: " ans && [ -n "$ans" ] && user="$ans"
+            read -rp "Hostname [$host]: " ans && [ -n "$ans" ] && host="$ans"
+            read -rp "GPU (auto/nvidia/amd/intel) [$guess_gpu]: " ans && [ -n "$ans" ] && guess_gpu="$ans"
+        fi
+        echo "Installing for user=$user host=$host gpu=$guess_gpu"
+
+        # Hardware config of THIS machine, generated, never written by hand.
+        sudo nixos-generate-config --show-hardware-config > /tmp/rhythm-hw.nix || exit 1
+        sudo cp -f /tmp/rhythm-hw.nix /etc/nixos/hardware-configuration.nix
+        rm -f /tmp/rhythm-hw.nix
+
+        # Backup of whatever /etc/nixos had, timestamped, never deleted.
+        if [ -f /etc/nixos/flake.nix ] || [ -f /etc/nixos/configuration.nix ]; then
+            local stamp
+            stamp=$(date +%Y%m%d-%H%M%S)
+            sudo mkdir -p "/etc/nixos.bak-$stamp"
+            sudo cp -rf /etc/nixos/flake.nix /etc/nixos/flake.lock /etc/nixos/configuration.nix \
+                /etc/nixos/hardware-configuration.nix "/etc/nixos.bak-$stamp/" 2>/dev/null || true
+            echo "Previous /etc/nixos backed up to /etc/nixos.bak-$stamp."
+        fi
+
+        # Bootloader carried over from how THIS machine boots: without it the
+        # rebuilt system would not start. EFI -> systemd-boot, BIOS -> grub
+        # on the disk holding /.
+        local boot_snippet rootdisk
+        if [ -d /sys/firmware/efi ]; then
+            boot_snippet='boot.loader.systemd-boot.enable = true;
+          boot.loader.efi.canTouchEfiVariables = true;'
+        else
+            rootdisk=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -1)
+            [ -n "$rootdisk" ] || rootdisk="sda"
+            boot_snippet='boot.loader.grub.enable = true;
+          boot.loader.grub.device = "/dev/'"$rootdisk"'";'
+        fi
+
+        # Consumer flake: pins nixpkgs + home-manager + this repo (main) and
+        # applies the desktop modules with the detected values.
+        sudo tee /etc/nixos/flake.nix > /dev/null << EOF2
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    rhythm.url = "github:rhythmcreative/hyprland";
+  };
+  outputs = { self, nixpkgs, home-manager, rhythm }: {
+    nixosConfigurations.$host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        rhythm.nixosModules.rhythm-hyprland
+        home-manager.nixosModules.home-manager
+        ./hardware-configuration.nix
+        {
+          $boot_snippet
+          networking.hostName = "$host";
+          system.stateVersion = "$rel";
+          rhythm = {
+            enable = true;
+            username = "$user";
+            gpu = "$guess_gpu";
+          };
+          users.users.$user = {
+            isNormalUser = true;
+            extraGroups = [ "wheel" "networkmanager" ];
+          };
+          home-manager = {
+            useGlobalPkgs = true;
+            useUserPackages = true;
+            users.$user = {
+              imports = [ rhythm.homeManagerModules.rhythm-hyprland ];
+              home.username = "$user";
+              home.homeDirectory = "/home/$user";
+              home.stateVersion = "$rel";
+              rhythm = { enable = true; username = "$user"; };
+            };
+          };
+        }
+      ];
+    };
+  };
+}
+EOF2
+        [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to the generated module above."
+
+        echo "Rebuilding the system (downloads several GB the first time)..."
+        sudo nixos-rebuild switch --flake "/etc/nixos#$host" || exit 1
+        echo ""
+        echo "Done. Reboot to enter the Rhythm Hyprland desktop."
+    }
+    install_nixos
+    exit $?
 fi
 
 # If running outside the cloned repository (e.g. standalone curl pipe), clone first

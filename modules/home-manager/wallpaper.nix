@@ -14,30 +14,48 @@ in
 {
   config = lib.mkIf (cfg.enable && cfg.wallpaper.mode != "none") {
     home.activation.fetchWallpapers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      if [ -n "$(ls -A ${lib.escapeShellArg wallDir} 2>/dev/null)" ]; then exit 0; fi
+      # NOTE: no `exit` anywhere in here. Activation blocks run sourced in
+      # one shell: `exit` would silently end the whole activation with code
+      # 0 and skip every later step, including linkGeneration. That exact
+      # bug shipped once and left homes half-deployed looking healthy.
+      if [ -z "$(ls -A ${lib.escapeShellArg wallDir} 2>/dev/null)" ]; then
+      # Home-manager activation runs at boot, possibly before NetworkManager
+      # is online. Wait a little for connectivity instead of failing
+      # silently on the first boot and never retrying (the guard above only
+      # runs while the directory is empty, so a failed first run would need
+      # another switch to retry).
+      tries=0
+      while [ $tries -lt 18 ] \
+        && ! ${pkgs.curl}/bin/curl -fsSL --connect-timeout 5 --max-time 10 -o /dev/null https://api.github.com 2>/dev/null; do
+        sleep 5
+        tries=$((tries + 1))
+      done
       mkdir -p ${lib.escapeShellArg wallDir}
       tmp="$(mktemp -d)"
       trap 'rm -rf "$tmp"' EXIT
       fw_repo="https://github.com/deadduck-09/FireWalls.git"
       if [ "${cfg.wallpaper.mode}" = "all" ]; then
-        ${pkgs.git}/bin/git clone --depth 1 --filter=blob:none --sparse "$fw_repo" "$tmp/fw" >/dev/null 2>&1 || exit 0
-        (cd "$tmp/fw" && ${pkgs.git}/bin/git sparse-checkout set Desktop/Wallpapers >/dev/null 2>&1) || exit 0
-        ${pkgs.findutils}/bin/find "$tmp/fw/Desktop/Wallpapers" -type f \
-          \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) \
-          -exec cp {} ${lib.escapeShellArg wallDir}/ \; 2>/dev/null || true
+        if ${pkgs.git}/bin/git clone --depth 1 --filter=blob:none --sparse "$fw_repo" "$tmp/fw" >/dev/null 2>&1 \
+        && (cd "$tmp/fw" && ${pkgs.git}/bin/git sparse-checkout set Desktop/Wallpapers >/dev/null 2>&1); then
+          ${pkgs.findutils}/bin/find "$tmp/fw/Desktop/Wallpapers" -type f \
+            \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) \
+            -exec cp {} ${lib.escapeShellArg wallDir}/ \; 2>/dev/null || true
+        fi
       else
         tree_json="$(${pkgs.curl}/bin/curl -fsSL --connect-timeout 10 --max-time 60 \
           "https://api.github.com/repos/deadduck-09/FireWalls/git/trees/main?recursive=1" 2>/dev/null || true)"
-        [ -n "$tree_json" ] || exit 0
-        echo "$tree_json" | ${pkgs.jq}/bin/jq -r '
-          .tree[]? | select(.type=="blob") | .path
-          | select(test("^Desktop/Wallpapers/[^\\n]*$"))
-          | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i"))
-          | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"
-        ' 2>/dev/null | ${pkgs.coreutils}/bin/shuf -n 50 | ${pkgs.findutils}/bin/xargs -P 6 -I {} sh -c '
-          dest=${lib.escapeShellArg wallDir}/"$(basename "$1")"
-          ${pkgs.curl}/bin/curl -g -fsSL --connect-timeout 10 --max-time 120 "$1" -o "$dest" 2>/dev/null || rm -f "$dest"
-        ' _ {} || true
+        if [ -n "$tree_json" ]; then
+          echo "$tree_json" | ${pkgs.jq}/bin/jq -r '
+            .tree[]? | select(.type=="blob") | .path
+            | select(test("^Desktop/Wallpapers/[^\\n]*$"))
+            | select(test("\\.(jpg|jpeg|png|webp|gif)$"; "i"))
+            | "https://raw.githubusercontent.com/deadduck-09/FireWalls/main/\(.)"
+          ' 2>/dev/null | ${pkgs.coreutils}/bin/shuf -n 50 | ${pkgs.findutils}/bin/xargs -P 6 -I {} sh -c '
+            dest=${lib.escapeShellArg wallDir}/"$(basename "$1")"
+            ${pkgs.curl}/bin/curl -g -fsSL --connect-timeout 10 --max-time 120 "$1" -o "$dest" 2>/dev/null || rm -f "$dest"
+          ' _ {} || true
+        fi
+      fi
       fi
     '';
   };

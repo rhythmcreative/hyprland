@@ -12,6 +12,7 @@
     ./hyprland.nix
     ./sddm.nix
     ./audio.nix
+    ./flatpak.nix
     ./hardware.nix
     ./system.nix
   ];

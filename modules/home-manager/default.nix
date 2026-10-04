@@ -8,5 +8,6 @@
     ./helpers.nix
     ./services.nix
     ./themes.nix
+    ./wallpaper.nix
   ];
 }

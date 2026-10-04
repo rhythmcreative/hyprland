@@ -133,6 +133,15 @@ hl.on("hyprland.start", function ()
     -- Lanzarlos aqui tambien dejaba la unidad muerta, sin supervision.
     hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
+    -- Pinned compositor plugins on NixOS. The flake exports one env var per
+    -- plugin with the store path of its .so; hyprctl loads them here. Unset
+    -- on Arch (hyprpm owns plugin loading there), so this stays a no-op.
+    for _, var in ipairs({ "RHYTHM_PLUGIN_HYPRBARS", "RHYTHM_PLUGIN_HYPREXPO" }) do
+        local so = os.getenv(var)
+        if so and so ~= "" then
+            hl.exec_cmd("hyprctl plugin load " .. so)
+        end
+    end
 end)
 
 -- Environment variables

@@ -28,12 +28,14 @@ in
       enable = true;
       wayland = {
         enable = true;
-        # The wrapped greeter decides per boot (via /sys/class/drm) whether
-        # the login goes to the internal panel or, lid closed, to whatever
-        # is connected. Same logic as sddm/sddm-greeter-monitor on Arch.
-        compositor = "${cfg.packageSet.greeterMonitor}/bin/sddm-greeter-monitor";
+        # Weston is only the fallback selected for its dependencies: picking
+        # it pulls qtwayland into the SDDM package, which the QML greeter
+        # theme needs under any Wayland compositor. The actual command is
+        # replaced below through settings, the module's designed override.
+        compositor = "weston";
       };
-      theme = "sddm-astronaut";
+      settings.Wayland.CompositorCommand = "${cfg.packageSet.greeterMonitor}/bin/sddm-greeter-monitor";
+      theme = "sddm-astronaut-theme";
     };
 
     environment.systemPackages = [ theme ];
@@ -42,7 +44,23 @@ in
     services.displayManager.sddm.settings.General.CursorTheme = "Bibata-Modern-Ice";
 
     # GNOME Keyring unlock at login, replacing the /etc/pam.d sed edits.
+    # login uses the default ruleset, so the plain switch works there. sddm
+    # ships custom rules (useDefaultRules=false), where enableGnomeKeyring
+    # is silently ignored, so the keyring rule is appended by name instead.
     security.pam.services.login.enableGnomeKeyring = true;
-    security.pam.services.sddm.enableGnomeKeyring = true;
+    security.pam.services.sddm.rules = {
+      auth.gnome_keyring = {
+        control = "optional";
+        modulePath = "${pkgs.gnome-keyring}/lib/security/pam_gnome_keyring.so";
+        order = 20000;
+        settings.auto_start = true;
+      };
+      session.gnome_keyring = {
+        control = "optional";
+        modulePath = "${pkgs.gnome-keyring}/lib/security/pam_gnome_keyring.so";
+        order = 20000;
+        settings.auto_start = true;
+      };
+    };
   };
 }

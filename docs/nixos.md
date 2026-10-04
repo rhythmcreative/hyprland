@@ -6,7 +6,8 @@ docs/adr/0001-nixos-flake-layout.md first for the why of each decision.
 
 ## What you get
 
-- Hyprland with portals and the hyprbars/hyprexpo plugins pinned.
+- Hyprland with portals and the hyprbars plugin pinned (hyprexpo
+  has no reproducible source upstream and is skipped, see ADR-0006).
 - SDDM on Wayland with the astronaut theme, login on the internal panel
   (lid closed: external output), same logic as on Arch.
 - All dotfiles, all helper scripts, all user units (island, wallpaper
@@ -34,8 +35,9 @@ home-manager switch --flake .#rhythm
 ## First boot checklist (do this on real hardware)
 
 1. `nix flake check` — must be green before anything else.
-2. Fill the two placeholder hashes in packages/rust-dock (build once,
-   paste the hash it asks for, rebuild).
+2. Nothing to fill in packages/rust-dock: source and vendor hashes are
+   pinned and the binary was built during review. Only refresh them when
+   you move the pinned commit (see ADR-0003).
 3. Log in through SDDM, lid open: greeter on the internal panel only.
 4. Close the lid, reboot: greeter on the external output.
 5. Leave the machine 5 minutes: lock screen, not a black screen.

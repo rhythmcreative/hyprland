@@ -9,7 +9,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, home-manager }:
+  outputs = { self, nixpkgs, home-manager, ... }@inputs:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
@@ -18,11 +18,7 @@
       };
     in
     {
-      overlays.default = final: prev: {
-        rhythmHelpers = final.callPackage ./packages/helpers { };
-        rustDock = final.callPackage ./packages/rust-dock { };
-        greeterMonitor = final.callPackage ./packages/greeter-monitor { };
-      };
+      overlays.default = import ./overlays;
 
       nixosModules.default = ./modules/nixos;
       nixosModules.rhythm-hyprland = ./modules/nixos;

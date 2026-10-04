@@ -14,6 +14,7 @@ in
       name = "Bibata-Modern-Ice";
       package = pkgs.bibata-cursors;
       size = 24;
+      enable = true;
       gtk.enable = true;
       x11.enable = true;
     };
@@ -28,7 +29,7 @@ in
 
     home.packages = with pkgs; [
       pywal16
-      qt6ct
+      qt6Packages.qt6ct
       nwg-displays
       nwg-look
     ];

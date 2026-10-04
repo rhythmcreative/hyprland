@@ -20,14 +20,11 @@ in
           source = "${cfg.packageSet.helpers}/bin/${name}";
         };
       })
-      names);
-
-    # The compiled dock under its classic name, for the launcher and any
-    # residual $HOME/.local/bin/rust-dock reference.
-    home.file = {
-      ".local/bin/rust-dock" = lib.mkIf cfg.features.rustDock {
-        source = "${cfg.packageSet.rustDock}/bin/rust-dock";
-      };
+      names)
+    // lib.optionalAttrs cfg.features.rustDock {
+      # The compiled dock under its classic name, for the launcher and any
+      # residual $HOME/.local/bin/rust-dock reference.
+      ".local/bin/rust-dock".source = "${cfg.packageSet.rustDock}/bin/rust-dock";
     };
 
     home.sessionPath = [ "${config.home.homeDirectory}/.local/bin" ];

@@ -38,7 +38,7 @@ in
         nerd-fonts.jetbrains-mono
         font-awesome
         noto-fonts
-        noto-fonts-emoji
+        noto-fonts-color-emoji
       ];
       fontconfig.enable = true;
     };

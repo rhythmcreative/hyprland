@@ -8,7 +8,6 @@
 { lib
 , stdenv
 , hyprlock
-, rustDock
 }:
 
 let
@@ -49,10 +48,12 @@ stdenv.mkDerivation {
     chmod +x "$out/bin"/*
 
     # Point the dock launcher at the packaged binary. The unit PATH already
-    # covers bare tools (pkill, hyprctl, jq), so only FHS-absolute paths and
-    # the classic binary location need patching.
-    substituteInPlace "$out/bin/rust-dock-launcher" \
-      --replace '$HOME/.local/bin/rust-dock' '${rustDock}/bin/rust-dock'
+    # covers bare tools (pkill, hyprctl, jq), so only FHS-absolute paths need
+    # patching. The launcher keeps pointing at $HOME/.local/bin/rust-dock on
+    # purpose: home-manager links the packaged binary under that exact name,
+    # so resolving it at runtime avoids a build-time edge on rustDock (whose
+    # hash is filled in on first use) and keeps working if the user swaps the
+    # binary by hand.
 
     # The locker probe checks FHS paths that do not exist on NixOS.
     substituteInPlace "$out/bin/powermenu-with-monitor-detection" \

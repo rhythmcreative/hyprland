@@ -1,7 +1,7 @@
 # ADR-0003: rust-dock becomes a buildRustPackage derivation
 
 ## Status
-Accepted (packaging pending: needs a real cargoHash from one build)
+Accepted (verified: builds reproducibly, hashes pinned)
 
 ## Context
 install.sh compiles rust-dock with cargo from GitHub at install time.

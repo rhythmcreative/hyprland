@@ -33,7 +33,13 @@ in
     })
 
     (lib.mkIf (cfg.gpu == "amd") {
-      hardware.amdgpu.opencl.enable = true;
+      # OpenCL through ROCm; the exact package set follows the nixpkgs
+      # hardware.graphics convention (extraPackages, no amdgpu-specific
+      # option exists for this).
+      hardware.graphics.extraPackages = with pkgs; [
+        rocmPackages.clr
+        rocmPackages.clr.icd
+      ];
     })
   ]);
 }

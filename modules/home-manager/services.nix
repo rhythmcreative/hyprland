@@ -30,6 +30,7 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (with pkgs; [ cliphist wl-clipboard ])}" ];
             Type = "simple";
             # Source cliphist.service: ExecStart=%h/.local/bin/cliphist-daemon.
             ExecStart = "${bin}/cliphist-daemon";
@@ -37,7 +38,6 @@ in
             RestartSec = "2s";
           };
           Install.WantedBy = [ "default.target" ];
-          path = with pkgs; [ cliphist wl-clipboard ];
         };
 
         rhythm-battery-limit = {
@@ -48,13 +48,13 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "oneshot";
             # Source rhythm-battery-limit.service: battery-charge-limit --apply.
             ExecStart = "${bin}/battery-charge-limit --apply";
             RemainAfterExit = false;
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools;
         };
       };
     }
@@ -73,6 +73,7 @@ in
             StartLimitIntervalSec = 0;
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ quickshell waybar ]))}" ];
             Type = "simple";
             # Source waybar-island.service: ExecStart=%h/.local/bin/quickshell-island.
             ExecStart = "${bin}/quickshell-island";
@@ -82,7 +83,6 @@ in
           Install.WantedBy = [ "default.target" ];
           # The launcher ends in `exec quickshell -p ...` and probes the
           # compositor with hyprctl while waiting for the socket.
-          path = hyprTools ++ (with pkgs; [ quickshell waybar ]);
         };
 
         island-watchdog = {
@@ -94,12 +94,12 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "oneshot";
             # Source island-watchdog.service: ExecStart=%h/.local/bin/island-watchdog.
             ExecStart = "${bin}/island-watchdog";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools;
         };
       };
 
@@ -131,6 +131,7 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ awww mpvpaper ]))}" ];
             Type = "simple";
             ExecStart = "${bin}/wallpaper-monitor-watcher";
             Restart = "always";
@@ -139,7 +140,6 @@ in
           Install.WantedBy = [ "default.target" ];
           # The watcher repaints through wallpaper-backend, which shells out
           # to awww and mpvpaper.
-          path = hyprTools ++ (with pkgs; [ awww mpvpaper ]);
         };
       };
     })
@@ -153,13 +153,13 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ [ cfg.packageSet.rustDock ])}" ];
             Type = "simple";
             ExecStart = "${bin}/rust-dock-monitor-watcher";
             Restart = "always";
             RestartSec = "2s";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools ++ [ cfg.packageSet.rustDock ];
         };
       };
     })
@@ -175,13 +175,13 @@ in
             Wants = [ "bluetooth.service" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ bluez ]))}" ];
             Type = "simple";
             ExecStart = "${bin}/bluetooth-pair-agent serve";
             Restart = "always";
             RestartSec = "3s";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools ++ (with pkgs; [ bluez ]);
         };
       };
     })
@@ -196,6 +196,7 @@ in
             After = [ "graphical-session.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ power-profiles-daemon upower ]))}" ];
             Type = "simple";
             ExecStart = "${bin}/auto-power-profile";
             Restart = "always";
@@ -204,7 +205,6 @@ in
             StandardError = "journal";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools ++ (with pkgs; [ power-profiles-daemon upower ]);
         };
       };
     })
@@ -218,13 +218,13 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "simple";
             ExecStart = "${bin}/privacy-shield-daemon";
             Restart = "always";
             RestartSec = "5s";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools;
         };
       };
     })
@@ -240,6 +240,7 @@ in
             StartLimitIntervalSec = 0;
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ hyprsunset ]))}" ];
             Type = "exec";
             ExecStart = "${bin}/hyprsunset-daemon";
             Restart = "on-failure";
@@ -248,7 +249,6 @@ in
           };
           # No Install section: started on demand by toggle-nightlight and
           # the schedule timer, mirroring the enable-user-services exclusion.
-          path = hyprTools ++ (with pkgs; [ hyprsunset ]);
         };
 
         rhythm-nightlight-schedule = {
@@ -258,12 +258,12 @@ in
             # graphical-session.target; the timer re-drives every 60s.
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "oneshot";
             ExecStart = "${bin}/night-light-schedule";
             TimeoutStartSec = "20";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools;
         };
       };
 
@@ -296,13 +296,13 @@ in
             Wants = [ "network-online.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "oneshot";
             ExecStart = "${bin}/rhythm-ota-checker";
             StandardOutput = "journal";
             StandardError = "journal";
           };
           Install.WantedBy = [ "default.target" ];
-          path = hyprTools;
         };
       };
 
@@ -332,6 +332,7 @@ in
             After = [ "default.target" ];
           };
           Service = {
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
             Type = "simple";
             # Source ExecStart wraps caffeine-keeper in systemd-inhibit and
             # ExecStopPost resumes hypridle with pkill -CONT; both binaries
@@ -343,7 +344,6 @@ in
           };
           # No Install section: the island toggle starts this while its flag
           # exists, mirroring the enable-user-services exclusion.
-          path = hyprTools;
         };
       };
     })

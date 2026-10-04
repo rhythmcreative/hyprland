@@ -13,6 +13,11 @@
   home.homeDirectory = "/home/rhythm";
   home.stateVersion = "25.11";
 
+  # NOTE: no nixpkgs.overlays here. This example runs with the flake's own
+  # pkgs, which already carry the overlay (see flake.nix). If you consume the
+  # module from your own flake with your own pkgs, add one line there:
+  #   nixpkgs.overlays = [ inputs.hyprland.overlays.default ];
+
   rhythm = {
     enable = true;
     username = "rhythm";

@@ -1,7 +1,10 @@
 # Compositor scope: Hyprland itself plus portals and plugins.
 #
 # Replaces the pacman install of hyprland/hypridle/hyprlock and the impure
-# `hyprpm add/enable hyprbars/hyprexpo` step: plugins become pinned
+# `hyprpm add/enable hyprbars` step: plugins become pinned
+# derivations instead (see ADR-0006). hyprexpo is deliberately absent:
+# upstream removed it from the hyprland-plugins repo and ships no
+# standalone source, so there is nothing reproducible to build.
 # hyprlandPlugins derivations (see ADR-0006).
 { config, lib, pkgs, ... }:
 
@@ -14,10 +17,19 @@ in
       enable = true;
       withUWSM = true;
       xwayland.enable = true;
-      plugins = with pkgs.hyprlandPlugins; [
-        hyprbars
-        hyprexpo
-      ];
+    };
+
+    # Pinned compositor plugins (ADR-0006). There is no programs.hyprland
+    # plugins option and home-manager has none either, so the shared
+    # hyprland.lua loads them through hyprctl from this env var; unset on
+    # Arch, where hyprpm owns plugin loading. It reaches the compositor
+    # twice: the display-manager service environment covers the SDDM
+    # session, and sessionVariables covers a TTY/UWSM start.
+    systemd.services.display-manager.environment = {
+      RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
+    };
+    environment.sessionVariables = {
+      RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
     };
 
     # Portals come with programs.hyprland, but the GTK fallback backend
@@ -35,7 +47,7 @@ in
       mpv
       waybar
       quickshell
-      rofi-wayland
+      rofi
       cliphist
       wl-clipboard
       grim

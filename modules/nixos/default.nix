@@ -16,4 +16,8 @@
     ./hardware.nix
     ./system.nix
   ];
+
+  # The overlay ships with the module: consumers get rhythmHelpers, rustDock
+  # and greeterMonitor without adding anything to nixpkgs.overlays.
+  nixpkgs.overlays = [ (import ../../overlays) ];
 }

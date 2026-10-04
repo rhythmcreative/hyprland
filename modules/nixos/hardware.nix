@@ -1,0 +1,39 @@
+# Hardware scope: GPU stack and vendor quirks.
+#
+# install.sh probes with lspci at install time and writes modprobe rules,
+# mkinitcpio MODULES and a pacman hook. NixOS owns the boot builder, so the
+# equivalent is explicit options here. Set rhythm.gpu when the hardware is
+# known; "auto" keeps modesetting defaults plus NVIDIA when present.
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.rhythm;
+  nvidia = cfg.gpu == "nvidia";
+in
+{
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      hardware.graphics.enable = true;
+      hardware.enableRedistributableFirmware = true;
+
+      # Vendor tools (asusctl, surface kernels) are intentionally not
+      # installed by default: NixOS cannot probe PCI IDs at build time the
+      # way install.sh does with lspci. Add them in the host config when
+      # the hardware is known (see hosts/example).
+    }
+
+    (lib.mkIf (nvidia || cfg.gpu == "auto") {
+      services.xserver.videoDrivers = [ "nvidia" ];
+      hardware.nvidia = {
+        modesetting.enable = true;
+        powerManagement.enable = true;
+        open = true;
+        package = config.boot.kernelPackages.nvidiaPackages.latest;
+      };
+    })
+
+    (lib.mkIf (cfg.gpu == "amd") {
+      hardware.amdgpu.opencl.enable = true;
+    })
+  ]);
+}

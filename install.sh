@@ -28,6 +28,23 @@ trap 'handle_error $LINENO' ERR
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
+# NixOS never goes through this installer, not even the bootstrap below: no
+# pacman, no /usr writes, nothing imperative. Fail fast here, before cloning
+# 28 MB for nothing: whichever ref you curled (main, beta, a tag), the answer
+# is the same flake. The full check with sudo and deps lives in
+# preflight_checks; this one needs nothing but /etc.
+if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
+    cat << 'EOF'
+This machine runs NixOS, which uses the flake instead of this installer.
+
+  sudo nixos-rebuild switch --flake /path/to/hyprland#asus
+
+Copy hosts/asus/configuration.nix and homes/rhythm/home.nix first and set
+username, gpu and monitors. Full guide: docs/nixos.md
+EOF
+    exit 0
+fi
+
 # If running outside the cloned repository (e.g. standalone curl pipe), clone first
 if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
     # mktemp -d y no una ruta fija en /tmp. Con "/tmp/rhythm-hyprland" cualquier
@@ -325,24 +342,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
-        # NixOS does not go through this installer at all: no pacman, no
-        # /usr writes, nothing imperative. The same desktop deploys through
-        # the flake (see docs/nixos.md). Running the Arch steps here would
-        # only break a NixOS system, so stop with directions, not an error.
-        cat << 'EOF'
-This machine runs NixOS, which uses the flake instead of this installer.
-
-  sudo nixos-rebuild switch --flake /path/to/hyprland#asus
-
-Copy hosts/asus/configuration.nix and homes/rhythm/home.nix first and set
-username, gpu and monitors. Full guide: docs/nixos.md
-EOF
-        exit 0
-    fi
-
     if [ ! -f /etc/arch-release ]; then
-        echo "ERROR: This installer is only compatible with Arch Linux (NixOS uses the flake, see docs/nixos.md)."
+        # NixOS exits at the top of this script with directions to the flake.
+        # Anything else landing here is a distro this installer knows nothing
+        # about: no pacman, no AUR, no /usr layout to write to.
+        echo "ERROR: This installer is only compatible with Arch Linux."
         exit 1
     fi
 

@@ -207,12 +207,65 @@ check_greeter() {
     fi
 }
 
+# ────────────────────────────────────────────────────────────────────────────
+# 5. Estado en vivo: lo desplegado tambien tiene que estar corriendo
+#
+# Todo lo anterior mira ficheros. Un servicio habilitado pero muerto, la isla
+# sin capa o el fondo sin pintar no salen en ningun fichero, asi que el
+# instalador los daba por buenos. Estas comprobaciones solo corren con
+# compositor delante; instalado desde TTY se saltan con una nota, porque ahi
+# todavia no hay nada que pueda estar vivo.
+# ────────────────────────────────────────────────────────────────────────────
+check_runtime() {
+    # Sin compositor no hay nada vivo que comprobar. El instalador corre a
+    # menudo desde TTY, y fallar ahi seria ruido, no senal.
+    if ! hyprctl monitors >/dev/null 2>&1; then
+        note "no compositor running (normal during install); live checks skipped"
+        return
+    fi
+
+    for u in waybar-island.service wallpaper-monitor-watcher.service; do
+        if systemctl --user is-active --quiet "$u" 2>/dev/null; then
+            ok "$u is running"
+        else
+            bad "$u is not running"
+        fi
+    done
+
+    if hyprctl layers 2>/dev/null | grep -q "namespace: quickshell"; then
+        ok "the island has a compositor layer"
+    else
+        bad "quickshell is running but has no layer (the island is invisible)"
+    fi
+
+    if [ -x "$HOME/.local/bin/background-health" ]; then
+        if [ -z "$("$HOME/.local/bin/background-health" 2>/dev/null)" ]; then
+            ok "wallpaper painted on every monitor"
+        else
+            bad "a monitor is missing its wallpaper"
+        fi
+    fi
+
+    if pgrep -x hypridle >/dev/null 2>&1; then
+        ok "hypridle is watching for idle time"
+    else
+        bad "hypridle is not running (no locking, no screen off)"
+    fi
+
+    if systemctl is-enabled --quiet sddm 2>/dev/null; then
+        ok "sddm starts at boot"
+    else
+        bad "sddm is not enabled (no login screen after reboot)"
+    fi
+}
+
 echo
 check_xsetup
 check_delivery
 check_greeter
 check_state_separation
 check_local_edits
+check_runtime
 
 echo
 if [ "$PROBLEMS" -eq 0 ]; then

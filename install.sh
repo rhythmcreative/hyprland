@@ -1648,6 +1648,17 @@ EOF
     # Add user to required groups (network for nmcli, lp for printing, optical for disc)
     sudo usermod -aG video,input,render,wheel,audio,storage,network,lp,optical "$USER"
     step_ok "System services and permissions configured."
+
+    # Verificacion final: el doctor mira lo desplegado (ficheros) y, con
+    # compositor delante, lo vivo (servicios, isla, fondo, hypridle, sddm).
+    # Desde TTY las comprobaciones en vivo se saltan solas. Solo avisa: un
+    # fallo aqui no revierte una instalacion que por lo demas esta bien.
+    if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
+        step_item "Verifying the installation..."
+        "$HOME/.local/bin/rhythm-doctor" --verify >> "$LOG_FILE" 2>&1 \
+            && step_ok "Installation verified." \
+            || step_warn "Doctor found issues. Check $LOG_FILE or run rhythm-doctor."
+    fi
 }
 
 # --- UPDATE WORKFLOW ---

@@ -2,7 +2,7 @@
 #
 # Copy to your own flake (or to /etc/nixos with the repo checked out) and
 # adjust username, gpu and monitors. Then:
-#   sudo nixos-rebuild switch --flake /path/to/hyprland#example
+#   sudo nixos-rebuild switch --flake /path/to/hyprland#asus
 { inputs, ... }:
 
 {
@@ -33,7 +33,7 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     extraSpecialArgs = { inherit inputs; };
-    users.rhythm = import ../../homes/example/home.nix;
+    users.rhythm = import ../../homes/rhythm/home.nix;
   };
 
   # nixos-unstable moves fast; pin the release you tested with.

@@ -1,7 +1,7 @@
 # Example home-manager configuration for the Rhythm Hyprland desktop.
 #
 # Used standalone (`home-manager switch --flake ...#rhythm`) or from the
-# NixOS host module (see hosts/example). Values must match the system side.
+# NixOS host module (see hosts/asus). Values must match the system side.
 { inputs, ... }:
 
 {

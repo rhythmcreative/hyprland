@@ -34,10 +34,10 @@
         inherit (pkgs) rhythmHelpers rustDock greeterMonitor;
       };
 
-      homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
+      homeConfigurations.rhythm = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         extraSpecialArgs = { inherit inputs; };
-        modules = [ ./homes/example/home.nix ];
+        modules = [ ./homes/rhythm/home.nix ];
       };
     };
 }

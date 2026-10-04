@@ -19,7 +19,7 @@ docs/adr/0001-nixos-flake-layout.md first for the why of each decision.
 
 ```bash
 # 1. Take NixOS/nixpkgs/nixos-unstable as your base at install time.
-# 2. Copy hosts/example/configuration.nix and homes/example/home.nix,
+# 2. Copy hosts/asus/configuration.nix and homes/rhythm/home.nix,
 #    set username, gpu and monitors, and wire the inputs in your flake:
 #      inputs.hyprland.url = "github:rhythmcreative/hyprland?ref=beta";
 sudo nixos-rebuild switch --flake .#your-host

@@ -97,6 +97,11 @@ present_banner() {
         || printf "%s\033[1;32m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "$2" 2>/dev/null \
         || printf "%s\033[0;37m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$2"
+    # Where the full output went. nix prints its own lines and gum draws over
+    # the terminal, so on a run that ends with a clear screen there is no way
+    # back to what happened; the log is the only record.
+    [ -n "${LOG_FILE:-}" ] && printf "%s\033[0;90m  → Full log: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$LOG_FILE"
+    return 0
 }
 
 clear_logo() {
@@ -2376,12 +2381,12 @@ if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
 fi
 
 # --- COMPLETION & REBOOT SCREEN ---
-clear_logo
-echo ""
-gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished installing"
+# Same helper the NixOS branch ends with, so both paths print the same screen
+# and, more usefully, both say where the full log landed.
+present_banner "Finished installing" "Installation complete."
 
 if [ "$NO_REBOOT" = true ]; then
-    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Installation complete. System reboot skipped via flag."
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Reboot skipped via flag."
 elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."

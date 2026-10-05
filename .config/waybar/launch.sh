@@ -189,6 +189,21 @@ else
     done <<< "$monitors"
 fi
 
+# Second pass over the generated per-monitor configs, now that they exist.
+#
+# auto-battery-setup.sh already ran at step 1, but at that point
+# config-<monitor> did not exist yet: these files are produced by the jq call
+# above. It could only choose the battery module by rewriting the BASE config,
+# which on NixOS is a read-only symlink into /nix/store and cannot be written
+# at all -- so the per-monitor bars were built from an unpatched base.
+#
+# Those files are in the same writable directory, so this pass is the one that
+# actually takes effect there. Running it twice is harmless: the script strips
+# the battery modules before adding them back.
+if [ -f "$WAYBAR_DIR/scripts/auto-battery-setup.sh" ]; then
+    "$WAYBAR_DIR/scripts/auto-battery-setup.sh" >> "$LOG_FILE" 2>&1 || true
+fi
+
 # Verification
 sleep 1
 if pgrep -x waybar > /dev/null; then

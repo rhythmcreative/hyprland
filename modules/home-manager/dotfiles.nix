@@ -35,5 +35,53 @@ in
         printf '%s\n' ${lib.escapeShellArg cfg.monitors.seedText} > "$target"
       fi
     '';
+
+    # The same wallpaper seeding install.sh does on Arch, which had no
+    # counterpart here.
+    #
+    # The repo ships .config/hypr/wallpapers/default.jpg and the configFile
+    # above deploys it, but NOTHING recorded it as the wallpaper to use:
+    # ~/.cache/current-wallpaper is the file load-last-wallpaper-fast reads,
+    # and on NixOS nothing ever wrote it. With no cache, no pywal wallpaper and
+    # no /usr/share/sddm (the NixOS greeter lives in the store, so that branch
+    # cannot match either) the chain had nothing to paint. And hyprland.lua
+    # disables both force_default_wallpaper and the logo, so Hyprland paints
+    # nothing of its own: the session came up on a flat black background.
+    #
+    # load-last-wallpaper-fast now falls back to default.jpg, so this is belt
+    # and braces, and it is what makes ~/.cache/current-wallpaper point at a
+    # stable path instead of being repopulated by the fallback on every login.
+    #
+    # It does not overwrite a wallpaper the user has already chosen, and it
+    # repairs a cache pointing at a file that no longer exists -- which was the
+    # case that black-screened every boot.
+    home.activation.seedWallpaper = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      home="${config.home.homeDirectory}"
+      default_wp="$home/.config/hypr/wallpapers/default.jpg"
+      cache="$home/.cache/current-wallpaper"
+      mkdir -p "$home/.cache" "$home/Pictures/Wallpapers"
+
+      seed=0
+      if [ -f "$cache" ]; then
+        cached="$(cat "$cache" 2>/dev/null || true)"
+        if [ -z "$cached" ] || [ ! -f "$cached" ]; then
+          # Points at something that is gone: that is a stale cache, not a
+          # wallpaper the user chose.
+          seed=1
+        fi
+      else
+        seed=1
+      fi
+
+      if [ "$seed" = 1 ] && [ -f "$default_wp" ]; then
+        printf '%s\n' "$default_wp" > "$cache"
+      fi
+
+      # wallpaper-random and wallpaper-selector fail on an empty library, so
+      # the default goes there too when nothing is present.
+      if [ -f "$default_wp" ] && [ -z "$(ls -A "$home/Pictures/Wallpapers" 2>/dev/null)" ]; then
+        cp -f "$default_wp" "$home/Pictures/Wallpapers/default.jpg"
+      fi
+    '';
   };
 }

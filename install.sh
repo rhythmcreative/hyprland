@@ -49,11 +49,11 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
             export PATH="$HOME/.nix-profile/bin:$PATH"
         fi
 
-        # Flakes on, persistently, so later rebuilds just work.
-        if ! grep -q "experimental-features.*flakes" /etc/nix/nix.conf 2>/dev/null; then
-            echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
-            sudo systemctl restart nix-daemon 2>/dev/null || true
-        fi
+        # Flakes for this session. /etc/nix/nix.conf is off-limits: on NixOS
+        # it is often a read-only store symlink, so appending fails with
+        # "Read-only file system". Persistence comes from nix.settings in
+        # the generated flake below, applied by the rebuild.
+        export NIX_CONFIG="experimental-features = nix-command flakes"
 
         local repo="$HOME/hyprland"
         if [ ! -d "$repo/.git" ]; then
@@ -135,6 +135,8 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
           $boot_snippet
           networking.hostName = "$host";
           system.stateVersion = "$rel";
+          # Flakes on, persistently, so later rebuilds just work.
+          nix.settings.experimental-features = [ "nix-command" "flakes" ];
           rhythm = {
             enable = true;
             username = "$user";
@@ -164,7 +166,11 @@ EOF2
         [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to the generated module above."
 
         echo "Rebuilding the system (downloads several GB the first time)..."
-        sudo nixos-rebuild switch --flake "/etc/nixos#$host" || exit 1
+        # NIX_CONFIG does not survive sudo, and /etc/nix/nix.conf is
+        # read-only on NixOS, so pass flakes explicitly for this first
+        # rebuild. The new system enables them permanently via nix.settings.
+        sudo NIX_CONFIG="experimental-features = nix-command flakes" \
+            nixos-rebuild switch --flake "/etc/nixos#$host" || exit 1
         echo ""
         echo "Done. Reboot to enter the Rhythm Hyprland desktop."
     }

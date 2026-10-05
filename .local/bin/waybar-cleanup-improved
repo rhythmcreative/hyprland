@@ -27,7 +27,7 @@ log "Instancias de waybar detectadas: $waybar_count"
 if [[ $waybar_count -eq 0 ]]; then
     log "No hay instancias de waybar ejecutándose"
     log "Iniciando waybar..."
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     sleep 2
     log "Waybar iniciado"
     notify "Waybar iniciado"
@@ -49,7 +49,7 @@ if [[ $waybar_count -eq 1 ]]; then
         log "Waybar no responde - reiniciando..."
         pkill waybar 2>/dev/null || true
         sleep 1
-        waybar > /dev/null 2>&1 &
+        "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 2
         log "Waybar reiniciado"
         notify "Waybar reiniciado"
@@ -101,7 +101,7 @@ if [[ $final_count -eq 0 ]]; then
     sleep 1
     
     log "Iniciando nueva instancia limpia de waybar..."
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     new_pid=$!
     
     # Verificar que inició correctamente

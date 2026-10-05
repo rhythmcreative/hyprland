@@ -84,7 +84,7 @@ if echo "$test_result" | grep -q '"cod":200'; then
     echo "🔄 Reiniciando Waybar..."
     pkill waybar 2>/dev/null
     sleep 1
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     echo "✅ ¡Todo listo! Tu clima ya está funcionando en Waybar."
 else
     echo "⚠️  Hay un problema con la API key."

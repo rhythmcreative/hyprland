@@ -22,7 +22,7 @@ fi
 
 # Iniciar waybar
 echo "Iniciando waybar..."
-waybar > /dev/null 2>&1 &
+"$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
 
 # Verificar que se inició correctamente
 sleep 1

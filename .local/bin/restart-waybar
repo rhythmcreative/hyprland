@@ -25,7 +25,7 @@ fi
 echo "Iniciando Waybar..."
 
 # Iniciar Waybar
-waybar &
+"$HOME/.config/waybar/launch.sh" --force &
 
 # Esperar un momento para que se inicie
 sleep 2

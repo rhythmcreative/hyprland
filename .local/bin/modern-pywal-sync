@@ -26,12 +26,180 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     fi
 fi
 
+# ── paleta de reserva ────────────────────────────────────────────────────────
+#
+# ESTOS COLORES SON LOS MISMOS que .config/hypr/hyprland.lua lleva escritos a
+# mano en color0..color15, a proposito: si pywal no llega a correr, el escritorio
+# se ve igual de coordenado que con pywal, no con los colores por defecto de GTK.
+# Si se cambian aqui, hay que cambiarlos tambien alla.
+PALETA_FALLBACK_COLOR0="#101012"
+PALETA_FALLBACK_COLOR1="#546065"
+PALETA_FALLBACK_COLOR2="#A45E4C"
+PALETA_FALLBACK_COLOR3="#E59A78"
+PALETA_FALLBACK_COLOR4="#5B7A84"
+PALETA_FALLBACK_COLOR5="#6F8C94"
+PALETA_FALLBACK_COLOR6="#9A9D9E"
+PALETA_FALLBACK_COLOR7="#c2c8c9"
+PALETA_FALLBACK_COLOR8="#878c8c"
+PALETA_FALLBACK_COLOR9="#546065"
+PALETA_FALLBACK_COLOR10="#A45E4C"
+PALETA_FALLBACK_COLOR11="#E59A78"
+PALETA_FALLBACK_COLOR12="#5B7A84"
+PALETA_FALLBACK_COLOR13="#6F8C94"
+PALETA_FALLBACK_COLOR14="#9A9D9E"
+PALETA_FALLBACK_COLOR15="#c2c8c9"
+PALETA_FALLBACK_BACKGROUND="$PALETA_FALLBACK_COLOR0"
+PALETA_FALLBACK_FOREGROUND="$PALETA_FALLBACK_COLOR7"
+
+# La imagen de la que pywal saca la paleta, en orden de preferencia: la que hay
+# puesta ahora, la que trae el repo, y la primera de la biblioteca del usuario.
+resolver_wallpaper_paleta() {
+    local cache="$HOME/.cache/current-wallpaper"
+    local ruta
+    if [ -f "$cache" ]; then
+        ruta=$(cat "$cache" 2>/dev/null || true)
+        if [ -n "$ruta" ] && [ -f "$ruta" ]; then
+            printf '%s\n' "$ruta"
+            return 0
+        fi
+    fi
+    if [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ]; then
+        printf '%s\n' "$HOME/.config/hypr/wallpapers/default.jpg"
+        return 0
+    fi
+    ruta=$(find "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
+        -print -quit 2>/dev/null || true)
+    [ -n "$ruta" ] && printf '%s\n' "$ruta" && return 0
+    return 1
+}
+
+# Los dos ficheros que los temas IMPORTAN, escritos a mano cuando pywal no ha
+# podido generarlos.
+#
+# Esto es lo que arregla "waybar sin tema" y "rofi sin tema": style.css y los
+# cuatro .rasi hacen @import de colors-pywal.css / colors-pywal.rasi, y GTK y
+# rofi DESCARTAN el tema entero si un import no se resuelve — no es que se
+# vea sin colores, es que no se ve el tema. Los dos ficheros estan en
+# .gitignore porque los genera pywal, asi que en una maquina donde wal nunca ha
+# corrido no existen y el @import falla siempre.
+escribir_colores_waybar_fallback() {
+    mkdir -p "$HOME/.config/waybar"
+    cat > "$HOME/.config/waybar/colors-pywal.css" <<EOF
+/* Paleta de reserva. La escribe modern-pywal-sync cuando pywal no ha podido
+   generar la suya; se regenera sola en cuanto wal corre. */
+@define-color background ${PALETA_FALLBACK_BACKGROUND};
+@define-color foreground ${PALETA_FALLBACK_FOREGROUND};
+@define-color color0 ${PALETA_FALLBACK_COLOR0};
+@define-color color1 ${PALETA_FALLBACK_COLOR1};
+@define-color color2 ${PALETA_FALLBACK_COLOR2};
+@define-color color3 ${PALETA_FALLBACK_COLOR3};
+@define-color color4 ${PALETA_FALLBACK_COLOR4};
+@define-color color5 ${PALETA_FALLBACK_COLOR5};
+@define-color color6 ${PALETA_FALLBACK_COLOR6};
+@define-color color7 ${PALETA_FALLBACK_COLOR7};
+@define-color color8 ${PALETA_FALLBACK_COLOR8};
+@define-color color9 ${PALETA_FALLBACK_COLOR9};
+@define-color color10 ${PALETA_FALLBACK_COLOR10};
+@define-color color11 ${PALETA_FALLBACK_COLOR11};
+@define-color color12 ${PALETA_FALLBACK_COLOR12};
+@define-color color13 ${PALETA_FALLBACK_COLOR13};
+@define-color color14 ${PALETA_FALLBACK_COLOR14};
+@define-color color15 ${PALETA_FALLBACK_COLOR15};
+EOF
+}
+
+escribir_colores_rofi_fallback() {
+    mkdir -p "$HOME/.config/rofi"
+    cat > "$HOME/.config/rofi/colors-pywal.rasi" <<EOF
+/* Paleta de reserva. La escribe modern-pywal-sync cuando pywal no ha podido
+   generar la suya; se regenera sola en cuanto wal corre. */
+* {
+    background:     ${PALETA_FALLBACK_BACKGROUND};
+    background-alt: ${PALETA_FALLBACK_COLOR0};
+    foreground:     ${PALETA_FALLBACK_FOREGROUND};
+    foreground-alt: ${PALETA_FALLBACK_COLOR8};
+    selected:       ${PALETA_FALLBACK_COLOR1};
+    active:         ${PALETA_FALLBACK_COLOR2};
+    urgent:         ${PALETA_FALLBACK_COLOR3};
+    color0:         ${PALETA_FALLBACK_COLOR0};
+    color1:         ${PALETA_FALLBACK_COLOR1};
+    color2:         ${PALETA_FALLBACK_COLOR2};
+    color3:         ${PALETA_FALLBACK_COLOR3};
+    color4:         ${PALETA_FALLBACK_COLOR4};
+    color5:         ${PALETA_FALLBACK_COLOR5};
+    color6:         ${PALETA_FALLBACK_COLOR6};
+    color7:         ${PALETA_FALLBACK_COLOR7};
+    color8:         ${PALETA_FALLBACK_COLOR8};
+    color9:         ${PALETA_FALLBACK_COLOR9};
+    color10:        ${PALETA_FALLBACK_COLOR10};
+    color11:        ${PALETA_FALLBACK_COLOR11};
+    color12:        ${PALETA_FALLBACK_COLOR12};
+    color13:        ${PALETA_FALLBACK_COLOR13};
+    color14:        ${PALETA_FALLBACK_COLOR14};
+    color15:        ${PALETA_FALLBACK_COLOR15};
+    background-trans:     ${PALETA_FALLBACK_BACKGROUND}CC;
+    background-alt-trans: ${PALETA_FALLBACK_COLOR0}AA;
+    selected-trans:       ${PALETA_FALLBACK_COLOR1}DD;
+}
+EOF
+}
+
 # 1. Cargar colores de Pywal
+#
+# ANTES era un `exit 1` seco si ~/.cache/wal/colors.sh no existia. Ese es el
+# punto de rotura de casi todo lo que se veia sin tema: el unico `wal` del
+# installer vivia dentro del bloque de SDDM (install.sh step_system), asi que
+# en una instalacion limpia el cache no existia todavia y este script se
+# negaba a trabajar. Y en el camino de update ni siquiera se intentaba.
+#
+# Ahora, en este orden: si wal esta y hay una imagen, se genera la paleta de
+# verdad; si no, se escribe una paleta fija. En los dos casos, de aqui en
+# adelante los ficheros existen.
+WALLPAPER_PALETA=""
 if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
-    echo "Error: Pywal no ha generado colores aún."
-    exit 1
+    if WALLPAPER_PALETA=$(resolver_wallpaper_paleta) \
+        && command -v wal >/dev/null 2>&1; then
+        echo "Pywal no habia corrido; se genera la paleta desde $(basename "$WALLPAPER_PALETA")..."
+        wal -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || true
+    fi
 fi
+
+if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
+    echo "Pywal no disponible; se usa la paleta base de Rhythm."
+    mkdir -p "$HOME/.cache/wal"
+    cat > "$HOME/.cache/wal/colors.sh" <<EOF
+# Paleta de reserva de Rhythm. La escribe modern-pywal-sync cuando pywal no ha
+# podido generar una. pywal la sobreescribe en cuanto corre.
+background='${PALETA_FALLBACK_BACKGROUND}'
+foreground='${PALETA_FALLBACK_FOREGROUND}'
+color0='${PALETA_FALLBACK_COLOR0}'
+color1='${PALETA_FALLBACK_COLOR1}'
+color2='${PALETA_FALLBACK_COLOR2}'
+color3='${PALETA_FALLBACK_COLOR3}'
+color4='${PALETA_FALLBACK_COLOR4}'
+color5='${PALETA_FALLBACK_COLOR5}'
+color6='${PALETA_FALLBACK_COLOR6}'
+color7='${PALETA_FALLBACK_COLOR7}'
+color8='${PALETA_FALLBACK_COLOR8}'
+color9='${PALETA_FALLBACK_COLOR9}'
+color10='${PALETA_FALLBACK_COLOR10}'
+color11='${PALETA_FALLBACK_COLOR11}'
+color12='${PALETA_FALLBACK_COLOR12}'
+color13='${PALETA_FALLBACK_COLOR13}'
+color14='${PALETA_FALLBACK_COLOR14}'
+color15='${PALETA_FALLBACK_COLOR15}'
+wal_colors_pywal_version='15'
+EOF
+fi
+
 source "$HOME/.cache/wal/colors.sh"
+
+# Los dos ficheros importados por los temas se resuelven aqui, antes de que el
+# resto del script los toque, para que los pasos 6 y 7 de abajo solo los
+# sobreescriban si pywal ha dejado los suyos.
+[ -e "$HOME/.config/waybar/colors-pywal.css" ] || escribir_colores_waybar_fallback
+[ -e "$HOME/.config/rofi/colors-pywal.rasi" ] || escribir_colores_rofi_fallback
 
 echo "Iniciando Sincronización Maestra..."
 
@@ -147,9 +315,19 @@ fi
 
 # 7. Sincronizar Rofi
 echo "  • Rofi..."
-if [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then
+# sync-rofi-pywal se prefiere: genera colors-pywal.rasi Y style-3-pywal.rasi, y
+# este ultimo es el que usa el lanzador de aplicaciones (SUPER+A). Antes solo se
+# generaba al abrir ese menu, y el menu lo exigia para poder abrirse.
+if [ -x "$HOME/.local/bin/sync-rofi-pywal" ]; then
+    "$HOME/.local/bin/sync-rofi-pywal" >/dev/null 2>&1 || true
+fi
+# Y si no, al menos el fichero de colores, desde la plantilla de pywal.
+if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] && [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then
     cp -f "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
 fi
+# Si aun asi no existe (sync-rofi-pywal ha fallado), se escribe la reserva para
+# que el @import de los .rasi no se quede sin resolver.
+[ -e "$HOME/.config/rofi/colors-pywal.rasi" ] || escribir_colores_rofi_fallback
 
 # 8. Sincronizar SDDM (Wallpaper y Colores)
 echo "  • SDDM (Login Screen)..."

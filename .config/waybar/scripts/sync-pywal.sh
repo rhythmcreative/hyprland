@@ -23,7 +23,7 @@ restart_waybar() {
     echo "Reiniciando Waybar..."
     pkill waybar 2>/dev/null
     sleep 0.5
-    waybar &
+    "$HOME/.config/waybar/launch.sh" --force &
     disown
     echo "Waybar reiniciado."
 }

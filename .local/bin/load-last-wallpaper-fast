@@ -62,32 +62,100 @@ if [ "$DAEMON_RUNNING" = false ]; then
 fi
 
 if [ "$DAEMON_RUNNING" = false ]; then
-    log "Error: No se pudo iniciar el daemon de wallpaper"
-    exit 1
+    # Antes salia aqui con exit 1, y como estaba ANTES de mirar el cache, una
+    # arranque lento (5 s no bastan) se comia la puesta de fondo entero aunque
+    # hubiera una imagen valida perfectamente conocida. Se avisa y se sigue: la
+    # cadena de abajo lo intentara de nuevo y, si tampoco puede, lo deja escrito
+    # en el log en vez de terminar en silencio.
+    log "AVISO: awww-daemon no respondio; se intenta poner el fondo igualmente"
 fi
 
-# Carga del wallpaper desde el registro de cache
+# ── RED DE SEGURIDAD: el wallpaper por defecto del repo ──────────────────────
+#
+# Esta es la razon de que el escritorio saliera con el fondo en negro y sin nada
+# que pareciese un fallo. El repo trae
+# .config/hypr/wallpapers/default.jpg, se copia a ~/.config/hypr/wallpapers/,
+# y no lo leia NADA: cero referencias en todo el repo. La cadena de abajo se
+# acababa y no pasaba nada.
+#
+# Y como hyprland.lua lleva force_default_wallpaper = 0 y disable_hyprland_logo
+# = true, Hyprland tampoco pinta lo suyo: sin awww, ni gris de arranque ni logo.
+# Es decir, que cualquier fallo de esta cadena no se ve como "sin fondo", se ve
+# como una pantalla negra sin pistas.
+#
+# Ademas la rama 1 era un callejon sin salida: si el cache apuntaba a una imagen
+# que ya no estaba, solo escribia en el log y se caia fuera del if/elif entero,
+# sin probar la rama 2 ni la 3 y sin reparar el cache. wallpaper-monitor-watcher
+# volvia a ejecutar este mismo script cada 10 s sin que cambiasen las cosas.
+#
+# Ahora: cada rama cae a la siguiente si su fichero no existe, y la ultima es el
+# default del repo, que siempre esta.
+DEFAULT_WP="$HOME/.config/hypr/wallpapers/default.jpg"
+
+# Un intento: si la imagen existe, se pinta y se elige. Devuelve 0 si se pudo.
+intentar_wallpaper() {
+    local ruta="$1" motivo="$2"
+    [ -n "$ruta" ] || return 1
+    if [ ! -f "$ruta" ]; then
+        log "$motivo no existe: $ruta"
+        return 1
+    fi
+    log "Cargando ($motivo): $(basename "$ruta")"
+    if "$HOME/.local/bin/wallpaper-backend" apply "$ruta" --login > /dev/null 2>&1; then
+        # Solo se registra como actual si el pintado ha funcionado. Al reves,
+        # wallpaper-backend escribe el cache ANTES de pintar, asi que un fallo
+        # dejaba constancia de un fondo que no se estaba viendo y se repetia en
+        # cada arranque.
+        echo "$ruta" > "$CACHE_FILE"
+        return 0
+    fi
+    log "wallpaper-backend no pudo pintar $ruta"
+    return 1
+}
+
 CACHE_FILE="$HOME/.cache/current-wallpaper"
 SDDM_WP="/usr/share/sddm/themes/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
 
+# La cache va primera, pero si lo que tiene dentro ya no existe se sigue hacia
+# abajo en vez de abandonar. Se limpia para que la proxima vuelta no vuelva a
+# mirar un camino muerto.
 if [[ -f "$CACHE_FILE" ]]; then
-    WALLPAPER_PATH=$(cat "$CACHE_FILE")
-
-    if [[ -f "$WALLPAPER_PATH" ]]; then
-        log "Cargando wallpaper actual: $(basename "$WALLPAPER_PATH")"
-"$HOME/.local/bin/wallpaper-backend" apply "$WALLPAPER_PATH" --login > /dev/null 2>&1 || true
+    CACHED=$(cat "$CACHE_FILE" 2>/dev/null || true)
+    if [ -n "$CACHED" ] && [ -f "$CACHED" ]; then
+        if ! intentar_wallpaper "$CACHED" "wallpaper actual"; then
+            log "Se descarta el cache, que no se pudo pintar: $CACHED"
+            rm -f "$CACHE_FILE"
+        fi
     else
-        log "Wallpaper en cache no existe: $WALLPAPER_PATH"
+        log "El cache apunta a algo inexistente, se ignora: ${CACHED:-vacio}"
+        rm -f "$CACHE_FILE"
     fi
-elif [[ -f "$HOME/.cache/wal/wal" ]]; then
-    FALLBACK=$(cat "$HOME/.cache/wal/wal")
-    log "Usando fallback de pywal: $(basename "$FALLBACK")"
-"$HOME/.local/bin/wallpaper-backend" apply "$FALLBACK" --login > /dev/null 2>&1 || true
-elif [[ -f "$SDDM_WP" ]]; then
-    log "Sincronizando con wallpaper de SDDM..."
-"$HOME/.local/bin/wallpaper-backend" apply "$SDDM_WP" --login > /dev/null 2>&1 || true
-    # Opcional: registrarlo como actual para pywal
-    echo "$SDDM_WP" > "$CACHE_FILE"
 fi
 
-log "Proceso de carga completado"
+# Solo se llega aqui si no hay nada utilizable en el cache.
+if [ ! -f "$CACHE_FILE" ]; then
+    if [ -f "$HOME/.cache/wal/wal" ]; then
+        intentar_wallpaper "$(cat "$HOME/.cache/wal/wal" 2>/dev/null || true)" "ultimo wallpaper de pywal" || true
+    fi
+    if [ ! -f "$CACHE_FILE" ] && [ -f "$SDDM_WP" ]; then
+        log "Sincronizando con el wallpaper del greeter..."
+        intentar_wallpaper "$SDDM_WP" "wallpaper de SDDM" || true
+    fi
+    # Ultimo recurso: la imagen que trae el repo. Esta no puede fallar por
+    # no existir en una instalacion hecha con install.sh.
+    if [ ! -f "$CACHE_FILE" ]; then
+        if [ -f "$DEFAULT_WP" ]; then
+            log "Sin wallpaper previo: se usa el default del repo."
+            intentar_wallpaper "$DEFAULT_WP" "wallpaper por defecto" || true
+        else
+            log "AVISO: no hay ningun wallpaper que poner. No hay cache, ni pywal,"
+            log "AVISO: ni el del greeter, ni $DEFAULT_WP"
+        fi
+    fi
+fi
+
+if [ -f "$CACHE_FILE" ]; then
+    log "Proceso de carga completado"
+else
+    log "Proceso de carga terminado SIN wallpaper: el escritorio quedara en negro"
+fi

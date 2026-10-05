@@ -126,7 +126,7 @@ if [[ "$RELOAD_WAYBAR" == true ]]; then
     fi
     
     # Intentar ejecutar waybar en segundo plano
-    nohup waybar > /dev/null 2>&1 &
+    nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     
     if [[ $? -eq 0 ]]; then
         echo "✅ Waybar recargado correctamente"

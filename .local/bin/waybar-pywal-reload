@@ -64,7 +64,7 @@ fi
 
 # 3. Iniciar waybar en background
 log "Iniciando Waybar..."
-waybar &
+"$HOME/.config/waybar/launch.sh" --force &
 sleep 2
 
 # Verificar que esté funcionando

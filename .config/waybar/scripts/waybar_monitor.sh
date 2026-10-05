@@ -42,7 +42,7 @@ restart_waybar() {
     sleep 2
     
     # Reiniciar waybar
-    waybar &
+    "$HOME/.config/waybar/launch.sh" --force &
     echo $! > "$PID_FILE"
     
     log_message "Waybar reiniciado exitosamente"

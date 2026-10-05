@@ -36,7 +36,7 @@ if command -v wal &> /dev/null; then
     
     # 7. Reiniciar Waybar para aplicar CSS de pywal
     pkill -KILL waybar 2>/dev/null
-    nohup waybar > /dev/null 2>&1 &
+    nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
 fi
 
 # 8. Guardar cache del wallpaper actual

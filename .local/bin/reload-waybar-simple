@@ -87,7 +87,7 @@ done
 
 # Iniciar waybar
 log "Iniciando waybar..."
-waybar > /dev/null 2>&1 &
+"$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
 sleep 1
 
 if pgrep waybar > /dev/null 2>&1; then

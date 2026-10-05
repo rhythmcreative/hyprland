@@ -187,6 +187,34 @@ log_debug "WAYLAND_DISPLAY: $WAYLAND_DISPLAY"
 ACTIVE_MONITOR=$(get_active_monitor)
 log_debug "Monitor activo detectado: $ACTIVE_MONITOR"
 
+# Sincronizar los colores de rofi con pywal ANTES de elegir tema.
+#
+# ORDEN, QUE ANTES ESTABA INVERTIDO Y NO TENIA SENTIDO: esto se llamaba dentro
+# de launch_rofi, es decir DESPUES de que select_best_theme hubiera elegido. Y
+# el unico generador de style-3-pywal.rasi es sync-rofi-pywal, que es
+# justamente a quien se llama aqui. O sea que la condicion de la prioridad 1
+#
+#     -f colors-pywal.rasi && -f style-3-pywal.rasi
+#
+# no se podia cumplir nunca la primera vez: el script exigia un fichero que el
+# unico sitio que lo creaba se dejaba para despues. En una maquina nueva,
+# SUPER+A moria con "No se encontraron temas de rofi disponibles" y no habia
+# forma de generar el tema con el propio atajo que lo necesita.
+sync_rofi_colors() {
+    log_debug "Sincronizando colores de rofi con pywal..."
+
+    if [[ -x "$HOME/.local/bin/sync-rofi-pywal" ]]; then
+        "$HOME/.local/bin/sync-rofi-pywal" > /dev/null 2>&1
+        log_debug "Colores de rofi sincronizados con pywal"
+        return 0
+    else
+        log_debug "Script sync-rofi-pywal no encontrado"
+        return 1
+    fi
+}
+
+sync_rofi_colors
+
 # Función para seleccionar el mejor tema disponible
 select_best_theme() {
     local monitor="$1"
@@ -278,25 +306,14 @@ else
 fi
 
 # NUEVA FUNCIÓN: Sincronizar automáticamente colores de rofi con pywal
-sync_rofi_colors() {
-    log_debug "Sincronizando colores de rofi con pywal..."
-    
-    # Ejecutar sincronización de colores de rofi
-    if [[ -x "$HOME/.local/bin/sync-rofi-pywal" ]]; then
-        "$HOME/.local/bin/sync-rofi-pywal" > /dev/null 2>&1
-        log_debug "Colores de rofi sincronizados con pywal"
-        return 0
-    else
-        log_debug "Script sync-rofi-pywal no encontrado"
-        return 1
-    fi
-}
+# (sync_rofi_colors se define y se llama ANTES de select_best_theme, mas arriba.)
 
 # Función principal para lanzar rofi
 launch_rofi() {
-    # NUEVO: Sincronizar colores de rofi con pywal antes de mostrar rofi
+    # Los colores ya estan sincronizados arriba, antes de elegir tema; se deja
+    # esta llamada por si el wallpaper ha cambiado entre medias.
     sync_rofi_colors
-    
+
     hide_active_bars
     
     log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"

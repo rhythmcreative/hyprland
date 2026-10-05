@@ -41,7 +41,7 @@ reload_waybar_safe() {
     # Si waybar no está corriendo, iniciarlo
     if [[ -z "$waybar_pids" ]]; then
         log "Iniciando waybar (no estaba corriendo)..."
-        waybar > /dev/null 2>&1 &
+        "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 1
         return 0
     fi
@@ -57,7 +57,7 @@ reload_waybar_safe() {
             pkill -9 waybar 2>/dev/null || true
             sleep 1
         fi
-        waybar > /dev/null 2>&1 &
+        "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 1
         log "Waybar iniciado con instancia única"
         return 0
@@ -80,7 +80,7 @@ reload_waybar_safe() {
     # ÚLTIMO RECURSO: Solo si waybar se crasheó, reiniciarlo UNA SOLA VEZ
     log "Waybar se cerró durante la recarga, reiniciando (último recurso)..."
     # Ya no está corriendo, solo iniciarlo
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     sleep 1
     if pgrep -x waybar > /dev/null; then
         log "Waybar reiniciado exitosamente (1 vez únicamente)"

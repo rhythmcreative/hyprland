@@ -9,6 +9,11 @@
     background-alt: {color0};
     foreground:     {foreground};
     foreground-alt: {color8};
+    /* foreground-alt (con guion) lo piden settings.rasi y hotkeys.rasi para el
+       color del placeholder. Sin esta linea, @foreground-alt no resolvia nunca
+       y rofi caia a su string por defecto en ese campo. Las dos formas se
+       declaran: la que usan los .rasi del repo y la que documenta pywal. */
+    foreground-alt: {color8};
     
     /* Colores de acento */
     selected:       {color1};

@@ -41,7 +41,7 @@ show_waybar() {
         sleep 0.5
     else
         log "Waybar no estaba corriendo, iniciándolo..."
-        waybar > /dev/null 2>&1 &
+        "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 1
         # Verificar que se inició correctamente
         if pgrep -x waybar > /dev/null; then

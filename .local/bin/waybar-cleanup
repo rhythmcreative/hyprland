@@ -64,7 +64,7 @@ fi
 
 # Iniciar waybar limpio
 log "Iniciando waybar limpio..."
-waybar > /dev/null 2>&1 &
+"$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
 new_pid=$!
 
 # Verificar que se inició correctamente

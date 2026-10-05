@@ -16,7 +16,7 @@ else
         pkill -USR2 waybar 2>/dev/null || {
             pkill waybar
             sleep 1
-            waybar > /dev/null 2>&1 &
+            "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         }
     fi
 fi

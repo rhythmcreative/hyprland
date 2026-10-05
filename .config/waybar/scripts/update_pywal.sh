@@ -8,6 +8,6 @@ sleep 1
 
 # Restart waybar to apply new colors
 killall waybar 2>/dev/null
-waybar &
+"$HOME/.config/waybar/launch.sh" --force &
 
 echo "Waybar colors updated with pywal!"

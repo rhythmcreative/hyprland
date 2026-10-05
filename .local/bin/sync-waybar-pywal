@@ -85,7 +85,7 @@ else
         kill -USR2 $waybar_pids 2>/dev/null || {
             kill -TERM $waybar_pids 2>/dev/null
             sleep 1
-            waybar > /dev/null 2>&1 &
+            "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         }
         log "Waybar recargado (fallback simple)"
     fi

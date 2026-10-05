@@ -73,13 +73,13 @@ if [[ -n "$waybar_pids" ]]; then
         log "Reiniciando Waybar..."
         kill -TERM $waybar_pids 2>/dev/null || true
         sleep 1
-        waybar > /dev/null 2>&1 &
+        "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 1
         log "Waybar reiniciado"
     fi
 else
     log "Iniciando Waybar..."
-    waybar > /dev/null 2>&1 &
+    "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     sleep 1
 fi
 

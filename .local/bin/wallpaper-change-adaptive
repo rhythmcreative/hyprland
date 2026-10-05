@@ -630,7 +630,7 @@ hide_waybar() {
 show_waybar() {
     log "Mostrando Waybar..."
     if ! pgrep -x waybar > /dev/null; then
-        nohup waybar > /dev/null 2>&1 &
+        nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 0.3
         if pgrep -x waybar > /dev/null; then
             log "Waybar iniciado"
@@ -642,7 +642,7 @@ show_waybar() {
 ensure_waybar_running() {
     log "Asegurando que waybar esté corriendo..."
     if ! pgrep -x waybar > /dev/null 2>&1; then
-        nohup waybar > /dev/null 2>&1 &
+        nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
         sleep 0.5
         if pgrep -x waybar > /dev/null 2>&1; then
             log "Waybar iniciado exitosamente"
@@ -919,7 +919,7 @@ if ! pgrep -x waybar > /dev/null; then
     log "CRÍTICO: Waybar no está ejecutándose al finalizar. Iniciando respaldo..."
     notify "Iniciando waybar de respaldo..."
     
-    nohup waybar > /dev/null 2>&1 &
+    nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     sleep 0.5
     
     if pgrep -x waybar > /dev/null; then

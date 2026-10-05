@@ -150,7 +150,7 @@ if [[ "$RELOAD_WAYBAR" == true ]]; then
         sleep 0.3
     fi
     
-    nohup waybar > /dev/null 2>&1 &
+    nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
     
     if [[ $? -eq 0 ]]; then
         echo "✅ Waybar recargado correctamente"

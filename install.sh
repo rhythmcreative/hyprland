@@ -1904,6 +1904,48 @@ step_dotfiles() {
     done
     step_ok "Config files synchronized ($synced deployed, $skipped already in place, $backed backed up)."
 
+    # Sembrar el fondo por defecto.
+    #
+    # El repo trae .config/hypr/wallpapers/default.jpg y el bucle de arriba ya
+    # lo ha copiado a ~/.config/hypr/, pero NADA lo leia: default.jpg no tenia
+    # ni una referencia en todo el repo. El unico wallpaper que se registraba
+    # era el del tema de SDDM, y solo si el bloque de SDDM se ejecutaba entero
+    # (install.sh lo triplemente condiciona). Si esa imagen no estaba, el cache
+    # se quedaba vacio y el escritorio arrancaba en negro: sin fondo, y sin el
+    # logo de Hyprland tampoco porque hyprland.lua pone disable_hyprland_logo.
+    #
+    # Se siembra aqui, ya en ~/.config, y no desde $DOTFILES_DIR, porque el
+    # cache tiene que sobrevivir a que el checkout se mueva o se borre.
+    #
+    # No se pisa uno que ya haya: si el usuario tiene un fondo elegido, este
+    # paso no toca nada.
+    local DEFAULT_WP="$HOME/.config/hypr/wallpapers/default.jpg"
+    # El cache cuenta como "no valido" si no existe O si lo que tiene dentro
+    # tampoco. Un cache que apunta a una imagen borrada es el caso que mas
+    #ciausaba el fondo negro de forma permanente.
+    local CACHE_WP_VALID=false
+    if [ -f "$HOME/.cache/current-wallpaper" ]; then
+        local CACHED_WP
+        CACHED_WP=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || true)
+        if [ -n "$CACHED_WP" ] && [ -f "$CACHED_WP" ]; then
+            CACHE_WP_VALID=true
+        else
+            step_warn "Wallpaper cache points at a missing file; reseeding."
+        fi
+    fi
+    if [ -f "$DEFAULT_WP" ] && [ "$CACHE_WP_VALID" != true ]; then
+        mkdir -p "$HOME/.cache"
+        echo "$DEFAULT_WP" > "$HOME/.cache/current-wallpaper"
+        step_ok "Default wallpaper seeded."
+    fi
+    # Lo mismo con la biblioteca: wallpaper-random y wallpaper-selector fallan
+    # con ~/Pictures/Wallpapers vacio, asi que el default se copia ahi tambien.
+    mkdir -p "$HOME/Pictures/Wallpapers"
+    if [ -f "$DEFAULT_WP" ] && ! compgen -G "$HOME/Pictures/Wallpapers/*" >/dev/null 2>&1; then
+        cp -f "$DEFAULT_WP" "$HOME/Pictures/Wallpapers/default.jpg"
+        step_ok "Default wallpaper added to the library."
+    fi
+
     # Restore the saved monitors.conf, if we had one
     if [ -n "$saved_monitors" ] && [ -f "$saved_monitors" ]; then
         cp -f "$saved_monitors" "$HOME/.config/hypr/monitors.conf"
@@ -2087,7 +2129,49 @@ step_wallpapers() {
         local WALL_DIR="$HOME/Pictures/Wallpapers"
         mkdir -p "$WALL_DIR"
         # Limpieza: elimina wallpapers antiguos para dejar solo FireWalls
+        #
+        # Esta limpieza se lleva por delante el default.jpg que step_dotfiles
+        # acaba de dejar en la biblioteca, y como este paso va DESPUES, el
+        # escritorio se quedaba sin wallpaper en cuanto se aceptaba el pack.
+        # Se guardan aparte los fondos que el usuario hubiera puesto a mano:
+        # esto se suppose "dejar solo FireWalls", no borrar lo suyo.
+        local DEFAULT_WP_SEED="$HOME/.config/hypr/wallpapers/default.jpg"
+        local KEPT_WALLS=""
+        mkdir -p "$HOME/.cache"
+        local saved_dir
+        saved_dir=$(mktemp -d "$HOME/.cache/rhythm-keep-walls.XXXXXX" 2>/dev/null || true)
+        if [ -n "$saved_dir" ]; then
+            # Todo lo que no venga de un pack conocido se considera del usuario.
+            # Los packs sedetectan por nombre, que es como los deja el paso de
+            # descarga; lo demas se aparta.
+            local f base
+            for f in "$WALL_DIR"/*; do
+                [ -e "$f" ] || continue
+                base=$(basename "$f")
+                case "$base" in
+                    default.jpg) continue ;;
+                esac
+                if [ -n "$DEFAULT_WP_SEED" ] && cmp -s "$f" "$DEFAULT_WP_SEED" 2>/dev/null; then
+                    continue
+                fi
+                mv -f "$f" "$saved_dir/" 2>/dev/null || true
+            done
+            KEPT_WALLS=$(find "$saved_dir" -maxdepth 1 -type f | wc -l)
+        else
+            KEPT_WALLS=0
+        fi
         rm -rf "${WALL_DIR:?}/"* 2>/dev/null || true
+        # El default se vuelve a poner DESPUES de la limpieza, siempre. Es el
+        # unico fondo que hay garantizado tras una instalacion.
+        if [ -f "$DEFAULT_WP_SEED" ]; then
+            cp -f "$DEFAULT_WP_SEED" "$WALL_DIR/default.jpg"
+        fi
+        # Y los del usuario vuelven, para que la limpieza no les borre lo suyo.
+        if [ -n "$saved_dir" ] && [ "${KEPT_WALLS:-0}" -gt 0 ] 2>/dev/null; then
+            mv -f "$saved_dir"/* "$WALL_DIR/" 2>/dev/null || true
+            step_item "Wallpapers previos del usuario conservados: $KEPT_WALLS"
+        fi
+        rm -rf "$saved_dir" 2>/dev/null || true
         # Directorio privado y con nombre aleatorio, como el resto de temporales
         # del script. Con "/tmp/wallpaper_install" fijo, otro usuario del equipo
         # puede dejar ese directorio ya hecho y con "firewalls" apuntando donde
@@ -2221,7 +2305,31 @@ step_system() {
     if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
         step_item "Deploying SDDM Astronaut theme..."
         sudo mkdir -p /usr/share/sddm/themes
+        # `rm -rf` antes del `cp -r`, y no confiado en que el destino no exista.
+        #
+        # cp -r sobre un directorio YA existente no lo sustituye: copia el
+        # origen DENTRO. En una reinstalacion, o tras haber instalado el tema a
+        # mano, /usr/share/sddm/themes/sddm-astronaut-theme ya estaba, y el
+        # resultado era
+        #     /usr/share/sddm/themes/sddm-astronaut-theme/sddm-astronaut-theme/
+        # con los Main.qml, metadata.desktop y Components/ de la version
+        # VIEJA arriba y la nueva enterada dentro. El greeter sigue arrancando,
+        # asi que no se ve como error: se ve como un tema que no cambia con las
+        # actualizaciones. Medido aqui: el `cp -r` no fallaba nunca, solo
+        # anidaba en silencio.
+        #
+        # Se borra solo lo del tema, nunca todo /usr/share/sddm/themes, que
+        # puede tener otros greeters instalados.
+        sudo rm -rf /usr/share/sddm/themes/sddm-astronaut-theme
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+        # Comprobacion: si el `cp` volvio a anidar, el theme.conf que se escribe
+        # abajo apuntaria a un directorio sin Main.qml de verdad y el login
+        # caeria al tema por defecto de SDDM sin decir nada.
+        if [ ! -f /usr/share/sddm/themes/sddm-astronaut-theme/Main.qml ]; then
+            step_warn "El tema de SDDM ha quedado mal desplegado (falta Main.qml); revisa /usr/share/sddm/themes."
+        else
+            step_ok "SDDM theme files in place."
+        fi
         
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
         echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
@@ -2306,11 +2414,38 @@ EOF
         chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
 
         # Initial color palette generation
+        #
+        # Este `wal` era el UNICO del installer, y solo se llegaba a el si el
+        # tema de SDDM estaba presente. Toda la cadena de colores (waybar,
+        # rofi, mako, GTK) cuelga de que corra al menos una vez, asi que su
+        # ausencia hacia que nada tuviera tema. Ahora modern-pywal-sync tambien
+        # lo ejecuta si falta, asi que esto es solo para tener una paleta ya
+        # buena antes del primer arranque.
+        #
+        # Y el cache se escribe SOLO si no hay uno utilizable: antes se
+        # sobreescribia siempre con una ruta DENTRO del clon del repo, que
+        # puede moverse o borrarse. Con el clon fuera, el cache apuntaba al
+        # vacio y el escritorio arrancaba en negro.
         local SDDM_WALLPAPER="$DOTFILES_DIR/sddm/sddm-astronaut-theme/Backgrounds/current_wallpaper.jpg"
+        local CACHE_WP_FILE="$HOME/.cache/current-wallpaper"
+        local CACHE_WP_NOW=""
+        [ -f "$CACHE_WP_FILE" ] && CACHE_WP_NOW=$(cat "$CACHE_WP_FILE" 2>/dev/null || true)
         if [ -f "$SDDM_WALLPAPER" ]; then
             wal -i "$SDDM_WALLPAPER" -n -q >> "$LOG_FILE" 2>&1 || true
-            mkdir -p "$HOME/.cache"
-            echo "$SDDM_WALLPAPER" > "$HOME/.cache/current-wallpaper"
+        fi
+        mkdir -p "$HOME/.cache"
+        if [ -z "$CACHE_WP_NOW" ] || [ ! -f "$CACHE_WP_NOW" ]; then
+            # Sin cache, se prefiere el default que vive en ~/.config, que es
+            # una ruta estable, y solo si no esta, el del clon.
+            if [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ]; then
+                echo "$HOME/.config/hypr/wallpapers/default.jpg" > "$CACHE_WP_FILE"
+                step_ok "Wallpaper cache seeded from the default."
+            elif [ -f "$SDDM_WALLPAPER" ]; then
+                echo "$SDDM_WALLPAPER" > "$CACHE_WP_FILE"
+                step_warn "Wallpaper cache seeded from the checkout; move the repo if you want it to survive."
+            fi
+        else
+            step_ok "Existing wallpaper kept: $(basename "$CACHE_WP_NOW")"
         fi
         step_ok "SDDM Astronaut theme configured."
     fi
@@ -2369,9 +2504,42 @@ step_update() {
         fi
     else
         step_dotfiles
-        if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-            bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
-        fi
+    fi
+
+    # Pywal, antes de modern-pywal-sync.
+    #
+    # ESTE PASO NO EXISTIA, y era la causa de que waybar y rofi salieran sin
+    # tema. modern-pywal-sync se negaba a trabajar sin ~/.cache/wal/colors.sh,
+    # ese cache solo lo crea `wal`, y `wal` no se ejecutaba en el camino de
+    # update en absoluto: solo dentro del bloque de SDDM en la instalacion
+    # completa. De modo que tras cualquier update en una maquina sin pywal
+    # previo, los ficheros colors-pywal.css y colors-pywal.rasi no se creaban,
+    # sus @import fallaban, y GTK y rofi descartan el tema ENTERO cuando un
+    # import no se resuelve.
+    #
+    # Se hace aqui, y antes del sincronizador, para que sincronice una paleta de
+    # verdad y no la de reserva.
+    step_item "Calibrating the pywal palette from the current wallpaper..."
+    local WAL_SRC=""
+    if [ -f "$HOME/.cache/current-wallpaper" ]; then
+        WAL_SRC=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || true)
+        [ -n "$WAL_SRC" ] && [ ! -f "$WAL_SRC" ] && WAL_SRC=""
+    fi
+    [ -z "$WAL_SRC" ] && [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ] \
+        && WAL_SRC="$HOME/.config/hypr/wallpapers/default.jpg"
+    if command -v wal >/dev/null 2>&1 && [ -n "$WAL_SRC" ]; then
+        wal -i "$WAL_SRC" -n -q >> "$LOG_FILE" 2>&1 \
+            && step_ok "Pywal palette generated from $(basename "$WAL_SRC")." \
+            || step_warn "wal fallo; se usara la paleta de reserva."
+    else
+        step_warn "Ni wal ni una imagen de la que sacar paleta; el sincronizador usara la reserva."
+    fi
+
+    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+        step_item "Syncing the palette to Waybar, Rofi, Mako and SDDM..."
+        bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1" \
+            && step_ok "Colours synchronised." \
+            || step_warn "modern-pywal-sync fallo; mira $LOG_FILE"
     fi
 
     # Reload systemd and re-enable all services after update

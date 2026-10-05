@@ -43,7 +43,7 @@ export OPENWEATHER_API_KEY="tu_api_key_aquí"
 
 ```bash
 # Reiniciar waybar para aplicar cambios
-pkill waybar && nohup waybar > /dev/null 2>&1 &
+pkill waybar && nohup "$HOME/.config/waybar/launch.sh" --force > /dev/null 2>&1 &
 ```
 
 ## 🎨 Iconos Disponibles

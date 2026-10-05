@@ -60,6 +60,13 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 fi
             fi
         }
+        # stdin may be a pipe (curl | bash) while the terminal is still
+        # reachable: gate menus on an openable /dev/tty, like gum does.
+        nixos_can_ask() {
+            [ -t 0 ] && return 0
+            [ -c /dev/tty ] || return 1
+            : 2>/dev/null </dev/tty || return 1
+        }
 
         # git comes with NixOS most of the time; otherwise fetch it through
         # nix itself so this stays a one-command install.
@@ -120,7 +127,7 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         # Arch-style choices, mapped to module options. Skipped with
         # RHYTHM_NO_CHOICES=1 (or RHYTHM_WALLPAPER / RHYTHM_FLATPAKS set).
         local wallpapers="${RHYTHM_WALLPAPER:-random}" flatpaks="${RHYTHM_FLATPAKS:-0}" pick=""
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] && [ -t 0 ] && command -v gum >/dev/null 2>&1; then
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] && nixos_can_ask && command -v gum >/dev/null 2>&1; then
             nixos_logo "$repo"
             pick=$(gum choose --header="Wallpaper pack:" \
                 "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" || true)
@@ -129,7 +136,7 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 "No "*) wallpapers="none" ;;
             esac
         fi
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] && [ -t 0 ] && command -v gum >/dev/null 2>&1; then
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] && nixos_can_ask && command -v gum >/dev/null 2>&1; then
             if gum confirm "Install Flatpak apps from flatpaks.txt?"; then
                 flatpaks="1"
             fi

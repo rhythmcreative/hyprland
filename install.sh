@@ -172,6 +172,12 @@ nixos_spin() {
     fi
 }
 
+# Same reason as nixos_tui_ok: a TUI on a dumb/limited terminal never draws and
+# never returns, so the run would hang on that step forever. Wrapping the
+# spinner in the timeout costs nothing (builds run far longer than the
+# timeout and gum is killed only if it stops rendering) and guarantees the
+# installer always reaches the next message.
+
 # NixOS does not use the Arch steps below at all. Instead of stopping with
 # directions, this same command installs the desktop: it auto-detects user and
 # GPU, activates a standalone home-manager flake under ~/.config/home-manager
@@ -250,9 +256,38 @@ EOF
         # reachable: gate menus on an openable /dev/tty, like gum does.
         nixos_can_ask() {
             [ "$AUTO_YES" = true ] && return 1
+            nixos_tui_ok || return 1
             [ -t 0 ] && return 0
             [ -c /dev/tty ] || return 1
             : 2>/dev/null </dev/tty || return 1
+        }
+
+        # Whether gum's full-screen widgets can actually be drawn here.
+        #
+        # `gum style` works on any terminal, which is why the logo showed up and
+        # made this look like a styling problem. `gum choose`/`gum confirm` are
+        # Bubble Tea TUI programs: on a dumb/limited terminal (TERM=dumb, the
+        # TERM=linux a NixOS getty sets, unknown) they never render and never
+        # exit, so the installer froze on the logo with zero output, forever,
+        # waiting for a key that could not be entered.
+        #
+        # A widget that cannot be drawn must never be started: fall back to
+        # documented defaults and say so, so the run keeps going visibly.
+        nixos_tui_ok() {
+            [ -n "${TERM:-}" ] || return 1
+            case "$TERM" in
+                dumb|unknown|linux|vt100|nsterm) return 1 ;;
+            esac
+            [ -t 1 ] || [ -c /dev/tty ] || return 1
+            return 0
+        }
+        # One-time note when the terminal cannot host the menus.
+        nixos_tui_warned=""
+        nixos_tui_note() {
+            [ -n "$nixos_tui_warned" ] && return 0
+            nixos_tui_warned=1
+            step_warn "This terminal (TERM=${TERM:-none}) cannot show interactive"
+            step_warn "menus; continuing with the defaults below, no input needed."
         }
 
         # git comes with NixOS most of the time; otherwise fetch it through
@@ -324,21 +359,31 @@ EOF
 
         # Arch-style choices, mapped to module options. Skipped with
         # RHYTHM_NO_CHOICES=1 (or RHYTHM_WALLPAPER / RHYTHM_FLATPAKS set).
+        # Every gum widget runs under `timeout`: a TUI that cannot draw would
+        # otherwise block the whole install with no way to press a key.
         local wallpapers="${opt_wall:-${RHYTHM_WALLPAPER:-random}}"
-        local flatpaks="${opt_flat:-${RHYTHM_FLATPAKS:-0}}" pick=""
+        local flatpaks="${opt_flat:-${RHYTHM_FLATPAKS:-0}}" pick="" answer=""
         if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] \
             && nixos_can_ask && command -v gum >/dev/null 2>&1; then
             clear_logo
-            pick=$(gum choose --header="Wallpaper pack:" \
-                "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" || true)
-            case "$pick" in
-                "All"*) wallpapers="all" ;;
-                "No "*) wallpapers="none" ;;
-            esac
+            pick=$(timeout 120 gum choose --header="Wallpaper pack:" \
+                "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" \
+                </dev/tty 2>/dev/null) || pick=""
+            if [ -z "$pick" ]; then
+                nixos_tui_note
+                step_item "Wallpapers: $wallpapers (default)"
+            else
+                case "$pick" in
+                    "All"*) wallpapers="all" ;;
+                    "No "*) wallpapers="none" ;;
+                esac
+            fi
+        elif [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ]; then
+            nixos_tui_note
         fi
         if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_flat" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] \
             && nixos_can_ask && command -v gum >/dev/null 2>&1; then
-            if gum confirm "Install Flatpak apps from flatpaks.txt?"; then
+            if answer=$(timeout 120 gum confirm "Install Flatpak apps from flatpaks.txt?" </dev/tty 2>/dev/null); then
                 flatpaks="1"
             fi
         fi

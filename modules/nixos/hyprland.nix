@@ -37,7 +37,15 @@ in
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
 
     # Everything the compositor and its scripts expect on PATH.
+    # gum + fzf van aqui a proposito: install.sh, los helpers y los menus
+    # los usan para mostrar mensajes. Sin gum en el sistema, `gum style`
+    # no existe y los avisos se ven en plano o no se ven (en Arch siempre
+    # esta porque el instalador lo pone con pacman).
     environment.systemPackages = with pkgs; [
+      gum
+      fzf
+      git
+      curl
       hypridle
       hyprlock
       hyprsunset

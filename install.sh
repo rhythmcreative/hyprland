@@ -28,6 +28,107 @@ trap 'handle_error $LINENO' ERR
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
+# --- Early presentation bootstrap (Arch + NixOS) ---
+# Tiene que ir antes de la rama de NixOS: antes el bloque de NixOS salia con
+# `exit` usando solo `echo` plano, sin gum, sin logo y sin leer de /dev/tty.
+# Por eso en Arch se veian los mensajes con estilo y en NixOS no se veia
+# nada (sobre todo con el one-liner de curl, donde stdin es una tuberia y
+# `read`/`gum` sin TTY no muestran prompt).
+# Ahora ambos caminos comparten la misma presentacion.
+_NIXOS_EARLY_TTY=""
+[ -e /dev/tty ] && _NIXOS_EARLY_TTY="/dev/tty"
+if [ -n "$_NIXOS_EARLY_TTY" ]; then
+    _EARLY_TERM_SIZE=$(stty size 2>/dev/null <"$_NIXOS_EARLY_TTY" || echo "24 80")
+else
+    _EARLY_TERM_SIZE=$(stty size 2>/dev/null || echo "24 80")
+fi
+_EARLY_TERM_WIDTH=$(echo "$_EARLY_TERM_SIZE" | cut -d' ' -f2)
+case "$_EARLY_TERM_WIDTH" in ''|*[!0-9]*) _EARLY_TERM_WIDTH=80 ;; esac
+_EARLY_LOGO_PATH="$DOTFILES_DIR/logo.txt"
+[ -n "$HOME" ] && [ -f "$HOME/hyprland/logo.txt" ] && [ ! -f "$_EARLY_LOGO_PATH" ] && _EARLY_LOGO_PATH="$HOME/hyprland/logo.txt"
+_EARLY_LOGO_WIDTH=69
+[ -f "$_EARLY_LOGO_PATH" ] && _EARLY_LOGO_WIDTH=$(awk '{ if (length > max) max = length } END { print max+0 }' "$_EARLY_LOGO_PATH" 2>/dev/null || echo 69)
+case "$_EARLY_LOGO_WIDTH" in ''|*[!0-9]*) _EARLY_LOGO_WIDTH=69 ;; esac
+_EARLY_PADDING_LEFT=$(( (_EARLY_TERM_WIDTH - _EARLY_LOGO_WIDTH) / 2 ))
+[ "$_EARLY_PADDING_LEFT" -lt 0 ] && _EARLY_PADDING_LEFT=0
+# Sin este tope, en terminales estrechas (80 cols) el padding izquierdo
+# empujaba el texto fuera de la pantalla y gum parecia no mostrar nada.
+[ "$_EARLY_PADDING_LEFT" -gt 8 ] && _EARLY_PADDING_LEFT=8
+_EARLY_PAD_SPACES=$(printf "%*s" "$_EARLY_PADDING_LEFT" "")
+
+export GUM_CONFIRM_PROMPT_FOREGROUND="6"
+export GUM_CONFIRM_SELECTED_FOREGROUND="0"
+export GUM_CONFIRM_SELECTED_BACKGROUND="2"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="0"
+
+# gum en NixOS casi nunca esta en PATH en el primer arranque. Se trae por
+# nix sin pedir nada al usuario; si no hay nix o falla, se sigue con echo.
+ensure_gum_nixos() {
+    command -v gum >/dev/null 2>&1 && return 0
+    [ -n "$HOME" ] && export PATH="$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
+    command -v gum >/dev/null 2>&1 && return 0
+    command -v nix >/dev/null 2>&1 || return 1
+    NIX_CONFIG="experimental-features = nix-command flakes" \
+        nix --extra-experimental-features "nix-command flakes" \
+        profile install nixpkgs#gum >/dev/null 2>&1 || return 1
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+    command -v gum >/dev/null 2>&1
+}
+
+nixos_say() {
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 7 --width "$_EARLY_TERM_WIDTH" --padding "0 0 0 $_EARLY_PADDING_LEFT" -- "$1" </dev/null || printf "%s%s\n" "$_EARLY_PAD_SPACES" "$1"
+    else
+        printf "%s%s\n" "$_EARLY_PAD_SPACES" "$1"
+    fi
+}
+
+nixos_section() {
+    echo ""
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 6 --bold --width "$_EARLY_TERM_WIDTH" --padding "0 0 0 $_EARLY_PADDING_LEFT" -- ":: $1" </dev/null || printf "%s\033[1;36m:: %s\033[0m\n" "$_EARLY_PAD_SPACES" "$1"
+    else
+        printf "%s\033[1;36m:: %s\033[0m\n" "$_EARLY_PAD_SPACES" "$1"
+    fi
+}
+
+nixos_ok() {
+    printf "%s\033[32m  [OK] %s\033[0m\n" "$_EARLY_PAD_SPACES" "$1"
+}
+
+nixos_warn() {
+    printf "%s\033[33m  ! %s\033[0m\n" "$_EARLY_PAD_SPACES" "$1"
+}
+
+nixos_logo() {
+    printf "\033[H\033[2J"
+    if [ -f "$_EARLY_LOGO_PATH" ]; then
+        if command -v gum >/dev/null 2>&1; then
+            gum style --foreground 2 --width "$_EARLY_TERM_WIDTH" --padding "1 0 0 $_EARLY_PADDING_LEFT" -- "$(<"$_EARLY_LOGO_PATH")" </dev/null || cat "$_EARLY_LOGO_PATH"
+        else
+            cat "$_EARLY_LOGO_PATH"
+        fi
+    fi
+}
+
+# Lee siempre del TTY real: con `bash -c "$(curl ...)"` stdin es el script,
+# no el teclado, y sin esto las preguntas no se ven ni responden.
+nixos_ask() {
+    local prompt="$1" def="$2" ans=""
+    if [ -e /dev/tty ]; then
+        if command -v gum >/dev/null 2>&1; then
+            ans=$(gum input --placeholder "$def" --header "$prompt" --width 60 </dev/tty >/dev/tty 2>/dev/tty || true)
+            printf '%s' "${ans:-$def}"
+        else
+            read -rp "$prompt [$def]: " ans </dev/tty >/dev/tty 2>/dev/tty || true
+            printf '%s' "${ans:-$def}"
+        fi
+    else
+        printf '%s' "$def"
+    fi
+}
+
 # NixOS does not use the Arch steps below at all. Instead of stopping with
 # directions, this same command deploys the desktop by itself: it detects
 # user, host and GPU, writes a minimal system flake under /etc/nixos that
@@ -35,33 +136,43 @@ DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo ""
 # defaults at most; ENTER accepts everything.
 if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
     install_nixos() {
-        [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
-        sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
+        ensure_gum_nixos || true
+        nixos_logo
+        nixos_section "Rhythm Hyprland (NixOS)"
+        [ "$(id -u)" -eq 0 ] && { nixos_say "ERROR: run as your user, not root."; exit 1; }
+        sudo -v || { nixos_say "ERROR: sudo authentication needed."; exit 1; }
 
         # git comes with NixOS most of the time; otherwise fetch it through
         # nix itself so this stays a one-command install.
         if ! command -v git >/dev/null 2>&1; then
-            echo "Installing git through nix..."
+            nixos_say "Installing git through nix..."
             NIX_CONFIG="experimental-features = nix-command flakes" \
                 nix --extra-experimental-features "nix-command flakes" \
                 profile install nixpkgs#git 2>/dev/null || {
-                    echo "ERROR: could not get git. Install it and retry."; exit 1; }
+                    nixos_say "ERROR: could not get git. Install it and retry."; exit 1; }
             export PATH="$HOME/.nix-profile/bin:$PATH"
         fi
+        ensure_gum_nixos || nixos_warn "gum not available, using plain text output."
 
         # Flakes on, persistently, so later rebuilds just work.
         if ! grep -q "experimental-features.*flakes" /etc/nix/nix.conf 2>/dev/null; then
+            nixos_say "Enabling nix flakes..."
             echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
             sudo systemctl restart nix-daemon 2>/dev/null || true
         fi
 
         local repo="$HOME/hyprland"
         if [ ! -d "$repo/.git" ]; then
-            echo "Cloning the desktop into $repo..."
+            nixos_section "Downloading desktop sources"
+            nixos_say "Cloning the desktop into $repo..."
             git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
+            _EARLY_LOGO_PATH="$repo/logo.txt"
         else
-            echo "Using existing checkout at $repo."
+            nixos_say "Using existing checkout at $repo."
+            _EARLY_LOGO_PATH="$repo/logo.txt"
         fi
+        nixos_logo
+        nixos_section "Rhythm Hyprland (NixOS)"
 
         # Lo minimo: usuario, maquina y grafica, todo con valor propuesto.
         local user="$USER" host guess_gpu ans="" rel
@@ -76,17 +187,26 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 0x8086) [ "$guess_gpu" = "auto" ] && guess_gpu="intel" ;;
             esac
         done
-        if [ -t 0 ]; then
-            read -rp "User [$user]: " ans && [ -n "$ans" ] && user="$ans"
-            read -rp "Hostname [$host]: " ans && [ -n "$ans" ] && host="$ans"
-            read -rp "GPU (auto/nvidia/amd/intel) [$guess_gpu]: " ans && [ -n "$ans" ] && guess_gpu="$ans"
+        nixos_section "Machine setup (ENTER accepts defaults)"
+        user=$(nixos_ask "User" "$user")
+        host=$(nixos_ask "Hostname" "$host")
+        if command -v gum >/dev/null 2>&1 && [ -e /dev/tty ]; then
+            guess_gpu=$(gum choose --header "GPU driver" --selected "$guess_gpu" "auto" "nvidia" "amd" "intel" </dev/tty >/dev/tty 2>/dev/tty || echo "$guess_gpu")
+        else
+            guess_gpu=$(nixos_ask "GPU (auto/nvidia/amd/intel)" "$guess_gpu")
         fi
-        echo "Installing for user=$user host=$host gpu=$guess_gpu"
+        nixos_say "Installing for user=$user host=$host gpu=$guess_gpu"
 
         # Hardware config of THIS machine, generated, never written by hand.
-        sudo nixos-generate-config --show-hardware-config > /tmp/rhythm-hw.nix || exit 1
+        nixos_section "Hardware configuration"
+        if command -v gum >/dev/null 2>&1; then
+            gum spin --spinner dot --title "Detecting hardware..." -- sudo nixos-generate-config --show-hardware-config > /tmp/rhythm-hw.nix || exit 1
+        else
+            sudo nixos-generate-config --show-hardware-config > /tmp/rhythm-hw.nix || exit 1
+        fi
         sudo cp -f /tmp/rhythm-hw.nix /etc/nixos/hardware-configuration.nix
         rm -f /tmp/rhythm-hw.nix
+        nixos_ok "Hardware configuration captured."
 
         # Backup of whatever /etc/nixos had, timestamped, never deleted.
         if [ -f /etc/nixos/flake.nix ] || [ -f /etc/nixos/configuration.nix ]; then
@@ -95,7 +215,7 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
             sudo mkdir -p "/etc/nixos.bak-$stamp"
             sudo cp -rf /etc/nixos/flake.nix /etc/nixos/flake.lock /etc/nixos/configuration.nix \
                 /etc/nixos/hardware-configuration.nix "/etc/nixos.bak-$stamp/" 2>/dev/null || true
-            echo "Previous /etc/nixos backed up to /etc/nixos.bak-$stamp."
+            nixos_say "Previous /etc/nixos backed up to /etc/nixos.bak-$stamp."
         fi
 
         # Bootloader carried over from how THIS machine boots: without it the
@@ -161,12 +281,17 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
   };
 }
 EOF2
-        [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to the generated module above."
+        [ "$guess_gpu" = "nvidia" ] && nixos_warn "NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to the generated module above."
 
-        echo "Rebuilding the system (downloads several GB the first time)..."
+        nixos_section "Rebuilding NixOS"
+        nixos_say "Rebuilding the system (downloads several GB the first time)..."
         sudo nixos-rebuild switch --flake "/etc/nixos#$host" || exit 1
         echo ""
-        echo "Done. Reboot to enter the Rhythm Hyprland desktop."
+        if command -v gum >/dev/null 2>&1; then
+            gum style --foreground 2 --bold --width "$_EARLY_TERM_WIDTH" --padding "0 0 1 $_EARLY_PADDING_LEFT" -- "Done. Reboot to enter the Rhythm Hyprland desktop." </dev/null || echo "Done. Reboot to enter the Rhythm Hyprland desktop."
+        else
+            echo "Done. Reboot to enter the Rhythm Hyprland desktop."
+        fi
     }
     install_nixos
     exit $?
@@ -385,6 +510,8 @@ else
     export TERM_WIDTH=80
     export TERM_HEIGHT=24
 fi
+case "$TERM_WIDTH" in ''|*[!0-9]*) export TERM_WIDTH=80 ;; esac
+case "$TERM_HEIGHT" in ''|*[!0-9]*) export TERM_HEIGHT=24 ;; esac
 
 LOGO_PATH="$DOTFILES_DIR/logo.txt"
 if [[ -f "$LOGO_PATH" ]]; then
@@ -392,10 +519,16 @@ if [[ -f "$LOGO_PATH" ]]; then
 else
     LOGO_WIDTH=69
 fi
+case "$LOGO_WIDTH" in ''|*[!0-9]*) LOGO_WIDTH=69 ;; esac
 
 PADDING_LEFT=$(((TERM_WIDTH - LOGO_WIDTH) / 2))
 if (( PADDING_LEFT < 0 )); then
     PADDING_LEFT=0
+fi
+# El padding gigante es lo que hacia "invisible" a gum en terminales
+# estrechas: el texto quedaba fuera de la pantalla. Tope a 8.
+if (( PADDING_LEFT > 8 )); then
+    PADDING_LEFT=8
 fi
 PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
 
@@ -417,7 +550,7 @@ clear_logo() {
     printf "\033[H\033[2J"
     if [[ -f "$LOGO_PATH" ]]; then
         if command -v gum >/dev/null 2>&1; then
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+            gum style --foreground 2 --width "$TERM_WIDTH" --padding "1 0 0 $PADDING_LEFT" -- "$(<"$LOGO_PATH")" </dev/null || cat "$LOGO_PATH"
         else
             cat "$LOGO_PATH"
         fi
@@ -427,7 +560,7 @@ clear_logo() {
 section() {
     echo ""
     if command -v gum >/dev/null 2>&1; then
-        gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
+        gum style --foreground 6 --bold --width "$TERM_WIDTH" --padding "0 0 0 $PADDING_LEFT" -- ":: $1" </dev/null || printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
     else
         printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
     fi

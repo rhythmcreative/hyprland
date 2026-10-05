@@ -137,7 +137,9 @@ EOF2
         local act
         act=$(nix --extra-experimental-features "nix-command flakes" build --no-link --print-out-paths \
             "$hm_dir#homeConfigurations.\"$user\".activationPackage") || exit 1
-        "$act/activate" -b backup || exit 1
+        # The activate script takes no backup flag (only --driver-version):
+        # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
+        HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
         echo "Done. Log out, switch to a TTY (Ctrl+Alt+F2) and run Hyprland to enter the desktop."
     }

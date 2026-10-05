@@ -29,10 +29,10 @@ trap 'handle_error $LINENO' ERR
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
 # NixOS does not use the Arch steps below at all. Instead of stopping with
-# directions, this same command installs the desktop only: it detects user
-# and GPU, writes a standalone home-manager flake under
-# ~/.config/home-manager, and activates it. No system rebuild, no sudo,
-# no /etc writes. Two questions with defaults at most; ENTER accepts all.
+# directions, this same command installs the desktop only: it auto-detects
+# user and GPU, writes a standalone home-manager flake under
+# ~/.config/home-manager, and activates it. No questions, no system rebuild,
+# no sudo, no /etc writes. Override the guesses with RHYTHM_USER/RHYTHM_GPU.
 if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
     install_nixos() {
         [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
@@ -66,20 +66,19 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         # Desktop only: standalone home-manager, no system rebuild.
         # No sudo, no /etc writes, no bootloader changes: the same modules
         # as homes/rhythm/home.nix, activated for this user only.
-        local user="$USER" guess_gpu ans="" rel hm_dir
+        # Fully non-interactive: values are auto-detected, override with
+        # RHYTHM_USER / RHYTHM_GPU in the rare case the guess is wrong.
+        local user="${RHYTHM_USER:-$USER}" guess_gpu="${RHYTHM_GPU:-auto}" rel hm_dir
         rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || echo "25.11")
-        guess_gpu="auto"
-        for dev in /sys/bus/pci/devices/*; do
-            [ "$(cat "$dev/class" 2>/dev/null)" = "0x030000" ] || [ "$(cat "$dev/class" 2>/dev/null)" = "0x030200" ] || continue
-            case "$(cat "$dev/vendor" 2>/dev/null)" in
-                0x10de) guess_gpu="nvidia" ;;
-                0x1002) [ "$guess_gpu" = "auto" ] && guess_gpu="amd" ;;
-                0x8086) [ "$guess_gpu" = "auto" ] && guess_gpu="intel" ;;
-            esac
-        done
-        if [ -t 0 ]; then
-            read -rp "User [$user]: " ans && [ -n "$ans" ] && user="$ans"
-            read -rp "GPU (auto/nvidia/amd/intel) [$guess_gpu]: " ans && [ -n "$ans" ] && guess_gpu="$ans"
+        if [ "$guess_gpu" = "auto" ]; then
+            for dev in /sys/bus/pci/devices/*; do
+                [ "$(cat "$dev/class" 2>/dev/null)" = "0x030000" ] || [ "$(cat "$dev/class" 2>/dev/null)" = "0x030200" ] || continue
+                case "$(cat "$dev/vendor" 2>/dev/null)" in
+                    0x10de) guess_gpu="nvidia" ;;
+                    0x1002) [ "$guess_gpu" = "auto" ] && guess_gpu="amd" ;;
+                    0x8086) [ "$guess_gpu" = "auto" ] && guess_gpu="intel" ;;
+                esac
+            done
         fi
         echo "Installing desktop for user=$user gpu=$guess_gpu"
         [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to $HOME/.config/home-manager/flake.nix."

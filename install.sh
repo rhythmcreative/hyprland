@@ -144,6 +144,27 @@ confirm_prompt() {
     gum confirm "$prompt_msg"
 }
 
+# nixos_spin <message> -- <command...>: a long step with something to look at.
+#
+# The NixOS path spends most of its time inside nix, which prints its own
+# lines and then goes quiet while it downloads or builds, so a bare `nix
+# build` left the terminal frozen for minutes with no explanation. The Arch
+# installer wraps every slow step in gum spin; this does the same, and is the
+# reason the two feel alike.
+#
+# With stdout not a terminal (piped into tee, CI, a log) a spinner is only
+# escape codes, so print the message plainly and let the command speak.
+nixos_spin() {
+    local msg="$1"; shift
+    [ "${1:-}" = "--" ] && shift
+    if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
+        gum spin --spinner dot --title "$msg" --padding "0 0 0 $PADDING_LEFT" -- "$@"
+    else
+        step_item "$msg"
+        "$@"
+    fi
+}
+
 # NixOS does not use the Arch steps below at all. Instead of stopping with
 # directions, this same command installs the desktop: it auto-detects user and
 # GPU, activates a standalone home-manager flake under ~/.config/home-manager
@@ -254,8 +275,9 @@ EOF
 
         if ! command -v gum >/dev/null 2>&1; then
             echo "Installing gum for the installer visuals (user profile only)..."
-            if nix --extra-experimental-features "nix-command flakes" \
-                profile install nixpkgs#gum 2>/dev/null; then
+            if nixos_spin "Fetching gum..." -- \
+                nix --extra-experimental-features "nix-command flakes" \
+                profile install nixpkgs#gum 2>>"$LOG_FILE"; then
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             else
                 echo "NOTE: gum is unavailable, continuing with plain prompts."
@@ -267,8 +289,8 @@ EOF
 
         local repo="$HOME/hyprland"
         if [ ! -d "$repo/.git" ]; then
-            step_item "Cloning desktop into $repo..."
-            git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
+            nixos_spin "Cloning the desktop into $repo..." -- \
+                git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
         else
             step_item "Using existing checkout at $repo."
         fi
@@ -393,7 +415,8 @@ EOF2
         # silently: without this, a lock from a previous run keeps building
         # the old modules forever (e.g. fixes never arrive). Only our own
         # input moves; nixpkgs/home-manager stay pinned by the lock.
-        nix --extra-experimental-features "nix-command flakes" flake lock \
+        nixos_spin "Fetching the latest desktop..." -- \
+            nix --extra-experimental-features "nix-command flakes" flake lock \
             --update-input hyprland "$hm_dir" || exit 1
         # Activation talks to systemd --user over the user bus. Two traps:
         # 1. Under 'su'/'sudo -i' there is no user manager at all.
@@ -421,20 +444,40 @@ EOF2
             echo "login also works."
             exit 1
         fi
-        local act
-        act=$(nix --extra-experimental-features "nix-command flakes" build --no-link --print-out-paths \
-            "$hm_dir#homeConfigurations.\"$user\".activationPackage") || exit 1
+        # The long one: compositors, toolkits, fonts and every desktop program
+        # as a closure. Minutes on a cold store, and nix goes quiet while it
+        # works, so it gets a spinner. The store path goes to a file rather
+        # than to stdout, otherwise the spinner's own output would land in it.
+        local act out_file
+        out_file=$(mktemp)
+        nixos_spin "Building the desktop (several GB the first time)..." -- \
+            bash -c "nix --extra-experimental-features 'nix-command flakes' build \
+                --no-link --print-out-paths \
+                '$hm_dir#homeConfigurations.\"$user\".activationPackage' \
+                > '$out_file' 2>>'$LOG_FILE'" || {
+            step_warn "The desktop build failed. Last lines of $LOG_FILE:"
+            tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+            rm -f "$out_file"
+            exit 1
+        }
+        act=$(cat "$out_file")
+        rm -f "$out_file"
+        [ -n "$act" ] && [ -x "$act/activate" ] || {
+            step_warn "nix build produced no activation package; see $LOG_FILE"
+            exit 1
+        }
         # The activate script takes no backup flag (only --driver-version):
         # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
-        HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
+        nixos_spin "Linking your dotfiles, helpers and user services..." -- \
+            env HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
         # GitHub CLI + OpenCode at user level (nix profile, no rebuild).
         section "Developer tools (gh, opencode)"
         for tool in gh opencode; do
             if ! command -v "$tool" >/dev/null 2>&1; then
-                step_item "Installing $tool through nix profile..."
-                nix --extra-experimental-features "nix-command flakes" \
-                    profile install "nixpkgs#$tool" 2>/dev/null \
+                nixos_spin "Installing $tool..." -- \
+                    nix --extra-experimental-features "nix-command flakes" \
+                    profile install "nixpkgs#$tool" 2>>"$LOG_FILE" \
                     || step_item "Could not install $tool, skipping."
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             fi
@@ -600,27 +643,30 @@ EOF3
             step_ok "Removed the old ./rhythm-sddm.nix stub (the module covers it)."
         fi
 
-        step_item "Locking flake inputs..."
         # Locked as this user so the lock file is not left root-owned, then
         # root only has to read it.
         if ! nix --extra-experimental-features "nix-command flakes" flake lock \
-            --update-input hyprland "$etc_dir" >/dev/null 2>&1; then
+            --update-input hyprland "$etc_dir" >>"$LOG_FILE" 2>&1; then
             sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
-                nix flake lock --update-input hyprland "$etc_dir" >/dev/null 2>&1 \
-                || { step_warn "Could not pre-lock $etc_dir; nixos-rebuild will do it."; }
+                nix flake lock --update-input hyprland "$etc_dir" >>"$LOG_FILE" 2>&1 \
+                || step_warn "Could not pre-lock $etc_dir; nixos-rebuild will do it."
         fi
+        step_ok "Flake inputs locked (nixpkgs $channel + latest desktop)."
 
-        step_item "Rebuilding the system (first run downloads several GB)..."
-        if command -v gum >/dev/null 2>&1; then
-            gum spin --spinner dot --title "Building the NixOS system..." \
-                --padding "0 0 0 $PADDING_LEFT" -- \
-                sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
-                nixos-rebuild switch --flake "$etc_dir#nixos"
-        else
+        # nixos-rebuild prints its own progress, but it is the longest step of
+        # the whole install, so it gets the same treatment as the user half.
+        if ! nixos_spin "Rebuilding the system (first run downloads several GB)..." -- \
             sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
-                nixos-rebuild switch --flake "$etc_dir#nixos"
+            nixos-rebuild switch --flake "$etc_dir#nixos"; then
+            step_warn "nixos-rebuild failed. Nothing was switched; your previous"
+            step_warn "generation is still the live one. Last lines of $LOG_FILE:"
+            tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+            step_warn "Fix it and re-run, or rebuild by hand:"
+            step_warn "  sudo nixos-rebuild switch --flake $etc_dir#nixos"
+            return 1
         fi
         step_ok "System rebuilt: SDDM astronaut greeter, Nerd Fonts, portals, PipeWire denoise, desktop apps."
+
 
         if sudo systemctl restart display-manager.service 2>/dev/null; then
             step_ok "Greeter is up: log out and pick Hyprland."

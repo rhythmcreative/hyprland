@@ -27,6 +27,15 @@ in
       };
     };
 
+    # Enabling gtk makes home-manager write org/gnome/desktop/interface
+    # keys via `dconf load`, which needs the ca.desrt.dconf bus service.
+    # On NixOS that comes from programs.dconf.enable (system-wide);
+    # standalone home-manager users have no system side, so expose the
+    # service file to the user bus directly. Same content the system
+    # would provide, so it is a no-op where programs.dconf already runs.
+    xdg.dataFile."dbus-1/services/ca.desrt.dconf.service".source =
+      "${pkgs.dconf}/share/dbus-1/services/ca.desrt.dconf.service";
+
     home.packages = with pkgs; [
       pywal16
       qt6Packages.qt6ct

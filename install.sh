@@ -38,6 +38,29 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
         # No sudo needed: desktop-only install, everything is user-owned.
 
+        # Same look as the Arch installer: gum menus and styling. On NixOS
+        # it comes from the user profile (no system change); without it
+        # every helper below degrades to plain colored echo.
+        nixos_section() {
+            if command -v gum >/dev/null 2>&1; then
+                gum style --foreground 6 --bold ":: $1"
+            else
+                printf '\033[1;36m:: %s\033[0m\n' "$1"
+            fi
+        }
+        nixos_ok() { printf '\033[32m  [OK] %s\033[0m\n' "$1"; }
+        nixos_item() { printf '\033[90m  → %s\033[0m\n' "$1"; }
+        nixos_logo() {
+            printf "\033[H\033[2J"
+            if [ -f "$1/logo.txt" ]; then
+                if command -v gum >/dev/null 2>&1; then
+                    gum style --foreground 2 --padding "1 0 0 0" "$(<"$1/logo.txt")"
+                else
+                    cat "$1/logo.txt"
+                fi
+            fi
+        }
+
         # git comes with NixOS most of the time; otherwise fetch it through
         # nix itself so this stays a one-command install.
         if ! command -v git >/dev/null 2>&1; then
@@ -55,13 +78,21 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         # the generated flake below, applied by the rebuild.
         export NIX_CONFIG="experimental-features = nix-command flakes"
 
+        if ! command -v gum >/dev/null 2>&1; then
+            echo "Installing gum for the installer visuals (user profile only)..."
+            nix --extra-experimental-features "nix-command flakes" \
+                profile install nixpkgs#gum 2>/dev/null || true
+            export PATH="$HOME/.nix-profile/bin:$PATH"
+        fi
+
         local repo="$HOME/hyprland"
         if [ ! -d "$repo/.git" ]; then
-            echo "Cloning the desktop into $repo..."
+            nixos_item "Cloning desktop into $repo..."
             git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
         else
-            echo "Using existing checkout at $repo."
+            nixos_item "Using existing checkout at $repo."
         fi
+        nixos_logo "$repo"
 
         # Desktop only: standalone home-manager, no system rebuild.
         # No sudo, no /etc writes, no bootloader changes: the same modules
@@ -80,8 +111,8 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 esac
             done
         fi
-        echo "Installing desktop for user=$user gpu=$guess_gpu"
-        [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to $HOME/.config/home-manager/flake.nix."
+        nixos_section "Installing desktop for user=$user gpu=$guess_gpu"
+        [ "$guess_gpu" = "nvidia" ] && nixos_item "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to ~/.config/home-manager/flake.nix."
 
         # A home-manager consumer flake of this repo (main): self-contained,
         # survives even if ~/hyprland is deleted later.
@@ -92,7 +123,7 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
             mkdir -p "$HOME/.config/home-manager.bak-$stamp"
             cp -rf "$hm_dir/flake.nix" "$hm_dir/flake.lock" "$hm_dir/home.nix" \
                 "$HOME/.config/home-manager.bak-$stamp/" 2>/dev/null || true
-            echo "Previous home-manager config backed up to ~/.config/home-manager.bak-$stamp."
+            nixos_ok "Previous home-manager config backed up to ~/.config/home-manager.bak-$stamp."
         fi
         mkdir -p "$hm_dir"
         cat > "$hm_dir/flake.nix" << EOF2
@@ -139,7 +170,7 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
 }
 EOF2
 
-        echo "Activating the desktop (downloads several GB the first time)..."
+        nixos_section "Activating the desktop (downloads several GB the first time)"
         # Always track this repo's latest main. nix reuses flake.lock
         # silently: without this, a lock from a previous run keeps building
         # the old modules forever (e.g. fixes never arrive). Only our own
@@ -179,7 +210,57 @@ EOF2
         # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
         HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
-        echo "Done. Log out, switch to a TTY (Ctrl+Alt+F2) and run Hyprland to enter the desktop."
+        # SDDM needs a system rebuild, so it is strictly opt-in
+        # (RHYTHM_SDDM=1). Desktop-only installs end here with TTY login.
+        if [ "${RHYTHM_SDDM:-0}" = "1" ]; then
+            rhythm_setup_sddm || exit 1
+        elif systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+            nixos_ok "Display manager detected: log out and pick a Hyprland session."
+            nixos_item "If no Hyprland entry shows up, re-run with RHYTHM_SDDM=1."
+        else
+            nixos_section "Done. Log out, switch to a TTY (Ctrl+Alt+F2) and run Hyprland."
+            nixos_item "Want graphical login? Re-run with RHYTHM_SDDM=1 for automatic SDDM (needs sudo, one rebuild)."
+        fi
+    }
+
+    # Minimal system addition for graphical login: stock SDDM (Wayland) plus
+    # system Hyprland so SDDM actually offers a Hyprland session entry.
+    # Only touches classic /etc/nixos/configuration.nix setups with no
+    # display manager yet; anything else gets instructions, not edits.
+    rhythm_setup_sddm() {
+        if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null; then
+            nixos_item "A display manager is already configured in /etc/nixos: leaving it alone."
+            nixos_item "If it shows no Hyprland entry, add programs.hyprland.enable = true; yourself."
+            return 0
+        fi
+        if [ ! -f /etc/nixos/configuration.nix ]; then
+            nixos_item "Automatic SDDM needs a classic /etc/nixos/configuration.nix;"
+            nixos_item "yours is flake-based (or missing). Add this to your system modules:"
+            echo '  services.displayManager.sddm.enable = true;'
+            echo '  services.displayManager.sddm.wayland.enable = true;'
+            echo '  programs.hyprland.enable = true;'
+            return 0
+        fi
+        sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
+        sudo cp -f /etc/nixos/configuration.nix "/etc/nixos/configuration.nix.bak-$(date +%Y%m%d-%H%M%S)"
+        sudo tee /etc/nixos/rhythm-sddm.nix > /dev/null << 'EOF2'
+{ ... }:
+{
+  services.displayManager.sddm.enable = true;
+  services.displayManager.sddm.wayland.enable = true;
+  programs.hyprland.enable = true;
+  programs.hyprland.xwayland.enable = true;
+}
+EOF2
+        if grep -q "^[[:space:]]*imports = \[" /etc/nixos/configuration.nix; then
+            sudo sed -i 's|^\([[:space:]]*imports = \[[^]]*\)|\1 ./rhythm-sddm.nix|' /etc/nixos/configuration.nix
+        else
+            echo "ERROR: no imports = [ list found in configuration.nix; add ./rhythm-sddm.nix by hand."
+            exit 1
+        fi
+        nixos_section "Rebuilding once to enable SDDM"
+        sudo nixos-rebuild switch || exit 1
+        nixos_ok "Done. Reboot and pick the Hyprland session in SDDM."
     }
     install_nixos
     exit $?

@@ -154,13 +154,20 @@ confirm_prompt() {
 #
 # With stdout not a terminal (piped into tee, CI, a log) a spinner is only
 # escape codes, so print the message plainly and let the command speak.
+#
+# NEVER put a redirect on the nixos_spin call itself
+# (nixos_spin "msg" -- cmd 2>>"$LOG_FILE"): the redirect applies to this
+# whole function, gum draws the spinner on stderr, and the terminal goes
+# fully dark for minutes (it looks like the installer died right after the
+# logo). To log a step, redirect INSIDE: pass
+# bash -c 'cmd >>"$LOG_FILE" 2>&1' so only the inner command is silenced.
 nixos_spin() {
     local msg="$1"; shift
     [ "${1:-}" = "--" ] && shift
     if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
         gum spin --spinner dot --title "$msg" --padding "0 0 0 $PADDING_LEFT" -- "$@"
     else
-        step_item "$msg"
+        step_item "$msg (can take several minutes; live log: ${LOG_FILE:-/tmp/hyprland-install.log})"
         "$@"
     fi
 }
@@ -276,8 +283,7 @@ EOF
         if ! command -v gum >/dev/null 2>&1; then
             echo "Installing gum for the installer visuals (user profile only)..."
             if nixos_spin "Fetching gum..." -- \
-                nix --extra-experimental-features "nix-command flakes" \
-                profile install nixpkgs#gum 2>>"$LOG_FILE"; then
+                bash -c "nix --extra-experimental-features 'nix-command flakes' profile install nixpkgs#gum >>'$LOG_FILE' 2>&1"; then
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             else
                 echo "NOTE: gum is unavailable, continuing with plain prompts."
@@ -476,8 +482,7 @@ EOF2
         for tool in gh opencode; do
             if ! command -v "$tool" >/dev/null 2>&1; then
                 nixos_spin "Installing $tool..." -- \
-                    nix --extra-experimental-features "nix-command flakes" \
-                    profile install "nixpkgs#$tool" 2>>"$LOG_FILE" \
+                    bash -c "nix --extra-experimental-features 'nix-command flakes' profile install 'nixpkgs#$tool' >>'$LOG_FILE' 2>&1" \
                     || step_item "Could not install $tool, skipping."
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             fi

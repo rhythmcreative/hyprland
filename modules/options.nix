@@ -61,6 +61,13 @@
         mpv
         mpvpaper
         awww
+        # ffmpeg lo usa el selector de fondos de la Isla para las vistas
+        # previas de los .gif. No estaba en ninguna de las dos listas, con lo
+        # que la previsualizacion de animados no podia funcionar en ninguna
+        # plataforma: ademas de faltar el paquete, la ruta que el QML tenia
+        # escrita (/usr/bin/ffmpeg) no existe en NixOS, donde el binario vive
+        # en el store.
+        ffmpeg
         # Hardware and power control used by the helper scripts.
         brightnessctl
         pamixer

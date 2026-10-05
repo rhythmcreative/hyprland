@@ -32,6 +32,7 @@ hypridle
 hyprland
 hyprlock
 hyprpicker
+ffmpeg
 imagemagick
 intel-gpu-tools
 intel-media-driver

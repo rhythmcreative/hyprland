@@ -83,5 +83,45 @@ in
         cp -f "$default_wp" "$home/Pictures/Wallpapers/default.jpg"
       fi
     '';
+
+    # La ruta de ffmpeg que usa el selector de la Isla.
+    #
+    # El QML tenia "/usr/bin/ffmpeg" escrito a fuego. Eso no existe en NixOS,
+    # donde el binario vive en el store, y en Arch depende de como lo haya
+    # instalado el gestor de paquetes. Intentado resolverlo dentro del QML,
+    # pero Quickshell no expone forma de comprobar si un fichero existe, y el
+    # intento que funcionaba en Arch se rompio en NixOS.
+    #
+    # Aqui si se sabe: el despliegue es quien conoce el PATH real. Se escribe
+    # en settings.json, que es lo que el QML lee, y solo si el usuario no ha
+    # configurado otra a mano.
+    home.activation.resolveFfmpeg = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      home="${config.home.homeDirectory}"
+      settings="$home/.config/quickshell/wallpaper/settings.json"
+      ffmpeg=""
+      if command -v ffmpeg >/dev/null 2>&1; then
+        ffmpeg="$(command -v ffmpeg)"
+      fi
+      if [ -n "$ffmpeg" ] && [ -w "$(dirname "$settings")" ]; then
+        if [ -f "$settings" ] && grep -q '"ffmpegPath"' "$settings"; then
+          echo "ffmpeg ya configurado a mano; no se toca."
+        else
+          tmp="$settings.ffmpeg.$$"
+          if command -v jq >/dev/null 2>&1; then
+            if [ -f "$settings" ]; then
+              jq --arg f "$ffmpeg" '. + {ffmpegPath: $f}' "$settings" > "$tmp" \
+                && mv -f "$tmp" "$settings" \
+                || rm -f "$tmp"
+            else
+              printf '{"ffmpegPath":"%s"}\n' "$ffmpeg" > "$tmp" \
+                && mv -f "$tmp" "$settings" \
+                || rm -f "$tmp"
+            fi
+          fi
+        fi
+      elif [ -z "$ffmpeg" ]; then
+        echo "AVISO: ffmpeg no esta en el PATH; la Isla no podra previsualizar .gif"
+      fi
+    '';
   };
 }

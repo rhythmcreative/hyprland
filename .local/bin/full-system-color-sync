@@ -21,34 +21,6 @@ else
     fi
 fi
 
-# Recargar dunst con los nuevos colores de pywal
-#
-# Este bloque solo se ejecutaba si habia dunst instalado; en este equipo las
-# notificaciones son de mako, asi que en la practica nunca llego a correr. Por
-# eso el fallo de abajo llevaba tiempo sin verse.
-echo "Recargando dunst con nuevos colores..."
-if [ -f "$HOME/.config/dunst/scripts/reload-dunst.sh" ]; then
-    # OJO: `wait` es un builtin del shell, no un binario, asi que
-    # `timeout 8 wait $pid` no puede funcionar: timeout responde
-    # "failed to run command 'wait': No such file or directory" y sale 127.
-    # Para acotar la espera hay que darsela al propio wait con su flag -n, o
-    # dejar que el comando corra sin limite: timeout no puede envolver un builtin.
-    timeout 8 "$HOME/.config/dunst/scripts/reload-dunst.sh"
-    if [ $? -eq 124 ]; then
-        echo "Dunst sync continuando en segundo plano..."
-    fi
-elif [ -f "$HOME/.config/wal/done.d/dunst-restart.sh" ]; then
-    "$HOME/.config/wal/done.d/dunst-restart.sh" &
-    disown
-    echo "Dunst recarga iniciada con script de pywal"
-else
-    # Fallback manual: reiniciar dunst directamente
-    echo "Recargando dunst manualmente..."
-    pkill dunst 2>/dev/null || true
-    sleep 1
-    dunst >/dev/null 2>&1 &
-    echo "Dunst recargado manualmente"
-fi
 
 # Sync nm-applet with waybar (en segundo plano)
 echo "Sincronizando nm-applet con waybar..."

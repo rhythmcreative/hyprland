@@ -2029,6 +2029,43 @@ MONCONF
     # cae al tag mas alto, que es lo que hay que preferir si los dos no coinciden:
     # .version llega tarde al repo cuando se etiqueta una release, y en ese
     # intervalo el tag es el numero bueno.
+    # La ruta de ffmpeg para el selector de fondos de la Isla.
+    #
+    # El QML traia "/usr/bin/ffmpeg" escrito a fuego, que no es el sitio donde
+    # lo deja el gestor de paquetes en todas las instalaciones y no existe en
+    # absoluto en NixOS (ahi vive en el store). ffmpeg tampoco estaba en
+    # packages.txt, con lo que la previsualizacion de .gif no podia funcionar.
+    #
+    # Resolverlo dentro del QML no es posible: Quickshell no expone una forma de
+    # comprobar si un fichero existe. En el despliegue si se sabe, que es donde
+    # se mira. Solo se escribe si el usuario no ha puesto la suya.
+    step_item "Resolving ffmpeg for the island wallpaper selector..."
+    local SETTINGS_QML="$HOME/.config/quickshell/wallpaper/settings.json"
+    if command -v ffmpeg >/dev/null 2>&1 && [ -d "$(dirname "$SETTINGS_QML")" ]; then
+        if [ -f "$SETTINGS_QML" ] && grep -q '"ffmpegPath"' "$SETTINGS_QML"; then
+            step_ok "ffmpegPath already set by hand; left alone."
+        elif command -v jq >/dev/null 2>&1; then
+            local ffmpeg_real
+            ffmpeg_real=$(command -v ffmpeg)
+            local tmp_qml="$SETTINGS_QML.tmp.$$"
+            if [ -f "$SETTINGS_QML" ]; then
+                jq --arg f "$ffmpeg_real" '. + {ffmpegPath: $f}' "$SETTINGS_QML" > "$tmp_qml" 2>/dev/null \
+                    && mv -f "$tmp_qml" "$SETTINGS_QML" \
+                    || { rm -f "$tmp_qml"; step_warn "No se pudo escribir ffmpegPath en settings.json."; }
+            else
+                printf '{"ffmpegPath":"%s"}\n' "$ffmpeg_real" > "$tmp_qml" \
+                    && mv -f "$tmp_qml" "$SETTINGS_QML" \
+                    || { rm -f "$tmp_qml"; step_warn "No se pudo escribir ffmpegPath en settings.json."; }
+            fi
+            [ -f "$SETTINGS_QML" ] && grep -q "$ffmpeg_real" "$SETTINGS_QML" \
+                && step_ok "ffmpegPath resolved to $ffmpeg_real."
+        else
+            step_warn "jq no disponible; ffmpegPath se quedaria en /usr/bin/ffmpeg."
+        fi
+    elif ! command -v ffmpeg >/dev/null 2>&1; then
+        step_warn "ffmpeg no esta instalado; la Isla no podra previsualizar .gif."
+    fi
+
     step_item "Stamping the installed version..."
     local stamped="" del_fichero="" del_tag=""
     if [ -f "$DOTFILES_DIR/.version" ]; then
@@ -2403,15 +2440,17 @@ step_system() {
         echo "$USER ALL=(root) NOPASSWD: /usr/local/lib/rhythm/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
         sudo chmod 440 /etc/sudoers.d/sddm-sync
 
-        # Pywal SDDM sync hook
-        mkdir -p "$HOME/.config/wal/hooks"
-        cat > "$HOME/.config/wal/hooks/sddm-sync.sh" << EOF
-#!/bin/bash
-if [ -x "$HOME/.local/bin/sddm-sync-wrapper" ]; then
-    "$HOME/.local/bin/sddm-sync-wrapper" >/dev/null 2>&1 || true
-fi
-EOF
-        chmod +x "$HOME/.config/wal/hooks/sddm-sync.sh"
+        # Pywal SDDM sync.
+        #
+        # ANTES se escribia aqui un hook en ~/.config/wal/hooks/sddm-sync.sh.
+        # Pywal no tiene hooks: se comprobo contra su codigo (3.8.15) y no hay
+        # ningun 'hook' ni 'postrun' en el paquete, y wal(1) solo documenta
+        # TEMPLATES. Ese fichero no lo ejecutaba nadie, nunca. El arbol entero
+        # de hooks del repo era inerte por el mismo motivo, y se ha borrado.
+        #
+        # Lo que si funciona es el paso 8 de modern-pywal-sync, que llama a
+        # sddm-sync-wrapper directamente. Se avisa de que el sitio cambio, por
+        # si alguien tiene el hook viejo por ahi de una instalacion anterior.
 
         # Initial color palette generation
         #

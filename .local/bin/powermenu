@@ -1,2 +1,30 @@
 #!/bin/bash
-exec "$HOME/.config/rofi/powermenu-hyprlock.sh" "$@"
+# powermenu: menu de apagado.
+#
+# ANTES
+#   exec "$HOME/.config/rofi/powermenu-hyprlock.sh" "$@"
+# y ese script no estaba en el repo, en ninguna maquina y ninguna plataforma.
+# El menu de apagado, invocado a mano, no arrancaba y no decia nada.
+#
+# POR QUE SE DELEGA EN VEZ DE CREAR EL FICHERO
+# powermenu-with-monitor-detection es el que se usa de verdad -- hyprland.lua
+# lo llama en SUPER+BackSpace -- y ya hace todo: detecta el monitor activo,
+# genera su propio .rasi con la paleta actual, y llama a hyprlock con la
+# opcion elegida. Es decir, la implementacion completa ya existe y funciona.
+#
+# Escribir un powermenu-hyprlock.sh nuevo habria sido una segunda
+# implementacion del mismo menu, con sus propios fallos, y sin ninguna forma de
+# que install.sh lo probara. Delegar quita el fichero que faltaba y quita una
+# duplicacion.
+#
+# Si powermenu-with-monitor-detection no estuviera (deploy a medias), se avisa
+# en vez de terminar en silencio.
+
+REAL="$HOME/.local/bin/powermenu-with-monitor-detection"
+
+if [ -x "$REAL" ]; then
+    exec "$REAL" "$@"
+fi
+
+echo "powermenu: falta $REAL, no se puede abrir el menu de apagado" >&2
+exit 1

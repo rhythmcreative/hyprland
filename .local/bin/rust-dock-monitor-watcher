@@ -140,7 +140,17 @@ reconcile_waybar() {
         # launch.sh lanza `waybar -c <dir>/config-<monitor> -s <estilo>`, asi que
         # el output se lee del propio cmdline. El ancla evita que config-DP-1
         # case con config-DP-11.
-        pgrep -f "waybar .*-c .*config-$m(\$| )" >/dev/null 2>&1 || { missing=1; break; }
+        #
+        # El nombre del proceso no sirve: en Nix el binario es
+        # .waybar-wrapped, no "waybar", asi que cualquier criterio por nombre
+        # (pgrep -x, o este mismo -f con "waybar " al principio) daba falso
+        # negativo. Con el criterio roto la barra parecia ausente siempre, y
+        # reconcile la relanzaba cada 90 s: aparecia y desaparecia sola. Se
+        # busca el ejecutable real, .waybar-wrapped, o el nombre en cualquier
+        # posicion de la linea de comandos.
+        pgrep -f "[w]aybar.*-c .*config-$m(\$| )" >/dev/null 2>&1 \
+            || pgrep -f "[w]aybar-wrapped.*-c .*config-$m(\$| )" >/dev/null 2>&1 \
+            || { missing=1; break; }
     done <<< "$monitors"
 
     # Retirar las barras de monitores que ya no estan.

@@ -28,7 +28,16 @@ in
 
     networking.networkmanager.enable = true;
     hardware.bluetooth.enable = true;
-    services.blueman.enable = cfg.features.bluetooth;
+    # bluetoothd (el demonio) sigue activo con hardware.bluetooth.enable de
+    # lo que se desactiva es el AGENTE GRAFICO.
+    #
+    # services.blueman.enable levanta blueman-applet y blueman-tray por
+    # XDG autostart, y los dos aparecen en la bandeja de waybar encima del
+    # icono de red de nm-applet. En la referencia del repo la derecha de la
+    # barra tiene un solo icono de red, no tres. El menu de bluetooth sigue
+    # funcionando por el modulo "bluetooth" de waybar y por
+    # Super+B / F10, que llaman a blueman-manager bajo demanda.
+    services.blueman.enable = false;
     services.power-profiles-daemon.enable = true;
 
     # SSH on by default, like the Arch installer leaves it: remote access

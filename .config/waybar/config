@@ -14,13 +14,7 @@
     "group/system-info",
     "custom/cava"
   ],
-  "modules-center": [
-        "clock",
-        "custom/weather",
-        "custom/music",
-        "custom/pomodoro",
-        "custom/uptime"
-    ],
+"modules-center": [],
   "modules-right": [
     "hyprland/language",
     "bluetooth",

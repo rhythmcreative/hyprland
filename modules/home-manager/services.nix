@@ -17,7 +17,100 @@ let
   cfg = config.rhythm;
   helpers = cfg.packageSet.helpers;
   bin = "${helpers}/bin";
-  hyprTools = with pkgs; [ hyprland jq procps systemd socat ];
+  # The scripts these units run are `while true` pollers: they call `sleep`
+  # between iterations and `date`/`ls`/`grep` to look at the world. A `sleep`
+  # that is not on PATH does not fail the loop, it removes the only thing
+  # slowing it down, so the unit spins at full speed and forks until the load
+  # average goes through the roof and the journal fills with `command not
+  # found` (measured: 1,067,228 of them in five minutes, load 12.37 on 8
+  # cores, 756MB of journal).
+  #
+  # `Environment=PATH=` REPLACES the session PATH, it does not extend it, so
+  # nothing here can be picked up from ~/.nix-profile or the system profile
+  # either. Every tool the scripts call by bare name has to be listed.
+  #
+  # coreutils/gnugrep/gawk/gnused are the four that were missing outright and
+  # cost the most: sleep, date, ls, head, cat, basename, tr, mkdir, rm, id,
+  # cut, wc, readlink, grep, awk and sed. procps was already here (pgrep,
+  # pkill, ps) but is referenced below as well, because the services that call
+  # it need it more than the ones that do not.
+  #
+  # Same reasoning, and the same treatment, as the greeter wrapper in
+  # packages/greeter-monitor, which already ships coreutils/procps/gawk/gnugrep/
+  # gnused for exactly this reason.
+  hyprTools = with pkgs; [
+    coreutils
+    findutils
+    gnugrep
+    gawk
+    gnused
+    hyprland
+    jq
+    procps
+    systemd
+    socat
+    util-linux
+    # bash: not just for shebangs. These scripts shell out with `bash -c` and
+    # resolve it through PATH, and several of the island helpers are launched
+    # from a unit that inherits this PATH.
+    bash
+    # python3: hypr-event-stream is a python script the rust-dock watcher
+    # restarts every 2s to read Hyprland's event socket. Without it on PATH
+    # it died on spawn, so monitoradded/monitorremoved never arrived and
+    # neither Waybar nor the dock was reconciled on hotplug. The island
+    # sensors shell out to `python3 -c` inline for the same reason.
+    python3
+    # waybar: rust-dock-monitor-watcher's reconcile_waybar runs launch.sh,
+    # which execs `waybar`. Without it here the reconcile fired every 90s,
+    # the launcher logged "waybar: command not found" and the bar was never
+    # restarted after dying. This was the whole reason the bar "came and
+    # went".
+    waybar
+    # pactl: volume-dynamic (bound to the volume keys) calls it. The session
+    # runs PipeWire, which does not ship a `pactl`, so the F11/F12 and mute
+    # keys did nothing at all until pulseaudio is on PATH.
+    pulseaudio
+    # SUID wrappers live in /run/wrappers/bin, which no unit PATH included, so
+    # battery-charge-limit could not reach sudo or pkexec and the charge limit
+    # could not be set from the island.
+    sudo
+    polkit
+  ];
+
+  # The watchers additionally call these by bare name. The scripts guard some
+  # of them with `command -v` and degrade silently when they are missing, so
+  # they never showed up as an error: privacy-shield just stopped being able
+  # to tell whether the camera light was on.
+  notifyTools = with pkgs; [ libnotify psmisc lsof wireplumber ];
+
+  # The dynamic island runs every sensor as `Quickshell.execDetached(["bash",
+  # "-c", ...])`, roughly 31 of them, so it needs an interpreter on PATH
+  # before it needs anything else. Without `bash` here Quickshell resolved
+  # argv[0] through PATH, failed to find it, and every one of those processes
+  # died at spawn: the island still drew its layer, but volume, brightness,
+  # wifi, clipboard, battery, privacy and dock state all stayed blank, and
+  # logged 3675 "binary could not be found" warnings in ten minutes.
+  #
+  # The rest are the tools those 31 commands pipe through. wireplumber brings
+  # wpctl, brightnessctl reads the backlight and nmcli reports the network;
+  # all three are already desktop packages, so they only had to be named on
+  # the unit PATH.
+  islandTools = with pkgs; [
+    # pkgs.bash a proposito, no el bash-interactive que trae hyprTools por
+    # otra via: Quickshell resuelve argv[0] ("bash") a traves del PATH, y el
+    # paquete interactivo expone el binario como `bash` dentro de su propio
+    # prefix pero no como `bash` en un directorio que el proceso entidad
+    # llegue a usar. Con el paquete normal el symlink queda en <pkg>/bin/bash,
+    # que es justo lo que el QML pide 31 veces.
+    bash
+    quickshell
+    waybar
+    wireplumber
+    brightnessctl
+    networkmanager
+    playerctl
+    cliphist
+  ];
 in
 {
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -36,7 +129,12 @@ in
             StartLimitIntervalSec = 0;
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (with pkgs; [ cliphist wl-clipboard ])}" ];
+            # cliphist-daemon polls in a `while true` with `sleep 1`, and
+            # dedupes with `pgrep` before storing an entry, so it needs
+            # coreutils and procps. It had neither: the loop ran flat out and
+            # the pgrep guard never matched, so every wl-paste event was
+            # stored without being compared against the last one.
+            Environment = [ "PATH=${lib.makeBinPath (with pkgs; [ cliphist wl-clipboard coreutils procps ])}" ];
             Type = "simple";
             # Source cliphist.service: ExecStart=%h/.local/bin/cliphist-daemon.
             ExecStart = "${bin}/cliphist-daemon";
@@ -79,7 +177,7 @@ in
             StartLimitIntervalSec = 0;
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ quickshell waybar ]))}" ];
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ islandTools)}" ];
             Type = "simple";
             # Source waybar-island.service: ExecStart=%h/.local/bin/quickshell-island.
             ExecStart = "${bin}/quickshell-island";
@@ -224,7 +322,13 @@ in
             After = [ "default.target" ];
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
+            # privacy-shield-daemon polls every POLL_INTERVAL and was the
+            # single hungriest process in the session at 45% CPU, because
+            # its `sleep` was missing. It also calls notify-send, fuser and
+            # lsof behind `command -v` guards to decide whether the camera
+            # and mic are live, so without them it could not see them and had
+            # nothing to warn about.
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ notifyTools)}" ];
             Type = "simple";
             ExecStart = "${bin}/privacy-shield-daemon";
             Restart = "always";

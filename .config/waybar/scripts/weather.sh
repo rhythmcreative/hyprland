@@ -194,7 +194,11 @@ parse_wttr_data() {
     
     # Crear resultado JSON - solo icono
     if command -v jq >/dev/null 2>&1; then
-        result=$(jq -n \
+        # -c es lo que faltaba: jq imprime el JSON en varias lineas y el
+        # parser de waybar solo admite una, asi que abortaba con
+        # "Error parsing JSON: Line 1, Column 2 Missing '}'" y el modulo se
+        # quedaba vacio aunque jq validara la salida.
+        result=$(jq -nc \
             --arg text "$icon" \
             --arg tooltip "Paracuellos de Jarama | Temp: $temp | $condition | Humedad: $humidity" \
             '{text: $text, tooltip: $tooltip, class: "weather-ok"}')

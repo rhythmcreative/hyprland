@@ -77,6 +77,51 @@
         jq
         inotify-tools
         psmisc
+        # gsettings viene en glib. Los scripts de pywal lo usan para activar
+        # el tema GTK y el color-scheme, pero lo invocan tras un
+        # `command -v`, asi que su ausencia no daba ningun error: elDesktop
+        # se quedaba en el tema por defecto sin decir por que. Sin esto, el
+        # despliegue del tema PywalSync-Mono no llegaba a aplicarse.
+glib
+        # bc, no por el powermenu en si sino por powermenu-with-monitor-detection:
+        # escala las fuentes y los espaciados del tema de rofi con `48 * $scale
+        # factor | bc` (6 llamadas). Sin bc cada variable queda vacia, el .rasi que
+        # genera sale con `mainbox-spacing: px` sin numero, rofi lo rechaza con
+        # "Failed to parse theme" y sale con codigo 1: el menu de Super+BackSpace
+        # no llega ni a abrirse, y el log solo muestra "Opcion seleccionada:"
+        # en vacio. El script nunca declaro la dependencia y en Arch bc viene en
+        # el sistema base.
+        bc
+        # python3: nueve helpers de ~/.local/bin la usan (los sensores de la
+        # Isla, bluetooth-pair-agent, pywal-tela-sync) y varios la invocan como
+        # `python3 -c` en linea, no por shebang. Sin esto eran 730 fallos en
+        # cinco minutos y el agente de emparejamiento Bluetooth reiniciaba 439
+        # veces con status=127.
+        python3
+        # pulseaudio aporta pactl, que usa volume-dynamic para las teclas de
+        # volumen (F11/F12 y el mute). PipeWire no lo trae, asi que sin esto
+        # esas teclas no hacian nada.
+        pulseaudio
+        # hyprpicker lo invoca el atajo de selector de color e identify (de
+        # imagemagick) lo usa el backend de fondos para detectar .webp
+        # animados, que si no se tratan como estaticos.
+        imagemagick
+        # brave-origin es el navegador por defecto. En Arch install.sh lo ofrece como
+        # la opcion AUR brave-origin-nightly-bin; el sufijo -bin es de Arch y
+        # en nixpkgs el mismo navegador es brave-origin. Ese atributo solo
+        # existe a partir de nixos-unstable, asi que en el canal estable se
+        # degrada a brave en vez de romper el rebuild.
+        (if pkgs ? brave-origin then pkgs.brave-origin else pkgs.brave)
+        # cava es el visualizador de audio que dibuja la barra del_custom/cava en
+        # modules-left. Sin el binario, cava.sh devuelve vacio y el modulo no
+        # aparece: en la captura se veia la izquierda sin la barra de audio.
+        cava
+        # nm-applet, en nixpkgs como networkmanagerapplet (el paquete `networkmanager`
+        # solo trae el daemon y las herramientas de linea de comandos).
+        # hyprland.lua lo lanza con `nm-applet --indicator &` y el menu de wifi
+        # de waybar lo abria, asi que sin esto ese bind no hacia nada.
+        networkmanagerapplet
+        gnome-network-displays
         # NOTE: gum and fzf are deliberately NOT here. This list becomes
         # home.packages, and the installer separately runs `nix profile
         # install nixpkgs#gum` into ~/.nix-profile. Both would provide
@@ -145,6 +190,48 @@
         type = lib.types.package;
         default = pkgs.greeterMonitor;
         description = "SDDM greeter wrapper deciding which output shows the login.";
+      };
+      pywalSyncMono = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.pywalSyncMono;
+        description = ''
+          The gtk/.themes/PywalSync-Mono GTK theme from the repo, wrapped so
+          home-manager can deploy it. GTK reads themes from disk, so a plain
+          checkout in the repo is not enough on its own.
+        '';
+      };
+      patchedWaybar = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.patchedWaybar;
+        description = ''
+          .config/waybar with its shebangs resolved for NixOS. Deployed
+          through xdg.configFile, so it gets no build step of its own.
+        '';
+      };
+      patchedHypr = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.patchedHypr;
+        description = ''
+          .config/hypr with its shebangs resolved for NixOS, for the scripts
+          under scripts/ that hyprland.lua and hyprlock.conf invoke.
+        '';
+      };
+      patchedWal = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.patchedWal;
+        description = ".config/wal with its shebangs resolved; these are pywal hooks.";
+      };
+      patchedQuickshell = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.patchedQuickshell;
+        description = ''
+          .config/quickshell with its shebangs resolved, for hyprwall/.
+        '';
+      };
+      patchedGtk3 = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.patchedGtk3;
+        description = ".config/gtk-3.0 with its shebangs resolved.";
       };
     };
 

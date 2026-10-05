@@ -144,12 +144,21 @@ fi
 # "quickshell -p .*waybar-island" llego a matar el shell que lo invoco. pgrep -x
 # compara solo el nombre del ejecutable, asi que un bash nunca puede coincidir.
 #
+# Ni pgrep -x ni pkill -f funcionan aqui en NixOS: el ejecutable se llama
+# .quickshell-wrapped, no "quickshell", asi que el match por nombre no se
+# daba nunca y las instancias anteriores sobrevivian. Se termina walkando
+# /proc y comparando la linea de comandos, que si lleva el nombre real, y sin
+# restricting el patron a un unico PID.
+#
 # Se hace DESPUES de esperar la pantalla a proposito: si se hiciera antes y luego
 # la pantalla no apareciera, se habria quedado sin isla y sin instance nueva.
-for _pid in $(pgrep -x quickshell 2>/dev/null); do
-    if tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null | grep -q "waybar-island"; then
-        kill "$_pid" 2>/dev/null || true
-    fi
+for _proc in /proc/[0-9]*; do
+    _pid="${_proc#/proc/}"
+    [ "$_pid" = "$$" ] && continue
+    _cmd="$(tr '\0' ' ' < "$_proc/cmdline" 2>/dev/null)" || continue
+    case "$_cmd" in
+        *quickshell*waybar-island*) kill "$_pid" 2>/dev/null || true ;;
+    esac
 done
 sleep 0.2
 

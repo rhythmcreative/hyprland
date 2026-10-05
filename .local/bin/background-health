@@ -22,22 +22,31 @@ mons=$(hyprctl monitors -j 2>/dev/null) || exit 0
 layers=$(hyprctl layers 2>/dev/null) || exit 0
 [ -n "$mons" ] && [ -n "$layers" ] || exit 0
 
-# Superficies de fondo de awww: "xywh: X Y W H, a: ALFA" por monitor, agrupadas
-# por monitor con awk. Se guardan como "X,Y WxH ALFA" para comparar.
+# Superficies de fondo de awww, agrupadas por monitor con awk. Se guardan como
+# "X,Y WxH ALFA" para comparar.
+#
+# El campo "a: ALFA" se busco siempre, y Hyprland 0.56 dejo de emitirlo: ahora
+# la linea es "xywh: X Y W H, namespace: awww-daemon, pid: N" y nada mas. Con
+# el patron viejo el match no se producia nunca, la lista de capas salia
+# vacia, todos los monitores se daban por rotos y el watcher reiniciaba
+# awww-daemon en bucle -- cada reinicio aborta con SIGABRT, asi que eso fueron
+# cientos de coredumps. El alfa pasa a ser opcional: si la linea no lo trae se
+# asume 1, que es lo que significa una superficie de fondo visible.
 awk '
   /^Monitor /            { mon = $2; sub(/:$/, "", mon) }
   /namespace: awww-daemon/ {
-      if (match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+, a: [0-9]+/)) {
-          det = substr($0, RSTART, RLENGTH)
-          # "xywh: X Y W H, a: A" -> al partir por :, y , solo salen 4 trozos:
-          # "xywh", " X Y W H", " a", " A". Las cuatro medidas van juntas en un
-          # campo separadas por espacios, asi que hay que parting ese campo otra
-          # vez. Antes se leian como si fueran cuatro campos sueltos, y por eso
-          # las posiciones y el tamano salian a 0 y la comprobacion daba siempre
-          # "todo bien": el script no detectaba nunca un fondo sin pintar.
-          split(det, f, /[:,]/)
+      if (match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+/)) {
+          head = substr($0, RSTART, RLENGTH)
+          # "xywh: X Y W H" partido por ":" y "," deja las cuatro medidas
+          # juntas en un unico campo separadas por espacios, asi que ese
+          # campo se parte otra vez. Sin este segundo split, w y h salian a 0.
+          split(head, f, /[:,]/)
           split(f[2], g, " ")
-          x = g[1] + 0; y = g[2] + 0; w = g[3] + 0; h = g[4] + 0; a = f[4] + 0
+          x = g[1] + 0; y = g[2] + 0; w = g[3] + 0; h = g[4] + 0
+          a = 1
+          if (match($0, /, a: [0-9]+/)) {
+              a = substr($0, RSTART + 4, RLENGTH - 4) + 0
+          }
           printf "%s\t%d,%d %dx%d %d\n", mon, x, y, w, h, a
       }
   }

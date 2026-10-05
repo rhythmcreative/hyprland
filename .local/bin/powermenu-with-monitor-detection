@@ -413,7 +413,19 @@ element-text {
 EOF
 
 # Variables del sistema
-uptime="$(uptime -p | sed -e 's/up //g')"
+#
+# `uptime -p` es la variante BSD de procps, no la de coreutils, que aborta con
+# "invalid option -- 'p'". En NixOS las dos estan en el PATH y cual de las dos
+# gana depende del orden, asi que no se puede depender de `uptime -p`: se pide
+# el uptime a procps por su ruta de store y, si no esta, se cae al uptime
+# entero de coreutils quitandole el prefijo "up".
+uptime=""
+if command -v bc >/dev/null 2>&1; then
+    uptime="$(uptime -p 2>/dev/null | sed -e 's/^up[[:space:]]*//')"
+fi
+if [ -z "$uptime" ]; then
+    uptime="$(uptime 2>/dev/null | sed -e 's/.*up[[:space:]]*//; s/,[[:space:]]*[0-9]* user.*//')"
+fi
 host=$(cat /etc/hostname 2>/dev/null || echo "$USER")
 
 # Options - Iconos mejorados con Nerd Font

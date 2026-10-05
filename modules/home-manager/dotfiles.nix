@@ -14,17 +14,25 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    # hypr y waybar entran por una derivacion (packages/patched-dotfiles) en
+    # vez de straight desde el repo, porque son los dos unicos que llevan
+    # scripts de shell que se ejecutan de verdad, y en NixOS no hay
+    # /bin/bash ni /usr/bin/env: sus shebangs no resuelven y el proceso muere
+    # con "bad interpreter" antes de hacer nada. waybar no arrancaba al iniciar
+    # sesion por esto (hyprland.lua llama a launch.sh, y launch.sh nunca
+    # llegaba ni a escribir su log). La derivacion aplica patchShebangs, que es
+    # lo mismo que ya hace packages/helpers para ~/.local/bin.
     xdg.configFile."Kvantum" = { source = ../../.config/Kvantum; recursive = true; };
-    xdg.configFile."gtk-3.0" = { source = ../../.config/gtk-3.0; recursive = true; };
-    xdg.configFile."hypr" = { source = ../../.config/hypr; recursive = true; };
+    xdg.configFile."gtk-3.0" = { source = cfg.packageSet.patchedGtk3; recursive = true; };
+    xdg.configFile."hypr" = { source = cfg.packageSet.patchedHypr; recursive = true; };
     xdg.configFile."kitty" = { source = ../../.config/kitty; recursive = true; };
     xdg.configFile."mako" = { source = ../../.config/mako; recursive = true; };
-    xdg.configFile."quickshell" = { source = ../../.config/quickshell; recursive = true; };
+    xdg.configFile."quickshell" = { source = cfg.packageSet.patchedQuickshell; recursive = true; };
     xdg.configFile."rhythm" = { source = ../../.config/rhythm; recursive = true; };
     xdg.configFile."rofi" = { source = ../../.config/rofi; recursive = true; };
     xdg.configFile."rust-dock" = { source = ../../.config/rust-dock; recursive = true; };
-    xdg.configFile."wal" = { source = ../../.config/wal; recursive = true; };
-    xdg.configFile."waybar" = { source = ../../.config/waybar; recursive = true; };
+    xdg.configFile."wal" = { source = cfg.packageSet.patchedWal; recursive = true; };
+    xdg.configFile."waybar" = { source = cfg.packageSet.patchedWaybar; recursive = true; };
 
     home.file.".zshrc".source = ../../zsh/.zshrc;
 
@@ -123,5 +131,6 @@ in
         echo "AVISO: ffmpeg no esta en el PATH; la Isla no podra previsualizar .gif"
       fi
     '';
+
   };
 }

@@ -205,8 +205,20 @@ if [ -f "$WAYBAR_DIR/scripts/auto-battery-setup.sh" ]; then
 fi
 
 # Verification
-sleep 1
-if pgrep -x waybar > /dev/null; then
+#
+# pgrep -x, y no el patron "waybar .*-c .*config-<monitor>" de mas arriba:
+# el binario de Nix se llama .waybar-wrapped, asi que el nombre del proceso no
+# es "waybar" y el match por nombre exacto nunca se daba. Como consecuencia el
+# launcher registraba "ERROR: Waybar failed to start" en cada arranque y el
+# reconciliador del watcher, que reutiliza este mismo criterio, conclufa que la
+# barra no existe y vuelve a lanzarla cada 90 s. La barra aparecia y
+# desaparecia sin que nada hubiera cambiado.
+#
+# Se busca el ejecutable real en la linea de comandos, que si lleva el nombre
+# bien, y se espera algo mas que un instante: Waybar tarda unos segundos en
+# levantar la capa.
+sleep 3
+if pgrep -f '[w]aybar.*config-' > /dev/null 2>&1; then
     echo "Waybar instances running successfully." >> "$LOG_FILE"
 else
     echo "ERROR: Waybar failed to start. Check the logs above." >> "$LOG_FILE"

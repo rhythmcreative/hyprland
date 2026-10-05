@@ -234,16 +234,12 @@ EOF2
         # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
         HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
-        # SDDM needs a system rebuild, so it is strictly opt-in
-        # (RHYTHM_SDDM=1). Desktop-only installs end here with TTY login.
-        if [ "${RHYTHM_SDDM:-0}" = "1" ]; then
-            rhythm_setup_sddm || exit 1
-        elif systemctl is-enabled display-manager.service >/dev/null 2>&1; then
-            nixos_ok "Display manager detected: log out and pick a Hyprland session."
-            nixos_item "If no Hyprland entry shows up, re-run with RHYTHM_SDDM=1."
+        # SDDM is part of the NixOS install: graphical login comes up
+        # automatically (skip with RHYTHM_NO_SDDM=1).
+        if [ "${RHYTHM_NO_SDDM:-0}" = "1" ]; then
+            nixos_item "SDDM skipped (RHYTHM_NO_SDDM=1). Start Hyprland from a TTY."
         else
-            nixos_section "Done. Log out, switch to a TTY (Ctrl+Alt+F2) and run Hyprland."
-            nixos_item "Want graphical login? Re-run with RHYTHM_SDDM=1 for automatic SDDM (needs sudo, one rebuild)."
+            rhythm_setup_sddm || exit 1
         fi
     }
 
@@ -252,11 +248,17 @@ EOF2
     # Only touches classic /etc/nixos/configuration.nix setups with no
     # display manager yet; anything else gets instructions, not edits.
     rhythm_setup_sddm() {
+        # Idempotent: already set up by a previous run.
+        if grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix 2>/dev/null \
+            && systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+            nixos_ok "SDDM already configured. Log out and pick the Hyprland session."
+            return 0
+        fi
         if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null \
             && [ "${RHYTHM_SDDM_FORCE:-0}" != "1" ]; then
             nixos_item "A display manager is already configured in /etc/nixos: leaving it alone."
             nixos_item "If it shows no Hyprland entry, add programs.hyprland.enable = true; yourself."
-            nixos_item "To replace it with SDDM anyway: RHYTHM_SDDM=1 RHYTHM_SDDM_FORCE=1 (rebuild may"
+            nixos_item "To replace it with SDDM anyway: RHYTHM_SDDM_FORCE=1 (rebuild may"
             nixos_item "fail if both DMs conflict; your configuration.nix backup lets you revert)."
             return 0
         fi

@@ -1,0 +1,44 @@
+# Mako notification daemon — DEFAULT
+#
+# Este fichero NO lo lee mako: mako lee ~/.config/mako/config. Es la copia
+# limpia de la que parte sync-mako-pywal, y lo usa para no perder tus ajustes
+# cuando la paleta cambie.
+#
+# Por que estaba en el repo y vacio (0 bytes): el .gitignore del proyecto
+# excluye .config/mako/config porque lo genera pywal, y el backup se copia de ahi
+# al primer sync. El resultado era un config.backup de cero bytes versionado,
+# y como sync-mako-pywal solo respalda si el backup NO existe
+#
+#     if [[ ! -f ~/.config/mako/config.backup ]]; then
+#         cp ~/.config/mako/config ~/.config/mako/config.backup
+#     fi
+#
+# un fichero vacio cuenta como existente, asi que tu config real no se guardaba
+# nunca, y una maquina nueva se quedaba sin config hasta que corria el primer
+# sync (con lo que ahora hace modern-pywal-sync al arrancar, pero no hay por que
+# depender de eso).
+#
+# Los colores son los mismos que trae hyprland.lua escritos a mano, para que sin
+# pywal las notificaciones se vean igual de coordinadas que el resto.
+
+background-color=#101012E6
+text-color=#c2c8c9
+border-color=#546065
+
+font=Inter 12
+width=380
+height=120
+margin=15
+padding=15
+border-size=3
+border-radius=12
+icons=1
+max-icon-size=48
+icon-location=left
+
+# Medida maxima de la primera linea antes de cortar.
+max-visible-lines=3
+
+# Que las notificaciones nuevas no empujan a las viejas fuera de la pantalla.
+sort=YES
+discard-on-close=YES

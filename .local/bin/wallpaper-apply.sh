@@ -101,23 +101,41 @@ else
 fi
 
 
-BLACK_PNG="/tmp/wallpaper-black.png"
-if [[ ! -f "$BLACK_PNG" ]]; then
-    ffmpeg -y -f lavfi -i color=black:size=1920x1080 -frames:v 1 "$BLACK_PNG" >/dev/null 2>&1 || true
-fi
+# ── ¿Está linux-wallpaperengine? ────────────────────────────────────────────
+#
+# ESTE SCRIPT DEPENDE DE UN BINARIO QUE NADA INSTALA.
+#
+# WALLPAPER_ENGINE_BIN apunta a ~/linux-wallpaperengine/build/output/, que es
+# donde lo deja su build, pero ni install.sh ni packages.txt ni el modulo de
+# NixOS lo compilan: hay que clonarlo y compilarlo a mano. Con el binario
+# ausente, este script hacia dos cosas que dejaban el escritorio roto:
+#
+#   1. pintaba un PNG NEGRO con awwm y lo ponia de fondo, para tapar el
+#      wallpaper anterior mientras el motor arrancaba; y
+#   2. luego lanzaba `linux-wallpaperengine` a pelo, sin comprobar que
+#      existiera (linea 139: sin ruta, sin $WALLPAPER_ENGINE_BIN), y con el
+#      resultado en $SS_FILE.
+#
+# El motor no arrancaba nunca, la captura no se generaba, y el escritorio se
+# quedaba con el fondo NEGRO que habia puesto en el paso 1. Sin un solo error:
+# el negro es indistinguible de "todavia no ha pintado".
+#
+# Ahora se comprueba ANTES de tocar nada. Si el motor no esta, no se pinta de
+# negro, y si el proyecto trae una imagen de vista previa se pone esa con el
+# backend estatico, que es lo que se ve de todas formas. Si no trae ninguna,
+# se avisa por stderr y se sale sin haber modificado el fondo.
+ENGINE_BIN=""
+for candidato in \
+    "$WALLPAPER_ENGINE_BIN" \
+    "$(command -v linux-wallpaperengine 2>/dev/null || true)"; do
+    [ -n "$candidato" ] && [ -x "$candidato" ] && { ENGINE_BIN="$candidato"; break; }
+done
 
-if [[ -f "$BLACK_PNG" ]]; then
-    awww img "${AWWW_OUTPUTS[@]}" \
-        --transition-type fade \
-        --transition-duration 0.8 \
-        --transition-fps 60 \
-        --transition-bezier 0.22,1,0.36,1 \
-        -- "$BLACK_PNG" 2>/dev/null || true
-fi
+HAVE_ENGINE=false
+[ -n "$ENGINE_BIN" ] && HAVE_ENGINE=true
 
-pkill -f "$WALLPAPER_ENGINE_BIN" 2>/dev/null || true
-
-
+# La vista previa se busca SIEMPRE, la use o no el motor: es lo que se pondra de
+# fondo en el camino estatico.
 WALLPAPER_IMAGE=""
 
 for img in preview.jpg preview.jpeg preview.png thumbnail.jpg; do
@@ -134,9 +152,51 @@ if [[ -z "$WALLPAPER_IMAGE" && -f "$WALLPAPER_DIR/project.json" ]]; then
     fi
 fi
 
+# ── CAMINO ESTATICO ────────────────────────────────────────────────────────
+#
+# Sin motor no hay animacion, pero hay una imagen, y ponerla es infinitamente
+# mejor que dejar la pantalla en negro. wallpaper-backend es el que decide
+# entre awww y mpvpaper, escribe el cache que leen los watchers, y ya sabe
+# resolver el entorno del compositor.
+if [[ "$HAVE_ENGINE" == false ]]; then
+    if [[ -n "$WALLPAPER_IMAGE" && -x "$HOME/.local/bin/wallpaper-backend" ]]; then
+        echo "wallpaper-apply: linux-wallpaperengine no esta instalado; se pone la vista previa estatica." >&2
+        "$HOME/.local/bin/wallpaper-backend" apply "$WALLPAPER_IMAGE" >/dev/null 2>&1 || true
+    else
+        echo "wallpaper-apply: linux-wallpaperengine no esta instalado y este proyecto no trae" >&2
+        echo "  vista previa utilizable. No se toca el fondo. Para animacion, compila" >&2
+        echo "  linux-wallpaperengine en $WALLPAPER_ENGINE_BIN." >&2
+    fi
+    exit 0
+fi
+
+# ── CAMINO CON MOTOR ────────────────────────────────────────────────────────
+#
+# A partir de aqui si hay motor, asi que el negro de transicion tiene sentido:
+# se pinta mientras el motor carga y este lo sustituye.
+BLACK_PNG="/tmp/wallpaper-black.png"
+if [[ ! -f "$BLACK_PNG" ]]; then
+    ffmpeg -y -f lavfi -i color=black:size=1920x1080 -frames:v 1 "$BLACK_PNG" >/dev/null 2>&1 || true
+fi
+
+if [[ -f "$BLACK_PNG" ]]; then
+    awww img "${AWWW_OUTPUTS[@]}" \
+        --transition-type fade \
+        --transition-duration 0.8 \
+        --transition-fps 60 \
+        --transition-bezier 0.22,1,0.36,1 \
+        -- "$BLACK_PNG" 2>/dev/null || true
+fi
+
+pkill -f "$ENGINE_BIN" 2>/dev/null || true
+
 if [[ -z "$WALLPAPER_IMAGE" ]]; then
     SS_FILE="$SCREENSHOT_DIR/$(basename "$WALLPAPER_DIR").png"
-    (linux-wallpaperengine --screenshot "$SS_FILE" --bg "$WALLPAPER_DIR" >/dev/null 2>&1 &)
+    # Se llama con la ruta comprobada, no a pelo. La version anterior usaba el
+    # literal `linux-wallpaperengine` y dependia de que el PATH del usuario
+    # lo tuviera, que es justo lo que no pasa en una sesion de SDDM o en un
+    # servicio de systemd.
+    ("$ENGINE_BIN" --screenshot "$SS_FILE" --bg "$WALLPAPER_DIR" >/dev/null 2>&1 &)
     sleep 2
     WALLPAPER_IMAGE="$SS_FILE"
 fi
@@ -158,7 +218,7 @@ fi
 for i in "${!MONITORS[@]}"; do
     MON="${MONITORS[$i]}"
     CMD=(
-        "$WALLPAPER_ENGINE_BIN"
+        "$ENGINE_BIN"
         --no-foreground
         --silent
         --scaling fill

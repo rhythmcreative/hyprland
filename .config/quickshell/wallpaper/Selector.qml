@@ -15,6 +15,18 @@ import Quickshell.Wayland
 import QtMultimedia
 
 Scope {
+    // HOME en tiempo de ejecucion, no escrito en el fuente.
+    //
+    // Estas rutas estaban fijas a /home/rhythmcreative. install.sh lo tapaba
+    // con un sed global que cambia esa cadena por $HOME, pero SOLO en Arch: en
+    // NixOS home-manager despliega este fichero desde el store tal cual y el
+    // sed no se ejecuta. Ahi el selector lanzaba batch-thumbnails.sh y
+    // list-wallpapers-json.sh contra un home inexistente y no llegaba a pintar
+    // nada, sin un solo error en pantalla.
+    function homeDir() {
+        return Quickshell.env("HOME") || "/tmp/nix-cache-invalid-home";
+    }
+
     Variants {
         model: Quickshell.screens
 
@@ -48,7 +60,14 @@ Scope {
             property string baseFolder: defaultBaseFolder
             property string staticWallpaperFolder: defaultStaticWallpaperFolder
             property string thumbFolder: defaultThumbFolder
-            property string ffmpegPath: "/usr/bin/ffmpeg"
+            // OJO: este "/usr/bin/ffmpeg" es una ruta de FHS, y en NixOS ffmpeg vive en
+    // el store. Se deja como estaba porque QML no tiene forma de comprobar si
+    // un fichero existe, y un intento de resolverlo por PATH (con un
+    // FileAdapter que no existe en la API de Quickshell) rompia el arranque de
+    // la Isla entera. En NixOS hay que cambiarlo a mano una vez con
+    //   :setffmpeg /nix/store/.../bin/ffmpeg
+    // o con el ffmpeg del perfil. NO se reescribe al desplegar.
+    property string ffmpegPath: "/usr/bin/ffmpeg"
 
             property bool anyHovered: false
             property bool keyboardNavigation: true
@@ -67,7 +86,7 @@ Scope {
                     let batch = thumbBatchQueue.join("\n");
                     thumbBatchQueue = [];
                     let proc = Qt.createQmlObject('import Quickshell.Io; Process {}', window);
-                    proc.command = ["/bin/bash", "-c", "echo '" + batch.replace(/'/g, "'\\''") + "' | /home/rhythmcreative/.local/bin/batch-thumbnails.sh"];
+                    proc.command = ["/usr/bin/env", "bash", "-c", "echo '" + batch.replace(/'/g, "'\\''") + "' | " + homeDir() + "/.local/bin/batch-thumbnails.sh"];
                     proc.startDetached();
                 }
             }
@@ -1227,7 +1246,7 @@ Scope {
                 });
 
                 console.log("Scanning static wallpapers:", staticWallpaperFolder);
-                staticFinder.command = ["/home/rhythmcreative/.local/bin/list-wallpapers-json.sh", staticWallpaperFolder];
+                staticFinder.command = [homeDir() + "/.local/bin/list-wallpapers-json.sh", staticWallpaperFolder];
                 staticFinder.running = true;
             }
             Component.onCompleted: {

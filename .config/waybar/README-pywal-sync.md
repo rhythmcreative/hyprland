@@ -6,7 +6,7 @@ He solucionado el problema de sincronización entre Waybar y pywal creando un si
 
 ## Scripts Creados
 
-### 1. `/home/rhythmcreative/.local/bin/waybar-pywal-reload`
+### 1. `~/.local/bin/waybar-pywal-reload`
 Script principal que:
 - ✅ Verifica que pywal haya generado los colores
 - 📄 Copia los colores de pywal al archivo CSS de waybar

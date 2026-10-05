@@ -1,5 +1,5 @@
 {
-    "wallpaper_path": "/home/rhythmcreative/Pictures/Wallpapers",
-    "cache_path": "/home/rhythmcreative/.cache/quickshell/thumbs/",
+    "wallpaper_path": "~/Pictures/Wallpapers",
+    "cache_path": "~/.cache/quickshell/thumbs/",
     "border_color": "#C13F20"
 }

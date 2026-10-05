@@ -117,12 +117,12 @@ El módulo ya está configurado en tu `~/.config/waybar/config`:
 
 ```json
 "custom/weather": {
-    "exec": "/home/rhythmcreative/.config/waybar/scripts/weather.sh",
+    "exec": "$HOME/.config/waybar/scripts/weather.sh",
     "return-type": "json",
     "format": "{}",
     "interval": 60,
     "tooltip": true,
-    "on-click": "/home/rhythmcreative/.config/waybar/scripts/weather.sh update",
+    "on-click": "$HOME/.config/waybar/scripts/weather.sh update",
     "signal": 8
 }
 ```

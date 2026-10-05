@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Sincroniza TODOS los componentes con la paleta actual.
+#
+# POR QUE EXISTE
+# --------------
+# .config/wal/done.d/sync-all.sh lo llama:
+#
+#     "$HOME"/.local/bin/sync-pywal-all
+#
+# y ese binario no estaba. Ademas, ese hook entero nunca se ejecutaba, porque
+# pywal no tienehooks: se comprobo contra el codigo de pywal 3.8.15 y no hay
+# ningun 'hook' ni 'postrun' en el paquete. Todo .config/wal/{postrun,hooks,
+# done.sh,done.d/} es inerte.
+#
+# Este fichero si se ejecuta, porque lo llama modern-pywal-sync al arrancar
+# (hyprland.lua) y al final de install.sh. Va al script que ya coordina
+# GTK, Qt, Waybar, Rofi, Mako, SDDM, la isla y rust-dock, para no tener dos
+# listas de pasos que mantener.
+
+set -uo pipefail
+
+REAL="$HOME/.local/bin/modern-pywal-sync"
+
+if [ -x "$REAL" ]; then
+    exec "$REAL" "$@"
+fi
+
+echo "sync-pywal-all: falta $REAL" >&2
+exit 1

@@ -36,6 +36,21 @@ PanelWindow {
         }
     }
 
+    // config.json trae las rutas con "~/" y QML no las expande por su cuenta,
+    // asi que FolderListModel las recibiria literales y no abriria nada. Se
+    // resuelven aqui, en ejecucion. Ver el comentario de hyprwall/cache.sh:
+    // las rutas estaban fijas a /home/rhythmcreative y en NixOS, donde el
+    // fichero llega del store sin pasar por el sed de install.sh, apuntaban a
+    // un home que no existe.
+    function expandHome(p) {
+        if (!p) return p;
+        if (p === "~") return Quickshell.env("HOME") || "/tmp/nix-cache-invalid-home";
+        if (p.indexOf("~/") === 0) {
+            return (Quickshell.env("HOME") || "/tmp/nix-cache-invalid-home") + p.slice(1);
+        }
+        return p;
+    }
+
     // Estado de la aplicación
     property string currentView: "colors" // "colors" o "wallpapers"
     property string selectedColor: ""
@@ -140,7 +155,7 @@ PanelWindow {
 
             FolderListModel {
                 id: wallpaperModel
-                folder: "file://" + configs.wallpaper_path + "/" + selectedColor.toLowerCase()
+                folder: "file://" + expandHome(configs.wallpaper_path) + "/" + selectedColor.toLowerCase()
                 showDirs: false
                 nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"]
                 sortField: FolderListModel.Name

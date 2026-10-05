@@ -1,5 +1,22 @@
 #!/bin/bash
 # toggle-noise-suppression - Mic noise suppression toggle (RNNoise via PipeWire)
+install_hint() {
+    # El comando de instalacion depende de la distribucion, y este script
+    # tambien se despliega en NixOS (packages/helpers no lo excluye), donde
+    # pacman no existe: el mensaje de ayuda era un `sudo pacman -S ...` que no
+    # podia funcionar ahi y no decia nada de que hubiera otro gestor.
+    if command -v pacman >/dev/null 2>&1; then
+        printf '%s' "sudo pacman -S noise-suppression-for-voice rnnoise"
+    elif command -v nix-env >/dev/null 2>&1 || [ -n "${NIX_STORE:-}" ]; then
+        # En NixOS el plugin llega como noise-suppression-for-voice y la
+        # plantilla del filtro va en el paquete de pipewire del store.
+        printf '%s' "nix profile install nixpkgs#noise-suppression-for-voice"
+    elif command -v apt-get >/dev/null 2>&1; then
+        printf '%s' "sudo apt install pipewire-filter-chain"
+    else
+        printf '%s' "instala el plugin LADSPA de RNNoise para tu distribucion"
+    fi
+}
 #
 # Preferred stack (dependency-light, Arch extra repo):
 #   sudo pacman -S noise-suppression-for-voice rnnoise
@@ -143,8 +160,8 @@ case "${1:-toggle}" in
         elif command -v noisetorch >/dev/null 2>&1; then
             noisetorch_toggle
         else
-            notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
-            echo "Missing deps. Install: sudo pacman -S noise-suppression-for-voice rnnoise" >&2
+            notify "Dependencies missing" "Install: $(install_hint)"
+            echo "Missing deps. Install: $(install_hint)" >&2
             exit 1
         fi
         ;;
@@ -176,7 +193,7 @@ case "${1:-toggle}" in
             ladspa_enable
         elif command -v noisetorch >/dev/null 2>&1; then
             noisetorch_toggle || {
-                notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
+                notify "Dependencies missing" "Install: $(install_hint)"
                 exit 1
             }
         elif command -v easyeffects >/dev/null 2>&1; then
@@ -187,11 +204,13 @@ case "${1:-toggle}" in
                 exit 2
             fi
         else
-            notify "Dependencies missing" "Install: sudo pacman -S noise-suppression-for-voice rnnoise"
+            notify "Dependencies missing" "Install: $(install_hint)"
             echo "Missing deps. Install one of:" >&2
-            echo "  sudo pacman -S noise-suppression-for-voice rnnoise   (preferred, lightweight)" >&2
-            echo "  sudo pacman -S easyeffects                            (full effects suite)" >&2
-            echo "  yay -S noisetorch                                     (AUR fallback)" >&2
+            echo "  $(install_hint)   (preferred, lightweight)" >&2
+            if command -v pacman >/dev/null 2>&1; then
+                echo "  sudo pacman -S easyeffects         (full effects suite)" >&2
+                echo "  yay -S noisetorch                  (AUR fallback)" >&2
+            fi
             exit 1
         fi
         ;;

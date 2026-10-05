@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Sincroniza el CSS de nm-applet con los colores de pywal.
+#
+# POR QUE EXISTE ESTE FICHERO
+# --------------------------
+# Dos llamadores, waybar-pywal-sync y full-system-color-sync, comproban
+#
+#     if [[ -f "$HOME/.local/bin/nm-applet-waybar-sync" ]]
+#
+# antes de llamarlo, y el fichero no estaba en el repo. La comprobacion
+# fallaba siempre y el sync no se ejecutaba nunca: sin error, sin log, sin
+# nada que delatarlo. nm-applet se quedaba con el GTK por defecto mientras
+# waybar si llevaba la paleta.
+#
+# El trabajo de verdad ya lo hacia sync-nm-applet-colors, que si esta en el
+# repo. Este es el nombre que esos dos esperaban, y lo que hace es delegar.
+#
+# No es un cambio de comportamiento en el Arch de hoy: antes no pasaba nada.
+# Lo que cambia es que ahora nm-applet recibe los colores.
+
+set -uo pipefail
+
+REAL="$HOME/.local/bin/sync-nm-applet-colors"
+
+if [ -x "$REAL" ]; then
+    exec "$REAL" "$@"
+fi
+
+# sync-nm-applet-colors tampoco esta (deploy parcial, helpers antiguo). Se
+# avisa en vez de terminar en silencio: era justo el fallo questo arregla.
+echo "nm-applet-waybar-sync: falta $REAL, no se puede sincronizar" >&2
+exit 1

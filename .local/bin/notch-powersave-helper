@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# notch-powersave-helper: lo invoca auto-power-profile al bajar la bateria.
+#
+#     if [ ! -f "$STATUS_LOCK" ] && [ -x "$POWERSAVE_HELPER" ]; then
+#         "$POWERSAVE_HELPER" toggle ...
+#
+# El fichero no estaba en el repo, asi que la condicion era falsa y el paso
+# automatico de ahorro nunca se ejecutaba: la notificacion decia "Power Saver
+# Activated" mientras el equipo se quedaba en perfil normal. Peor que no
+# hacerlo, porque el aviso mentia.
+#
+# El estado (fichero /tmp/powersave-active, brillo, EPP) lo lleva
+# toggle-powersave, que si esta en el repo. Este solo le pasa "toggle" y
+# traslada su codigo de salida, para que auto-power-profile siga decidiendo
+# con STATUS_LOCK igual que hasta ahora.
+
+set -uo pipefail
+
+REAL="$HOME/.local/bin/toggle-powersave"
+ACCION="${1:-toggle}"
+
+if [ -x "$REAL" ]; then
+    exec "$REAL" "$ACCION"
+fi
+
+echo "notch-powersave-helper: falta $REAL" >&2
+exit 1

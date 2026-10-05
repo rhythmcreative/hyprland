@@ -10,6 +10,14 @@ import Qt.labs.platform
 PanelWindow {
     id: window
     
+    // HOME en tiempo de ejecucion, no escrito en el fuente. Ver el comentario
+    // en quickshell/wallpaper/Selector.qml: install.sh reescribe
+    // /home/rhythmcreative con un sed, pero en NixOS home-manager despliega el
+    // fichero desde el store sin pasar por ahi, y commands.sh no se encontraba.
+    function homeDir() {
+        return Quickshell.env("HOME") || "/tmp/nix-cache-invalid-home";
+    }
+
     implicitHeight: Screen.height
     implicitWidth: Screen.width
     
@@ -237,7 +245,7 @@ PanelWindow {
         const path = folderModel.get(listView.currentIndex, "filePath")
         if (path) {
             const cleanPath = path.toString().replace(/^file:\/\//, "")
-            Quickshell.execDetached(["bash", "/home/rhythmcreative/.config/quickshell/hyprwall/commands.sh", cleanPath])
+            Quickshell.execDetached(["bash", homeDir() + "/.config/quickshell/hyprwall/commands.sh", cleanPath])
             Qt.quit()
         }
     }

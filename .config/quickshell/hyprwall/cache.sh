@@ -5,8 +5,17 @@ CONFIG="$1/config.json"
 
 
 
-wallpaper_path=$(jq -r '.wallpaper_path' "$CONFIG")
-cache_path=$(jq -r '.cache_path' "$CONFIG")
+# Las rutas de config.json empiezan por "~/".
+#
+# Antes traian /home/rhythmcreative escrito a fuego. install.sh lo tapaba con
+# un sed global, pero solo en Arch: en NixOS home-manager despliega este
+# fichero desde el store sin pasar por ahi, y find "$wallpaper_path" se
+# quedaba en un home inexistente sin decir nada. Expandir aqui funciona igual
+# en los dos, y no depende de que nadie reescriba el fichero al desplegarlo.
+expand_home() { printf '%s' "${1/#\~/$HOME}"; }
+
+wallpaper_path=$(expand_home "$(jq -r '.wallpaper_path' "$CONFIG")")
+cache_path=$(expand_home "$(jq -r '.cache_path' "$CONFIG")")
 cache_batch_size=$(jq -r '.cache_batch_size' "$CONFIG")
 
 mkdir -p "$cache_path"

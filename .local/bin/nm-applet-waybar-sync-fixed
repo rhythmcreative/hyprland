@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Variante "fixed" de nm-applet-waybar-sync. Mismo trabajo, otro nombre.
+#
+# sync-nm-applet-colors.sh lo buscaba con este segundo nombre antes de que
+# existiera el otro, y el primero no estaba en el repo. Se deja el
+# envoltorio para que las dos rutas de llamada encuentro algo, y las dos
+# acaban en el mismo sitio.
+
+set -uo pipefail
+
+REAL="$HOME/.local/bin/sync-nm-applet-colors"
+
+if [ -x "$REAL" ]; then
+    exec "$REAL" "$@"
+fi
+
+echo "nm-applet-waybar-sync-fixed: falta $REAL, no se puede sincronizar" >&2
+exit 1

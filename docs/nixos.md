@@ -90,6 +90,25 @@ home-manager switch --flake .#rhythm
 - `toggle-noise-suppression` still mentions pacman in its prompts; the
   actual denoising is always-on through PipeWire (ADR-0002).
 
+## SSH
+
+`services.openssh.enable` is on by default (mkDefault, so an explicit `false`
+in your own configuration.nix still wins) and port 22 is added to
+`networking.firewall.allowedTCPPorts` by modules/nixos/system.nix. The port is
+named there instead of left to the sshd module's implicit behaviour:
+`networking.firewall.enable = true` in a hand-written configuration.nix is the
+usual reason a machine answers ping but times out on port 22.
+
+Reachability from another machine, in order:
+
+```bash
+ping -c2 <ip>                    # up? wrong subnet or wifi isolation shows here
+nc -vz <ip> 22                   # timed out = dropped by a firewall
+                                 # refused  = nothing listening
+sudo ss -tlnp | grep ':22'       # sshd bound?
+sudo nft list ruleset | grep 'dport 22'
+```
+
 ## Options
 
 All knobs live under `rhythm.*` and are documented in

@@ -89,6 +89,10 @@ home-manager switch --flake .#rhythm
   newer Quickshell than nixpkgs ships, pin it as a flake input.
 - `toggle-noise-suppression` still mentions pacman in its prompts; the
   actual denoising is always-on through PipeWire (ADR-0002).
+- The Tela icon theme is used from nixpkgs with the dead links its own
+  release leaves behind removed in the overlay: NixOS' store checks refuse
+  to build a package that ships dangling symlinks, and the theme depends on
+  nothing else, so it takes home-manager down with it.
 
 ## SSH
 

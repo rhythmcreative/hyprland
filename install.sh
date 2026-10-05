@@ -80,9 +80,12 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
 
         if ! command -v gum >/dev/null 2>&1; then
             echo "Installing gum for the installer visuals (user profile only)..."
-            nix --extra-experimental-features "nix-command flakes" \
-                profile install nixpkgs#gum 2>/dev/null || true
-            export PATH="$HOME/.nix-profile/bin:$PATH"
+            if nix --extra-experimental-features "nix-command flakes" \
+                profile install nixpkgs#gum 2>/dev/null; then
+                export PATH="$HOME/.nix-profile/bin:$PATH"
+            else
+                echo "NOTE: gum is unavailable, continuing with plain prompts."
+            fi
         fi
 
         local repo="$HOME/hyprland"
@@ -113,6 +116,25 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         fi
         nixos_section "Installing desktop for user=$user gpu=$guess_gpu"
         [ "$guess_gpu" = "nvidia" ] && nixos_item "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to ~/.config/home-manager/flake.nix."
+
+        # Arch-style choices, mapped to module options. Skipped with
+        # RHYTHM_NO_CHOICES=1 (or RHYTHM_WALLPAPER / RHYTHM_FLATPAKS set).
+        local wallpapers="${RHYTHM_WALLPAPER:-random}" flatpaks="${RHYTHM_FLATPAKS:-0}" pick=""
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] && [ -t 0 ] && command -v gum >/dev/null 2>&1; then
+            nixos_logo "$repo"
+            pick=$(gum choose --header="Wallpaper pack:" \
+                "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" || true)
+            case "$pick" in
+                "All"*) wallpapers="all" ;;
+                "No "*) wallpapers="none" ;;
+            esac
+        fi
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] && [ -t 0 ] && command -v gum >/dev/null 2>&1; then
+            if gum confirm "Install Flatpak apps from flatpaks.txt?"; then
+                flatpaks="1"
+            fi
+        fi
+        nixos_item "Wallpapers: $wallpapers - Flatpaks: $([ "$flatpaks" = "1" ] && echo on || echo off)"
 
         # A home-manager consumer flake of this repo (main): self-contained,
         # survives even if ~/hyprland is deleted later.
@@ -162,6 +184,8 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
             enable = true;
             username = "$user";
             gpu = "$guess_gpu";
+            wallpaper.mode = "$wallpapers";
+            features.flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
           };
         }
       ];

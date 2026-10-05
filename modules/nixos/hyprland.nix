@@ -36,32 +36,10 @@ in
     # (file picker outside pure-Wayland apps) needs naming explicitly.
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
 
-    # Everything the compositor and its scripts expect on PATH.
-    environment.systemPackages = with pkgs; [
-      hypridle
-      hyprlock
-      hyprsunset
-      hyprpicker
-      awww
-      mpvpaper
-      mpv
-      waybar
-      quickshell
-      rofi
-      cliphist
-      wl-clipboard
-      grim
-      slurp
-      swappy
-      wf-recorder
-      libnotify
-      socat
-      brightnessctl
-      pamixer
-      playerctl
-      inotify-tools
-      psmisc
-      jq
-    ];
+    # Everything the compositor and its scripts expect on PATH. The list
+    # itself is shared with the home-manager scope (see
+    # rhythm.desktopPackages in modules/options.nix) so both install paths
+    # end up with the same working desktop.
+    environment.systemPackages = cfg.desktopPackages;
   };
 }

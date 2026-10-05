@@ -1,6 +1,10 @@
 [Unit]
 Description=Clipboard history watcher (cliphist over wl-paste)
 After=default.target
+# default.target se alcanza antes que el compositor, y el daemon espera al
+# socket en vez de salir. Aun asi, sin limite de arranques: un start-limit-hit
+# aqui deja la sesion de usuario degradada entera.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

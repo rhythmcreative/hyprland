@@ -4,18 +4,62 @@
 # cliphist guarda en ~/.cache/cliphist/db, asi que sobrevive a reinicios. Hay que
 # vigilar los dos tipos MIME por separado: text para lo copiado normal e image
 # para capturas y fotos. Con un solo watcher las imagenes no se guardaban.
+#
+# Este servicio vive en default.target, que se alcanza ANTES de que el
+# compositor arranque: SDDM (y UWSM) lo arrancan despues. La version anterior
+# asumia wayland-1, lanzaba los dos wl-paste y hacia `wait`; sin socket todavia
+# los dos morian al instante, el script salia con codigo 0 y systemd lo
+# reiniciaba cada 2s hasta toparse con el start limit (1853 reinicios
+# acumulados). El resultado era una sesion de usuario degradada y un aviso de
+# home-manager en cada activacion. Ahora el daemon espera al socket y, si el
+# compositor se va, se rearma en vez de salir.
 
 set -u
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-[ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="wayland-1"
 
-# Si ya hay watchers de esta sesion, no duplicarlos.
-if pgrep -f "wl-paste --watch cliphist store" >/dev/null 2>&1; then
-    exit 0
-fi
+# Devuelve el socket Wayland de la sesion. La variable de entorno manda solo si
+# el socket existe de verdad: al arrancar el servicio todavia no.
+wayland_socket() {
+    local sock
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+        printf '%s' "$WAYLAND_DISPLAY"
+        return 0
+    fi
+    for sock in "$XDG_RUNTIME_DIR"/wayland-[0-9]*; do
+        [ -S "$sock" ] || continue
+        printf '%s' "${sock##*/}"
+        return 0
+    done
+    return 1
+}
 
-wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
-wl-paste --type image --watch cliphist store >/dev/null 2>&1 &
+# Si ya hay watchers de esta sesion, no duplicarlos. Espera en vez de salir:
+# un exit 0 aqui es exactamente el restart storm que este script evita.
+while pgrep -f "wl-paste --watch cliphist store" >/dev/null 2>&1; do
+    sleep 5
+done
 
-wait
+while true; do
+    if ! WAYLAND_DISPLAY="$(wayland_socket)"; then
+        sleep 1
+        continue
+    fi
+    export WAYLAND_DISPLAY
+
+    wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
+    text_pid=$!
+    wl-paste --type image --watch cliphist store >/dev/null 2>&1 &
+    image_pid=$!
+
+    # Vive mientras quede al menos uno de los dos. wl-paste --watch no sale
+    # solo: se queda pegado al portapapeles hasta que se cae la conexion.
+    while kill -0 "$text_pid" 2>/dev/null || kill -0 "$image_pid" 2>/dev/null; do
+        sleep 5
+    done
+    wait "$text_pid" 2>/dev/null
+    wait "$image_pid" 2>/dev/null
+
+    # Sesion cerrada o compositor reiniciado: borrar y esperar al siguiente.
+    sleep 2
+done

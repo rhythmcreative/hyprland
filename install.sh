@@ -28,41 +28,195 @@ trap 'handle_error $LINENO' ERR
 
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
+# El log va a un mktemp y no a "/tmp/hyprland-install-$USER.log", que se puede
+# adivinar de sobra. En esa ruta fija, otro usuario del equipo crea el fichero
+# como enlace simbolico que apunte a ~/.bashrc o a lo que sea, y el ": >" de
+# abajo lo deja en cero. Con mktemp no hay forma de saber el nombre de antes.
+#
+# Se crea aqui y no en su sitio de siempre (justo antes de los flags de Arch)
+# porque la trampa de errores lo cita: la rama de NixOS sale mucho antes de
+# aquel punto, y un fallo suyo imprimia "log saved to: " sin nada detras.
+LOG_FILE=$(mktemp "/tmp/hyprland-install-${USER:-$(id -un)}.XXXXXX.log" 2>/dev/null || true)
+if [ -z "$LOG_FILE" ] || ! touch "$LOG_FILE" 2>/dev/null; then
+    mkdir -p "$HOME/.cache" 2>/dev/null || true
+    LOG_FILE="$HOME/.cache/hyprland-install.log"
+fi
+: > "$LOG_FILE" 2>/dev/null || true
+
+# --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
+# Defined here, before the NixOS branch, and used by BOTH install paths. It used
+# to live further down, after the NixOS branch had already exited, so that path
+# had to grow its own copy of every helper (nixos_section, nixos_ok, nixos_item,
+# nixos_logo) with no centring, no Tokyo Night colours for gum and no
+# completion screen: the same installer printed two different desktops. One
+# implementation, called with whichever checkout holds logo.txt.
+rhythm_presentation_init() {
+    local logo_dir="${1:-$DOTFILES_DIR}"
+    if [[ -e /dev/tty ]]; then
+        TERM_SIZE=$(stty size 2>/dev/null </dev/tty || echo "24 80")
+        export TERM_HEIGHT=$(echo "$TERM_SIZE" | cut -d' ' -f1)
+        export TERM_WIDTH=$(echo "$TERM_SIZE" | cut -d' ' -f2)
+    else
+        export TERM_WIDTH=80
+        export TERM_HEIGHT=24
+    fi
+
+    LOGO_PATH="$logo_dir/logo.txt"
+    if [[ -f "$LOGO_PATH" ]]; then
+        LOGO_WIDTH=$(awk '{ if (length > max) max = length } END { print max+0 }' "$LOGO_PATH" 2>/dev/null || echo 69)
+    else
+        LOGO_WIDTH=69
+    fi
+
+    PADDING_LEFT=$(((TERM_WIDTH - LOGO_WIDTH) / 2))
+    if (( PADDING_LEFT < 0 )); then
+        PADDING_LEFT=0
+    fi
+    PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
+
+    # Tokyo Night theme for gum (Omarchy style)
+    export GUM_CONFIRM_PROMPT_FOREGROUND="6"     # Cyan
+    export GUM_CONFIRM_SELECTED_FOREGROUND="0"   # Black
+    export GUM_CONFIRM_SELECTED_BACKGROUND="2"   # Green
+    export GUM_CONFIRM_UNSELECTED_FOREGROUND="7" # White
+    export GUM_CONFIRM_UNSELECTED_BACKGROUND="0" # Black
+    export PADDING="0 0 0 $PADDING_LEFT"
+    export GUM_CHOOSE_PADDING="$PADDING"
+    export GUM_FILTER_PADDING="$PADDING"
+    export GUM_INPUT_PADDING="$PADDING"
+    export GUM_SPIN_PADDING="$PADDING"
+    export GUM_TABLE_PADDING="$PADDING"
+    export GUM_CONFIRM_PADDING="$PADDING"
+}
+
+# present_banner <green-bold> <normal>: the two closing lines of a finished run.
+present_banner() {
+    clear_logo
+    echo ""
+    gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "$1" 2>/dev/null \
+        || printf "%s\033[1;32m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "$2" 2>/dev/null \
+        || printf "%s\033[0;37m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$2"
+}
+
+clear_logo() {
+    printf "\033[H\033[2J"
+    if [[ -f "$LOGO_PATH" ]]; then
+        if command -v gum >/dev/null 2>&1; then
+            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+        else
+            cat "$LOGO_PATH"
+        fi
+    fi
+}
+
+section() {
+    echo ""
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
+    else
+        printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    fi
+}
+
+step_item() {
+    printf "%s\033[90m  → %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+}
+
+step_ok() {
+    printf "%s\033[32m  [OK] %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+}
+
+step_warn() {
+    printf "%s\033[33m  ! %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+}
+
+confirm_prompt() {
+    local prompt_msg="$1"
+    if [ "${AUTO_YES:-false}" = true ]; then
+        return 0
+    fi
+    gum confirm "$prompt_msg"
+}
+
 # NixOS does not use the Arch steps below at all. Instead of stopping with
-# directions, this same command installs the desktop only: it auto-detects
-# user and GPU, writes a standalone home-manager flake under
-# ~/.config/home-manager, and activates it. No questions, no system rebuild,
-# no sudo, no /etc writes. Override the guesses with RHYTHM_USER/RHYTHM_GPU.
+# directions, this same command installs the desktop: it auto-detects user and
+# GPU, activates a standalone home-manager flake under ~/.config/home-manager
+# for the user scope (dotfiles, helpers, user units) and wires the repo's NixOS
+# module into /etc/nixos for everything that has to be system wide (SDDM
+# astronaut greeter, fonts, portals, audio denoising, user groups, the Hyprland
+# session and every desktop program). Override the guesses with
+# RHYTHM_USER/RHYTHM_GPU.
 if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
+    # Flags the Arch parser below understands, accepted here too. This branch
+    # runs before it, and silently ignoring "--wallpapers all" or "-y" would
+    # install something different from what was asked for.
+    nixos_show_help() {
+        cat << 'EOF'
+Rhythm Hyprland Installer (NixOS backend)
+
+Usage:
+  ./install.sh [OPTIONS]
+
+Options:
+  -h, --help                 Show this help message and exit
+  -y, --yes                  Assume yes to all prompts (unattended mode)
+  --wallpapers <mode>        Wallpaper pack: all, random, none
+  --skip-wallpapers          Same as --wallpapers none
+  --flatpaks                 Install the Flatpak apps from flatpaks.txt
+  --skip-flatpaks            Skip Flatpaks (default)
+  --gpu <type>               GPU driver stack: nvidia, amd, intel, auto, none
+  --skip-gpu                 Skip GPU detection (generic modesetting only)
+  --no-system                Desktop for this user only: do not touch /etc/nixos
+  -u, --update               Same as a normal run (there is no separate OTA on NixOS)
+
+Environment overrides:
+  RHYTHM_USER, RHYTHM_GPU            Auto-detected values
+  RHYTHM_WALLPAPER, RHYTHM_FLATPAKS  Preset the choices
+  RHYTHM_NO_CHOICES=1                Never prompt
+  RHYTHM_NO_SYSTEM=1                 Do not touch /etc/nixos
+  RHYTHM_NIXOS_CHANNEL=<name>        nixpkgs branch (default: your installed release)
+
+One-line installation:
+  bash -c "$(curl -fsSL --connect-timeout 10 --max-time 60 https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+EOF
+    }
+
     install_nixos() {
         [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
-        # No sudo needed: desktop-only install, everything is user-owned.
 
-        # Same look as the Arch installer: gum menus and styling. On NixOS
-        # it comes from the user profile (no system change); without it
-        # every helper below degrades to plain colored echo.
-        nixos_section() {
-            if command -v gum >/dev/null 2>&1; then
-                gum style --foreground 6 --bold ":: $1"
-            else
-                printf '\033[1;36m:: %s\033[0m\n' "$1"
-            fi
-        }
-        nixos_ok() { printf '\033[32m  [OK] %s\033[0m\n' "$1"; }
-        nixos_item() { printf '\033[90m  → %s\033[0m\n' "$1"; }
-        nixos_logo() {
-            printf "\033[H\033[2J"
-            if [ -f "$1/logo.txt" ]; then
-                if command -v gum >/dev/null 2>&1; then
-                    gum style --foreground 2 --padding "1 0 0 0" "$(<"$1/logo.txt")"
-                else
-                    cat "$1/logo.txt"
-                fi
-            fi
-        }
+        local want_help=0
+        AUTO_YES=false
+        local opt_wall="" opt_flat="" opt_gpu="" opt_no_system=0
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -h|--help) want_help=1 ;;
+                -y|--yes) AUTO_YES=true ;;
+                --wallpapers) shift; opt_wall="${1:-random}" ;;
+                --wallpapers=*) opt_wall="${1#*=}" ;;
+                --skip-wallpapers) opt_wall="none" ;;
+                --flatpaks) opt_flat="1" ;;
+                --skip-flatpaks) opt_flat="0" ;;
+                --gpu) shift; opt_gpu="${1:-auto}" ;;
+                --gpu=*) opt_gpu="${1#*=}" ;;
+                --skip-gpu) opt_gpu="none" ;;
+                --no-system) opt_no_system=1 ;;
+                -u|--update) : ;;   # updates are a plain re-run on NixOS (ADR-0005)
+                *) : ;;            # Arch-only flags mean nothing here
+            esac
+            shift
+        done
+        rhythm_presentation_init "$DOTFILES_DIR"
+        if [ "$want_help" = 1 ]; then
+            clear_logo
+            nixos_show_help
+            exit 0
+        fi
+
         # stdin may be a pipe (curl | bash) while the terminal is still
         # reachable: gate menus on an openable /dev/tty, like gum does.
         nixos_can_ask() {
+            [ "$AUTO_YES" = true ] && return 1
             [ -t 0 ] && return 0
             [ -c /dev/tty ] || return 1
             : 2>/dev/null </dev/tty || return 1
@@ -80,10 +234,18 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         fi
 
         # Flakes for this session. /etc/nix/nix.conf is off-limits: on NixOS
-        # it is often a read-only store symlink, so appending fails with
-        # "Read-only file system". Persistence comes from nix.settings in
-        # the generated flake below, applied by the rebuild.
+        # it is a store symlink, so appending fails with "Read-only file
+        # system". The user config written below keeps `nix build` and
+        # `home-manager switch` working afterwards; the system side gets the
+        # same through nix.settings in the flake this installer writes to
+        # /etc/nixos.
         export NIX_CONFIG="experimental-features = nix-command flakes"
+        local nix_user_conf="$HOME/.config/nix/nix.conf"
+        mkdir -p "$(dirname "$nix_user_conf")"
+        if ! grep -q 'experimental-features' "$nix_user_conf" 2>/dev/null; then
+            printf 'experimental-features = nix-command flakes\n' > "$nix_user_conf"
+            step_item "Enabled flakes for your user in $nix_user_conf."
+        fi
 
         if ! command -v gum >/dev/null 2>&1; then
             echo "Installing gum for the installer visuals (user profile only)..."
@@ -94,22 +256,25 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 echo "NOTE: gum is unavailable, continuing with plain prompts."
             fi
         fi
+        # gum arrived after the geometry was measured: re-measure so the
+        # centring and the gum padding use the real terminal.
+        rhythm_presentation_init "$DOTFILES_DIR"
 
         local repo="$HOME/hyprland"
         if [ ! -d "$repo/.git" ]; then
-            nixos_item "Cloning desktop into $repo..."
+            step_item "Cloning desktop into $repo..."
             git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
         else
-            nixos_item "Using existing checkout at $repo."
+            step_item "Using existing checkout at $repo."
         fi
-        nixos_logo "$repo"
+        rhythm_presentation_init "$repo"
+        clear_logo
 
-        # Desktop only: standalone home-manager, no system rebuild.
-        # No sudo, no /etc writes, no bootloader changes: the same modules
-        # as homes/rhythm/home.nix, activated for this user only.
-        # Fully non-interactive: values are auto-detected, override with
-        # RHYTHM_USER / RHYTHM_GPU in the rare case the guess is wrong.
-        local user="${RHYTHM_USER:-$USER}" guess_gpu="${RHYTHM_GPU:-auto}" rel hm_dir
+        # User scope: standalone home-manager, no sudo, no /etc writes, the
+        # same modules as homes/rhythm/home.nix, activated for this user only.
+        # Auto-detected values; override with RHYTHM_USER / RHYTHM_GPU in the
+        # rare case the guess is wrong.
+        local user="${RHYTHM_USER:-$USER}" guess_gpu="${opt_gpu:-${RHYTHM_GPU:-auto}}" rel hm_dir
         rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || echo "25.11")
         if [ "$guess_gpu" = "auto" ]; then
             for dev in /sys/bus/pci/devices/*; do
@@ -121,14 +286,16 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 esac
             done
         fi
-        nixos_section "Installing desktop for user=$user gpu=$guess_gpu"
-        [ "$guess_gpu" = "nvidia" ] && nixos_item "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to ~/.config/home-manager/flake.nix."
+        section "Installing desktop for user=$user gpu=$guess_gpu"
+        [ "$guess_gpu" = "nvidia" ] && step_item "NOTE: NVIDIA needs unfree. If a build refuses, add nixpkgs.config.allowUnfree = true; to /etc/nixos/flake.nix."
 
         # Arch-style choices, mapped to module options. Skipped with
         # RHYTHM_NO_CHOICES=1 (or RHYTHM_WALLPAPER / RHYTHM_FLATPAKS set).
-        local wallpapers="${RHYTHM_WALLPAPER:-random}" flatpaks="${RHYTHM_FLATPAKS:-0}" pick=""
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] && nixos_can_ask && command -v gum >/dev/null 2>&1; then
-            nixos_logo "$repo"
+        local wallpapers="${opt_wall:-${RHYTHM_WALLPAPER:-random}}"
+        local flatpaks="${opt_flat:-${RHYTHM_FLATPAKS:-0}}" pick=""
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] \
+            && nixos_can_ask && command -v gum >/dev/null 2>&1; then
+            clear_logo
             pick=$(gum choose --header="Wallpaper pack:" \
                 "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" || true)
             case "$pick" in
@@ -136,26 +303,24 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
                 "No "*) wallpapers="none" ;;
             esac
         fi
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] && nixos_can_ask && command -v gum >/dev/null 2>&1; then
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_flat" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] \
+            && nixos_can_ask && command -v gum >/dev/null 2>&1; then
             if gum confirm "Install Flatpak apps from flatpaks.txt?"; then
                 flatpaks="1"
             fi
         fi
-        nixos_item "Wallpapers: $wallpapers - Flatpaks: $([ "$flatpaks" = "1" ] && echo on || echo off)"
+        step_item "Wallpapers: $wallpapers - Flatpaks: $([ "$flatpaks" = "1" ] && echo on || echo off)"
 
         # A home-manager consumer flake of this repo (main): self-contained,
-        # survives even if ~/hyprland is deleted later.
+        # survives even if ~/hyprland is deleted later. Rendered to a temp
+        # file first: an unchanged flake is left alone entirely, so
+        # re-running the installer does not litter ~/.config with a new
+        # home-manager.bak-<timestamp> directory on every attempt.
         hm_dir="$HOME/.config/home-manager"
-        if [ -e "$hm_dir/flake.nix" ] || [ -e "$hm_dir/home.nix" ]; then
-            local stamp
-            stamp=$(date +%Y%m%d-%H%M%S)
-            mkdir -p "$HOME/.config/home-manager.bak-$stamp"
-            cp -rf "$hm_dir/flake.nix" "$hm_dir/flake.lock" "$hm_dir/home.nix" \
-                "$HOME/.config/home-manager.bak-$stamp/" 2>/dev/null || true
-            nixos_ok "Previous home-manager config backed up to ~/.config/home-manager.bak-$stamp."
-        fi
         mkdir -p "$hm_dir"
-        cat > "$hm_dir/flake.nix" << EOF2
+        local new_flake
+        new_flake=$(mktemp)
+        cat > "$new_flake" << EOF2
 {
   description = "Rhythm Hyprland desktop (standalone home-manager)";
   inputs = {
@@ -201,7 +366,24 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
 }
 EOF2
 
-        nixos_section "Activating the desktop (downloads several GB the first time)"
+        # Swap the rendered flake in, keeping a timestamped copy of whatever
+        # was there before. Compared by content, not just existence.
+        if [ -e "$hm_dir/flake.nix" ] && cmp -s "$new_flake" "$hm_dir/flake.nix"; then
+            rm -f "$new_flake"
+            step_item "home-manager flake already up to date, left untouched."
+        else
+            if [ -e "$hm_dir/flake.nix" ] || [ -e "$hm_dir/home.nix" ]; then
+                local stamp
+                stamp=$(date +%Y%m%d-%H%M%S)
+                mkdir -p "$HOME/.config/home-manager.bak-$stamp"
+                cp -rf "$hm_dir/flake.nix" "$hm_dir/flake.lock" "$hm_dir/home.nix" \
+                    "$HOME/.config/home-manager.bak-$stamp/" 2>/dev/null || true
+                step_ok "Previous home-manager config backed up to ~/.config/home-manager.bak-$stamp."
+            fi
+            mv -f "$new_flake" "$hm_dir/flake.nix"
+        fi
+
+        section "Activating the desktop (downloads several GB the first time)"
         # Always track this repo's latest main. nix reuses flake.lock
         # silently: without this, a lock from a previous run keeps building
         # the old modules forever (e.g. fixes never arrive). Only our own
@@ -242,117 +424,215 @@ EOF2
         HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
         # GitHub CLI + OpenCode at user level (nix profile, no rebuild).
-        nixos_section "Developer tools (gh, opencode)"
+        section "Developer tools (gh, opencode)"
         for tool in gh opencode; do
             if ! command -v "$tool" >/dev/null 2>&1; then
-                nixos_item "Installing $tool through nix profile..."
+                step_item "Installing $tool through nix profile..."
                 nix --extra-experimental-features "nix-command flakes" \
                     profile install "nixpkgs#$tool" 2>/dev/null \
-                    || nixos_item "Could not install $tool, skipping."
+                    || step_item "Could not install $tool, skipping."
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             fi
         done
         if command -v gh >/dev/null 2>&1; then
             if gh auth status >/dev/null 2>&1; then
-                nixos_ok "gh already authenticated."
+                step_ok "gh already authenticated."
             elif nixos_can_ask; then
-                nixos_item "Authenticate GitHub CLI (browser/device flow)..."
-                gh auth login || nixos_item "Skipped; run 'gh auth login' later."
+                step_item "Authenticate GitHub CLI (browser/device flow)..."
+                gh auth login || step_item "Skipped; run 'gh auth login' later."
             else
-                nixos_item "Run 'gh auth login' later to authenticate GitHub CLI."
+                step_item "Run 'gh auth login' later to authenticate GitHub CLI."
             fi
         fi
         command -v opencode >/dev/null 2>&1 \
-            && nixos_ok "opencode ready ($(opencode --version 2>/dev/null | head -1))." \
+            && step_ok "opencode ready ($(opencode --version 2>/dev/null | head -1))." \
             || true
-        # SDDM is part of the NixOS install: graphical login comes up
-        # automatically (skip with RHYTHM_NO_SDDM=1).
-        if [ "${RHYTHM_NO_SDDM:-0}" = "1" ]; then
-            nixos_item "SDDM skipped (RHYTHM_NO_SDDM=1). Start Hyprland from a TTY."
+
+        # System scope: SDDM, fonts, portals, audio and the desktop programs
+        # live outside $HOME, so they need the NixOS module. Skip with
+        # RHYTHM_NO_SYSTEM=1 or --no-system.
+        local system_status="skipped"
+        if [ "${RHYTHM_NO_SYSTEM:-0}" = "1" ] || [ "$opt_no_system" = "1" ]; then
+            step_item "System configuration skipped (--no-system). SDDM, fonts and"
+            step_item "desktop programs stay uninstalled: log in from a TTY instead."
         else
-            rhythm_setup_sddm || exit 1
+            rhythm_setup_system "$user" "$guess_gpu" "$wallpapers" "$flatpaks" \
+                && system_status="done" || system_status="failed"
         fi
+
+        # Same closing screen as the Arch installer instead of dropping the
+        # user at a bare prompt with no idea whether it worked.
+        present_banner "Finished installing" \
+            "Log out (or reboot) and pick Hyprland in the login screen."
+        if [ "$system_status" = "done" ]; then
+            printf "%s\033[0;37m  → Update later: cd /etc/nixos && sudo nix flake update && sudo nixos-rebuild switch\033[0m\n" "$PADDING_LEFT_SPACES"
+        fi
+        printf "%s\033[0;37m  → Update your desktop only: ~/.config/home-manager, then home-manager switch --flake ~/.config/home-manager#%s\033[0m\n" "$PADDING_LEFT_SPACES" "$user"
+        echo ""
     }
 
-    # Minimal system addition for graphical login: stock SDDM (Wayland) plus
-    # system Hyprland so SDDM actually offers a Hyprland session entry.
-    # Only touches classic /etc/nixos/configuration.nix setups with no
-    # display manager yet; anything else gets instructions, not edits.
-    rhythm_setup_sddm() {
-        # Idempotent: already set up by a previous run (module with SSH too).
-        if grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix 2>/dev/null \
-            && grep -q 'services\.openssh\.enable' /etc/nixos/rhythm-sddm.nix 2>/dev/null \
-            && systemctl is-enabled display-manager.service >/dev/null 2>&1 \
-            && systemctl is-enabled sshd.service >/dev/null 2>&1; then
-            nixos_ok "SDDM + SSH already configured. Log out and pick the Hyprland session."
-            return 0
+    # System scope: wire this repo's NixOS module into /etc/nixos.
+    #
+    # It used to write a five-line rhythm-sddm.nix (SDDM + Hyprland + SSH) and
+    # stop there. That left the machine with a login screen on the default
+    # breeze themes, no Nerd Fonts (so every waybar icon was a tofu box), no
+    # xdg-desktop-portal (screen sharing dead), no rnnoise, the user outside
+    # video/render/input/audio, and none of rhythm.desktopPackages at all:
+    # SDDM started a compositor with no bar, no launcher and no terminal. The
+    # module in modules/nixos already declares every one of those, so the
+    # installer now installs the module instead of re-describing a subset of
+    # it by hand.
+    #
+    # /etc/nixos/configuration.nix is never rewritten: the generated flake
+    # imports it as a module, so the machine keeps whatever the installer of
+    # NixOS wrote plus the user's own edits.
+    rhythm_setup_system() {
+        local user="$1" guess_gpu="$2" wallpapers="$3" flatpaks="$4"
+        local etc_dir="/etc/nixos" channel
+
+        channel="${RHYTHM_NIXOS_CHANNEL:-nixos-$rel}"
+        case "$channel" in
+            nixos-*) : ;;
+            *) channel="nixos-$rel" ;;
+        esac
+
+        if [ ! -f "$etc_dir/configuration.nix" ]; then
+            step_warn "No $etc_dir/configuration.nix: this looks like a flake-based system."
+            step_item "Add these to your system modules and rebuild:"
+            printf '%s\n' \
+                '  inputs.hyprland.url = "github:rhythmcreative/hyprland";' \
+                '  # in modules:' \
+                '  imports = [ inputs.hyprland.nixosModules.rhythm-hyprland ];' \
+                "  rhythm = { enable = true; username = \"$user\"; gpu = \"$guess_gpu\"; };"
+            return 1
         fi
-        if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null \
+        if grep -rq "displayManager\.\(gdm\|lightdm\|greetd\|ly\)" "$etc_dir/" 2>/dev/null \
             && [ "${RHYTHM_SDDM_FORCE:-0}" != "1" ]; then
-            nixos_item "A display manager is already configured in /etc/nixos: leaving it alone."
-            nixos_item "If it shows no Hyprland entry, add programs.hyprland.enable = true; yourself."
-            nixos_item "To replace it with SDDM anyway: RHYTHM_SDDM_FORCE=1 (rebuild may"
-            nixos_item "fail if both DMs conflict; your configuration.nix backup lets you revert)."
+            step_warn "Another display manager is configured in $etc_dir: leaving it alone."
+            step_item "The rest of the desktop is still installed. To use SDDM anyway:"
+            step_item "RHYTHM_SDDM_FORCE=1 (your configuration.nix backup reverts it)."
             return 0
         fi
-        if [ ! -f /etc/nixos/configuration.nix ]; then
-            nixos_item "Automatic SDDM needs a classic /etc/nixos/configuration.nix;"
-            nixos_item "yours is flake-based (or missing). Add this to your system modules:"
-            echo '  services.displayManager.sddm.enable = true;'
-            echo '  services.displayManager.sddm.wayland.enable = true;'
-            echo '  programs.hyprland.enable = true;'
-            echo '  services.openssh.enable = true;'
-            return 0
-        fi
+
         sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
-        sudo cp -f /etc/nixos/configuration.nix "/etc/nixos/configuration.nix.bak-$(date +%Y%m%d-%H%M%S)"
-        sudo tee /etc/nixos/rhythm-sddm.nix > /dev/null << 'EOF2'
-{ ... }:
+
+        section "System configuration (greeter, fonts, portals, audio, apps)"
+
+        # The generated flake, compared by content so re-runs are no-ops.
+        local new_sys_flake sys_stamp
+        new_sys_flake=$(mktemp)
+        cat > "$new_sys_flake" << EOF3
 {
-  services.displayManager.sddm.enable = true;
-  services.displayManager.sddm.wayland.enable = true;
-  programs.hyprland.enable = true;
-  programs.hyprland.xwayland.enable = true;
-  # SSH server on by default (port 22 opens automatically).
-  services.openssh.enable = true;
+  description = "Rhythm Hyprland desktop for NixOS (written by install.sh)";
+
+  # Pinned to the release this machine was installed with, not
+  # nixos-unstable: the installer must not drag the whole system across a
+  # channel jump on its way to installing a desktop.
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/$channel";
+    hyprland = {
+      url = "github:rhythmcreative/hyprland";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { nixpkgs, hyprland, ... }: {
+    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        # The machine's own configuration, imported untouched.
+        ./configuration.nix
+        hyprland.nixosModules.rhythm-hyprland
+        {
+          rhythm = {
+            enable = true;
+            username = "$user";
+            gpu = "$guess_gpu";
+            wallpaper.mode = "$wallpapers";
+            features.flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
+          };
+$(if [ "$guess_gpu" = "nvidia" ]; then printf '          nixpkgs.config.allowUnfree = true;\n'; fi)
+          # This is a flake now, so make sure the next rebuild does not need
+          # --extra-experimental-features to work.
+          nix.settings.experimental-features = [ "nix-command" "flakes" ];
+          # SSH server on by default (port 22 opens automatically), same as the
+          # Arch installer leaves it.
+          services.openssh.enable = true;
+          # home-manager is deliberately NOT enabled here: the user scope is
+          # the standalone flake in ~/.config/home-manager. Turning on
+          # home-manager.users as well would give every file two owners and
+          # two conflicting activations.
+        }
+      ];
+    };
+  };
 }
-EOF2
-        # Patch the imports list (single-line or multi-line). sed exits 0
-        # even when nothing matches, so verify the import really landed.
-        if ! grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix; then
-            local patched
-            patched="$(mktemp)"
-            sudo awk 'done { print; next }
-                /^[[:space:]]*imports =[[:space:]]*$/ { print; pending=1; next }
-                pending && /^[[:space:]]*\[/ {
-                    if (/\]/) { sub(/\]/, " ./rhythm-sddm.nix ]"); print }
-                    else { print; print "    ./rhythm-sddm.nix" }
-                    pending=0; done=1; next
-                }
-                /^[[:space:]]*imports = \[/ {
-                    if (/\]/) { sub(/\]/, " ./rhythm-sddm.nix ]") }
-                    print
-                    if (!/\]/) { print "    ./rhythm-sddm.nix" }
-                    done=1
-                    next
-                }
-                { pending=0; print }' \
-                /etc/nixos/configuration.nix > "$patched" \
-                && sudo cp -f "$patched" /etc/nixos/configuration.nix
-            rm -f "$patched"
-        fi
-        grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix \
-            || { echo "ERROR: could not add ./rhythm-sddm.nix to imports; add it by hand."; exit 1; }
-        nixos_section "Rebuilding once to enable SDDM + SSH"
-        sudo nixos-rebuild switch || exit 1
-        nixos_ok "SDDM + SSH enabled. Starting them now (no reboot needed)..."
-        if sudo systemctl restart display-manager.service sshd.service 2>/dev/null; then
-            nixos_ok "SDDM is up (pick Hyprland at login) and sshd listens on port 22."
+EOF3
+
+        if [ -e "$etc_dir/flake.nix" ] && cmp -s "$new_sys_flake" "$etc_dir/flake.nix"; then
+            rm -f "$new_sys_flake"
+            step_item "System flake already up to date, left untouched."
         else
-            nixos_item "Could not start them live; reboot and pick Hyprland in SDDM."
+            if [ -e "$etc_dir/flake.nix" ] || [ -e "$etc_dir/flake.lock" ]; then
+                sys_stamp=$(date +%Y%m%d-%H%M%S)
+                sudo mkdir -p "$etc_dir.bak-$sys_stamp"
+                sudo cp -f "$etc_dir/flake.nix" "$etc_dir/flake.lock" \
+                    "$etc_dir.bak-$sys_stamp/" 2>/dev/null || true
+                step_ok "Previous system flake backed up to $etc_dir.bak-$sys_stamp."
+            fi
+            sudo cp -f "$new_sys_flake" "$etc_dir/flake.nix"
+            rm -f "$new_sys_flake"
+            step_ok "Wrote $etc_dir/flake.nix (nixpkgs pinned to $channel)."
         fi
+
+        # The old hand-written stub enabled SDDM and programs.hyprland itself.
+        # The module does both, so leaving the import in place would have two
+        # definitions fighting over the display manager and the session entry.
+        if grep -q 'rhythm-sddm\.nix' "$etc_dir/configuration.nix" 2>/dev/null; then
+            sudo cp -f "$etc_dir/configuration.nix" \
+                "$etc_dir/configuration.nix.bak-$(date +%Y%m%d-%H%M%S)"
+            sudo sed -i '/rhythm-sddm\.nix/d' "$etc_dir/configuration.nix"
+            step_ok "Removed the old ./rhythm-sddm.nix stub (the module covers it)."
+        fi
+
+        step_item "Locking flake inputs..."
+        # Locked as this user so the lock file is not left root-owned, then
+        # root only has to read it.
+        if ! nix --extra-experimental-features "nix-command flakes" flake lock \
+            --update-input hyprland "$etc_dir" >/dev/null 2>&1; then
+            sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
+                nix flake lock --update-input hyprland "$etc_dir" >/dev/null 2>&1 \
+                || { step_warn "Could not pre-lock $etc_dir; nixos-rebuild will do it."; }
+        fi
+
+        step_item "Rebuilding the system (first run downloads several GB)..."
+        if command -v gum >/dev/null 2>&1; then
+            gum spin --spinner dot --title "Building the NixOS system..." \
+                --padding "0 0 0 $PADDING_LEFT" -- \
+                sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
+                nixos-rebuild switch --flake "$etc_dir#nixos"
+        else
+            sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
+                nixos-rebuild switch --flake "$etc_dir#nixos"
+        fi
+        step_ok "System rebuilt: SDDM astronaut greeter, Nerd Fonts, portals, PipeWire denoise, desktop apps."
+
+        if sudo systemctl restart display-manager.service 2>/dev/null; then
+            step_ok "Greeter is up: log out and pick Hyprland."
+        else
+            step_item "Could not restart the greeter live; reboot and pick Hyprland."
+        fi
+        step_item "Groups (video, render, input, audio) apply on your next login."
     }
-    install_nixos
+    # Todo lo que salga de aqui (incluido el build de varios GB) queda en el
+    # log que la trampa de errores cita al final.
+    rhythm_nixos_log() {
+        [ -n "${LOG_FILE:-}" ] || return 0
+        "$@" 2>&1 | tee -a "$LOG_FILE"
+        return "${PIPESTATUS[0]}"
+    }
+
+    rhythm_nixos_log install_nixos "$@"
     exit $?
 fi
 
@@ -388,17 +668,6 @@ fi
 # script lo llama tambien system-ota. Sin eso, una actualizacion dejaba el
 # sddm.conf apuntando al start-hyprland de siempre y las piezas nuevas a medias,
 # que es peor que no tenerlas.
-
-# El log va a un mktemp y no a "/tmp/hyprland-install-$USER.log", que se puede
-# adivinar de sobra. En esa ruta fija, otro usuario del equipo crea el fichero
-# como enlace simbolico que apunte a ~/.bashrc o a lo que sea, y el ": >" de
-# abajo lo deja en cero. Con mktemp no hay forma de saber el nombre de antes.
-LOG_FILE=$(mktemp "/tmp/hyprland-install-${USER:-$(id -un)}.XXXXXX.log" 2>/dev/null || true)
-if [ -z "$LOG_FILE" ] || ! touch "$LOG_FILE" 2>/dev/null; then
-    mkdir -p "$HOME/.cache" 2>/dev/null || true
-    LOG_FILE="$HOME/.cache/hyprland-install.log"
-fi
-: > "$LOG_FILE" 2>/dev/null || true
 
 # --- CLI ARGUMENT PARSING & CONFIGURATION ---
 AUTO_YES=false
@@ -560,82 +829,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
-if [[ -e /dev/tty ]]; then
-    TERM_SIZE=$(stty size 2>/dev/null </dev/tty || echo "24 80")
-    export TERM_HEIGHT=$(echo "$TERM_SIZE" | cut -d' ' -f1)
-    export TERM_WIDTH=$(echo "$TERM_SIZE" | cut -d' ' -f2)
-else
-    export TERM_WIDTH=80
-    export TERM_HEIGHT=24
-fi
-
-LOGO_PATH="$DOTFILES_DIR/logo.txt"
-if [[ -f "$LOGO_PATH" ]]; then
-    LOGO_WIDTH=$(awk '{ if (length > max) max = length } END { print max+0 }' "$LOGO_PATH" 2>/dev/null || echo 69)
-else
-    LOGO_WIDTH=69
-fi
-
-PADDING_LEFT=$(((TERM_WIDTH - LOGO_WIDTH) / 2))
-if (( PADDING_LEFT < 0 )); then
-    PADDING_LEFT=0
-fi
-PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
-
-# Tokyo Night theme for gum (Omarchy style)
-export GUM_CONFIRM_PROMPT_FOREGROUND="6"     # Cyan
-export GUM_CONFIRM_SELECTED_FOREGROUND="0"   # Black
-export GUM_CONFIRM_SELECTED_BACKGROUND="2"   # Green
-export GUM_CONFIRM_UNSELECTED_FOREGROUND="7" # White
-export GUM_CONFIRM_UNSELECTED_BACKGROUND="0" # Black
-export PADDING="0 0 0 $PADDING_LEFT"
-export GUM_CHOOSE_PADDING="$PADDING"
-export GUM_FILTER_PADDING="$PADDING"
-export GUM_INPUT_PADDING="$PADDING"
-export GUM_SPIN_PADDING="$PADDING"
-export GUM_TABLE_PADDING="$PADDING"
-export GUM_CONFIRM_PADDING="$PADDING"
-
-clear_logo() {
-    printf "\033[H\033[2J"
-    if [[ -f "$LOGO_PATH" ]]; then
-        if command -v gum >/dev/null 2>&1; then
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
-        else
-            cat "$LOGO_PATH"
-        fi
-    fi
-}
-
-section() {
-    echo ""
-    if command -v gum >/dev/null 2>&1; then
-        gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
-    else
-        printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
-    fi
-}
-
-step_item() {
-    printf "%s\033[90m  → %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
-}
-
-step_ok() {
-    printf "%s\033[32m  [OK] %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
-}
-
-step_warn() {
-    printf "%s\033[33m  ! %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
-}
-
-confirm_prompt() {
-    local prompt_msg="$1"
-    if [ "$AUTO_YES" = true ]; then
-        return 0
-    fi
-    gum confirm "$prompt_msg"
-}
+# Geometry, Tokyo Night gum theme and the shared helpers. Defined near the top
+# of the file (the NixOS branch needs them too), initialised here so the Arch
+# path keeps its exact previous presentation.
+rhythm_presentation_init "$DOTFILES_DIR"
 
 # --- PREFLIGHT CHECKS ---
 preflight_checks() {

@@ -27,6 +27,58 @@
       '';
     };
 
+    # Programs the desktop invokes at runtime. Declared here, next to the
+    # options both scopes read, because the two scopes install them through
+    # different mechanisms: the NixOS module as environment.systemPackages
+    # (so they survive a login without a user session), the home-manager
+    # module as home.packages. install.sh deploys home-manager alone (see
+    # modules/home-manager/packages.nix), so a list that only lived in the
+    # NixOS module left a session with a compositor and nothing to run.
+    desktopPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = with pkgs; [
+        # Compositor companions and the session itself.
+        hypridle
+        hyprlock
+        hyprsunset
+        hyprpicker
+        # Bar, menu, notifications and the dynamic island.
+        waybar
+        quickshell
+        rofi
+        libnotify
+        # Terminal and file manager: hyprland.lua binds both by name.
+        kitty
+        thunar
+        # Screenshots, clipboard and screen sharing.
+        grim
+        slurp
+        swappy
+        cliphist
+        wl-clipboard
+        wf-recorder
+        # Media and wallpaper.
+        mpv
+        mpvpaper
+        awww
+        # Hardware and power control used by the helper scripts.
+        brightnessctl
+        pamixer
+        playerctl
+        # Small utilities the scripts and binds reach for.
+        socat
+        jq
+        inotify-tools
+        psmisc
+      ];
+      description = ''
+        Programs the desktop needs on PATH. Installed as
+        environment.systemPackages by the NixOS module and as home.packages
+        by the home-manager module, so a standalone install gets the same
+        working desktop as a system-wide one.
+      '';
+    };
+
     monitors.seedText = lib.mkOption {
       type = lib.types.lines;
       default = "monitor=,preferred,auto,1";

@@ -4,6 +4,7 @@
 {
   imports = [
     ../options.nix
+    ./packages.nix
     ./dotfiles.nix
     ./helpers.nix
     ./services.nix

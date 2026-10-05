@@ -18,6 +18,30 @@ docs/adr/0001-nixos-flake-layout.md first for the why of each decision.
 
 ## Install on a NixOS machine
 
+The installer detects NixOS and does all of this for you:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+```
+
+It has two halves, because the desktop has two halves:
+
+- **User scope** — a standalone home-manager flake in
+  `~/.config/home-manager`: dotfiles, helper scripts, user units, and the
+  desktop programs as `home.packages`. No sudo.
+- **System scope** — `modules/nixos` wired into `/etc/nixos` for what cannot
+  live in `$HOME`: the SDDM astronaut greeter, Nerd Fonts, portals, PipeWire
+  with rnnoise, your groups, the Hyprland session and its companions.
+
+The system half is a generated `/etc/nixos/flake.nix` that imports your
+`configuration.nix` as a module, so that file is never rewritten. nixpkgs is
+pinned to the release you installed with, not `nixos-unstable`: installing a
+desktop should not drag the whole system across a channel jump. Use
+`--no-system` (or `RHYTHM_NO_SYSTEM=1`) for the user half only, and
+`RHYTHM_NIXOS_CHANNEL` to pin a different branch.
+
+To drive it by hand instead:
+
 ```bash
 # 1. Take NixOS/nixpkgs/nixos-unstable as your base at install time.
 # 2. Copy hosts/asus/configuration.nix and homes/rhythm/home.nix,

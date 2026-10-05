@@ -28,6 +28,12 @@ in
             Description = "Clipboard history watcher (cliphist over wl-paste)";
             # Source cliphist.service: After=default.target.
             After = [ "default.target" ];
+            # Same reasoning as waybar-island below: default.target comes
+            # before the compositor, so the daemon waits for the Wayland
+            # socket instead of exiting. A start-limit-hit here degrades the
+            # whole user session, which home-manager reports on every
+            # activation, so restarts stay unlimited.
+            StartLimitIntervalSec = 0;
           };
           Service = {
             Environment = [ "PATH=${lib.makeBinPath (with pkgs; [ cliphist wl-clipboard ])}" ];

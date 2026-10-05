@@ -29,14 +29,14 @@ trap 'handle_error $LINENO' ERR
 DOTFILES_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")
 
 # NixOS does not use the Arch steps below at all. Instead of stopping with
-# directions, this same command deploys the desktop by itself: it detects
-# user, host and GPU, writes a minimal system flake under /etc/nixos that
-# consumes flake.nix from this repo, and rebuilds. Three questions with
-# defaults at most; ENTER accepts everything.
+# directions, this same command installs the desktop only: it detects user
+# and GPU, writes a standalone home-manager flake under
+# ~/.config/home-manager, and activates it. No system rebuild, no sudo,
+# no /etc writes. Two questions with defaults at most; ENTER accepts all.
 if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
     install_nixos() {
         [ "$(id -u)" -eq 0 ] && { echo "ERROR: run as your user, not root."; exit 1; }
-        sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
+        # No sudo needed: desktop-only install, everything is user-owned.
 
         # git comes with NixOS most of the time; otherwise fetch it through
         # nix itself so this stays a one-command install.
@@ -63,9 +63,10 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
             echo "Using existing checkout at $repo."
         fi
 
-        # Lo minimo: usuario, maquina y grafica, todo con valor propuesto.
-        local user="$USER" host guess_gpu ans="" rel
-        host=$(hostname 2>/dev/null || echo rhythm-nixos)
+        # Desktop only: standalone home-manager, no system rebuild.
+        # No sudo, no /etc writes, no bootloader changes: the same modules
+        # as homes/rhythm/home.nix, activated for this user only.
+        local user="$USER" guess_gpu ans="" rel hm_dir
         rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || echo "25.11")
         guess_gpu="auto"
         for dev in /sys/bus/pci/devices/*; do
@@ -78,84 +79,53 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
         done
         if [ -t 0 ]; then
             read -rp "User [$user]: " ans && [ -n "$ans" ] && user="$ans"
-            read -rp "Hostname [$host]: " ans && [ -n "$ans" ] && host="$ans"
             read -rp "GPU (auto/nvidia/amd/intel) [$guess_gpu]: " ans && [ -n "$ans" ] && guess_gpu="$ans"
         fi
-        echo "Installing for user=$user host=$host gpu=$guess_gpu"
+        echo "Installing desktop for user=$user gpu=$guess_gpu"
+        [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to $HOME/.config/home-manager/flake.nix."
 
-        # Hardware config of THIS machine, generated, never written by hand.
-        sudo nixos-generate-config --show-hardware-config > /tmp/rhythm-hw.nix || exit 1
-        sudo cp -f /tmp/rhythm-hw.nix /etc/nixos/hardware-configuration.nix
-        rm -f /tmp/rhythm-hw.nix
-
-        # Backup of whatever /etc/nixos had, timestamped, never deleted.
-        if [ -f /etc/nixos/flake.nix ] || [ -f /etc/nixos/configuration.nix ]; then
+        # A home-manager consumer flake of this repo (main): self-contained,
+        # survives even if ~/hyprland is deleted later.
+        hm_dir="$HOME/.config/home-manager"
+        if [ -e "$hm_dir/flake.nix" ] || [ -e "$hm_dir/home.nix" ]; then
             local stamp
             stamp=$(date +%Y%m%d-%H%M%S)
-            sudo mkdir -p "/etc/nixos.bak-$stamp"
-            sudo cp -rf /etc/nixos/flake.nix /etc/nixos/flake.lock /etc/nixos/configuration.nix \
-                /etc/nixos/hardware-configuration.nix "/etc/nixos.bak-$stamp/" 2>/dev/null || true
-            echo "Previous /etc/nixos backed up to /etc/nixos.bak-$stamp."
+            mkdir -p "$HOME/.config/home-manager.bak-$stamp"
+            cp -rf "$hm_dir/flake.nix" "$hm_dir/flake.lock" "$hm_dir/home.nix" \
+                "$HOME/.config/home-manager.bak-$stamp/" 2>/dev/null || true
+            echo "Previous home-manager config backed up to ~/.config/home-manager.bak-$stamp."
         fi
-
-        # Bootloader carried over from how THIS machine boots: without it the
-        # rebuilt system would not start. EFI -> systemd-boot, BIOS -> grub
-        # on the disk holding /.
-        local boot_snippet rootdisk
-        if [ -d /sys/firmware/efi ]; then
-            boot_snippet='boot.loader.systemd-boot.enable = true;
-          boot.loader.efi.canTouchEfiVariables = true;'
-        else
-            rootdisk=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -1)
-            [ -n "$rootdisk" ] || rootdisk="sda"
-            boot_snippet='boot.loader.grub.enable = true;
-          boot.loader.grub.device = "/dev/'"$rootdisk"'";'
-        fi
-
-        # Consumer flake: pins nixpkgs + home-manager + this repo (main) and
-        # applies the desktop modules with the detected values.
-        sudo tee /etc/nixos/flake.nix > /dev/null << EOF2
+        mkdir -p "$hm_dir"
+        cat > "$hm_dir/flake.nix" << EOF2
 {
+  description = "Rhythm Hyprland desktop (standalone home-manager)";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rhythm.url = "github:rhythmcreative/hyprland";
+    hyprland = {
+      url = "github:rhythmcreative/hyprland";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
-  outputs = { self, nixpkgs, home-manager, rhythm }: {
-    nixosConfigurations.$host = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
+  outputs = { nixpkgs, home-manager, hyprland, ... }: {
+    homeConfigurations."$user" = home-manager.lib.homeManagerConfiguration {
+      pkgs = import nixpkgs {
+        system = "x86_64-linux";
+        overlays = [ hyprland.overlays.default ];
+      };
       modules = [
-        rhythm.nixosModules.rhythm-hyprland
-        home-manager.nixosModules.home-manager
-        ./hardware-configuration.nix
+        hyprland.homeManagerModules.rhythm-hyprland
         {
-          $boot_snippet
-          networking.hostName = "$host";
-          system.stateVersion = "$rel";
-          # Flakes on, persistently, so later rebuilds just work.
-          nix.settings.experimental-features = [ "nix-command" "flakes" ];
+          home.username = "$user";
+          home.homeDirectory = "/home/$user";
+          home.stateVersion = "$rel";
           rhythm = {
             enable = true;
             username = "$user";
             gpu = "$guess_gpu";
-          };
-          users.users.$user = {
-            isNormalUser = true;
-            extraGroups = [ "wheel" "networkmanager" ];
-          };
-          home-manager = {
-            useGlobalPkgs = true;
-            useUserPackages = true;
-            users.$user = {
-              imports = [ rhythm.homeManagerModules.rhythm-hyprland ];
-              home.username = "$user";
-              home.homeDirectory = "/home/$user";
-              home.stateVersion = "$rel";
-              rhythm = { enable = true; username = "$user"; };
-            };
           };
         }
       ];
@@ -163,16 +133,14 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
   };
 }
 EOF2
-        [ "$guess_gpu" = "nvidia" ] && echo "NOTE: NVIDIA needs unfree. If the build refuses, add nixpkgs.config.allowUnfree = true; to the generated module above."
 
-        echo "Rebuilding the system (downloads several GB the first time)..."
-        # NIX_CONFIG does not survive sudo, and /etc/nix/nix.conf is
-        # read-only on NixOS, so pass flakes explicitly for this first
-        # rebuild. The new system enables them permanently via nix.settings.
-        sudo NIX_CONFIG="experimental-features = nix-command flakes" \
-            nixos-rebuild switch --flake "/etc/nixos#$host" || exit 1
+        echo "Activating the desktop (downloads several GB the first time)..."
+        local act
+        act=$(nix --extra-experimental-features "nix-command flakes" build --no-link --print-out-paths \
+            "$hm_dir#homeConfigurations.\"$user\".activationPackage") || exit 1
+        "$act/activate" -b backup || exit 1
         echo ""
-        echo "Done. Reboot to enter the Rhythm Hyprland desktop."
+        echo "Done. Log out, switch to a TTY (Ctrl+Alt+F2) and run Hyprland to enter the desktop."
     }
     install_nixos
     exit $?

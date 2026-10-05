@@ -40,6 +40,15 @@ in
     # itself is shared with the home-manager scope (see
     # rhythm.desktopPackages in modules/options.nix) so both install paths
     # end up with the same working desktop.
-    environment.systemPackages = cfg.desktopPackages;
+    #
+    # gum and fzf are appended here instead of living in desktopPackages:
+    # install.sh puts gum in ~/.nix-profile, and home.packages + profile
+    # would both ship share/zsh/site-functions/_gum, which aborts the whole
+    # activation with a file-collision error. System packages never enter the
+    # user profile, so this is the conflict-free place for them.
+    environment.systemPackages = cfg.desktopPackages ++ (with pkgs; [
+      gum
+      fzf
+    ]);
   };
 }

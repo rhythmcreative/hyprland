@@ -70,12 +70,14 @@
         jq
         inotify-tools
         psmisc
-        # Installer visuals and menus: helpers and install.sh show messages
-        # through gum (choose/confirm/style) with plain-text fallback. On Arch
-        # pacman always provides it; on NixOS it must be installed, otherwise
-        # the styled prompts silently degrade and look like missing output.
-        gum
-        fzf
+        # NOTE: gum and fzf are deliberately NOT here. This list becomes
+        # home.packages, and the installer separately runs `nix profile
+        # install nixpkgs#gum` into ~/.nix-profile. Both would provide
+        # share/zsh/site-functions/_gum, and two packages owning the same
+        # file in one profile aborts the whole home-manager activation
+        # ("An existing package already provides the following file").
+        # The NixOS module adds them to environment.systemPackages instead,
+        # which never enters the user profile.
       ];
       description = ''
         Programs the desktop needs on PATH. Installed as

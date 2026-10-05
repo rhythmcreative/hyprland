@@ -72,7 +72,18 @@ rhythm_presentation_init() {
     if (( PADDING_LEFT < 0 )); then
         PADDING_LEFT=0
     fi
+    # A wide logo in a narrow terminal used to push every message to the right
+    # edge and off screen, which read as "nothing shows". Cap the indent and
+    # reserve the columns it takes so long lines wrap inside the visible area.
+    if (( PADDING_LEFT > 8 )); then
+        PADDING_LEFT=8
+    fi
     PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
+    # Width every message is wrapped to, so no line spills past the terminal.
+    CONTENT_WIDTH=$((TERM_WIDTH - PADDING_LEFT))
+    if (( CONTENT_WIDTH < 40 )); then
+        CONTENT_WIDTH=40
+    fi
 
     # Tokyo Night theme for gum (Omarchy style)
     export GUM_CONFIRM_PROMPT_FOREGROUND="6"     # Cyan
@@ -93,14 +104,14 @@ rhythm_presentation_init() {
 present_banner() {
     clear_logo
     echo ""
-    gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "$1" 2>/dev/null \
+    gum style --foreground 2 --bold --width "${CONTENT_WIDTH:-80}" --padding "0 0 1 $PADDING_LEFT" -- "$1" 2>/dev/null \
         || printf "%s\033[1;32m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
-    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "$2" 2>/dev/null \
+    gum style --foreground 7 --width "${CONTENT_WIDTH:-80}" --padding "0 0 1 $PADDING_LEFT" -- "$2" 2>/dev/null \
         || printf "%s\033[0;37m%s\033[0m\n" "$PADDING_LEFT_SPACES" "$2"
     # Where the full output went. nix prints its own lines and gum draws over
     # the terminal, so on a run that ends with a clear screen there is no way
     # back to what happened; the log is the only record.
-    [ -n "${LOG_FILE:-}" ] && printf "%s\033[0;90m  → Full log: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$LOG_FILE"
+    [ -n "${LOG_FILE:-}" ] && rhythm_msg "8" "" "  → Full log:" "$LOG_FILE"
     return 0
 }
 
@@ -108,32 +119,53 @@ clear_logo() {
     printf "\033[H\033[2J"
     if [[ -f "$LOGO_PATH" ]]; then
         if command -v gum >/dev/null 2>&1; then
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+            gum style --foreground 2 --width "${CONTENT_WIDTH:-80}" --padding "1 0 0 $PADDING_LEFT" -- "$(<"$LOGO_PATH")"
         else
             cat "$LOGO_PATH"
         fi
     fi
 }
 
+# Every message goes through gum with the same width and indent, so the whole
+# run lines up in one column. step_item/step_ok/step_warn used to be raw
+# printf: they printed without gum styling and, being longer than the
+# terminal, their wrapped continuation started at column 0, which is what
+# made parts of the NixOS output look flush left and "not gum".
 section() {
     echo ""
     if command -v gum >/dev/null 2>&1; then
-        gum style --foreground 6 --bold --padding "0 0 0 $PADDING_LEFT" ":: $1"
+        gum style --foreground 6 --bold --width "${CONTENT_WIDTH:-80}" --padding "0 0 0 $PADDING_LEFT" -- ":: $1"
     else
         printf "%s\033[1;36m:: %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
     fi
 }
 
+# rhythm_msg <ansi-color> <ansi-bold> <prefix> <text>
+# gum does the padding and the wrapping; the printf fallback keeps the
+# indent for terminals where gum is missing or fails.
+rhythm_msg() {
+    local color="$1" bold="$2" prefix="$3" text="$4"
+    if command -v gum >/dev/null 2>&1; then
+        local args=(style --width "${CONTENT_WIDTH:-80}" --padding "0 0 0 $PADDING_LEFT")
+        [ -n "$color" ] && args+=(--foreground "$color")
+        [ -n "$bold" ] && args+=(--bold)
+        gum "${args[@]}" -- "$prefix $text" 2>/dev/null \
+            || printf "%s%s%s%s\033[0m\n" "$PADDING_LEFT_SPACES" "$bold" "$prefix $text" "$color"
+    else
+        printf "%s%s%s%s%s\033[0m\n" "$PADDING_LEFT_SPACES" "$bold" "$prefix" "$text" "$color"
+    fi
+}
+
 step_item() {
-    printf "%s\033[90m  → %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    rhythm_msg "7" "" "  →" "$1"
 }
 
 step_ok() {
-    printf "%s\033[32m  [OK] %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    rhythm_msg "2" "" "  [OK]" "$1"
 }
 
 step_warn() {
-    printf "%s\033[33m  ! %s\033[0m\n" "$PADDING_LEFT_SPACES" "$1"
+    rhythm_msg "3" "" "  !" "$1"
 }
 
 confirm_prompt() {
@@ -165,9 +197,13 @@ nixos_spin() {
     local msg="$1"; shift
     [ "${1:-}" = "--" ] && shift
     if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
-        gum spin --spinner dot --title "$msg" --padding "0 0 0 $PADDING_LEFT" -- "$@"
+        gum spin --spinner dot --title "$msg" --width "${CONTENT_WIDTH:-80}" \
+            --padding "0 0 0 $PADDING_LEFT" -- "$@"
     else
-        step_item "$msg (can take several minutes; live log: ${LOG_FILE:-/tmp/hyprland-install.log})"
+        # The hint goes on its own line: appended to the message it ran past
+        # the terminal width and wrapped back to column 0.
+        step_item "$msg"
+        step_item "This can take several minutes. Live log: ${LOG_FILE:-/tmp/hyprland-install.log}"
         "$@"
     fi
 }
@@ -293,11 +329,11 @@ EOF
         # git comes with NixOS most of the time; otherwise fetch it through
         # nix itself so this stays a one-command install.
         if ! command -v git >/dev/null 2>&1; then
-            echo "Installing git through nix..."
+            step_item "Installing git through nix..."
             NIX_CONFIG="experimental-features = nix-command flakes" \
                 nix --extra-experimental-features "nix-command flakes" \
                 profile install nixpkgs#git 2>/dev/null || {
-                    echo "ERROR: could not get git. Install it and retry."; exit 1; }
+                    step_warn "ERROR: could not get git. Install it and retry."; exit 1; }
             export PATH="$HOME/.nix-profile/bin:$PATH"
         fi
 
@@ -316,12 +352,12 @@ EOF
         fi
 
         if ! command -v gum >/dev/null 2>&1; then
-            echo "Installing gum for the installer visuals (user profile only)..."
+            step_item "Installing gum for the installer visuals (user profile only)..."
             if nixos_spin "Fetching gum..." -- \
                 bash -c "nix --extra-experimental-features 'nix-command flakes' profile install nixpkgs#gum >>'$LOG_FILE' 2>&1"; then
                 export PATH="$HOME/.nix-profile/bin:$PATH"
             else
-                echo "NOTE: gum is unavailable, continuing with plain prompts."
+                step_warn "gum is unavailable, continuing with plain prompts."
             fi
         fi
         # gum arrived after the geometry was measured: re-measure so the
@@ -519,8 +555,27 @@ EOF2
         }
         # The activate script takes no backup flag (only --driver-version):
         # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
-        nixos_spin "Linking your dotfiles, helpers and user services..." -- \
-            env HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
+        # Activation is where a profile file collision surfaces (two packages
+        # owning the same share/zsh/site-functions file aborts the whole run),
+        # and the raw nix output for that is a wall of store paths. Detect it
+        # and print the one command that fixes it instead of just dying.
+        if ! nixos_spin "Linking your dotfiles, helpers and user services..." -- \
+            env HOME_MANAGER_BACKUP_EXT=backup "$act/activate"; then
+            if grep -q "already provides the following file" "$LOG_FILE" 2>/dev/null; then
+                local conflict
+                conflict=$(grep -o '/nix/store/[^"]*site-functions/[^"]*' "$LOG_FILE" 2>/dev/null | head -1 | xargs -r basename)
+                step_warn "Two packages in your profile provide the same file${conflict:+ ($conflict)}."
+                step_warn "This is the gum completion installed both by this installer"
+                step_warn "(nix profile) and by home-manager. Fix it with:"
+                echo ""
+                step_item "nix profile remove gum"
+                echo ""
+                step_item "then re-run this installer; it puts gum back only if missing."
+            fi
+            step_warn "Activation failed. Last lines of $LOG_FILE:"
+            tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+            exit 1
+        fi
         echo ""
         # GitHub CLI + OpenCode at user level (nix profile, no rebuild).
         section "Developer tools (gh, opencode)"
@@ -563,9 +618,11 @@ EOF2
         present_banner "Finished installing" \
             "Log out (or reboot) and pick Hyprland in the login screen."
         if [ "$system_status" = "done" ]; then
-            printf "%s\033[0;37m  → Update later: cd /etc/nixos && sudo nix flake update && sudo nixos-rebuild switch\033[0m\n" "$PADDING_LEFT_SPACES"
+            rhythm_msg "7" "" "  → Update later:" \
+                "cd /etc/nixos && sudo nix flake update && sudo nixos-rebuild switch"
         fi
-        printf "%s\033[0;37m  → Update your desktop only: ~/.config/home-manager, then home-manager switch --flake ~/.config/home-manager#%s\033[0m\n" "$PADDING_LEFT_SPACES" "$user"
+        rhythm_msg "7" "" "  → Update your desktop only:" \
+            "~/.config/home-manager, then home-manager switch --flake ~/.config/home-manager#$user"
         echo ""
     }
 

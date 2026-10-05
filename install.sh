@@ -134,21 +134,30 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
 EOF2
 
         echo "Activating the desktop (downloads several GB the first time)..."
-        # Activation talks to systemd --user and dconf over the user bus.
-        # Under 'su'/'sudo -i' there is no user manager, and everything
-        # fails later with a cryptic GDBus ServiceUnknown. Fail here instead.
+        # Activation talks to systemd --user over the user bus. Two traps:
+        # 1. Under 'su'/'sudo -i' there is no user manager at all.
+        # 2. Worse, the chain inherits root's XDG_RUNTIME_DIR=/run/user/0,
+        #    so the bus looks reachable but belongs to root: activation
+        #    then dies with cryptic GDBus ServiceUnknown. Drop foreign
+        #    runtime dirs before doing anything.
+        if [ -n "${XDG_RUNTIME_DIR:-}" ] \
+            && [ "$(stat -c %u "$XDG_RUNTIME_DIR" 2>/dev/null || echo none)" != "$(id -u)" ]; then
+            unset XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+        fi
         if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then
             export XDG_RUNTIME_DIR="/run/user/$(id -u)"
         fi
         if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "${XDG_RUNTIME_DIR:-/nonexistent}/bus" ]; then
             export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
         fi
-        if ! systemctl --user show-environment >/dev/null 2>&1; then
+        if ! systemctl --user show-environment >/dev/null 2>&1 \
+            || [ "${XDG_RUNTIME_DIR:-}" != "/run/user/$(id -u)" ]; then
             echo "ERROR: no user systemd/D-Bus session for $user."
             echo "Did you get here via 'su' or 'sudo -i'? That starts no user"
-            echo "manager. Log in directly (TTY or display manager) and retry;"
-            echo "on headless boxes 'loginctl enable-linger $user' (as root,"
-            echo "once) plus a fresh login also works."
+            echo "manager (or leaves you on root's bus). Log in directly"
+            echo "(TTY or display manager) and retry; on headless boxes"
+            echo "'loginctl enable-linger $user' (as root, once) plus a fresh"
+            echo "login also works."
             exit 1
         fi
         local act

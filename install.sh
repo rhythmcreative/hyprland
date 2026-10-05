@@ -252,9 +252,12 @@ EOF2
     # Only touches classic /etc/nixos/configuration.nix setups with no
     # display manager yet; anything else gets instructions, not edits.
     rhythm_setup_sddm() {
-        if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null; then
+        if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null \
+            && [ "${RHYTHM_SDDM_FORCE:-0}" != "1" ]; then
             nixos_item "A display manager is already configured in /etc/nixos: leaving it alone."
             nixos_item "If it shows no Hyprland entry, add programs.hyprland.enable = true; yourself."
+            nixos_item "To replace it with SDDM anyway: RHYTHM_SDDM=1 RHYTHM_SDDM_FORCE=1 (rebuild may"
+            nixos_item "fail if both DMs conflict; your configuration.nix backup lets you revert)."
             return 0
         fi
         if [ ! -f /etc/nixos/configuration.nix ]; then
@@ -276,15 +279,40 @@ EOF2
   programs.hyprland.xwayland.enable = true;
 }
 EOF2
-        if grep -q "^[[:space:]]*imports = \[" /etc/nixos/configuration.nix; then
-            sudo sed -i 's|^\([[:space:]]*imports = \[[^]]*\)|\1 ./rhythm-sddm.nix|' /etc/nixos/configuration.nix
-        else
-            echo "ERROR: no imports = [ list found in configuration.nix; add ./rhythm-sddm.nix by hand."
-            exit 1
+        # Patch the imports list (single-line or multi-line). sed exits 0
+        # even when nothing matches, so verify the import really landed.
+        if ! grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix; then
+            local patched
+            patched="$(mktemp)"
+            sudo awk 'done { print; next }
+                /^[[:space:]]*imports =[[:space:]]*$/ { print; pending=1; next }
+                pending && /^[[:space:]]*\[/ {
+                    if (/\]/) { sub(/\]/, " ./rhythm-sddm.nix ]"); print }
+                    else { print; print "    ./rhythm-sddm.nix" }
+                    pending=0; done=1; next
+                }
+                /^[[:space:]]*imports = \[/ {
+                    if (/\]/) { sub(/\]/, " ./rhythm-sddm.nix ]") }
+                    print
+                    if (!/\]/) { print "    ./rhythm-sddm.nix" }
+                    done=1
+                    next
+                }
+                { pending=0; print }' \
+                /etc/nixos/configuration.nix > "$patched" \
+                && sudo cp -f "$patched" /etc/nixos/configuration.nix
+            rm -f "$patched"
         fi
+        grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix \
+            || { echo "ERROR: could not add ./rhythm-sddm.nix to imports; add it by hand."; exit 1; }
         nixos_section "Rebuilding once to enable SDDM"
         sudo nixos-rebuild switch || exit 1
-        nixos_ok "Done. Reboot and pick the Hyprland session in SDDM."
+        nixos_ok "SDDM enabled. Starting it now (no reboot needed)..."
+        if sudo systemctl restart display-manager.service 2>/dev/null; then
+            nixos_ok "SDDM is up. Pick the Hyprland session at login."
+        else
+            nixos_item "Could not start it live; reboot and pick Hyprland in SDDM."
+        fi
     }
     install_nixos
     exit $?

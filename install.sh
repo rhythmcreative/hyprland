@@ -121,6 +121,12 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
           home.username = "$user";
           home.homeDirectory = "/home/$user";
           home.stateVersion = "$rel";
+          # No dconf bus service exists in a standalone install (on NixOS
+          # only programs.dconf.enable provides it, system-wide), so the
+          # dconfSettings activation step would die with ServiceUnknown.
+          # Theme/font/cursor still land via GTK settings.ini; re-enable
+          # this if you ever add programs.dconf to your system config.
+          dconf.enable = false;
           rhythm = {
             enable = true;
             username = "$user";

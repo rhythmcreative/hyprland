@@ -70,6 +70,12 @@
         jq
         inotify-tools
         psmisc
+        # Installer visuals and menus: helpers and install.sh show messages
+        # through gum (choose/confirm/style) with plain-text fallback. On Arch
+        # pacman always provides it; on NixOS it must be installed, otherwise
+        # the styled prompts silently degrade and look like missing output.
+        gum
+        fzf
       ];
       description = ''
         Programs the desktop needs on PATH. Installed as

@@ -134,6 +134,12 @@ if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-
 EOF2
 
         echo "Activating the desktop (downloads several GB the first time)..."
+        # Always track this repo's latest main. nix reuses flake.lock
+        # silently: without this, a lock from a previous run keeps building
+        # the old modules forever (e.g. fixes never arrive). Only our own
+        # input moves; nixpkgs/home-manager stay pinned by the lock.
+        nix --extra-experimental-features "nix-command flakes" flake lock \
+            --update-input hyprland "$hm_dir" || exit 1
         # Activation talks to systemd --user over the user bus. Two traps:
         # 1. Under 'su'/'sudo -i' there is no user manager at all.
         # 2. Worse, the chain inherits root's XDG_RUNTIME_DIR=/run/user/0,

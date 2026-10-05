@@ -241,6 +241,30 @@ EOF2
         # existing files are preserved via HOME_MANAGER_BACKUP_EXT instead.
         HOME_MANAGER_BACKUP_EXT=backup "$act/activate" || exit 1
         echo ""
+        # GitHub CLI + OpenCode at user level (nix profile, no rebuild).
+        nixos_section "Developer tools (gh, opencode)"
+        for tool in gh opencode; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+                nixos_item "Installing $tool through nix profile..."
+                nix --extra-experimental-features "nix-command flakes" \
+                    profile install "nixpkgs#$tool" 2>/dev/null \
+                    || nixos_item "Could not install $tool, skipping."
+                export PATH="$HOME/.nix-profile/bin:$PATH"
+            fi
+        done
+        if command -v gh >/dev/null 2>&1; then
+            if gh auth status >/dev/null 2>&1; then
+                nixos_ok "gh already authenticated."
+            elif nixos_can_ask; then
+                nixos_item "Authenticate GitHub CLI (browser/device flow)..."
+                gh auth login || nixos_item "Skipped; run 'gh auth login' later."
+            else
+                nixos_item "Run 'gh auth login' later to authenticate GitHub CLI."
+            fi
+        fi
+        command -v opencode >/dev/null 2>&1 \
+            && nixos_ok "opencode ready ($(opencode --version 2>/dev/null | head -1))." \
+            || true
         # SDDM is part of the NixOS install: graphical login comes up
         # automatically (skip with RHYTHM_NO_SDDM=1).
         if [ "${RHYTHM_NO_SDDM:-0}" = "1" ]; then
@@ -255,10 +279,12 @@ EOF2
     # Only touches classic /etc/nixos/configuration.nix setups with no
     # display manager yet; anything else gets instructions, not edits.
     rhythm_setup_sddm() {
-        # Idempotent: already set up by a previous run.
+        # Idempotent: already set up by a previous run (module with SSH too).
         if grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix 2>/dev/null \
-            && systemctl is-enabled display-manager.service >/dev/null 2>&1; then
-            nixos_ok "SDDM already configured. Log out and pick the Hyprland session."
+            && grep -q 'services\.openssh\.enable' /etc/nixos/rhythm-sddm.nix 2>/dev/null \
+            && systemctl is-enabled display-manager.service >/dev/null 2>&1 \
+            && systemctl is-enabled sshd.service >/dev/null 2>&1; then
+            nixos_ok "SDDM + SSH already configured. Log out and pick the Hyprland session."
             return 0
         fi
         if grep -rq "displayManager\.\(sddm\|gdm\|lightdm\|greetd\|ly\)" /etc/nixos/ 2>/dev/null \
@@ -275,6 +301,7 @@ EOF2
             echo '  services.displayManager.sddm.enable = true;'
             echo '  services.displayManager.sddm.wayland.enable = true;'
             echo '  programs.hyprland.enable = true;'
+            echo '  services.openssh.enable = true;'
             return 0
         fi
         sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
@@ -286,6 +313,8 @@ EOF2
   services.displayManager.sddm.wayland.enable = true;
   programs.hyprland.enable = true;
   programs.hyprland.xwayland.enable = true;
+  # SSH server on by default (port 22 opens automatically).
+  services.openssh.enable = true;
 }
 EOF2
         # Patch the imports list (single-line or multi-line). sed exits 0
@@ -314,13 +343,13 @@ EOF2
         fi
         grep -q '\./rhythm-sddm\.nix' /etc/nixos/configuration.nix \
             || { echo "ERROR: could not add ./rhythm-sddm.nix to imports; add it by hand."; exit 1; }
-        nixos_section "Rebuilding once to enable SDDM"
+        nixos_section "Rebuilding once to enable SDDM + SSH"
         sudo nixos-rebuild switch || exit 1
-        nixos_ok "SDDM enabled. Starting it now (no reboot needed)..."
-        if sudo systemctl restart display-manager.service 2>/dev/null; then
-            nixos_ok "SDDM is up. Pick the Hyprland session at login."
+        nixos_ok "SDDM + SSH enabled. Starting them now (no reboot needed)..."
+        if sudo systemctl restart display-manager.service sshd.service 2>/dev/null; then
+            nixos_ok "SDDM is up (pick Hyprland at login) and sshd listens on port 22."
         else
-            nixos_item "Could not start it live; reboot and pick Hyprland in SDDM."
+            nixos_item "Could not start them live; reboot and pick Hyprland in SDDM."
         fi
     }
     install_nixos

@@ -6,31 +6,6 @@ final: prev: {
   greeterMonitor = final.callPackage ../packages/greeter-monitor { };
   pywalSyncMono = final.callPackage ../packages/pywal-sync-mono { };
 
-  # Prebuilt Tela Circle icon theme with all color variants included.
-  # Avoids compiling 400k+ files and symlinks locally, installing in seconds.
-  tela-circle-icon-theme = final.stdenvNoCC.mkDerivation {
-    pname = "tela-circle-icon-theme";
-    version = "2026-07-07-all";
-    src = final.fetchzip {
-      url = "https://github.com/rhythmcreative/hyprland/releases/download/v0.25/tela-circle-icon-theme-all.tar.gz";
-      hash = "sha256-zACGW9Amy00NwWHVwQ+Eu2FnE9E4+xfFzEDvaiXXBJI=";
-      stripRoot = false;
-    };
-    propagatedBuildInputs = [
-      final.adwaita-icon-theme
-      final.kdePackages.breeze-icons
-      final.hicolor-icon-theme
-    ];
-    dontDropIconThemeCache = true;
-    dontWrapQtApps = true;
-    installPhase = ''
-      runHook preInstall
-      mkdir -p "$out/share/icons"
-      cp -a . "$out/share/icons/"
-      runHook postInstall
-    '';
-  };
-
   # Config trees that carry shell scripts, wrapped so their shebangs get
   # patched at build time. See packages/patched-dotfiles for why this is
   # needed and why it is not done with sed on the deployed copies.

@@ -23,22 +23,6 @@ in
       enable = true;
       iconTheme = {
         name = "Tela-circle";
-        # pkgs.tela-circle-icon-theme, NO una ruta escrita a mano.
-        #
-        # Antes esto era un runCommand que copiaba desde el store path
-        # /nix/store/9r7s5syzq8lkap1ykxsm7r6h84g5ms4f-tela-circle-icon-theme-...
-        # Ese path solo existia en la maquina donde se escribio: en cualquier
-        # otra, o tras un gc, no esta. Y no fallaba, que es lo grave. La
-        # interpolacion de una ruta inexistente no da error al evaluar, el
-        # glob del for no itera sobre nada, y el runCommand se llevaba una
-        # paquete VACIO: cero ficheros, sin index.theme y sin iconos. El
-        # build entero salia verde mientras home-manager desplegaba un tema de
-        # iconos con 0 entradas, que es exactamente "la sesion sale sin tema".
-        #
-        # El problema de fondo que ese runCommand intentaba esquivar (tres
-        # symlinks colgantes que hacen fallar noBrokenSymlinks) ya lo resuelve
-        # el overlay, en overlays/default.nix: borra los symlinks rotos tras
-        # instalar. Asi que aqui solo hace falta pedir el paquete ya corregido.
         package = pkgs.tela-circle-icon-theme;
       };
       # gtk/.themes/PywalSync-Mono existe en el repo pero ningun modulo lo

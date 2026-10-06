@@ -26,6 +26,28 @@ let
   # the equivalent has to be done in the build.
   vendoredTheme = ../../sddm/sddm-astronaut-theme;
 
+  cursorName = "Bibata-Modern-Ice";
+
+  # SDDM's own FacesDir ships only .face.icon and root.face.icon, which are
+  # X11 core-cursor aliases: this greeter is Wayland and Qt resolves cursor
+  # themes as FacesDir/<name>/{cursor.theme,index.theme,cursors/}, so neither
+  # of those files is ever loaded here. Only the theme goes in.
+  #
+  # pkgs.sddm is not referenced on purpose -- it is not a top-level attribute
+  # in this nixpkgs, and reaching it through
+  # config.services.displayManager.sddm.package instead would make the sddm
+  # derivation depend on this directory while this directory depended on the
+  # sddm derivation.
+  cursorFaces = pkgs.runCommand "sddm-faces" { } ''
+    mkdir -p "$out"
+
+    if [ -d "${pkgs.bibata-cursors}/share/icons/${cursorName}" ]; then
+      cp -r "${pkgs.bibata-cursors}/share/icons/${cursorName}" "$out/"
+    else
+      echo "AVISO: no hay cursor ${cursorName} para el greeter" >&2
+    fi
+  '';
+
   # The wallpaper is a loose file inside another store path. A path written by
   # hand is not mounted into the build sandbox, so it is wrapped in its own
   # tiny derivation and declared as a build input; without that the copy in
@@ -160,7 +182,20 @@ in
     ];
 
     # Greeter cursor, matching the Bibata-Modern-Ice default on Arch.
-    services.displayManager.sddm.settings.General.CursorTheme = "Bibata-Modern-Ice";
+    services.displayManager.sddm.settings.General.CursorTheme = cursorName;
+
+    # CursorTheme is only a name: SDDM resolves it against FacesDir, and
+    # nixpkgs points that at SDDM's own directory, which ships just the two
+    # X core-cursor aliases (.face.icon, root.face.icon). Bibata-Modern-Ice is
+    # not in there, so the name resolves to nothing and Qt falls back to its
+    # default arrow with no warning -- a different cursor in the greeter than
+    # the one the session uses. The cursor package is already in the closure
+    # (home.pointerCursor pulls it in for the user), so this only has to point
+    # FacesDir at a directory that has the theme in it.
+    # FacesDir, not General: nixpkgs declares its default under [Theme], so
+    # setting it in [General] writes a second FacesDir into the file instead
+    # of replacing that one, and the later [Theme] line is the one SDDM uses.
+    services.displayManager.sddm.settings.Theme.FacesDir = "${cursorFaces}";
 
     # GNOME Keyring unlock at login, replacing the /etc/pam.d sed edits.
     # login uses the default ruleset, so the plain switch works there. sddm

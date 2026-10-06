@@ -232,7 +232,7 @@ glib
       # hyprland.lua never sees RHYTHM_PLUGIN_HYPRBARS and never runs
       # `hyprctl plugin load` on it, so no bar is drawn anywhere.
       hyprbars = lib.mkEnableOption "the hyprbars plugin, which adds title bars to windows" // {
-        default = true;
+        default = false;
       };
       asus = lib.mkEnableOption "ASUS ROG/TUF hardware integration (asusctl, supergfxctl, power curves)" // { default = false; };
       surface = lib.mkEnableOption "Microsoft Surface hardware integration (surface-control)" // { default = false; };

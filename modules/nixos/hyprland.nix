@@ -65,26 +65,26 @@ in
 
     # Navegador por defecto del sistema.
     #
-    # La opcion es xdg.mime y su tipo es un attrs (nombre de aplicacion ->
-    # lista de mimeTypes), no una lista. Escribe el
-    # [Default Applications] del mimeapps.list que leen GTK y xdg-utils.
-    #
-    # nixpkgs ya no trae programs.brave: se fusiono con programs.chromium, que
-    # solo gestiona politicas y noAssociations, asi que el navegador por
-    # defecto se declara aqui y las politicas mas abajo.
-    xdg.mime.defaultApplications = {
-      "${(if pkgs ? brave-origin then pkgs.brave-origin else pkgs.brave).name}.desktop" = [
-        "text/html"
-        "application/xhtml+xml"
-        "application/xml"
-        "application/rdf+xml"
-        "image/gif"
-        "image/jpeg"
-        "image/png"
-        "x-scheme-handler/http"
-        "x-scheme-handler/https"
-      ];
-    };
+    # La especificacion FreeDesktop asigna tipos MIME a ficheros .desktop
+    # en [Default Applications]. Escribe /etc/xdg/mimeapps.list.
+    xdg.mime.defaultApplications =
+      let
+        browserDesktop =
+          if pkgs ? brave-origin then [ "brave-origin.desktop" "brave-browser.desktop" ]
+          else "brave-browser.desktop";
+        browserMimes = [
+          "text/html"
+          "application/xhtml+xml"
+          "application/xml"
+          "application/rdf+xml"
+          "image/gif"
+          "image/jpeg"
+          "image/png"
+          "x-scheme-handler/http"
+          "x-scheme-handler/https"
+        ];
+      in
+      lib.genAttrs browserMimes (_: browserDesktop);
 
     # Politicas de Chromium para Brave: sin esto Brave sale pidiendo clave de
     # API, sin sincronizacion y con las notificaciones de oferta activadas.

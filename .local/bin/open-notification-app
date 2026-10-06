@@ -26,7 +26,12 @@ CANDIDATES="${KNOWN[$LOW]:-}"
 
 find_desktop() {
     local id="$1" d
-    for base in "$HOME/.local/share/applications" "/usr/share/applications" "/var/lib/flatpak/exports/share/applications"; do
+    local search_dirs=("$HOME/.local/share/applications" "/usr/share/applications" "/var/lib/flatpak/exports/share/applications")
+    IFS=':' read -ra xdirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    for xdir in "${xdirs[@]}"; do
+        [ -n "$xdir" ] && [ -d "$xdir/applications" ] && search_dirs+=("$xdir/applications")
+    done
+    for base in "${search_dirs[@]}"; do
         [ -d "$base" ] || continue
         for d in "$base/$id.desktop" "$base/"*.desktop; do
             [ -f "$d" ] || continue
@@ -46,13 +51,18 @@ done
 
 # Generic fuzzy match on Name= when no direct hit
 if [ -z "$DESK" ]; then
+    local fuzzy_dirs=("$HOME/.local/share/applications" "/usr/share/applications")
+    IFS=':' read -ra xdirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    for xdir in "${xdirs[@]}"; do
+        [ -n "$xdir" ] && [ -d "$xdir/applications" ] && fuzzy_dirs+=("$xdir/applications")
+    done
     while IFS= read -r d; do
         [ -f "$d" ] || continue
         if grep -qiE "^Name.*=.*$LOW" "$d" 2>/dev/null; then
             DESK="$d"
             break
         fi
-    done < <(find "$HOME/.local/share/applications" /usr/share/applications -maxdepth 1 -name '*.desktop' 2>/dev/null | sort)
+    done < <(find "${fuzzy_dirs[@]}" -maxdepth 1 -name '*.desktop' 2>/dev/null | sort -u)
 fi
 
 if [ -z "$DESK" ]; then

@@ -61,7 +61,9 @@ in
     # corre, asi que no se pierde nada.
     home.activation.pruneGeneratedGtkCss = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
       home="${config.home.homeDirectory}"
-      rm -f "$home/.config/gtk-3.0/gtk.css" "$home/.config/gtk-4.0/gtk.css"
+      rm -f "$home/.config/gtk-3.0/gtk.css" "$home/.config/gtk-4.0/gtk.css" \
+            "$home/.config/Kvantum/PywalAdapta/PywalAdapta.kvconfig" \
+            "$home/.config/mako/config"
     '';
 
     # El desplegue del directorio .themes, que gtk.theme.name por si solo no

@@ -76,10 +76,9 @@ home-manager switch --flake .#rhythm
 ## Deliberate differences from Arch
 
 - No live greeter recolouring: the login theme palette is baked in at
-  build time (the store is read-only). The desktop itself recolours live.
-- No OTA updater: updates are `nix flake update` plus `nixos-rebuild
-  switch`; rollbacks are boot generations. `system-ota`, `ota-updater`,
-  `ota-snapshot` and `rhythm-sddm-deploy` are not installed.
+- Unified OTA updater: `system-ota` and the `rhythm` CLI (and Dynamic Island tiles)
+  work seamlessly on NixOS, translating `system-ota update` to `home-manager switch`
+  and `nixos-rebuild switch`, and rollbacks to system generations.
 - No `hyprpm`: plugins come from nixpkgs pins.
 - `monitors.conf` is seeded once and never overwritten; edit it with
   nwg-displays as usual.

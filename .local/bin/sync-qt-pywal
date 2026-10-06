@@ -19,6 +19,7 @@ hex_to_rgb() {
 # Crear directorio si no existe
 mkdir -p ~/.config/Kvantum/PywalAdapta
 mkdir -p ~/.local/share/color-schemes
+[ -L ~/.config/Kvantum/PywalAdapta/PywalAdapta.kvconfig ] && rm -f ~/.config/Kvantum/PywalAdapta/PywalAdapta.kvconfig
 
 # Actualizar tema Kvantum con colores de PyWal
 cat > ~/.config/Kvantum/PywalAdapta/PywalAdapta.kvconfig << EOF

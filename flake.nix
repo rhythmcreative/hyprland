@@ -26,6 +26,9 @@
       homeManagerModules.default = ./modules/home-manager;
       homeManagerModules.rhythm-hyprland = ./modules/home-manager;
 
+      homeModules.default = ./modules/home-manager;
+      homeModules.rhythm-hyprland = ./modules/home-manager;
+
       packages.${system} = {
         inherit (pkgs) rhythmHelpers rustDock greeterMonitor;
       };

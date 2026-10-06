@@ -78,7 +78,7 @@ let
   };
 in
 {
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf (cfg.enable && cfg.features.sddm) {
     services.displayManager.sddm = {
       enable = true;
       wayland = {

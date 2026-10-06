@@ -20,7 +20,6 @@ let
   excluded = [
     "rust-dock" # packaged separately as rustDock (a committed Arch binary would not run: no /lib64 loader)
     "waybar_auto_hide" # precompiled Arch ELF binary; not used and fails on NixOS without /lib64 loader
-    "system-ota" # updates come from `nix flake update` plus `nixos-rebuild switch` (ADR-0005)
     "ota-updater"
     "ota-snapshot" # Arch timeshift/snapper layout; NixOS generations cover rollbacks
     "rhythm-sddm-deploy" # embodied by modules/nixos/sddm.nix

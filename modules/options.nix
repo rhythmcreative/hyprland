@@ -171,6 +171,13 @@ glib
         # de waybar lo abria, asi que sin esto ese bind no hacia nada.
         networkmanagerapplet
         gnome-network-displays
+        # Gestor de Bluetooth e interfaz de audio para Super+B y pavucontrol
+        blueman
+        pavucontrol
+        # Soporte completo de estilos Qt con Kvantum (Qt5 y Qt6) y qt5ct
+        kdePackages.qtstyleplugin-kvantum
+        libsForQt5.qtstyleplugin-kvantum
+        libsForQt5.qt5ct
         # NOTE: gum and fzf are deliberately NOT here. This list becomes
         # home.packages, and the installer separately runs `nix profile
         # install nixpkgs#gum` into ~/.nix-profile. Both would provide
@@ -215,6 +222,7 @@ glib
       "the RNNoise microphone filter chain in PipeWire" // { default = false; };
 
     features = {
+      sddm = lib.mkEnableOption "the SDDM login manager with astronaut theme" // { default = true; };
       island = lib.mkEnableOption "the quickshell dynamic island" // { default = true; };
       wallpaperWatcher = lib.mkEnableOption "the wallpaper monitor watcher" // { default = true; };
       rustDock = lib.mkEnableOption "rust-dock and its monitor watcher" // { default = true; };

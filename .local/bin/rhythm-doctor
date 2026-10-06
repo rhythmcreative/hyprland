@@ -35,6 +35,11 @@ PROBLEMS=0
 FIXED=0
 DRY="" [ "$MODE" = "fix" ] || DRY="echo would"
 
+IS_NIXOS=0
+if [ -e /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
+    IS_NIXOS=1
+fi
+
 ok()   { printf '  \033[32mok\033[0m    %s\n' "$1"; }
 warn() { printf '  \033[33mwarn\033[0m  %s\n' "$1"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; PROBLEMS=$((PROBLEMS+1)); }
@@ -57,6 +62,10 @@ fi
 # install-once: fija cada maquina en el release con el que se instalo.
 # ────────────────────────────────────────────────────────────────────────────
 check_xsetup() {
+    if [ "$IS_NIXOS" -eq 1 ]; then
+        ok "SDDM managed declaratively via NixOS module (modules/nixos/sddm.nix)"
+        return
+    fi
     # Ojo con las rutas: /etc/sddm.conf.d/xsetup.conf esta DESHABILITADO a
     # proposito (el login es Wayland, asi que Xsetup no debe correr), y el
     # script de verdad va a /etc/sddm/Xsetup. Mirar el otro path daria un FAIL
@@ -96,6 +105,17 @@ check_xsetup() {
 # pregunta por una tecla que no hace nada.
 # ────────────────────────────────────────────────────────────────────────────
 check_delivery() {
+    if [ "$IS_NIXOS" -eq 1 ]; then
+        local missing=0
+        for b in rhythm quickshell-island wallpaper-backend powermenu-with-monitor-detection system-ota; do
+            if [ ! -x "$HOME/.local/bin/$b" ] && ! command -v "$b" >/dev/null 2>&1; then
+                bad "helper not on PATH or in ~/.local/bin: $b"
+                missing=$((missing+1))
+            fi
+        done
+        [ "$missing" -eq 0 ] && ok "NixOS helpers and user environment are present"
+        return
+    fi
     local missing=0
 
     # Unidades de usuario: cada ExecStart tiene que existir y ser ejecutable.
@@ -194,6 +214,10 @@ check_local_edits() {
 # siempre, sin envoltorio y sin cursor, mientras el repo ya traia la
 # plantilla nueva.
 check_greeter() {
+    if [ "$IS_NIXOS" -eq 1 ]; then
+        ok "SDDM greeter configured declaratively via NixOS module"
+        return
+    fi
     if [ ! -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
         bad "rhythm-sddm-deploy is not in ~/.local/bin; the greeter can't be deployed"
         return
@@ -252,8 +276,8 @@ check_runtime() {
         bad "hypridle is not running (no locking, no screen off)"
     fi
 
-    if systemctl is-enabled --quiet sddm 2>/dev/null; then
-        ok "sddm starts at boot"
+    if systemctl is-enabled --quiet sddm 2>/dev/null || systemctl is-enabled --quiet display-manager 2>/dev/null; then
+        ok "display manager starts at boot"
     else
         bad "sddm is not enabled (no login screen after reboot)"
     fi

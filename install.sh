@@ -704,19 +704,33 @@ EOF
         # home-manager.bak-<timestamp> directory on every attempt.
         hm_dir="$HOME/.config/home-manager"
         mkdir -p "$hm_dir"
+        local channel="${RHYTHM_NIXOS_CHANNEL:-nixos-$rel}"
+        case "$channel" in
+            nixos-*) : ;;
+            *) channel="nixos-$rel" ;;
+        esac
+        local hm_url="github:nix-community/home-manager"
+        if [[ "$channel" =~ ^nixos-([0-9]+\.[0-9]+)$ ]]; then
+            hm_url="github:nix-community/home-manager/release-${BASH_REMATCH[1]}"
+        fi
+        local hyprland_url="${RHYTHM_FLAKE_URL:-github:rhythmcreative/hyprland}"
+        if [ -z "${RHYTHM_FLAKE_URL:-}" ] && [ "${RHYTHM_DEV:-0}" = "1" ] && [ -d "$repo/.git" ]; then
+            hyprland_url="path:$repo"
+        fi
+
         local new_flake
         new_flake=$(mktemp)
         cat > "$new_flake" << EOF2
 {
   description = "Rhythm Hyprland desktop (standalone home-manager)";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/$channel";
     home-manager = {
-      url = "github:nix-community/home-manager";
+      url = "$hm_url";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hyprland = {
-      url = "github:rhythmcreative/hyprland";
+      url = "$hyprland_url";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -938,12 +952,30 @@ EOF2
                 "  rhythm = { enable = true; username = \"$user\"; gpu = \"$guess_gpu\"; };"
             return 1
         fi
-        if grep -rq "displayManager\.\(gdm\|lightdm\|greetd\|ly\)" "$etc_dir/" 2>/dev/null \
-            && [ "${RHYTHM_SDDM_FORCE:-0}" != "1" ]; then
-            step_warn "Another display manager is configured in $etc_dir: leaving it alone."
-            step_item "The rest of the desktop is still installed. To use SDDM anyway:"
-            step_item "RHYTHM_SDDM_FORCE=1 (your configuration.nix backup reverts it)."
-            return 0
+
+        local sddm_feature="true"
+        if grep -rq "displayManager\.\(gdm\|lightdm\|greetd\|ly\)" "$etc_dir/" 2>/dev/null; then
+            if [ "${RHYTHM_SDDM_FORCE:-0}" = "1" ]; then
+                sddm_feature="true"
+            else
+                local prompt_sddm=false
+                if nixos_can_ask; then
+                    if timeout 60 gum confirm "Another display manager is configured in $etc_dir. Switch to SDDM (with Astronaut theme) as default?" </dev/tty 2>/dev/null; then
+                        prompt_sddm=true
+                    fi
+                fi
+                if [ "$prompt_sddm" = "true" ]; then
+                    sddm_feature="true"
+                else
+                    step_warn "Existing display manager detected: keeping it and disabling SDDM."
+                    sddm_feature="false"
+                fi
+            fi
+        fi
+
+        local hyprland_url="${RHYTHM_FLAKE_URL:-github:rhythmcreative/hyprland}"
+        if [ -z "${RHYTHM_FLAKE_URL:-}" ] && [ "${RHYTHM_DEV:-0}" = "1" ] && [ -d "$repo/.git" ]; then
+            hyprland_url="path:$repo"
         fi
 
         sudo -v || { echo "ERROR: sudo authentication needed."; exit 1; }
@@ -963,7 +995,7 @@ EOF2
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/$channel";
     hyprland = {
-      url = "github:rhythmcreative/hyprland";
+      url = "$hyprland_url";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -982,6 +1014,7 @@ EOF2
             gpu = "$guess_gpu";
             wallpaper.mode = "$wallpapers";
             features = {
+              sddm = $sddm_feature;
               flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
               asus = $([ "$is_asus" = "true" ] && echo true || echo false);
               surface = $([ "$is_surface" = "true" ] && echo true || echo false);

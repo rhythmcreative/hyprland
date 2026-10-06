@@ -31,6 +31,11 @@ LOG_FILE="/tmp/system-ota.log"
 
 mkdir -p "$CACHE_DIR" "$BACKUP_BASE"
 
+# Helper for NixOS detection
+is_nixos() {
+    [ -e /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }
+}
+
 # Helper for notifications
 send_notif() {
     local title="$1"
@@ -173,7 +178,11 @@ generate_status_json() {
     fi
 
     local kernel_ver
-    kernel_ver=$(uname -r 2>/dev/null || echo "Linux")
+    if is_nixos; then
+        kernel_ver="$(uname -r 2>/dev/null || echo "Linux") (NixOS)"
+    else
+        kernel_ver=$(uname -r 2>/dev/null || echo "Linux")
+    fi
 
     local last_checked
     last_checked=$(date "+%Y-%m-%d %H:%M")
@@ -507,6 +516,74 @@ cmd_update() {
         esac
     done
 
+    # NixOS declarative update handling
+    if is_nixos; then
+        echo "=== Rhythm Hyprland Update (NixOS) ==="
+        send_notif "System Update" "Starting NixOS update process..." "normal"
+        local OTA_PROBLEMS=0
+
+        # Update local git repository if cloned
+        if [ -d "$REPO_DIR/.git" ]; then
+            echo "[1/3] Updating local repository checkout ($REPO_DIR)..."
+            if ! git -C "$REPO_DIR" pull --ff-only origin main >> "$LOG_FILE" 2>&1; then
+                echo "  [!] Git pull skipped or had local modifications."
+            fi
+        fi
+
+        # Update home-manager user flake
+        local hm_dir="$HOME/.config/home-manager"
+        if [ -f "$hm_dir/flake.nix" ]; then
+            echo "[2/3] Updating user desktop environment (home-manager)..."
+            nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland "$hm_dir" >> "$LOG_FILE" 2>&1 || true
+            if command -v home-manager >/dev/null 2>&1; then
+                if ! home-manager switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] home-manager switch reported errors. Details in $LOG_FILE"
+                fi
+            else
+                if ! nix --extra-experimental-features "nix-command flakes" run home-manager -- switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] home-manager switch reported errors. Details in $LOG_FILE"
+                fi
+            fi
+        else
+            echo "[2/3] No standalone home-manager flake found at $hm_dir."
+        fi
+
+        # Update NixOS system flake if requested
+        local etc_dir="/etc/nixos"
+        if [ -f "$etc_dir/flake.nix" ] && [ "$system_packages" = true ]; then
+            echo "[3/3] Rebuilding NixOS system (/etc/nixos)..."
+            if command -v sudo >/dev/null 2>&1; then
+                sudo nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland "$etc_dir" >> "$LOG_FILE" 2>&1 || true
+                if ! sudo nixos-rebuild switch --flake "$etc_dir" >> "$LOG_FILE" 2>&1; then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] nixos-rebuild switch reported errors. Details in $LOG_FILE"
+                fi
+            else
+                echo "  [!] sudo required for system rebuild."
+            fi
+        else
+            echo "[3/3] System rebuild skipped (run with --system to rebuild /etc/nixos)."
+        fi
+
+        # Reload desktop services
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
+        command -v pkill >/dev/null 2>&1 && pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+
+        generate_status_json "false" >/dev/null 2>&1 || true
+
+        if [ "$OTA_PROBLEMS" -eq 0 ]; then
+            send_notif "System Update Complete" "NixOS desktop updated successfully!" "normal"
+            echo "OTA update completed successfully."
+            return 0
+        else
+            send_notif "System Update" "Update finished with warnings. See $LOG_FILE" "normal"
+            echo "OTA update finished with $OTA_PROBLEMS issue(s). Details in $LOG_FILE"
+            return 1
+        fi
+    fi
+
     # Todo lo que falla aqui se ignoraba con "|| true" y el final escribia siempre
     # "aplicado correctamente", asi que la notificacion decia que habia ido bien
     # con el pull vaciado, el despliegue a medias o la isla sin volver. Se cuenta
@@ -790,6 +867,21 @@ cmd_update() {
 }
 
 cmd_rollback() {
+    if is_nixos; then
+        echo "=== NixOS System Rollback ==="
+        if [ -f /etc/nixos/flake.nix ] && command -v sudo >/dev/null 2>&1; then
+            echo "Rolling back NixOS system generation..."
+            sudo nixos-rebuild --rollback switch --flake /etc/nixos || true
+        fi
+        if command -v home-manager >/dev/null 2>&1; then
+            echo "Home-manager generations:"
+            home-manager generations || true
+        fi
+        send_notif "System Rollback" "NixOS generation rollback triggered." "normal"
+        echo "Rollback completed."
+        return 0
+    fi
+
     local snapshots=()
     for d in "$BACKUP_BASE"/ota-*; do
         if [ -d "$d" ]; then
@@ -874,6 +966,7 @@ cmd_gui() {
         echo ""
         local pkg_mgr="pacman"
         command -v dnf >/dev/null 2>&1 && pkg_mgr="dnf"
+        if is_nixos; then pkg_mgr="nixos-rebuild"; fi
 
         local choice
         choice=$(gum choose \
@@ -899,7 +992,13 @@ cmd_gui() {
                 ;;
             "3."*)
                 if gum confirm "Run full system package update via $pkg_mgr?"; then
-                    if [ "$pkg_mgr" = "dnf" ]; then
+                    if is_nixos; then
+                        if [ -f /etc/nixos/flake.nix ]; then
+                            sudo nixos-rebuild switch --flake /etc/nixos
+                        else
+                            sudo nixos-rebuild switch
+                        fi
+                    elif [ "$pkg_mgr" = "dnf" ]; then
                         sudo dnf upgrade -y
                     else
                         sudo pacman -Syu

@@ -455,7 +455,7 @@ EOF
                     fzf_selection=$(nix-env -qaP 2>/dev/null | awk '{print $1}' | sort -u | fzf --multi --ansi \
                         --prompt="Search Nixpkgs > " \
                         --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search" \
-                        --preview-window='right:55%:wrap' </dev/tty || true)
+                        --preview-window='right:55%:wrap' || true)
                 fi
 
                 if [ -n "$fzf_selection" ]; then
@@ -2370,7 +2370,7 @@ unified_app_search() {
 
         local SELECTED_SEARCH=""
         if command -v dnf >/dev/null 2>&1; then
-            SELECTED_SEARCH=$( (dnf repoquery -q --available --queryformat "%{name}" 2>/dev/null || dnf list available 2>/dev/null | awk '{print $1}' | cut -d. -f1) | sort -u | fzf "${fzf_args[@]}" </dev/tty || true )
+            SELECTED_SEARCH=$( (dnf repoquery -q --available --queryformat "%{name}" 2>/dev/null || dnf list available 2>/dev/null | awk '{print $1}' | cut -d. -f1) | sort -u | fzf "${fzf_args[@]}" || true )
         fi
 
         if [[ -n "$SELECTED_SEARCH" ]]; then
@@ -2404,7 +2404,7 @@ unified_app_search() {
 
         local SELECTED_SEARCH=""
         if command -v apt-cache >/dev/null 2>&1; then
-            SELECTED_SEARCH=$(apt-cache pkgnames 2>/dev/null | sort -u | fzf "${fzf_args[@]}" </dev/tty || true)
+            SELECTED_SEARCH=$(apt-cache pkgnames 2>/dev/null | sort -u | fzf "${fzf_args[@]}" || true)
         fi
 
         if [[ -n "$SELECTED_SEARCH" ]]; then
@@ -2506,14 +2506,24 @@ first_run_choices() {
     if [ "$SKIP_APPS" = true ]; then
         INSTALL_MODE="minimal"
     else
+        local search_label="Universal Package Search with fzf (Search & install ANY package from Pacman + AUR)"
+        local full_label="Full Package Stack (Install all 125 packages from packages.txt)"
+        if [ "$DISTRO" = "fedora" ]; then
+            search_label="Universal Package Search with fzf (Search & install ANY package from Fedora DNF)"
+            full_label="Full Package Stack (Install full curated stack via DNF + Flatpaks)"
+        elif [ "$DISTRO" = "debian" ]; then
+            search_label="Universal Package Search with fzf (Search & install ANY package from Debian APT)"
+            full_label="Full Package Stack (Install full curated stack via APT + Flatpaks)"
+        fi
+
         local MODE_RAW
         MODE_RAW=$(gum choose \
             --height 8 \
             --header="Select software installation mode:" \
             --cursor-prefix="> " \
             "Custom Categorized Menus (Browsers, Chat, Dev, Media, Gaming, Utilities)" \
-            "Universal Package Search with fzf (Search & install ANY package from Pacman + AUR)" \
-            "Full Package Stack (Install all 125 packages from packages.txt)" \
+            "$search_label" \
+            "$full_label" \
             "Minimal Desktop Core (Essential Hyprland stack only)" || true)
 
         if [[ "$MODE_RAW" == *"Full Package Stack"* ]]; then
@@ -2526,23 +2536,33 @@ first_run_choices() {
         else
             INSTALL_MODE="custom"
 
+            local repo_tag="[Arch]"
+            local ext_tag="[AUR]"
+            if [ "$DISTRO" = "fedora" ]; then
+                repo_tag="[DNF]"
+                ext_tag="[Flatpak]"
+            elif [ "$DISTRO" = "debian" ]; then
+                repo_tag="[APT]"
+                ext_tag="[APT/Flatpak]"
+            fi
+
             # 1. Browsers
             clear_logo
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Web Browsers (1/5)"
             local BROWSERS_LIST=(
-                "Brave Browser (brave-bin) [AUR]"
-                "Brave Origin Nightly (brave-origin-nightly-bin) [AUR]"
-                "Chromium (chromium) [Arch]"
-                "Firefox (firefox) [Arch]"
-                "Firefox Developer Edition (firefox-developer-edition) [AUR]"
-                "Google Chrome (google-chrome) [AUR]"
-                "Microsoft Edge (microsoft-edge-stable-bin) [AUR]"
-                "Zen Browser (zen-browser-bin) [AUR]"
+                "Brave Browser (brave-bin) $ext_tag"
+                "Brave Origin Nightly (brave-origin-nightly-bin) $ext_tag"
+                "Chromium (chromium) $repo_tag"
+                "Firefox (firefox) $repo_tag"
+                "Firefox Developer Edition (firefox-developer-edition) $ext_tag"
+                "Google Chrome (google-chrome) $ext_tag"
+                "Microsoft Edge (microsoft-edge-stable-bin) $ext_tag"
+                "Zen Browser (zen-browser-bin) $ext_tag"
             )
             local SEL_BROWSERS
             SEL_BROWSERS=$(printf "%s\n" "${BROWSERS_LIST[@]}" | gum choose --no-limit --height 10 \
-                --selected="Brave Browser (brave-bin) [AUR]" \
+                --selected="Brave Browser (brave-bin) $ext_tag" \
                 --header="Space = Toggle, Enter = Confirm Category" \
                 --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
 
@@ -2551,15 +2571,15 @@ first_run_choices() {
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Communication & Social (2/5)"
             local COMM_LIST=(
-                "Discord / Vesktop (vesktop) [AUR]"
-                "Telegram Desktop (telegram-desktop) [Arch]"
-                "Slack Desktop (slack-desktop) [AUR]"
-                "WhatsApp / ZapZap (zapzap) [AUR]"
-                "Spotify (spotify) [AUR]"
+                "Discord / Vesktop (vesktop) $ext_tag"
+                "Telegram Desktop (telegram-desktop) $repo_tag"
+                "Slack Desktop (slack-desktop) $ext_tag"
+                "WhatsApp / ZapZap (zapzap) $ext_tag"
+                "Spotify (spotify) $ext_tag"
             )
             local SEL_COMM
             SEL_COMM=$(printf "%s\n" "${COMM_LIST[@]}" | gum choose --no-limit --height 10 \
-                --selected="Discord / Vesktop (vesktop) [AUR]" \
+                --selected="Discord / Vesktop (vesktop) $ext_tag" \
                 --header="Space = Toggle, Enter = Confirm Category" \
                 --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
 
@@ -2568,20 +2588,20 @@ first_run_choices() {
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Productivity & Development (3/5)"
             local DEV_LIST=(
-                "Visual Studio Code (visual-studio-code-bin) [AUR]"
-                "Neovim (neovim) [Arch]"
-                "Obsidian (obsidian) [AUR]"
-                "LibreOffice Fresh (libreoffice-fresh) [Arch]"
-                "LocalSend (localsend-bin) [AUR]"
-                "Docker & Docker Compose (docker docker-compose) [Arch]"
-                "Node.js & NPM (nodejs npm) [Arch]"
-                "Python Suite (python-pip python-black ruff) [Arch]"
-                "GitKraken (gitkraken) [AUR]"
-                "Ollama (ollama) [Arch/AUR]"
+                "Visual Studio Code (visual-studio-code-bin) $ext_tag"
+                "Neovim (neovim) $repo_tag"
+                "Obsidian (obsidian) $ext_tag"
+                "LibreOffice Fresh (libreoffice-fresh) $repo_tag"
+                "LocalSend (localsend-bin) $ext_tag"
+                "Docker & Docker Compose (docker docker-compose) $repo_tag"
+                "Node.js & NPM (nodejs npm) $repo_tag"
+                "Python Suite (python-pip python-black ruff) $repo_tag"
+                "GitKraken (gitkraken) $ext_tag"
+                "Ollama (ollama) $ext_tag"
             )
             local SEL_DEV
             SEL_DEV=$(printf "%s\n" "${DEV_LIST[@]}" | gum choose --no-limit --height 10 \
-                --selected="Visual Studio Code (visual-studio-code-bin) [AUR]" \
+                --selected="Visual Studio Code (visual-studio-code-bin) $ext_tag" \
                 --header="Space = Toggle, Enter = Confirm Category" \
                 --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " || true)
 
@@ -2590,17 +2610,17 @@ first_run_choices() {
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Media, Creativity & Gaming (4/5)"
             local MEDIA_LIST=(
-                "Steam (steam) [Arch/Multilib]"
-                "Lutris (lutris) [Arch]"
-                "Heroic Games Launcher (heroic-games-launcher-bin) [AUR]"
-                "OBS Studio (obs-studio) [Arch]"
-                "VLC Media Player (vlc) [Arch]"
-                "MPV Media Player (mpv) [Arch]"
-                "GIMP (gimp) [Arch]"
-                "Inkscape (inkscape) [Arch]"
-                "Kdenlive (kdenlive) [Arch]"
-                "Blender (blender) [Arch]"
-                "Audacity (audacity) [Arch]"
+                "Steam (steam) $repo_tag"
+                "Lutris (lutris) $repo_tag"
+                "Heroic Games Launcher (heroic-games-launcher-bin) $ext_tag"
+                "OBS Studio (obs-studio) $repo_tag"
+                "VLC Media Player (vlc) $repo_tag"
+                "MPV Media Player (mpv) $repo_tag"
+                "GIMP (gimp) $repo_tag"
+                "Inkscape (inkscape) $repo_tag"
+                "Kdenlive (kdenlive) $repo_tag"
+                "Blender (blender) $repo_tag"
+                "Audacity (audacity) $repo_tag"
             )
             local SEL_MEDIA
             SEL_MEDIA=$(printf "%s\n" "${MEDIA_LIST[@]}" | gum choose --no-limit --height 10 \
@@ -2611,13 +2631,15 @@ first_run_choices() {
             clear_logo
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: System Utilities & Flatpaks (5/5)"
+            local vbox_label="VirtualBox (virtualbox virtualbox-host-modules-arch virtualbox-guest-iso) $repo_tag"
+            [ "$DISTRO" != "arch" ] && vbox_label="VirtualBox (virtualbox) $repo_tag"
             local UTILS_LIST=(
-                "VirtualBox (virtualbox virtualbox-host-modules-arch virtualbox-guest-iso) [Arch]"
-                "Timeshift (timeshift) [Arch]"
-                "Thunar File Manager (thunar thunar-archive-plugin thunar-volman) [Arch]"
-                "Dolphin File Manager (dolphin ark) [Arch]"
-                "Btop (btop) [Arch]"
-                "Fastfetch (fastfetch) [Arch]"
+                "$vbox_label"
+                "Timeshift (timeshift) $repo_tag"
+                "Thunar File Manager (thunar thunar-archive-plugin thunar-volman) $repo_tag"
+                "Dolphin File Manager (dolphin ark) $repo_tag"
+                "Btop (btop) $repo_tag"
+                "Fastfetch (fastfetch) $repo_tag"
                 "Mission Center (io.missioncenter.MissionCenter) [Flatpak]"
                 "Clapper (com.github.rafostar.Clapper) [Flatpak]"
                 "Eye of GNOME (org.gnome.eog) [Flatpak]"
@@ -2668,7 +2690,13 @@ first_run_choices() {
                     *"(kdenlive)"*)                     PACMAN_INSTALL+=("kdenlive") ;;
                     *"(blender)"*)                      PACMAN_INSTALL+=("blender") ;;
                     *"(audacity)"*)                     PACMAN_INSTALL+=("audacity") ;;
-                    *"(virtualbox virtualbox-host-modules-arch virtualbox-guest-iso)"*) PACMAN_INSTALL+=("virtualbox" "virtualbox-host-modules-arch" "virtualbox-guest-iso") ;;
+                    *"(virtualbox"*|*"(virtualbox "*|*"(virtualbox)"*)
+                        if [ "$DISTRO" = "arch" ]; then
+                            PACMAN_INSTALL+=("virtualbox" "virtualbox-host-modules-arch" "virtualbox-guest-iso")
+                        else
+                            PACMAN_INSTALL+=("virtualbox")
+                        fi
+                        ;;
                     *"(timeshift)"*)                    PACMAN_INSTALL+=("timeshift") ;;
                     *"(thunar thunar-archive-plugin thunar-volman)"*) PACMAN_INSTALL+=("thunar" "thunar-archive-plugin" "thunar-volman") ;;
                     *"(dolphin ark)"*)                  PACMAN_INSTALL+=("dolphin" "ark") ;;
@@ -2685,7 +2713,15 @@ first_run_choices() {
             clear_logo
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Additional Custom Software"
-            if confirm_prompt "Would you like to search and add any extra packages with fzf?"; then
+            local fzf_prompt="Would you like to search and add any extra packages with fzf?"
+            if [ "$DISTRO" = "fedora" ]; then
+                fzf_prompt="Would you like to search and add extra packages from DNF with fzf?"
+            elif [ "$DISTRO" = "debian" ]; then
+                fzf_prompt="Would you like to search and add extra packages from APT with fzf?"
+            elif [ "$DISTRO" = "arch" ]; then
+                fzf_prompt="Would you like to search and add extra packages from Pacman/AUR with fzf?"
+            fi
+            if confirm_prompt "$fzf_prompt"; then
                 unified_app_search
             fi
         fi
@@ -2829,6 +2865,21 @@ step_applications() {
     if [ "$INSTALL_MODE" = "full" ]; then
         if [ "$DISTRO" = "fedora" ]; then
             step_item "Full stack requested for Fedora: deploying Flatpaks and available packages..."
+            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                while IFS= read -r fapp || [ -n "$fapp" ]; do
+                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                    [ -z "$fapp" ] && continue
+                    [[ "$fapp" =~ ^# ]] && continue
+                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                done < "$DOTFILES_DIR/flatpaks.txt"
+            fi
+            step_ok "Full package stack successfully deployed."
+            return 0
+        fi
+
+        if [ "$DISTRO" = "debian" ]; then
+            step_item "Full stack requested for Debian: deploying Flatpaks and available packages..."
             if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
                 sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
                 while IFS= read -r fapp || [ -n "$fapp" ]; do

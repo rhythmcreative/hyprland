@@ -25,12 +25,17 @@ in
     # Arch, where hyprpm owns plugin loading. It reaches the compositor
     # twice: the display-manager service environment covers the SDDM
     # session, and sessionVariables covers a TTY/UWSM start.
-    systemd.services.display-manager.environment = {
-      RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
-    };
-    environment.sessionVariables = {
-      RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
-    };
+    #
+    # rhythm.features.hyprbars = false leaves the var unset, which is how
+    # hyprland.lua is told not to load it.
+    systemd.services.display-manager.environment =
+      lib.optionalAttrs cfg.features.hyprbars {
+        RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
+      };
+    environment.sessionVariables =
+      lib.optionalAttrs cfg.features.hyprbars {
+        RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
+      };
 
     # Portals come with programs.hyprland, but the GTK fallback backend
     # (file picker outside pure-Wayland apps) needs naming explicitly.

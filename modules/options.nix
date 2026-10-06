@@ -228,6 +228,13 @@ glib
       # Arch pacman-based checker (see ADR-0005).
       otaCheck = lib.mkEnableOption "the background OTA update checker" // { default = false; };
       flatpaks = lib.mkEnableOption "flatpak support with the repo app list" // { default = false; };
+
+      # hyprbars draws a title bar on every window. Off means the shared
+      # hyprland.lua never sees RHYTHM_PLUGIN_HYPRBARS and never runs
+      # `hyprctl plugin load` on it, so no bar is drawn anywhere.
+      hyprbars = lib.mkEnableOption "the hyprbars plugin, which adds title bars to windows" // {
+        default = true;
+      };
     };
 
     packageSet = {

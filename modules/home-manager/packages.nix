@@ -44,7 +44,10 @@ in
     # opcion equivocada el fichero salia con una sola linea y las tres
     # variables seguian sin llegar.
     systemd.user.sessionVariables = {
-      RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
+      # hyprland.lua loads the plugin only when this is set, so leaving it
+      # out with rhythm.features.hyprbars = false is what keeps the title
+      # bars off.
+      RHYTHM_PLUGIN_HYPRBARS = lib.mkIf cfg.features.hyprbars "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
       ZSH_AUTOSUGGESTIONS_SRC = "${pkgs.zsh-autosuggestions}/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh";
       ZSH_SYNTAX_HIGHLIGHTING_SRC = "${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh";
 

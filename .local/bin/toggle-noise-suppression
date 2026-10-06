@@ -7,6 +7,8 @@ install_hint() {
     # podia funcionar ahi y no decia nada de que hubiera otro gestor.
     if command -v pacman >/dev/null 2>&1; then
         printf '%s' "sudo pacman -S noise-suppression-for-voice rnnoise"
+    elif command -v dnf >/dev/null 2>&1; then
+        printf '%s' "sudo dnf install -y noise-suppression-for-voice rnnoise"
     elif command -v nix-env >/dev/null 2>&1 || [ -n "${NIX_STORE:-}" ]; then
         # En NixOS el plugin llega como noise-suppression-for-voice y la
         # plantilla del filtro va en el paquete de pipewire del store.

@@ -1077,6 +1077,15 @@ http-connections = 50" \
     exit $?
 fi
 
+# Detect operating system
+DISTRO="unknown"
+if [ -f /etc/arch-release ] || grep -qi 'ID=.*arch' /etc/os-release 2>/dev/null; then
+    DISTRO="arch"
+elif [ -f /etc/fedora-release ] || grep -qi 'ID=.*fedora' /etc/os-release 2>/dev/null; then
+    DISTRO="fedora"
+fi
+[ -n "${RHYTHM_DISTRO_OVERRIDE:-}" ] && DISTRO="$RHYTHM_DISTRO_OVERRIDE"
+
 # If running outside the cloned repository (e.g. standalone curl pipe), clone first
 if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
     # mktemp -d y no una ruta fija en /tmp. Con "/tmp/rhythm-hyprland" cualquier
@@ -1087,7 +1096,11 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
     echo "Cloning rhythmcreative/hyprland repository to $CLONE_DIR..."
     if ! command -v git >/dev/null 2>&1; then
         echo "Installing git..."
-        sudo pacman -S --needed --noconfirm git
+        if [ "$DISTRO" = "fedora" ]; then
+            sudo dnf install -y git
+        else
+            sudo pacman -S --needed --noconfirm git
+        fi
     fi
     # clone necesita que el destino no exista, y mktemp ya lo ha creado.
     rmdir "$CLONE_DIR"
@@ -1160,7 +1173,7 @@ run_step() {
 
 show_help() {
     cat << 'EOF'
-Rhythm Hyprland Installer (Omarchy Style)
+Rhythm Hyprland Installer (Omarchy Style) - Arch Linux & Fedora
 
 Usage:
   ./install.sh [OPTIONS]
@@ -1291,46 +1304,78 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ ! -f /etc/arch-release ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
-        # about: no pacman, no AUR, no /usr layout to write to.
-        echo "ERROR: This installer is only compatible with Arch Linux."
+        # about: no pacman, no dnf, no supported layout.
+        echo "ERROR: This installer is only compatible with Arch Linux and Fedora."
         exit 1
     fi
 
     # Network verification
-    if ! ping -c 1 archlinux.org >/dev/null 2>&1 && ! curl -s --head https://archlinux.org >/dev/null 2>&1; then
+    if ! ping -c 1 1.1.1.1 >/dev/null 2>&1 && ! curl -s --head https://github.com >/dev/null 2>&1; then
         echo "ERROR: No active internet connection detected. Please connect before continuing."
         exit 1
     fi
 
-    # Pacman optimizations (ParallelDownloads and Color)
-    if grep -q "^#ParallelDownloads" /etc/pacman.conf 2>/dev/null; then
-        sudo sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
-    fi
-    if grep -q "^#Color" /etc/pacman.conf 2>/dev/null; then
-        sudo sed -i 's/^#Color/Color/' /etc/pacman.conf
-    fi
-    if grep -q "^#\[multilib\]" /etc/pacman.conf 2>/dev/null; then
-        sudo sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
-        sudo pacman -Sy >> "$LOG_FILE" 2>&1
-    fi
-
-    # Ensure bootstrap tools exist
-    local bootstrap_pkgs=()
-    for pkg in gum fzf git base-devel stow zsh curl sudo; do
-        if ! pacman -Q "$pkg" >/dev/null 2>&1; then
-            bootstrap_pkgs+=("$pkg")
+    if [ "$DISTRO" = "arch" ]; then
+        # Pacman optimizations (ParallelDownloads and Color)
+        if grep -q "^#ParallelDownloads" /etc/pacman.conf 2>/dev/null; then
+            sudo sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
         fi
-    done
-    if [ ${#bootstrap_pkgs[@]} -gt 0 ]; then
-        sudo pacman -S --needed --noconfirm "${bootstrap_pkgs[@]}" >> "$LOG_FILE" 2>&1
+        if grep -q "^#Color" /etc/pacman.conf 2>/dev/null; then
+            sudo sed -i 's/^#Color/Color/' /etc/pacman.conf
+        fi
+        if grep -q "^#\[multilib\]" /etc/pacman.conf 2>/dev/null; then
+            sudo sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
+            sudo pacman -Sy >> "$LOG_FILE" 2>&1
+        fi
+
+        # Ensure bootstrap tools exist
+        local bootstrap_pkgs=()
+        for pkg in gum fzf git base-devel stow zsh curl sudo; do
+            if ! pacman -Q "$pkg" >/dev/null 2>&1; then
+                bootstrap_pkgs+=("$pkg")
+            fi
+        done
+        if [ ${#bootstrap_pkgs[@]} -gt 0 ]; then
+            sudo pacman -S --needed --noconfirm "${bootstrap_pkgs[@]}" >> "$LOG_FILE" 2>&1
+        fi
+    elif [ "$DISTRO" = "fedora" ]; then
+        # DNF optimizations (fastestmirror & max_parallel_downloads)
+        if [ -f /etc/dnf/dnf.conf ]; then
+            if ! grep -q "^max_parallel_downloads" /etc/dnf/dnf.conf; then
+                echo "max_parallel_downloads=10" | sudo tee -a /etc/dnf/dnf.conf >/dev/null
+            fi
+            if ! grep -q "^fastestmirror" /etc/dnf/dnf.conf; then
+                echo "fastestmirror=True" | sudo tee -a /etc/dnf/dnf.conf >/dev/null
+            fi
+        fi
+
+        # Ensure bootstrap tools exist
+        local dnf_bootstrap=(git curl sudo zsh fzf dnf-plugins-core gum stow tar xz)
+        sudo dnf install -y "${dnf_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+
+        # Enable RPM Fusion free & nonfree
+        local fedora_ver
+        fedora_ver=$(rpm -E %fedora 2>/dev/null || echo "41")
+        sudo dnf install -y \
+            "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${fedora_ver}.noarch.rpm" \
+            "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${fedora_ver}.noarch.rpm" >> "$LOG_FILE" 2>&1 || true
+
+        # Enable essential Hyprland and ecosystem COPRs
+        sudo dnf copr enable -y nett00n/hyprland >> "$LOG_FILE" 2>&1 || true
+        sudo dnf copr enable -y errornointernet/quickshell >> "$LOG_FILE" 2>&1 || true
+        sudo dnf copr enable -y tofik/nwg-shell >> "$LOG_FILE" 2>&1 || true
+        sudo dnf copr enable -y alebastr/sway-extras >> "$LOG_FILE" 2>&1 || true
     fi
 }
 
 # --- AUR HELPER SETUP (YAY) ---
 install_yay() {
+    if [ "$DISTRO" = "fedora" ]; then
+        return 0
+    fi
     if ! command -v yay > /dev/null 2>&1; then
         section "AUR Helper (yay)"
         step_item "Building yay from AUR..."
@@ -1382,7 +1427,64 @@ auto_detect_drivers() {
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
         IS_NVIDIA=true
         step_item "NVIDIA GPU detected. Analyzing architecture and installed kernels..."
+    fi
 
+    if [ "$DISTRO" = "fedora" ]; then
+        if [ "$IS_NVIDIA" = true ]; then
+            step_item "Preparing Fedora RPM Fusion & Akmod driver for NVIDIA..."
+            sudo dnf install -y kernel-devel kernel-headers akmod-nvidia xorg-x11-drv-nvidia-cuda libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA RPM packages."
+        fi
+        if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
+            step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
+            sudo dnf install -y mesa-dri-drivers mesa-vulkan-drivers vulkan-tools >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Intel"* ]]; then
+            step_item "Intel GPU detected. Adding hardware acceleration drivers..."
+            sudo dnf install -y intel-media-driver libva-intel-driver vulkan-tools >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        local SYS_VENDOR PROD_NAME
+        SYS_VENDOR=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)
+        PROD_NAME=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
+
+        if [[ $SYS_VENDOR == *"ASUSTeK"* ]]; then
+            step_item "ASUS hardware detected. Enabling COPR and adding asusctl..."
+            sudo dnf copr enable -y lukenukem/asus-linux >> "$LOG_FILE" 2>&1 || true
+            sudo dnf install -y asusctl supergfxctl rog-control-center >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $PROD_NAME == *"Surface"* ]]; then
+            step_item "Microsoft Surface detected. Adding surface kernel & utilities..."
+            sudo dnf config-manager --add-repo=https://pkg.surfacelinux.com/fedora/linux-surface.repo >> "$LOG_FILE" 2>&1 || true
+            sudo dnf install -y kernel-surface iptsd >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if [ "$IS_NVIDIA" = true ]; then
+            section "NVIDIA System & Wayland Optimization (Fedora)"
+            step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
+            sudo mkdir -p /etc/modprobe.d
+            cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+# Enable Direct Rendering Manager (DRM) Kernel Mode Setting and Framebuffer Device for Wayland & Hyprland
+options nvidia-drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+EOF
+            step_item "Enabling NVIDIA power management & suspend services..."
+            sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
+
+            step_item "Configuring dracut for early NVIDIA KMS..."
+            sudo mkdir -p /etc/dracut.conf.d
+            cat << 'EOF' | sudo tee /etc/dracut.conf.d/nvidia.conf > /dev/null
+add_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "
+EOF
+            step_item "Rebuilding initramfs with dracut..."
+            sudo dracut --force >> "$LOG_FILE" 2>&1 || step_warn "dracut rebuild had warnings."
+            step_ok "NVIDIA system optimization complete."
+        fi
+        step_ok "Hardware drivers configured."
+        return 0
+    fi
+
+    if [ "$IS_NVIDIA" = true ]; then
         # 1. Detect installed kernels and install matching kernel headers
         local KERNEL_HEADERS=()
         for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-lts|-zen|-hardened)?$'); do
@@ -1532,7 +1634,11 @@ install_rust_dock() {
     fi
 
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
-    yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
+    if [ "$DISTRO" = "fedora" ]; then
+        sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1
+    else
+        yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
+    fi
 
     if ! command -v cargo > /dev/null 2>&1; then
         step_warn "Cargo not found. Skipping rust-dock build."
@@ -1602,9 +1708,197 @@ PINNED
     fi
 }
 
+# --- FEDORA THEMES, ICONS & FONTS ASSETS ---
+fedora_install_themes_and_fonts() {
+    section "Fedora Visual Assets & Typography"
+
+    # 1. JetBrains Mono Nerd Font
+    if ! fc-list : family 2>/dev/null | grep -qi "JetBrainsMono Nerd Font"; then
+        step_item "Installing JetBrains Mono Nerd Font..."
+        local font_dir="/usr/local/share/fonts/JetBrainsMonoNerd"
+        sudo mkdir -p "$font_dir"
+        local tmp_font
+        tmp_font=$(mktemp "${TMPDIR:-/tmp}/jetbrains-font.XXXXXX.tar.xz")
+        if curl -fsSL --connect-timeout 15 --max-time 180 \
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" \
+            -o "$tmp_font" >> "$LOG_FILE" 2>&1; then
+            sudo tar -xf "$tmp_font" -C "$font_dir" >> "$LOG_FILE" 2>&1
+            sudo fc-cache -f >> "$LOG_FILE" 2>&1 || true
+            step_ok "JetBrains Mono Nerd Font installed."
+        else
+            step_warn "Could not download JetBrains Mono Nerd Font; system fonts will be used."
+        fi
+        rm -f "$tmp_font"
+    else
+        step_ok "JetBrains Mono Nerd Font already present."
+    fi
+
+    # 2. Tela Circle Icon Theme (All variants prebuilt from Release v0.25)
+    if [ ! -d "/usr/share/icons/Tela-circle" ] && [ ! -d "$HOME/.local/share/icons/Tela-circle" ]; then
+        step_item "Installing Tela Circle Icon Theme (All Variants)..."
+        local tmp_tela
+        tmp_tela=$(mktemp "${TMPDIR:-/tmp}/tela-circle.XXXXXX.tar.gz")
+        if curl -fsSL --connect-timeout 15 --max-time 180 \
+            "https://github.com/rhythmcreative/hyprland/releases/download/v0.25/tela-circle-icon-theme-all.tar.gz" \
+            -o "$tmp_tela" >> "$LOG_FILE" 2>&1; then
+            sudo mkdir -p /usr/share/icons
+            sudo tar -xzf "$tmp_tela" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
+            step_ok "Tela Circle Icon Theme deployed."
+        else
+            step_warn "Could not download precompiled Tela Circle theme."
+        fi
+        rm -f "$tmp_tela"
+    else
+        step_ok "Tela Circle Icon Theme already present."
+    fi
+
+    # 3. Bibata Cursor Theme
+    if [ ! -d "/usr/share/icons/Bibata-Modern-Ice" ] && [ ! -d "$HOME/.local/share/icons/Bibata-Modern-Ice" ]; then
+        step_item "Installing Bibata Modern Ice Cursor..."
+        local tmp_bibata
+        tmp_bibata=$(mktemp "${TMPDIR:-/tmp}/bibata.XXXXXX.tar.gz")
+        if curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://github.com/ful1e5/Bibata_Cursor/releases/latest/download/Bibata-Modern-Ice.tar.gz" \
+            -o "$tmp_bibata" >> "$LOG_FILE" 2>&1; then
+            sudo mkdir -p /usr/share/icons
+            sudo tar -xzf "$tmp_bibata" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
+            step_ok "Bibata Cursor Theme deployed."
+        else
+            step_warn "Could not download Bibata cursor theme."
+        fi
+        rm -f "$tmp_bibata"
+    else
+        step_ok "Bibata Cursor Theme already present."
+    fi
+
+    # 4. Pywal (Command-line color palette engine)
+    if ! command -v wal >/dev/null 2>&1; then
+        step_item "Setting up Pywal..."
+        pip3 install --user pywal >> "$LOG_FILE" 2>&1 || pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || true
+        if command -v wal >/dev/null 2>&1 || [ -x "$HOME/.local/bin/wal" ]; then
+            step_ok "Pywal initialized."
+        else
+            step_warn "Pywal pip installation encountered warnings."
+        fi
+    else
+        step_ok "Pywal already present."
+    fi
+}
+
 # --- SYSTEM PACKAGES DEPLOYMENT ---
 step_software() {
     section "Core Packages & System Libraries"
+
+    if [ "$DISTRO" = "fedora" ]; then
+        local FEDORA_CORE_PKGS=(
+            hyprland
+            hypridle
+            hyprlock
+            hyprsunset
+            hyprpicker
+            xdg-desktop-portal-hyprland
+            xdg-desktop-portal-gtk
+            waybar
+            quickshell
+            rofi-wayland
+            kitty
+            zsh
+            zsh-autosuggestions
+            zsh-syntax-highlighting
+            starship
+            thunar
+            thunar-archive-plugin
+            thunar-volman
+            file-roller
+            gvfs
+            tumbler
+            ffmpegthumbnailer
+            poppler-glib
+            libgsf
+            gwenview
+            NetworkManager
+            network-manager-applet
+            bluez
+            bluez-obex
+            blueman
+            pipewire
+            pipewire-pulseaudio
+            wireplumber
+            pavucontrol
+            playerctl
+            pamixer
+            brightnessctl
+            v4l-utils
+            lsof
+            swappy
+            grim
+            slurp
+            wl-clipboard
+            wf-recorder
+            libnotify
+            socat
+            qt5-qtgraphicaleffects
+            qt5-qtquickcontrols2
+            qt5-qtsvg
+            qt5-qtdeclarative
+            qt6-qtdeclarative
+            qt6-qt5compat
+            qt6-qtsvg
+            qt6-qtwayland
+            qt5ct
+            qt6ct
+            kvantum
+            sddm
+            polkit-kde
+            gnome-keyring
+            nwg-displays
+            nwg-look
+            awww
+            cava
+            google-noto-fonts-common
+            google-noto-sans-cjk-fonts
+            google-noto-emoji-fonts
+            fontawesome-fonts-all
+            rust
+            cargo
+            pkgconf-pkg-config
+            gtk4-devel
+            gtk4-layer-shell-devel
+            power-profiles-daemon
+            upower
+            python3
+            python3-pip
+            python3-pillow
+            python3-gobject
+            flatpak
+            stow
+            curl
+            wget
+            unzip
+            jq
+            bc
+            ImageMagick
+            cliphist
+            mpv
+            mpvpaper
+            htop
+            btop
+            fastfetch
+            inotify-tools
+            psmisc
+            xdg-user-dirs
+            btrfs-progs
+        )
+
+        gum spin --spinner dot --title "Installing core packages via dnf..." --padding "0 0 0 $PADDING_LEFT" -- \
+            bash -c "sudo dnf install -y --skip-broken ${FEDORA_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1"
+        step_ok "Core packages installed."
+
+        fedora_install_themes_and_fonts
+        install_rust_dock
+        auto_detect_drivers
+        return 0
+    fi
 
     local CORE_PKGS=(
         # Compositor & Wayland core
@@ -1778,6 +2072,40 @@ step_software() {
 unified_app_search() {
     clear_logo
     echo ""
+    if [ "$DISTRO" = "fedora" ]; then
+        step_item "Launching fzf package search (Fedora DNF repositories)..."
+        step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+        sleep 0.8
+
+        local fzf_args=(
+            --multi
+            --ansi
+            --prompt="Search Packages > "
+            --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
+            --preview 'dnf info {1} 2>/dev/null || echo "Loading info..."'
+            --preview-window 'right:55%:wrap'
+            --bind 'change:top'
+        )
+
+        local SELECTED_SEARCH
+        SELECTED_SEARCH=$(dnf list available 2>/dev/null | awk '{print $1}' | cut -d. -f1 | fzf "${fzf_args[@]}" || true)
+
+        if [[ -n "$SELECTED_SEARCH" ]]; then
+            local count=0
+            while IFS= read -r app; do
+                [ -z "$app" ] && continue
+                PACMAN_INSTALL+=("$app")
+                ((count++))
+            done <<< "$SELECTED_SEARCH"
+            step_ok "Added $count packages from universal search."
+            sleep 1
+        else
+            step_item "No packages selected from search."
+            sleep 0.5
+        fi
+        return 0
+    fi
+
     if ! command -v yay > /dev/null 2>&1; then
         install_yay
     fi
@@ -2056,6 +2384,76 @@ first_run_choices() {
 # --- APPLICATION DEPLOYMENT STEP ---
 step_applications() {
     section "Optional Software & Applications"
+
+    if [ "$DISTRO" = "fedora" ]; then
+        if [ "$INSTALL_MODE" = "minimal" ]; then
+            step_ok "Optional applications skipped (minimal core stack)."
+            return 0
+        fi
+
+        if [ "$INSTALL_MODE" = "full" ]; then
+            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+                step_item "Configuring Flathub and deploying default Flatpaks..."
+                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                while IFS= read -r fapp || [ -n "$fapp" ]; do
+                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                    [ -z "$fapp" ] && continue
+                    [[ "$fapp" =~ ^# ]] && continue
+                    step_item "Installing flatpak: $fapp"
+                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                done < "$DOTFILES_DIR/flatpaks.txt"
+            fi
+            step_ok "Full package stack successfully deployed."
+            return 0
+        fi
+
+        if [ ${#PACMAN_INSTALL[@]} -eq 0 ] && [ ${#FLATPAK_INSTALL[@]} -eq 0 ]; then
+            step_ok "No optional applications selected."
+            return 0
+        fi
+
+        local DNF_APPS=()
+        for app in "${PACMAN_INSTALL[@]}"; do
+            case "$app" in
+                brave-bin|brave-origin-nightly-bin) FLATPAK_INSTALL+=("com.brave.Browser") ;;
+                google-chrome)                     FLATPAK_INSTALL+=("com.google.Chrome") ;;
+                microsoft-edge-stable-bin)         FLATPAK_INSTALL+=("com.microsoft.Edge") ;;
+                zen-browser-bin)                   FLATPAK_INSTALL+=("app.zen_browser.zen") ;;
+                vesktop)                           FLATPAK_INSTALL+=("dev.vencord.Vesktop") ;;
+                slack-desktop)                     FLATPAK_INSTALL+=("com.slack.Slack") ;;
+                zapzap)                            FLATPAK_INSTALL+=("com.rtosta.zapzap") ;;
+                spotify)                           FLATPAK_INSTALL+=("com.spotify.Client") ;;
+                visual-studio-code-bin)            FLATPAK_INSTALL+=("com.visualstudio.code") ;;
+                obsidian)                          FLATPAK_INSTALL+=("md.obsidian.Obsidian") ;;
+                localsend-bin)                     FLATPAK_INSTALL+=("org.localsend.localsend_app") ;;
+                gitkraken)                         FLATPAK_INSTALL+=("com.axosoft.GitKraken") ;;
+                heroic-games-launcher-bin)         FLATPAK_INSTALL+=("com.heroicgameslauncher.hgl") ;;
+                libreoffice-fresh)                 DNF_APPS+=("libreoffice") ;;
+                docker-compose)                    DNF_APPS+=("docker-compose") ;;
+                virtualbox*)                       DNF_APPS+=("VirtualBox") ;;
+                *)                                 DNF_APPS+=("$app") ;;
+            esac
+        done
+
+        if [ ${#DNF_APPS[@]} -gt 0 ]; then
+            local unique_dnf=($(printf "%s\n" "${DNF_APPS[@]}" | sort -u))
+            step_item "Installing selected native packages via dnf (${#unique_dnf[@]} items): ${unique_dnf[*]}"
+            sudo dnf install -y --skip-broken "${unique_dnf[@]}" >> "$LOG_FILE" 2>&1 || step_warn "Some dnf packages could not be installed."
+        fi
+
+        if [ ${#FLATPAK_INSTALL[@]} -gt 0 ] && [ "$SKIP_FLATPAKS" = false ]; then
+            local unique_flatpaks=($(printf "%s\n" "${FLATPAK_INSTALL[@]}" | sort -u))
+            step_item "Configuring Flathub and installing Flatpaks (${#unique_flatpaks[@]} items)..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            for fapp in "${unique_flatpaks[@]}"; do
+                step_item "Installing flatpak: $fapp"
+                sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+            done
+        fi
+
+        step_ok "Application selection successfully deployed."
+        return 0
+    fi
 
     if [ "$INSTALL_MODE" = "minimal" ]; then
         step_ok "Optional applications skipped (minimal core stack)."
@@ -2794,7 +3192,11 @@ step_system() {
     systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
 
     # Add user to required groups (network for nmcli, lp for printing, optical for disc)
-    sudo usermod -aG video,input,render,wheel,audio,storage,network,lp,optical "$USER"
+    for grp in video input render wheel audio storage network lp optical; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            sudo usermod -aG "$grp" "$USER" >> "$LOG_FILE" 2>&1 || true
+        fi
+    done
     step_ok "System services and permissions configured."
 
     # Verificacion final: el doctor mira lo desplegado (ficheros) y, con
@@ -2821,7 +3223,9 @@ step_update() {
             bash "$DOTFILES_DIR/.local/bin/system-ota" update
         else
             echo ""
-            if gum confirm "Would you also like to update system packages with pacman?"; then
+            local pkg_label="pacman"
+            [ "$DISTRO" = "fedora" ] && pkg_label="dnf"
+            if gum confirm "Would you also like to update system packages with $pkg_label?"; then
                 bash "$DOTFILES_DIR/.local/bin/system-ota" update --system
             else
                 bash "$DOTFILES_DIR/.local/bin/system-ota" update
@@ -2940,11 +3344,17 @@ if [ "$DRY_RUN" = true ]; then
     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
     step_item "Verifying preflight environment..."
     sleep 0.4
-    step_ok "Arch Linux x86_64 verified."
-    step_ok "Parallel downloads & multilib repository active."
-    
-    section "AUR Helper & Build Toolchain"
-    step_ok "yay aur helper ready."
+    if [ "$DISTRO" = "fedora" ]; then
+        step_ok "Fedora Linux x86_64 verified."
+        step_ok "DNF package manager & RPM Fusion repositories active."
+        section "Package Toolchain & Repositories"
+        step_ok "DNF COPRs (hyprland, quickshell, nwg-shell, sway-extras) verified."
+    else
+        step_ok "Arch Linux x86_64 verified."
+        step_ok "Parallel downloads & multilib repository active."
+        section "AUR Helper & Build Toolchain"
+        step_ok "yay aur helper ready."
+    fi
     step_ok "Rust, cargo, and GTK4 layer-shell libraries ready."
 
     section "Core Packages & System Libraries"
@@ -2955,7 +3365,11 @@ if [ "$DRY_RUN" = true ]; then
     section "Hardware Drivers & GPU Optimization"
     step_item "Simulating hardware auto-detection (NVIDIA/AMD/Intel)..."
     sleep 0.5
-    step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
+    if [ "$DISTRO" = "fedora" ]; then
+        step_ok "NVIDIA Akmod, kernel-devel, DRM modesetting & dracut initramfs verified."
+    else
+        step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
+    fi
 
     section "Optional Software & Applications"
     step_item "Simulating interactive application menu..."

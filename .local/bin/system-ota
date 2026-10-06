@@ -157,6 +157,19 @@ generate_status_json() {
                 fi
             done <<< "$raw_pacman"
         fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local raw_dnf
+        raw_dnf=$(dnf check-update -q 2>/dev/null || true)
+        if [ -n "$raw_dnf" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $1}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_dnf"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
     fi
 
     local kernel_ver
@@ -682,19 +695,31 @@ cmd_update() {
         fi
     fi
 
-    # Step 3: Pacman packages if requested
+    # Step 3: System packages if requested
     if [ "$system_packages" = "true" ]; then
-        echo "[3/4] Updating system packages with pacman..."
-        if command -v sudo >/dev/null 2>&1; then
-            if ! sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1; then
-                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                echo "  [!] pacman termino con errores. Detalle en $LOG_FILE"
+        if command -v pacman >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with pacman..."
+            if command -v sudo >/dev/null 2>&1; then
+                if ! sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1; then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] pacman termino con errores. Detalle en $LOG_FILE"
+                fi
+            else
+                echo "Sudo not available, skipping pacman system packages."
             fi
-        else
-            echo "Sudo not available, skipping pacman system packages."
+        elif command -v dnf >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with dnf..."
+            if command -v sudo >/dev/null 2>&1; then
+                if ! sudo dnf upgrade -y >> "$LOG_FILE" 2>&1; then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] dnf termino con errores. Detalle en $LOG_FILE"
+                fi
+            else
+                echo "Sudo not available, skipping dnf system packages."
+            fi
         fi
     else
-        echo "[3/4] Skipping pacman packages (run with --system to update packages)."
+        echo "[3/4] Skipping system packages (run with --system to update packages)."
     fi
 
     # Step 4: Reload desktop services
@@ -847,11 +872,14 @@ cmd_gui() {
             "Status: $status_text"
 
         echo ""
+        local pkg_mgr="pacman"
+        command -v dnf >/dev/null 2>&1 && pkg_mgr="dnf"
+
         local choice
         choice=$(gum choose \
             "1. Check for updates" \
             "2. Download & Install update (Seamless)" \
-            "3. Update system packages (pacman -Syu)" \
+            "3. Update system packages ($pkg_mgr)" \
             "4. View Changelog & Release Notes" \
             "5. Tag new release version" \
             "6. Rollback to previous checkpoint" \
@@ -870,8 +898,12 @@ cmd_gui() {
                 fi
                 ;;
             "3."*)
-                if gum confirm "Run full system package update via pacman?"; then
-                    sudo pacman -Syu
+                if gum confirm "Run full system package update via $pkg_mgr?"; then
+                    if [ "$pkg_mgr" = "dnf" ]; then
+                        sudo dnf upgrade -y
+                    else
+                        sudo pacman -Syu
+                    fi
                     generate_status_json "false" >/dev/null 2>&1 || true
                     gum confirm "Package update completed. Press enter to continue" || true
                 fi

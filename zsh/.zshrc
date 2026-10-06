@@ -7,18 +7,28 @@
 # We use Starship so this is secondary
 ZSH_THEME="robbyrussell"
 
-# Source plugins from pacman/AUR (Clean installation without Oh-My-Zsh)
-#
-# En Arch pacman los deja en /usr/share/zsh/plugins. En NixOS no existe
-# /usr/share: los plugins viven en el store, y el modulo del escritorio
-# exporta la ruta exacta de cada fichero en estas dos variables. El valor por
-# defecto es la ruta de Arch, asi que el mismo .zshrc funciona en las dos
-# plataformas sin cambiar el comportamiento de ninguna.
-: "${ZSH_AUTOSUGGESTIONS_SRC:=/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh}"
-: "${ZSH_SYNTAX_HIGHLIGHTING_SRC:=/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh}"
+# Source plugins (Arch, Fedora, NixOS)
+# Arch: /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+# Fedora: /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+# NixOS: Provided via environment variables ZSH_AUTOSUGGESTIONS_SRC / ZSH_SYNTAX_HIGHLIGHTING_SRC
+if [ -z "$ZSH_AUTOSUGGESTIONS_SRC" ] || [ ! -f "$ZSH_AUTOSUGGESTIONS_SRC" ]; then
+    if [ -f "/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+        ZSH_AUTOSUGGESTIONS_SRC="/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    elif [ -f "/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+        ZSH_AUTOSUGGESTIONS_SRC="/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    fi
+fi
 
-[ -f "$ZSH_AUTOSUGGESTIONS_SRC" ] && source "$ZSH_AUTOSUGGESTIONS_SRC"
-[ -f "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ] && source "$ZSH_SYNTAX_HIGHLIGHTING_SRC"
+if [ -z "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ] || [ ! -f "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ]; then
+    if [ -f "/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+        ZSH_SYNTAX_HIGHLIGHTING_SRC="/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+    elif [ -f "/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+        ZSH_SYNTAX_HIGHLIGHTING_SRC="/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+    fi
+fi
+
+[ -n "$ZSH_AUTOSUGGESTIONS_SRC" ] && [ -f "$ZSH_AUTOSUGGESTIONS_SRC" ] && source "$ZSH_AUTOSUGGESTIONS_SRC"
+[ -n "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ] && [ -f "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ] && source "$ZSH_SYNTAX_HIGHLIGHTING_SRC"
 
 # Starship Prompt
 if command -v starship > /dev/null; then
@@ -34,9 +44,15 @@ alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 alias grep='grep --color=auto'
-alias pacinst='sudo pacman -S'
-alias pacupd='sudo pacman -Syu'
-alias yayinst='yay -S'
+if command -v pacman >/dev/null 2>&1; then
+    alias pacinst='sudo pacman -S'
+    alias pacupd='sudo pacman -Syu'
+    alias yayinst='yay -S'
+fi
+if command -v dnf >/dev/null 2>&1; then
+    alias dnfinst='sudo dnf install'
+    alias dnfupd='sudo dnf upgrade'
+fi
 alias ..='cd ..'
 alias ...='cd ../..'
 

@@ -197,31 +197,6 @@ curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/instal
 
 </details>
 
-<details>
-  <summary><b>NixOS</b></summary>
-
-The same command detects NixOS and installs the same desktop through Nix:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
-```
-
-It activates a standalone home-manager flake for your user scope (dotfiles,
-helpers, user units) and wires this repo's NixOS module into `/etc/nixos` for
-everything that has to be system wide: the SDDM astronaut greeter, Nerd Fonts,
-portals, PipeWire denoising, your groups, the Hyprland session and every desktop
-program. Your `/etc/nixos/configuration.nix` is imported untouched, never
-rewritten; the generated `/etc/nixos/flake.nix` is what gets rebuilt.
-
-| Flag | Description |
-|---|---|
-| `--no-system` | User scope only: do not touch `/etc/nixos` |
-| `--flatpaks` / `--skip-flatpaks` | Install or skip the Flatpak apps |
-| `RHYTHM_NIXOS_CHANNEL` | nixpkgs branch to pin (default: your installed release) |
-
-Run `./install.sh --help` on NixOS for the full list.
-
-</details>
 
 ---
 

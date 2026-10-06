@@ -1140,6 +1140,7 @@ INSTALL_MODE="custom"
 PACMAN_INSTALL=()
 FLATPAK_INSTALL=()
 SET_ZSH=true
+ENABLE_SDDM=""
 UPDATE_MODE=false
 RESUME_MODE=false
 # Marca de pasos completados, para poder reanudar una instalacion que se corto.
@@ -1193,6 +1194,8 @@ Options:
   --skip-rust-dock           Skip building rust-dock from source
   --skip-flatpaks            Skip Flatpak package installation
   --skip-apps                Skip optional application selection menu
+  --sddm                     Set SDDM (Astronaut theme) as default display manager
+  --no-sddm, --skip-sddm     Keep existing display manager without setting SDDM
   --replace-configs-all      Directly overwrite existing configs without .bak backups
   --resume                   Continue an interrupted install: steps already done
                              are skipped, and configs that are already identical
@@ -1269,6 +1272,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-apps)
             SKIP_APPS=true
+            shift
+            ;;
+        --sddm)
+            ENABLE_SDDM=true
+            shift
+            ;;
+        --no-sddm|--skip-sddm)
+            ENABLE_SDDM=false
             shift
             ;;
         --replace-configs-all)
@@ -2193,6 +2204,26 @@ unified_app_search() {
     fi
 }
 
+# --- DISPLAY MANAGER DETECTION ---
+detect_existing_display_manager() {
+    local dm
+    for dm in gdm lightdm lxdm greetd ly cosmic-greeter; do
+        if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1; then
+            echo "$dm"
+            return 0
+        fi
+    done
+    if [ -e /etc/systemd/system/display-manager.service ]; then
+        local target
+        target=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
+        if [ -n "$target" ] && [[ "$target" != *"sddm"* ]]; then
+            basename "$target" .service
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # --- FIRST RUN SETUP CHOICES (OMARCHY TUI WIZARD) ---
 first_run_choices() {
     if [ "$AUTO_YES" = true ]; then
@@ -2200,6 +2231,7 @@ first_run_choices() {
         PACMAN_INSTALL=("brave-bin" "vesktop" "visual-studio-code-bin")
         FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
         [ -z "$WALLPAPER_MODE" ] && WALLPAPER_MODE="random"
+        [ -z "$ENABLE_SDDM" ] && ENABLE_SDDM=true
         SET_ZSH=true
         return 0
     fi
@@ -2424,6 +2456,26 @@ first_run_choices() {
         SET_ZSH=true
     else
         SET_ZSH=false
+    fi
+
+    # Display manager / greeter choice
+    local DETECTED_DM=""
+    DETECTED_DM=$(detect_existing_display_manager || true)
+    if [ -z "$ENABLE_SDDM" ]; then
+        if [ -n "$DETECTED_DM" ] && [ "$DETECTED_DM" != "sddm" ]; then
+            clear_logo
+            echo ""
+            gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Display Manager (Login Greeter)"
+            gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Detected existing login greeter: $DETECTED_DM"
+            if confirm_prompt "Set SDDM (with Astronaut theme) as your default login screen?"; then
+                ENABLE_SDDM=true
+            else
+                ENABLE_SDDM=false
+                step_item "Retaining $DETECTED_DM as the default login screen."
+            fi
+        else
+            ENABLE_SDDM=true
+        fi
     fi
 
     clear_logo
@@ -3256,9 +3308,23 @@ step_system() {
     fi
 
     # Core system services
-    step_item "Enabling NetworkManager, Bluetooth, and SDDM..."
-    sudo systemctl enable NetworkManager bluetooth sddm >> "$LOG_FILE" 2>&1 || true
+    step_item "Enabling NetworkManager and Bluetooth..."
+    sudo systemctl enable NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
     sudo systemctl start NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
+
+    if [ "${ENABLE_SDDM:-true}" = true ]; then
+        local other_dm
+        other_dm=$(detect_existing_display_manager || true)
+        if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
+            step_item "Disabling $other_dm in favor of SDDM..."
+            sudo systemctl disable "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+        fi
+        step_item "Enabling SDDM display manager..."
+        sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+        step_ok "SDDM enabled as default display manager."
+    else
+        step_ok "SDDM service activation skipped (existing display manager retained)."
+    fi
 
     # PAM gnome-keyring unlock
     for pam_file in /etc/pam.d/login /etc/pam.d/sddm; do
@@ -3533,17 +3599,23 @@ elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
         sudo reboot
-    else
+    elif [ "${ENABLE_SDDM:-true}" = true ]; then
         sudo systemctl start sddm
     fi
 elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
-    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start SDDM cleanly."
+    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start your desktop cleanly."
     if gum confirm "Reboot into Hyprland now?"; then
         sudo reboot
     fi
 else
-    if gum confirm "Start SDDM login manager now?"; then
-        sudo systemctl start sddm
+    if [ "${ENABLE_SDDM:-true}" = true ]; then
+        if gum confirm "Start SDDM login manager now?"; then
+            sudo systemctl start sddm
+        fi
+    else
+        if gum confirm "Reboot into Hyprland now?"; then
+            sudo reboot
+        fi
     fi
 fi

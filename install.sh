@@ -343,12 +343,22 @@ EOF
         # `home-manager switch` working afterwards; the system side gets the
         # same through nix.settings in the flake this installer writes to
         # /etc/nixos.
-        export NIX_CONFIG="experimental-features = nix-command flakes"
+        # Flakes and performance optimizations for this session.
+        # max-jobs = auto and http-connections = 50 ensure parallel downloads and builds.
+        export NIX_CONFIG="experimental-features = nix-command flakes
+max-jobs = auto
+cores = 0
+http-connections = 50"
         local nix_user_conf="$HOME/.config/nix/nix.conf"
         mkdir -p "$(dirname "$nix_user_conf")"
         if ! grep -q 'experimental-features' "$nix_user_conf" 2>/dev/null; then
-            printf 'experimental-features = nix-command flakes\n' > "$nix_user_conf"
-            step_item "Enabled flakes for your user in $nix_user_conf."
+            cat << 'EOF' > "$nix_user_conf"
+experimental-features = nix-command flakes
+max-jobs = auto
+cores = 0
+http-connections = 50
+EOF
+            step_item "Configured flakes and parallel downloads in $nix_user_conf."
         fi
 
         if ! command -v gum >/dev/null 2>&1; then
@@ -798,8 +808,10 @@ EOF2
         # than to stdout, otherwise the spinner's own output would land in it.
         local act out_file
         out_file=$(mktemp)
+        step_item "Tip: to view live download progress in another terminal, run: tail -f \"$LOG_FILE\""
         nixos_spin "Building the desktop (several GB the first time)..." -- \
             bash -c "nix --extra-experimental-features 'nix-command flakes' build \
+                --max-jobs auto --cores 0 \
                 --no-link --print-out-paths \
                 '$hm_dir#homeConfigurations.\"$user\".activationPackage' \
                 > '$out_file' 2>>'$LOG_FILE'" || {
@@ -1029,9 +1041,13 @@ EOF3
 
         # nixos-rebuild prints its own progress, but it is the longest step of
         # the whole install, so it gets the same treatment as the user half.
+        step_item "Tip: to view system rebuild progress in another terminal, run: tail -f \"$LOG_FILE\""
         if ! nixos_spin "Rebuilding the system (first run downloads several GB)..." -- \
-            sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
-            nixos-rebuild switch --flake "$etc_dir#nixos"; then
+            sudo env NIX_CONFIG="experimental-features = nix-command flakes
+max-jobs = auto
+cores = 0
+http-connections = 50" \
+            nixos-rebuild switch --max-jobs auto --cores 0 --flake "$etc_dir#nixos"; then
             step_warn "nixos-rebuild failed. Nothing was switched; your previous"
             step_warn "generation is still the live one. Last lines of $LOG_FILE:"
             tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true

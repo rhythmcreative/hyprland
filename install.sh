@@ -1119,6 +1119,8 @@ if [ -f /etc/arch-release ] || grep -qi 'ID=.*arch' /etc/os-release 2>/dev/null;
     DISTRO="arch"
 elif [ -f /etc/fedora-release ] || grep -qi 'ID=.*fedora' /etc/os-release 2>/dev/null; then
     DISTRO="fedora"
+elif [ -f /etc/debian_version ] || grep -qi 'ID=.*debian' /etc/os-release 2>/dev/null; then
+    DISTRO="debian"
 fi
 [ -n "${RHYTHM_DISTRO_OVERRIDE:-}" ] && DISTRO="$RHYTHM_DISTRO_OVERRIDE"
 
@@ -1134,6 +1136,8 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         echo "Installing git..."
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y git
+        elif [ "$DISTRO" = "debian" ]; then
+            sudo apt-get update -y && sudo apt-get install -y git
         else
             sudo pacman -S --needed --noconfirm git
         fi
@@ -1351,11 +1355,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
-        # about: no pacman, no dnf, no supported layout.
-        echo "ERROR: This installer is only compatible with Arch Linux and Fedora."
+        # about: no pacman, no dnf, no apt, no supported layout.
+        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, and Debian (Trixie/Sid)."
         exit 1
     fi
 
@@ -1447,12 +1451,37 @@ CHARM_EOF
 
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "debian" ]; then
+        # Setup Charm repository for gum on Debian
+        if ! command -v gum >/dev/null 2>&1; then
+            sudo mkdir -p /etc/apt/keyrings
+            if curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/charm.gpg >> "$LOG_FILE" 2>&1; then
+                echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
+            fi
+        fi
+
+        # Ensure bootstrap tools exist
+        local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg)
+        sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+        sudo apt-get install -y "${debian_bootstrap[@]}" gum >> "$LOG_FILE" 2>&1 || true
+
+        # Standalone binary fallback for gum if repo install had issues
+        if ! command -v gum >/dev/null 2>&1; then
+            local tmp_gum
+            tmp_gum=$(mktemp "${TMPDIR:-/tmp}/gum.XXXXXX.tar.gz")
+            if curl -fsSL --connect-timeout 10 "https://github.com/charmbracelet/gum/releases/download/v0.14.5/gum_0.14.5_linux_x86_64.tar.gz" -o "$tmp_gum" >> "$LOG_FILE" 2>&1; then
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ --strip-components=1 --wildcards '*/gum' >> "$LOG_FILE" 2>&1 || \
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ gum >> "$LOG_FILE" 2>&1 || true
+                sudo chmod +x /usr/local/bin/gum 2>/dev/null || true
+            fi
+            rm -f "$tmp_gum"
+        fi
     fi
 }
 
 # --- AUR HELPER SETUP (YAY) ---
 install_yay() {
-    if [ "$DISTRO" = "fedora" ]; then
+    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ]; then
         return 0
     fi
     if ! command -v yay > /dev/null 2>&1; then
@@ -1557,6 +1586,38 @@ add_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "
 EOF
             step_item "Rebuilding initramfs with dracut..."
             sudo dracut --force >> "$LOG_FILE" 2>&1 || step_warn "dracut rebuild had warnings."
+            step_ok "NVIDIA system optimization complete."
+        fi
+        step_ok "Hardware drivers configured."
+        return 0
+    elif [ "$DISTRO" = "debian" ]; then
+        if [ "$IS_NVIDIA" = true ]; then
+            step_item "Preparing Debian DKMS driver for NVIDIA..."
+            sudo apt-get install -y linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian packages."
+        fi
+        if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
+            step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
+            sudo apt-get install -y mesa-va-drivers mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Intel"* ]]; then
+            step_item "Intel GPU detected. Adding hardware acceleration drivers..."
+            sudo apt-get install -y intel-media-va-driver-non-free i965-va-driver-shaders mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if [ "$IS_NVIDIA" = true ]; then
+            section "NVIDIA System & Wayland Optimization (Debian)"
+            step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
+            sudo mkdir -p /etc/modprobe.d
+            cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+# Enable Direct Rendering Manager (DRM) Kernel Mode Setting and Framebuffer Device for Wayland & Hyprland
+options nvidia-drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+EOF
+            step_item "Enabling NVIDIA power management & suspend services..."
+            sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
+            step_item "Updating initramfs..."
+            sudo update-initramfs -u >> "$LOG_FILE" 2>&1 || step_warn "initramfs update had warnings."
             step_ok "NVIDIA system optimization complete."
         fi
         step_ok "Hardware drivers configured."
@@ -1715,6 +1776,8 @@ install_rust_dock() {
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1
+    elif [ "$DISTRO" = "debian" ]; then
+        sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev libgtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
     fi
@@ -1787,9 +1850,9 @@ PINNED
     fi
 }
 
-# --- FEDORA THEMES, ICONS & FONTS ASSETS ---
-fedora_install_themes_and_fonts() {
-    section "Fedora Visual Assets & Typography"
+# --- VISUAL ASSETS, ICONS & FONTS (FEDORA & DEBIAN) ---
+install_themes_and_fonts() {
+    section "Visual Assets, Icons & Typography"
 
     # 1. JetBrains Mono Nerd Font
     if ! fc-list : family 2>/dev/null | grep -qi "JetBrainsMono Nerd Font"; then
@@ -1987,7 +2050,132 @@ step_software() {
             "
         step_ok "Core packages installed."
 
-        fedora_install_themes_and_fonts
+        install_themes_and_fonts
+        install_rust_dock
+        auto_detect_drivers
+        return 0
+    elif [ "$DISTRO" = "debian" ]; then
+        sudo -v
+
+        # Ensure Debian backports is available if Debian 13 (Trixie)
+        local debian_codename
+        debian_codename=$(grep "VERSION_CODENAME" /etc/os-release 2>/dev/null | cut -d= -f2 || echo "trixie")
+        [ -z "$debian_codename" ] && debian_codename="trixie"
+
+        local DEBIAN_CORE_PKGS=(
+            hyprland
+            hypridle
+            hyprlock
+            hyprsunset
+            hyprpicker
+            xdg-desktop-portal-hyprland
+            xdg-desktop-portal-gtk
+            waybar
+            quickshell
+            rofi-wayland
+            rofi
+            kitty
+            zsh
+            zsh-autosuggestions
+            zsh-syntax-highlighting
+            starship
+            thunar
+            thunar-archive-plugin
+            thunar-volman
+            file-roller
+            gvfs
+            gvfs-backends
+            gvfs-fuse
+            tumbler
+            ffmpegthumbnailer
+            libgsf-1-114
+            gwenview
+            network-manager
+            network-manager-gnome
+            bluez
+            bluez-obex
+            blueman
+            pipewire
+            pipewire-pulse
+            pipewire-alsa
+            wireplumber
+            pavucontrol
+            playerctl
+            pamixer
+            brightnessctl
+            v4l-utils
+            lsof
+            swappy
+            grim
+            slurp
+            wl-clipboard
+            wf-recorder
+            libnotify-bin
+            socat
+            x11-xserver-utils
+            qml-module-qtgraphicaleffects
+            qml-module-qtquick-controls2
+            qml-module-qtsvg
+            qml-module-qtquick-shapes
+            qt5ct
+            qt6ct
+            qt-style-kvantum
+            qt-style-kvantum-themes
+            sddm
+            polkit-kde-agent-1
+            gnome-keyring
+            nwg-displays
+            nwg-look
+            cava
+            fonts-noto
+            fonts-noto-cjk
+            fonts-noto-color-emoji
+            fonts-font-awesome
+            power-profiles-daemon
+            upower
+            python3
+            python3-pip
+            python3-pil
+            python3-gi
+            flatpak
+            stow
+            curl
+            wget
+            unzip
+            jq
+            bc
+            imagemagick
+            cliphist
+            mpv
+            htop
+            btop
+            fastfetch
+            inotify-tools
+            psmisc
+            xdg-user-dirs
+            btrfs-progs
+            timeshift
+        )
+
+        rhythm_spin "Installing core packages via apt-get..." -- \
+            bash -c "
+                export DEBIAN_FRONTEND=noninteractive
+                # Try batch install with backports priority for Hyprland ecosystem
+                sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
+                if ! sudo apt-get install -y ${DEBIAN_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
+                    for pkg in ${DEBIAN_CORE_PKGS[*]}; do
+                        sudo apt-get install -y \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
+                    done
+                fi
+
+                # Extra utilities if available in repos
+                for extra in swww mpvpaper awww; do
+                    sudo apt-get install -y \"\$extra\" >> '$LOG_FILE' 2>&1 || true
+                done
+            "
+        step_ok "Core packages installed."
+
+        install_themes_and_fonts
         install_rust_dock
         auto_detect_drivers
         return 0
@@ -2199,6 +2387,40 @@ unified_app_search() {
             sleep 0.5
         fi
         return 0
+    elif [ "$DISTRO" = "debian" ]; then
+        step_item "Launching fzf package search (Debian APT repositories)..."
+        step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+        sleep 0.8
+
+        local fzf_args=(
+            --multi
+            --ansi
+            --prompt="Search Packages > "
+            --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
+            --preview 'apt-cache show {1} 2>/dev/null || echo "Loading info..."'
+            --preview-window 'right:55%:wrap'
+            --bind 'change:top'
+        )
+
+        local SELECTED_SEARCH=""
+        if command -v apt-cache >/dev/null 2>&1; then
+            SELECTED_SEARCH=$(apt-cache pkgnames 2>/dev/null | sort -u | fzf "${fzf_args[@]}" </dev/tty || true)
+        fi
+
+        if [[ -n "$SELECTED_SEARCH" ]]; then
+            local count=0
+            while IFS= read -r app; do
+                [ -z "$app" ] && continue
+                PACMAN_INSTALL+=("$app")
+                ((count++))
+            done <<< "$SELECTED_SEARCH"
+            step_ok "Added $count packages from universal search."
+            sleep 1
+        else
+            step_item "No packages selected from search."
+            sleep 0.5
+        fi
+        return 0
     fi
 
     if ! command -v yay > /dev/null 2>&1; then
@@ -2240,7 +2462,7 @@ unified_app_search() {
 # --- DISPLAY MANAGER DETECTION ---
 detect_existing_display_manager() {
     local dm
-    for dm in gdm lightdm lxdm greetd ly cosmic-greeter; do
+    for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
         if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1; then
             echo "$dm"
             return 0
@@ -2251,6 +2473,14 @@ detect_existing_display_manager() {
         target=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
         if [ -n "$target" ] && [[ "$target" != *"sddm"* ]]; then
             basename "$target" .service
+            return 0
+        fi
+    fi
+    if [ -f /etc/X11/default-display-manager ]; then
+        local debian_dm
+        debian_dm=$(basename "$(cat /etc/X11/default-display-manager 2>/dev/null || true)")
+        if [ -n "$debian_dm" ] && [ "$debian_dm" != "sddm" ]; then
+            echo "$debian_dm"
             return 0
         fi
     fi
@@ -2663,6 +2893,28 @@ step_applications() {
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
                     *steam*) sudo dnf install -y steam >> "$LOG_FILE" 2>&1 || true ;;
                     *) sudo dnf install -y --skip-broken "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                esac
+            done
+        elif [ "$DISTRO" = "debian" ]; then
+            step_item "Deploying application selections for Debian..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            for app in "${PACMAN_INSTALL[@]}"; do
+                case "$app" in
+                    *brave*)
+                        # Setup official Brave browser repo for Debian if requested
+                        if ! command -v brave-browser >/dev/null 2>&1; then
+                            sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg >> "$LOG_FILE" 2>&1 || true
+                            sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources >> "$LOG_FILE" 2>&1 || true
+                            sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+                            sudo apt-get install -y brave-browser >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true
+                        fi
+                        ;;
+                    *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
+                    *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
+                    *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || sudo apt-get install -y steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
         else
@@ -3350,10 +3602,34 @@ step_system() {
         other_dm=$(detect_existing_display_manager || true)
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
             step_item "Disabling $other_dm in favor of SDDM..."
-            sudo systemctl disable "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+            sudo systemctl disable --now "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+            sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
         fi
+
+        # Disable all other common display managers to avoid conflicts with display-manager.service alias
+        for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
+            if [ "$dm" != "sddm" ]; then
+                sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
+            fi
+        done
+
+        # If display-manager.service symlink already exists and points to something else, remove or force it
+        if [ -e /etc/systemd/system/display-manager.service ]; then
+            local current_target
+            current_target=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
+            if [ -n "$current_target" ] && [[ "$current_target" != *"sddm"* ]]; then
+                sudo rm -f /etc/systemd/system/display-manager.service >> "$LOG_FILE" 2>&1 || true
+            fi
+        fi
+
+        # Debian default display manager file
+        if [ -d /etc/X11 ] || [ -f /etc/X11/default-display-manager ]; then
+            echo "/usr/bin/sddm" | sudo tee /etc/X11/default-display-manager >/dev/null 2>&1 || true
+        fi
+
         step_item "Enabling SDDM display manager..."
-        sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+        sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+        sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
         step_ok "SDDM enabled as default display manager."
     else
         step_ok "SDDM service activation skipped (existing display manager retained)."
@@ -3406,6 +3682,7 @@ step_update() {
             echo ""
             local pkg_label="pacman"
             [ "$DISTRO" = "fedora" ] && pkg_label="dnf"
+            [ "$DISTRO" = "debian" ] && pkg_label="apt"
             if gum confirm "Would you also like to update system packages with $pkg_label?"; then
                 bash "$DOTFILES_DIR/.local/bin/system-ota" update --system
             else
@@ -3530,6 +3807,11 @@ if [ "$DRY_RUN" = true ]; then
         step_ok "DNF package manager & RPM Fusion repositories active."
         section "Package Toolchain & Repositories"
         step_ok "DNF COPRs (hyprland, quickshell, nwg-shell, sway-extras) verified."
+    elif [ "$DISTRO" = "debian" ]; then
+        step_ok "Debian Linux x86_64 (Trixie/Sid) verified."
+        step_ok "APT package manager & Charm repositories active."
+        section "Package Toolchain & Repositories"
+        step_ok "Official Debian & Backports repositories verified."
     else
         step_ok "Arch Linux x86_64 verified."
         step_ok "Parallel downloads & multilib repository active."
@@ -3548,6 +3830,8 @@ if [ "$DRY_RUN" = true ]; then
     sleep 0.5
     if [ "$DISTRO" = "fedora" ]; then
         step_ok "NVIDIA Akmod, kernel-devel, DRM modesetting & dracut initramfs verified."
+    elif [ "$DISTRO" = "debian" ]; then
+        step_ok "NVIDIA DKMS, kernel headers, DRM modesetting & initramfs verified."
     else
         step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
     fi

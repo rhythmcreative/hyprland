@@ -175,6 +175,19 @@ generate_status_json() {
             done <<< "$raw_dnf"
             pacman_updates=${#pacman_pkgs[@]}
         fi
+    elif command -v apt-get >/dev/null 2>&1; then
+        local raw_apt
+        raw_apt=$(apt-get -s -o Debug::NoLocking=true upgrade 2>/dev/null | grep "^Inst " || true)
+        if [ -n "$raw_apt" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $2}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_apt"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
     fi
 
     local kernel_ver
@@ -793,6 +806,16 @@ cmd_update() {
                 fi
             else
                 echo "Sudo not available, skipping dnf system packages."
+            fi
+        elif command -v apt-get >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with apt-get..."
+            if command -v sudo >/dev/null 2>&1; then
+                if ! (sudo apt-get update -y >> "$LOG_FILE" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y >> "$LOG_FILE" 2>&1); then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] apt-get termino con errores. Detalle en $LOG_FILE"
+                fi
+            else
+                echo "Sudo not available, skipping apt-get system packages."
             fi
         fi
     else

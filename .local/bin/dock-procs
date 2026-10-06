@@ -40,9 +40,22 @@ signal="${4:-}"
 
 # Ejecutables aceptados para cada tipo. Se comparan contra /proc/<pid>/exe, que
 # es el binario de verdad, no una cadena de la linea de comandos.
+#
+# Un patron por tipo que cubre los dos nombres. Nix no trae /usr/bin/waybar
+# sino un envoltorio cuyo comm es `.waybar-wrapped` y cuyo exe apunta dentro
+# del store, con lo que `*/waybar` no cuadraba ahi: `pgrep -x waybar` no
+# devolvia nada, el bucle no se ejecutaba, y las senales USR1/USR2 que ocultan
+# y restauran las barras al abrir rofi no llegaban a nadie (barra, dock e isla
+# se quedaban encima del menu).
+#
+# Un patron y no dos con `|`: en un `case` de bash la alternativa solo se
+# parsea si la `|` esta en el fuente. Puesta en una variable llega al patron
+# como un literal, y `*/waybar|*/.waybar-wrapped` no casa con NADA. Un solo
+# glob `*waybar` cubre /usr/bin/waybar y /nix/store/.../.waybar-wrapped, y el
+# `pgrep -x` de arriba ya acota que procesos entran.
 case "$kind" in
-    rust-dock) want_exe='*/rust-dock' ;;
-    waybar)    want_exe='*/waybar' ;;
+    rust-dock) want_exe='*rust-dock' ;;
+    waybar)    want_exe='*waybar' ;;
     *) echo "tipo desconocido: $kind" >&2; exit 2 ;;
 esac
 
@@ -70,7 +83,9 @@ pids_of_kind() {
     # estrecha primero y el ejecutable confirma despues, sobre cuatro o cinco
     # procesos en vez de cuatrocientos.
     local pid exe
-    for pid in $(pgrep -x "$kind" 2>/dev/null); do
+    # Se prueban los dos nombres, el normal y el de Nix (.foo-wrapped), porque
+    # `pgrep -x` compara con comm y en NixOS no existe /usr/bin/<kind>.
+    for pid in $(pgrep -x "$kind" 2>/dev/null; pgrep -x ".$kind-wrapped" 2>/dev/null); do
         exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
         case "$exe" in
             $want_exe) echo "$pid" ;;

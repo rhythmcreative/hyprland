@@ -221,17 +221,9 @@ hl.animation({ leaf = "windowsOut",    enabled = true, speed = 1.49, bezier = "l
 hl.animation({ leaf = "fadeIn",        enabled = true, speed = 1.73, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeOut",       enabled = true, speed = 1.46, bezier = "almostLinear" })
 hl.animation({ leaf = "fade",          enabled = true, speed = 3.03, bezier = "quick" })
--- El style se declara porque sin el Hyprland usa el default del leaf, que no es
--- slide: la barra se iba de golpe en vez de deslizarse. Todos los demas leaves
--- de abajo lo llevan explicito (popin, fade) y layers se habia quedado sin el.
---
--- La velocidad baja de 4 a 3 porque la capa se quita cada vez que se abre un
--- menu, y a 4 el desplazamiento dura lo bastante para notarse como tiron en vez
--- de movimiento. slide sube la capa, que es donde vive waybar ("top"), y las tres
--- leaves se mueven juntas: In al ocultarse, Out al volver.
-hl.animation({ leaf = "layers",        enabled = true, speed = 3,    bezier = "quick", style = "slide" })
-hl.animation({ leaf = "layersIn",      enabled = true, speed = 3,    bezier = "quick", style = "slide" })
-hl.animation({ leaf = "layersOut",     enabled = true, speed = 3,    bezier = "quick", style = "slide" })
+hl.animation({ leaf = "layers",        enabled = true, speed = 4,    bezier = "quick" })
+hl.animation({ leaf = "layersIn",      enabled = true, speed = 4,    bezier = "quick" })
+hl.animation({ leaf = "layersOut",     enabled = true, speed = 3.5,  bezier = "quick" })
 hl.animation({ leaf = "fadeLayersIn",  enabled = true, speed = 1.79, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 1.39, bezier = "almostLinear" })
 hl.animation({ leaf = "workspaces",    enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })

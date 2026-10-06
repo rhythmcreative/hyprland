@@ -253,7 +253,7 @@ Environment overrides:
   RHYTHM_NIXOS_CHANNEL=<name>        nixpkgs branch (default: your installed release)
 
 One-line installation:
-  bash -c "$(curl -fsSL --connect-timeout 10 --max-time 60 https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+  bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
 EOF
     }
 
@@ -1169,7 +1169,7 @@ Options:
   -h, --help                 Show this help message and exit
 
 One-line installation:
-  bash -c "$(curl -fsSL --connect-timeout 10 --max-time 60 https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+  bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
 
 Examples:
   ./install.sh --update

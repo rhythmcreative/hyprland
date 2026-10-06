@@ -1689,6 +1689,9 @@ step_software() {
         # Fonts
         ttf-jetbrains-mono-nerd
         otf-font-awesome
+        noto-fonts
+        noto-fonts-cjk
+        noto-fonts-emoji
 
         # Rust & Build Dependencies (for rust-dock)
         rust

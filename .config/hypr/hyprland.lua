@@ -148,11 +148,22 @@ end)
 hl.env("XCURSOR_SIZE", "24")
 hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")
 hl.env("HYPRCURSOR_SIZE", "24")
-hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+-- Motores de Qt. En Arch son qt5ct y kvantum, y estan instalados.
+-- En NixOS ninguno de los dos existe en nixpkgs, y el modulo del escritorio
+-- deja QT_QPA_PLATFORMTHEME=qt6ct y QT_STYLE_OVERRIDE=adwaita en el entorno
+-- de la sesion (adwaita-qt6 es el puente GTK->Qt que hay disponible).
+--
+-- Por eso solo se fijan si NO vienen ya de fuera: en Arch, donde no llegan,
+-- se mantienen estos; en NixOS, donde llegan, hyprctl no pisa el valor.
+if not os.getenv("QT_QPA_PLATFORMTHEME") then
+    hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+end
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
-hl.env("QT_STYLE_OVERRIDE", "kvantum")
+if not os.getenv("QT_STYLE_OVERRIDE") then
+    hl.env("QT_STYLE_OVERRIDE", "kvantum")
+end
 hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
 hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
 

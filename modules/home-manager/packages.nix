@@ -14,7 +14,7 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
-    home.packages = cfg.desktopPackages;
+    home.packages = cfg.desktopPackages ++ [ pkgs.adwaita-qt6 ];
 
     # Variables que el compositor tiene que encontrar al arrancar.
     #
@@ -47,6 +47,26 @@ in
       RHYTHM_PLUGIN_HYPRBARS = "${pkgs.hyprlandPlugins.hyprbars}/lib/libhyprbars.so";
       ZSH_AUTOSUGGESTIONS_SRC = "${pkgs.zsh-autosuggestions}/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh";
       ZSH_SYNTAX_HIGHLIGHTING_SRC = "${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh";
+
+      # Tematizacion de Qt en NixOS, donde los motores que hyprland.lua fija
+      # por defecto no existen.
+      #
+      # hyprland.lua pone QT_QPA_PLATFORMTHEME=qt5ct y
+      # QT_STYLE_OVERRIDE=kvantum, pensados para Arch. En nixpkgs no hay
+      # qt5ct ni kvantum (comprobado en nixos-26.05 y en unstable), con lo que
+      # Qt caia al estilo por defecto y las apps se veian distintas de GTK.
+      #
+      # El equivalente disponible es adwaita-qt6, que porta el tema Adwaita de
+      # GTK a Qt: el plugin de estilo se llama `adwaita`
+      # (lib/qt-6/plugins/styles/adwaita.so), y qt6ct, que hace de
+      # platform theme para la fuente, la paleta y los iconos. Entre los dos
+      # cubren lo que kvantum + qt5ct hacian en Arch.
+      #
+      # hyprland.lua solo fija estas dos si NO vienen ya del entorno (ver ahi
+      # el `if not os.getenv`), asi que en Arch sigue mandando qt5ct+kvantum
+      # y aqui mandan estos.
+      QT_QPA_PLATFORMTHEME = "qt6ct";
+      QT_STYLE_OVERRIDE = "adwaita";
     };
   };
 }

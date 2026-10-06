@@ -21,7 +21,7 @@ docs/adr/0001-nixos-flake-layout.md first for the why of each decision.
 The installer detects NixOS and does all of this for you:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)"
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 ```
 
 It has two halves, because the desktop has two halves:

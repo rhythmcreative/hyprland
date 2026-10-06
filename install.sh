@@ -253,7 +253,7 @@ Environment overrides:
   RHYTHM_NIXOS_CHANNEL=<name>        nixpkgs branch (default: your installed release)
 
 One-line installation:
-  bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
+  curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 EOF
     }
 
@@ -1169,7 +1169,7 @@ Options:
   -h, --help                 Show this help message and exit
 
 One-line installation:
-  bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
+  curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 
 Examples:
   ./install.sh --update

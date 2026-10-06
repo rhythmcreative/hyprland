@@ -157,7 +157,7 @@ OTA updates pull the repo, run numbered idempotent migrations from `migrations/`
 Run directly from the terminal with curl:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 ```
 
 ### Manual install
@@ -192,7 +192,7 @@ cd ~/.config/hyprland-repo
 
 ```bash
 # Example unattended run
-bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh) -y --no-reboot --skip-wallpapers
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --no-reboot --skip-wallpapers
 ```
 
 </details>
@@ -203,7 +203,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main
 The same command detects NixOS and installs the same desktop through Nix:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 ```
 
 It activates a standalone home-manager flake for your user scope (dotfiles,

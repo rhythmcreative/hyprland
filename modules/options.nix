@@ -208,6 +208,12 @@ glib
       '';
     };
 
+    # Reduccion de ruido del microfono. En Arch se activa a mano con
+    # toggle-noise-suppression, asi que por defecto va apagado tambien aqui: lo
+    # contrario es una diferencia de comportamiento entre las dos plataformas.
+    audio.denoising = lib.mkEnableOption
+      "the RNNoise microphone filter chain in PipeWire" // { default = false; };
+
     features = {
       island = lib.mkEnableOption "the quickshell dynamic island" // { default = true; };
       wallpaperWatcher = lib.mkEnableOption "the wallpaper monitor watcher" // { default = true; };

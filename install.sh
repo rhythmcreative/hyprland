@@ -1791,12 +1791,15 @@ fedora_install_themes_and_fonts() {
     if [ ! -d "/usr/share/icons/Bibata-Modern-Ice" ] && [ ! -d "$HOME/.local/share/icons/Bibata-Modern-Ice" ]; then
         step_item "Installing Bibata Modern Ice Cursor..."
         local tmp_bibata
-        tmp_bibata=$(mktemp "${TMPDIR:-/tmp}/bibata.XXXXXX.tar.gz")
+        tmp_bibata=$(mktemp "${TMPDIR:-/tmp}/bibata.XXXXXX.tar.xz")
         if curl -fsSL --connect-timeout 15 --max-time 60 \
-            "https://github.com/ful1e5/Bibata_Cursor/releases/latest/download/Bibata-Modern-Ice.tar.gz" \
+            "https://github.com/ful1e5/Bibata_Cursor/releases/latest/download/Bibata-Modern-Ice.tar.xz" \
+            -o "$tmp_bibata" >> "$LOG_FILE" 2>&1 || \
+           curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.7/Bibata-Modern-Ice.tar.xz" \
             -o "$tmp_bibata" >> "$LOG_FILE" 2>&1; then
             sudo mkdir -p /usr/share/icons
-            sudo tar -xzf "$tmp_bibata" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
+            sudo tar -xf "$tmp_bibata" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
             step_ok "Bibata Cursor Theme deployed."
         else
             step_warn "Could not download Bibata cursor theme."

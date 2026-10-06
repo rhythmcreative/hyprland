@@ -2128,13 +2128,15 @@ unified_app_search() {
             --ansi
             --prompt="Search Packages > "
             --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
-            --preview 'dnf info {1} 2>/dev/null || echo "Loading info..."'
+            --preview 'dnf info -C {1} 2>/dev/null || dnf info {1} 2>/dev/null || echo "Loading info..."'
             --preview-window 'right:55%:wrap'
             --bind 'change:top'
         )
 
-        local SELECTED_SEARCH
-        SELECTED_SEARCH=$(dnf list available 2>/dev/null | awk '{print $1}' | cut -d. -f1 | fzf "${fzf_args[@]}" || true)
+        local SELECTED_SEARCH=""
+        if command -v dnf >/dev/null 2>&1; then
+            SELECTED_SEARCH=$( (dnf repoquery -q --available --queryformat "%{name}" 2>/dev/null || dnf list available 2>/dev/null | awk '{print $1}' | cut -d. -f1) | sort -u | fzf "${fzf_args[@]}" </dev/tty || true )
+        fi
 
         if [[ -n "$SELECTED_SEARCH" ]]; then
             local count=0

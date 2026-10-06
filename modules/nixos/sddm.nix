@@ -28,25 +28,23 @@ let
 
   cursorName = "Bibata-Modern-Ice";
 
-  # SDDM's own FacesDir ships only .face.icon and root.face.icon, which are
-  # X11 core-cursor aliases: this greeter is Wayland and Qt resolves cursor
-  # themes as FacesDir/<name>/{cursor.theme,index.theme,cursors/}, so neither
-  # of those files is ever loaded here. Only the theme goes in.
+  # What the greeter does with CursorTheme is one call: the daemon reads the
+  # name from sddm.conf and passes it over the socket, and sddm-greeter-qt6
+  # hands it to QIcon::setThemeName(). Neither binary mentions FacesDir -- the
+  # Wayland greeter has no such setting, it is an X11-era one for face icons.
+  # So CursorTheme only works if Qt can resolve the name on its own, and Qt
+  # looks in $XDG_DATA_DIRS/icons and $HOME/.icons.
   #
-  # pkgs.sddm is not referenced on purpose -- it is not a top-level attribute
-  # in this nixpkgs, and reaching it through
-  # config.services.displayManager.sddm.package instead would make the sddm
-  # derivation depend on this directory while this directory depended on the
-  # sddm derivation.
-  cursorFaces = pkgs.runCommand "sddm-faces" { } ''
-    mkdir -p "$out"
-
-    if [ -d "${pkgs.bibata-cursors}/share/icons/${cursorName}" ]; then
-      cp -r "${pkgs.bibata-cursors}/share/icons/${cursorName}" "$out/"
-    else
-      echo "AVISO: no hay cursor ${cursorName} para el greeter" >&2
-    fi
-  '';
+  # Neither exists for the greeter: its user is sddm with HOME=/var/lib/sddm,
+  # its unit sets no XDG_DATA_DIRS, and /etc/environment -- which is what
+  # pam_env.so in etc/pam.d/sddm-greeter reads -- is not generated here. Qt
+  # therefore falls back to its compiled-in /usr/local/share:/usr/share, which
+  # do not exist on NixOS, finds no cursor theme at all, and silently uses its
+  # bundled arrow.
+  #
+  # Hence the two halves: the cursor has to be somewhere Qt scans, and the
+  # greeter has to be told to scan it.
+  cursorDataDir = "${pkgs.bibata-cursors}/share";
 
   # The wallpaper is a loose file inside another store path. A path written by
   # hand is not mounted into the build sandbox, so it is wrapped in its own
@@ -179,23 +177,33 @@ in
           fi
         '';
       }))
+      # The greeter cursor, same package home.pointerCursor gives the user.
+      # In the system profile it lands in /run/current-system/sw/share/icons,
+      # which is one of the XDG_DATA_DIRS handed to the greeter below, so Qt
+      # resolves CursorTheme from there instead of falling back to its bundled
+      # arrow. Nothing new in the closure.
+      pkgs.bibata-cursors
     ];
 
     # Greeter cursor, matching the Bibata-Modern-Ice default on Arch.
     services.displayManager.sddm.settings.General.CursorTheme = cursorName;
 
-    # CursorTheme is only a name: SDDM resolves it against FacesDir, and
-    # nixpkgs points that at SDDM's own directory, which ships just the two
-    # X core-cursor aliases (.face.icon, root.face.icon). Bibata-Modern-Ice is
-    # not in there, so the name resolves to nothing and Qt falls back to its
-    # default arrow with no warning -- a different cursor in the greeter than
-    # the one the session uses. The cursor package is already in the closure
-    # (home.pointerCursor pulls it in for the user), so this only has to point
-    # FacesDir at a directory that has the theme in it.
-    # FacesDir, not General: nixpkgs declares its default under [Theme], so
-    # setting it in [General] writes a second FacesDir into the file instead
-    # of replacing that one, and the later [Theme] line is the one SDDM uses.
-    services.displayManager.sddm.settings.Theme.FacesDir = "${cursorFaces}";
+    # CursorTheme is only a name handed to QIcon::setThemeName() (see the note
+    # on cursorDataDir), so on its own it cannot make the cursor appear: Qt has
+    # to find the theme somewhere it scans. /etc/environment is not generated
+    # on this system, so pam_env.so in the greeter's PAM stack has nothing to
+    # read and the greeter ends up with Qt's built-in /usr/local/share:/usr/share
+    # -- both absent under NixOS. Setting it on the unit reaches the daemon,
+    # which passes its environment down to the helper and the greeter; the
+    # system profile is kept first so the greeter still sees the fonts and
+    # icons the desktop entries rely on.
+    systemd.services.display-manager.environment.XDG_DATA_DIRS =
+      "/run/current-system/sw/share:${cursorDataDir}:/etc/xdg/share";
+
+    # Kept in the system profile as well, so the theme lands in
+    # /run/current-system/sw/share/icons/<name> rather than only in a path Qt
+    # is told about. home.pointerCursor already pulls the same package in for
+    # the user, so this adds nothing to the closure.
 
     # GNOME Keyring unlock at login, replacing the /etc/pam.d sed edits.
     # login uses the default ruleset, so the plain switch works there. sddm

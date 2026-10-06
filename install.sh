@@ -187,17 +187,17 @@ confirm_prompt() {
 # With stdout not a terminal (piped into tee, CI, a log) a spinner is only
 # escape codes, so print the message plainly and let the command speak.
 #
-# NEVER put a redirect on the nixos_spin call itself
-# (nixos_spin "msg" -- cmd 2>>"$LOG_FILE"): the redirect applies to this
+# NEVER put a redirect on the rhythm_spin call itself
+# (rhythm_spin "msg" -- cmd 2>>"$LOG_FILE"): the redirect applies to this
 # whole function, gum draws the spinner on stderr, and the terminal goes
 # fully dark for minutes (it looks like the installer died right after the
 # logo). To log a step, redirect INSIDE: pass
 # bash -c 'cmd >>"$LOG_FILE" 2>&1' so only the inner command is silenced.
-nixos_spin() {
+rhythm_spin() {
     local msg="$1"; shift
     [ "${1:-}" = "--" ] && shift
     if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
-        gum spin --spinner dot --title "$msg" --width "${CONTENT_WIDTH:-80}" \
+        gum spin --spinner dot --title "$msg" \
             --padding "0 0 0 $PADDING_LEFT" -- "$@"
     else
         # The hint goes on its own line: appended to the message it ran past
@@ -206,6 +206,9 @@ nixos_spin() {
         step_item "This can take several minutes. Live log: ${LOG_FILE:-/tmp/hyprland-install.log}"
         "$@"
     fi
+}
+nixos_spin() {
+    rhythm_spin "$@"
 }
 
 # Same reason as nixos_tui_ok: a TUI on a dumb/limited terminal never draws and
@@ -1352,9 +1355,36 @@ preflight_checks() {
             fi
         fi
 
-        # Ensure bootstrap tools exist
-        local dnf_bootstrap=(git curl sudo zsh fzf dnf-plugins-core gum stow tar xz)
-        sudo dnf install -y "${dnf_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+        # Setup Charm official repository for gum
+        if ! command -v gum >/dev/null 2>&1; then
+            if [ ! -f /etc/yum.repos.d/charm.repo ]; then
+                sudo rpm --import https://repo.charm.sh/yum/gpg.key >> "$LOG_FILE" 2>&1 || true
+                sudo tee /etc/yum.repos.d/charm.repo >/dev/null << 'CHARM_EOF' || true
+[charm]
+name=Charm
+baseurl=https://repo.charm.sh/yum/
+enabled=1
+gpgcheck=1
+gpgkey=https://repo.charm.sh/yum/gpg.key
+CHARM_EOF
+            fi
+        fi
+
+        # Ensure bootstrap tools exist (supporting both DNF 4 and DNF 5)
+        local dnf_bootstrap=(git curl sudo zsh fzf stow tar xz dnf-plugins-core)
+        sudo dnf install -y "${dnf_bootstrap[@]}" 'dnf5-command(copr)' 'dnf5-plugins' gum >> "$LOG_FILE" 2>&1 || true
+
+        # Standalone binary fallback for gum if repo install was bypassed
+        if ! command -v gum >/dev/null 2>&1; then
+            local tmp_gum
+            tmp_gum=$(mktemp "${TMPDIR:-/tmp}/gum.XXXXXX.tar.gz")
+            if curl -fsSL --connect-timeout 10 "https://github.com/charmbracelet/gum/releases/download/v0.14.5/gum_0.14.5_linux_x86_64.tar.gz" -o "$tmp_gum" >> "$LOG_FILE" 2>&1; then
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ --strip-components=1 --wildcards '*/gum' >> "$LOG_FILE" 2>&1 || \
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ gum >> "$LOG_FILE" 2>&1 || true
+                sudo chmod +x /usr/local/bin/gum 2>/dev/null || true
+            fi
+            rm -f "$tmp_gum"
+        fi
 
         # Enable RPM Fusion free & nonfree
         local fedora_ver
@@ -1368,6 +1398,11 @@ preflight_checks() {
         sudo dnf copr enable -y errornointernet/quickshell >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y tofik/nwg-shell >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y alebastr/sway-extras >> "$LOG_FILE" 2>&1 || true
+        sudo dnf copr enable -y scottames/awww >> "$LOG_FILE" 2>&1 || true
+        sudo dnf copr enable -y solopasha/hyprland >> "$LOG_FILE" 2>&1 || true
+
+        # Refresh metadata cache
+        sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
     fi
 }
 
@@ -1675,7 +1710,7 @@ install_rust_dock() {
     rm -f "$source_dir/target/release/rust-dock" 2>/dev/null || true
 
     local build_ok=1
-    gum spin --spinner dot --title "Compiling rust-dock (release)..." --padding "0 0 0 $PADDING_LEFT" -- \
+    rhythm_spin "Compiling rust-dock (release)..." -- \
         bash -c "cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
 
     if [ "$build_ok" -ne 1 ] || [ ! -f "$source_dir/target/release/rust-dock" ]; then
@@ -1790,6 +1825,8 @@ step_software() {
     section "Core Packages & System Libraries"
 
     if [ "$DISTRO" = "fedora" ]; then
+        sudo -v
+
         local FEDORA_CORE_PKGS=(
             hyprland
             hypridle
@@ -1850,10 +1887,10 @@ step_software() {
             kvantum
             sddm
             polkit-kde
+            plasma-polkit-agent
             gnome-keyring
             nwg-displays
             nwg-look
-            awww
             cava
             google-noto-fonts-common
             google-noto-sans-cjk-fonts
@@ -1880,7 +1917,6 @@ step_software() {
             ImageMagick
             cliphist
             mpv
-            mpvpaper
             htop
             btop
             fastfetch
@@ -1890,8 +1926,18 @@ step_software() {
             btrfs-progs
         )
 
-        gum spin --spinner dot --title "Installing core packages via dnf..." --padding "0 0 0 $PADDING_LEFT" -- \
-            bash -c "sudo dnf install -y --skip-broken ${FEDORA_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1"
+        rhythm_spin "Installing core packages via dnf..." -- \
+            bash -c "
+                if ! sudo dnf install -y --skip-broken --allowerasing ${FEDORA_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
+                    for pkg in ${FEDORA_CORE_PKGS[*]}; do
+                        sudo dnf install -y --skip-broken --allowerasing \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
+                    done
+                fi
+
+                for extra in awww swww mpvpaper; do
+                    sudo dnf install -y --skip-broken --allowerasing \"\$extra\" >> '$LOG_FILE' 2>&1 || true
+                done
+            "
         step_ok "Core packages installed."
 
         fedora_install_themes_and_fonts
@@ -2041,7 +2087,7 @@ step_software() {
         timeshift
     )
 
-    gum spin --spinner dot --title "Installing core packages and dependencies..." --padding "0 0 0 $PADDING_LEFT" -- \
+    rhythm_spin "Installing core packages and dependencies..." -- \
         bash -c "yay -S --needed --noconfirm ${CORE_PKGS[*]} >> '$LOG_FILE' 2>&1"
     step_ok "Core packages installed."
 
@@ -2461,6 +2507,21 @@ step_applications() {
     fi
 
     if [ "$INSTALL_MODE" = "full" ]; then
+        if [ "$DISTRO" = "fedora" ]; then
+            step_item "Full stack requested for Fedora: deploying Flatpaks and available packages..."
+            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                while IFS= read -r fapp || [ -n "$fapp" ]; do
+                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                    [ -z "$fapp" ] && continue
+                    [[ "$fapp" =~ ^# ]] && continue
+                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                done < "$DOTFILES_DIR/flatpaks.txt"
+            fi
+            step_ok "Full package stack successfully deployed."
+            return 0
+        fi
+
         if [ -f "$DOTFILES_DIR/packages.txt" ]; then
             step_item "Reading package list from packages.txt..."
             local FULL_PKGS=()
@@ -2500,11 +2561,27 @@ step_applications() {
     fi
 
     if [ ${#PACMAN_INSTALL[@]} -gt 0 ]; then
-        local unique_pkgs=($(printf "%s\n" "${PACMAN_INSTALL[@]}" | sort -u))
-        PACMAN_INSTALL=("${unique_pkgs[@]}")
-        step_item "Installing selected native/AUR packages (${#PACMAN_INSTALL[@]} items): ${PACMAN_INSTALL[*]}"
-        gum spin --spinner dot --title "Installing applications via yay..." --padding "0 0 0 $PADDING_LEFT" -- \
-            bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
+        if [ "$DISTRO" = "fedora" ]; then
+            step_item "Deploying application selections for Fedora..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            for app in "${PACMAN_INSTALL[@]}"; do
+                case "$app" in
+                    *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
+                    *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || sudo dnf install -y code >> "$LOG_FILE" 2>&1 || true ;;
+                    *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
+                    *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo dnf install -y steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo dnf install -y --skip-broken "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                esac
+            done
+        else
+            local unique_pkgs=($(printf "%s\n" "${PACMAN_INSTALL[@]}" | sort -u))
+            PACMAN_INSTALL=("${unique_pkgs[@]}")
+            step_item "Installing selected native/AUR packages (${#PACMAN_INSTALL[@]} items): ${PACMAN_INSTALL[*]}"
+            rhythm_spin "Installing applications via yay..." -- \
+                bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
+        fi
     fi
 
     if [ ${#FLATPAK_INSTALL[@]} -gt 0 ] && [ "$SKIP_FLATPAKS" = false ]; then
@@ -3359,7 +3436,7 @@ if [ "$DRY_RUN" = true ]; then
 
     section "Core Packages & System Libraries"
     step_item "Simulating package dependency resolution..."
-    gum spin --spinner dot --title "Checking 65+ core packages..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.2
+    rhythm_spin "Checking 65+ core packages..." -- sleep 1.2
     step_ok "Compositor, Waybar, Quickshell, Rofi, Audio, Fonts resolved."
 
     section "Hardware Drivers & GPU Optimization"
@@ -3377,7 +3454,7 @@ if [ "$DRY_RUN" = true ]; then
     step_ok "Interactive multi-selection menu and universal fzf package search verified."
 
     section "Rust-Dock Component"
-    gum spin --spinner dot --title "Verifying rust-dock target binary..." --padding "0 0 0 $PADDING_LEFT" -- sleep 0.8
+    rhythm_spin "Verifying rust-dock target binary..." -- sleep 0.8
     step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
 
     section "Configuration Synchronization (Dotfiles)"
@@ -3392,7 +3469,7 @@ if [ "$DRY_RUN" = true ]; then
     step_ok "SDDM Astronaut theme and live Pywal synchronization hooks verified."
     step_ok "Multi-monitor detection (Xsetup) configured."
 
-    gum spin --spinner dot --title "Calibrating Pywal color palette..." --padding "0 0 0 $PADDING_LEFT" -- sleep 1.0
+    rhythm_spin "Calibrating Pywal color palette..." -- sleep 1.0
 
     clear_logo
     echo ""
@@ -3436,7 +3513,7 @@ mark_step "finished"
 
 # Calibrate colors
 if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-    gum spin --spinner dot --title "Calibrating Pywal color scheme..." --padding "0 0 0 $PADDING_LEFT" -- \
+    rhythm_spin "Calibrating Pywal color scheme..." -- \
         bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
 fi
 

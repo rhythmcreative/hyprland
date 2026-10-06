@@ -16,7 +16,22 @@ export PATH="$HOME/.local/bin:$PATH"
 # coincidir. Luego se filtra por linea de comandos para no contar otros
 # quickshell que no sean la isla.
 
-for _pid in $(pgrep -x quickshell 2>/dev/null); do
+# El nombre del ejecutable no es "quickshell" en NixOS: nixpkgs envuelve el
+# binario con makeWrapper y el proceso se llama .quickshell-wrapped, asi que
+# `pgrep -x quickshell` no matchea nunca. Medido: la isla corriendo (pid 843080)
+# con comm=.quickshell-wrapped, y el script contestando "no". Por eso
+# hide_active_bars del launcher se saltaba el bloque del island y la barra no
+# se ocultaba al abrir un menu.
+#
+# Y no se puede con `pgrep -x '.quickshell-wrapped'`: el kernel trunca comm a
+# 15 caracteres (comm=.quickshell-wra) y pgrep -x rechaza en vez de truncar los
+# patterns largos, asi que devuelve cero siempre.
+#
+# La solucion es el patron truncado de 15, que es lo que comm really tiene, y
+# seguir filtrando por linea de comandos como hacia el resto: ningun bash
+# coincide porque su comm no es este, y el filtro deja fuera otros quickshell
+# que no sean la isla.
+for _pid in $(pgrep -x quickshell 2>/dev/null; pgrep -x '.quickshell-wra' 2>/dev/null); do
     if tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null | grep -q "waybar-island"; then
         echo yes
         exit 0

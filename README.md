@@ -153,51 +153,77 @@ OTA updates pull the repo, run numbered idempotent migrations from `migrations/`
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Fira+Code&pause=1000&color=FFFFFF&vCenter=true&multiline=true&width=435&height=35&lines=Installation)](https://git.io/typing-svg)
 
-### Quick install
+The installer features an interactive **Tokyo Night TUI wizard** that automatically detects your distribution, configures required repositories, detects your GPU hardware (NVIDIA / AMD / Intel), sets up audio, builds native components, and deploys configurations seamlessly.
 
-Run directly from the terminal with curl:
+<div align="center">
+
+| Supported Distribution | Package Ecosystem | Detection |
+|:---:|:---:|:---:|
+| **Arch Linux** | Pacman + AUR (yay) | Automatic (`/etc/arch-release`) |
+| **Fedora Linux** | DNF + RPM Fusion + COPR | Automatic (`/etc/fedora-release`) |
+
+</div>
+
+### Quick Install (Recommended)
+
+Run directly from your terminal as your regular user:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
 ```
 
-### Manual install
+### Installation Modes
 
-Clone the repository and run the script:
+Choose the command that best fits your workflow:
 
 ```bash
+# 1. Interactive Wizard (Guided step-by-step setup)
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash
+
+# 2. Fast & Unattended (Installs essential desktop, auto-detects GPU & random wallpapers)
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --wallpapers random
+
+# 3. Visual Preview Mode (Simulates installation without touching system files)
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- --preview
+
+# 4. Manual Installation (Clone and inspect before running)
 git clone https://github.com/rhythmcreative/hyprland.git ~/.config/hyprland-repo
 cd ~/.config/hyprland-repo
 ./install.sh
 ```
 
 > [!IMPORTANT]
-> Run the installer as your regular user, not as root or with `sudo`. Root privileges are asked via `sudo` when required.
+> **Do not run the installer as root or with `sudo`**. Run as your standard user; the installer will prompt for `sudo` authentication only when installing system packages or configuring systemd services.
+
+> [!TIP]
+> After installation, reboot your system (or start SDDM) and select **Hyprland** in the astronaut greeter. Press **`Super + F`** anytime to search all shortcuts interactively!
 
 <details>
-  <summary><b>Installer flags & headless options</b></summary>
+  <summary><b>Installer flags & advanced options</b></summary>
 
 | Flag | Description |
 |---|---|
-| `-y`, `--yes` | Non-interactive mode, automatically confirms prompts |
-| `--preview`, `--dry-run` | Visual simulation mode without applying changes |
-| `--no-reboot` | Skip reboot prompt at the end |
-| `--wallpapers <mode>` | Pre-select wallpaper mode: `all`, `random`, or `none` |
-| `--skip-wallpapers` | Skip downloading wallpaper packs |
+| `-y`, `--yes` | Unattended mode: automatically confirms prompts with safe defaults |
+| `--preview`, `--dry-run` | Simulation mode: runs the visual installer workflow without system changes |
+| `--wallpapers <mode>` | Pre-select wallpaper pack: `all`, `random`, or `none` |
+| `--skip-wallpapers` | Skip downloading additional wallpaper collections |
 | `--gpu <type>` | Override GPU driver stack: `nvidia`, `amd`, `intel`, `auto`, `none` |
-| `--skip-gpu` | Skip GPU driver detection |
-| `--skip-rust-dock` | Skip building rust-dock |
-| `--skip-flatpaks` | Skip installing Flatpaks |
-| `--replace-configs-all` | Overwrite existing configurations directly without backups |
-| `-h`, `--help` | Show available options |
+| `--skip-gpu` | Skip GPU driver detection (generic modesetting only) |
+| `--skip-rust-dock` | Skip compiling and deploying the Rust-Dock component |
+| `--skip-flatpaks` | Skip installing Flatpak applications |
+| `--skip-apps` | Minimal core desktop install without extra software prompts |
+| `--replace-configs-all` | Overwrite existing configurations directly without `.bak` backups |
+| `--resume` | Resume an interrupted install without repeating completed steps |
+| `--no-reboot` | Skip reboot prompt at the end of the installation |
+| `-u`, `--update` | Update existing installation (syncs dotfiles, scripts, and packages) |
+| `-h`, `--help` | Show complete command-line help message |
 
 ```bash
-# Example unattended run
-curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --no-reboot --skip-wallpapers
+# Example: Non-interactive install for an NVIDIA system with random wallpapers
+curl -fsSL https://raw.githubusercontent.com/rhythmcreative/hyprland/main/install.sh | bash -s -- -y --gpu nvidia --wallpapers random --no-reboot
 ```
 
 </details>
-
 
 ---
 

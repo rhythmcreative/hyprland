@@ -25,13 +25,8 @@ final: prev: {
   }).overrideAttrs (old: {
     postInstall = ''
       ${old.postInstall or ""}
-      # Read every symlink in the shell and only fork rm for the dead ones:
-      # jdupes has turned most of the ~400k files into links by now, so a
-      # find -exec test per link would fork once per file.
-      find "$out" -type l -print0 |
-        while IFS= read -r -d "" link; do
-          [ -e "$link" ] || rm -f "$link"
-        done
+      # Efficiently prune broken dangling symlinks using native C find without slow bash loops:
+      find "$out" -xtype l -delete
     '';
   });
 

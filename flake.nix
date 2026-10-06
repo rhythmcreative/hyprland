@@ -35,5 +35,11 @@
         extraSpecialArgs = { inherit inputs; };
         modules = [ ./homes/rhythm/home.nix ];
       };
+
+      nixosConfigurations.asus = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = { inherit inputs; };
+        modules = [ ./hosts/asus/configuration.nix ];
+      };
     };
 }

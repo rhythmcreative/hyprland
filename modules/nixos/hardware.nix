@@ -12,33 +12,42 @@ in
 {
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
-      hardware.graphics.enable = true;
+      # Hardware acceleration support
+      hardware.graphics = {
+        enable = true;
+        enable32Bit = true;
+        extraPackages = lib.mkMerge [
+          (lib.mkIf (cfg.gpu == "intel") (with pkgs; [
+            intel-media-driver
+            intel-vaapi-driver
+            vulkan-intel
+          ]))
+          (lib.mkIf (cfg.gpu == "amd") (with pkgs; [
+            rocmPackages.clr
+            rocmPackages.clr.icd
+          ]))
+        ];
+      };
       hardware.enableRedistributableFirmware = true;
 
-      # Vendor tools (asusctl, surface kernels) are intentionally not
-      # installed by default: NixOS cannot probe PCI IDs at build time the
-      # way install.sh does with lspci. Add them in the host config when
-      # the hardware is known (see hosts/example).
+      # ASUS ROG/TUF hardware integration
+      services.asusd = lib.mkIf cfg.features.asus {
+        enable = true;
+      };
+      environment.systemPackages = lib.mkMerge [
+        (lib.mkIf cfg.features.asus [ pkgs.asusctl ])
+        (lib.mkIf cfg.features.surface [ pkgs.surface-control ])
+      ];
     }
 
     (lib.mkIf (cfg.gpu == "nvidia") {
       services.xserver.videoDrivers = [ "nvidia" ];
       hardware.nvidia = {
-        modesetting.enable = true;
-        powerManagement.enable = true;
-        open = true;
-        package = config.boot.kernelPackages.nvidiaPackages.latest;
+        modesetting.enable = lib.mkDefault true;
+        powerManagement.enable = lib.mkDefault true;
+        open = lib.mkDefault true;
+        package = lib.mkDefault config.boot.kernelPackages.nvidiaPackages.latest;
       };
-    })
-
-    (lib.mkIf (cfg.gpu == "amd") {
-      # OpenCL through ROCm; the exact package set follows the nixpkgs
-      # hardware.graphics convention (extraPackages, no amdgpu-specific
-      # option exists for this).
-      hardware.graphics.extraPackages = with pkgs; [
-        rocmPackages.clr
-        rocmPackages.clr.icd
-      ];
     })
   ]);
 }

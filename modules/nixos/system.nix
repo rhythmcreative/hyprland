@@ -105,11 +105,37 @@ in
 
     services.flatpak.enable = cfg.features.flatpaks;
 
+    # Sudo sin contraseña por defecto para el grupo wheel (igual que en Arch,
+    # /etc/sudoers.d/99-rhythmcreative), para que unidades de fondo como
+    # rhythm-battery-limit.service puedan aplicar cambios sin bloquearse.
+    security.sudo.wheelNeedsPassword = lib.mkDefault false;
+
+    # Agente de autenticacion grafica de Polkit (Plasma 6).
+    # Sin esto, cualquier aplicacion grafica que pida privilegios de root
+    # (GParted, configuraciones de red, virt-manager o herramientas de disco)
+    # falla en silencio al no encontrar agente en la sesion de Hyprland.
+    systemd.user.services.polkit-kde-authentication-agent-1 = {
+      description = "polkit-kde-authentication-agent-1";
+      wantedBy = [ "graphical-session.target" "default.target" ];
+      wants = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = "${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1";
+        Restart = "on-failure";
+        RestartSec = 1;
+        TimeoutStopSec = 10;
+      };
+    };
+
     fonts = {
       packages = with pkgs; [
         nerd-fonts.jetbrains-mono
+        nerd-fonts.meslo-lg
         font-awesome
+        inter
         noto-fonts
+        noto-fonts-cjk-sans
         noto-fonts-color-emoji
       ];
       fontconfig.enable = true;

@@ -390,40 +390,299 @@ EOF
                 esac
             done
         fi
+        local is_asus=false is_surface=false
+        local sys_vendor prod_name
+        sys_vendor=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)
+        prod_name=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
+        [[ "$sys_vendor" == *"ASUSTeK"* ]] && is_asus=true
+        [[ "$prod_name" == *"Surface"* ]] && is_surface=true
+
         section "Installing desktop for user=$user gpu=$guess_gpu"
         [ "$guess_gpu" = "nvidia" ] && step_item "NOTE: NVIDIA needs unfree. If a build refuses, add nixpkgs.config.allowUnfree = true; to /etc/nixos/flake.nix."
+        [ "$is_asus" = true ] && step_ok "ASUS hardware detected (asusctl ROG integration enabled)."
+        [ "$is_surface" = true ] && step_ok "Microsoft Surface detected (surface-control enabled)."
 
-        # Arch-style choices, mapped to module options. Skipped with
+        # Arch-style choices, mapped to module options and packages. Skipped with
         # RHYTHM_NO_CHOICES=1 (or RHYTHM_WALLPAPER / RHYTHM_FLATPAKS set).
         # Every gum widget runs under `timeout`: a TUI that cannot draw would
         # otherwise block the whole install with no way to press a key.
         local wallpapers="${opt_wall:-${RHYTHM_WALLPAPER:-random}}"
-        local flatpaks="${opt_flat:-${RHYTHM_FLATPAKS:-0}}" pick="" answer=""
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ] \
-            && nixos_can_ask && command -v gum >/dev/null 2>&1; then
+        local flatpaks="${opt_flat:-${RHYTHM_FLATPAKS:-0}}"
+        local -a nix_user_pkgs=()
+        local enable_steam_system=false
+
+        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && nixos_can_ask && command -v gum >/dev/null 2>&1; then
             clear_logo
-            pick=$(timeout 120 gum choose --header="Wallpaper pack:" \
-                "Random 50 wallpapers" "All wallpapers (~850 MB)" "No wallpapers" \
-                </dev/tty 2>/dev/null) || pick=""
-            if [ -z "$pick" ]; then
-                nixos_tui_note
-                step_item "Wallpapers: $wallpapers (default)"
+            echo ""
+            gum style --foreground 3 --bold --padding "0 0 1 $PADDING_LEFT" "Get ready to make a few choices..."
+
+            local mode_raw
+            mode_raw=$(timeout 120 gum choose \
+                --height 9 \
+                --header="Select software installation mode:" \
+                --cursor-prefix="> " \
+                "Custom Categorized Menus (Browsers, Chat, Dev, Media, Gaming, Utilities)" \
+                "Search & Select ANY Packages with fzf (Nixpkgs database)" \
+                "Full Package Stack (Recommended standard application bundle)" \
+                "Minimal Desktop Core (Essential Hyprland stack only)" </dev/tty 2>/dev/null || true)
+
+            nixos_search_packages() {
+                if ! command -v fzf >/dev/null 2>&1; then
+                    step_item "Installing fzf for package search..."
+                    nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#fzf >>"$LOG_FILE" 2>&1 || true
+                fi
+                clear_logo
+                echo ""
+                step_item "Launching package search (Search & install ANY package from Nixpkgs)..."
+                step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+                sleep 0.8
+
+                local fzf_selection=""
+                if command -v nix-env >/dev/null 2>&1; then
+                    fzf_selection=$(nix-env -qaP 2>/dev/null | awk '{print $1}' | sort -u | fzf --multi --ansi \
+                        --prompt="Search Nixpkgs > " \
+                        --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search" \
+                        --preview-window='right:55%:wrap' </dev/tty || true)
+                fi
+
+                if [ -n "$fzf_selection" ]; then
+                    local count=0
+                    while IFS= read -r app; do
+                        [ -z "$app" ] && continue
+                        # Strip channel prefix if present (e.g. nixos.brave -> brave, nixpkgs.brave -> brave)
+                        app="${app#nixos.}"
+                        app="${app#nixpkgs.}"
+                        nix_user_pkgs+=("$app")
+                        [ "$app" = "steam" ] && enable_steam_system=true
+                        ((count++))
+                    done <<< "$fzf_selection"
+                    step_ok "Added $count packages from package search."
+                    sleep 1
+                else
+                    step_item "No packages selected from search."
+                    sleep 0.5
+                fi
+            }
+
+            if [[ "$mode_raw" == *"Full Package Stack"* ]]; then
+                nix_user_pkgs+=(
+                    "brave" "vesktop" "telegram-desktop" "spotify"
+                    "vscode" "neovim" "obsidian" "libreoffice" "localsend"
+                    "steam" "obs-studio" "vlc" "gimp" "fastfetch" "btop"
+                )
+                enable_steam_system=true
+                flatpaks="1"
+            elif [[ "$mode_raw" == *"Minimal"* ]] || [ -z "$mode_raw" ]; then
+                : # Minimal stack: no extra user packages
+            elif [[ "$mode_raw" == *"Search & Select ANY Packages"* ]]; then
+                nixos_search_packages
             else
-                case "$pick" in
-                    "All"*) wallpapers="all" ;;
-                    "No "*) wallpapers="none" ;;
+                # 1. Web Browsers
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Web Browsers (1/5)"
+                local browsers_list=(
+                    "Brave Browser (brave)"
+                    "Chromium (chromium)"
+                    "Firefox (firefox)"
+                    "Firefox Developer Edition (firefox-devedition)"
+                    "Google Chrome (google-chrome)"
+                    "Microsoft Edge (microsoft-edge)"
+                    "Zen Browser (zen-browser)"
+                )
+                local sel_browsers
+                sel_browsers=$(printf "%s\n" "${browsers_list[@]}" | timeout 120 gum choose --no-limit --height 10 \
+                    --selected="Brave Browser (brave)" \
+                    --header="Space = Toggle, Enter = Confirm Category" \
+                    --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " </dev/tty 2>/dev/null || true)
+
+                # 2. Communication & Social
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Communication & Social (2/5)"
+                local comm_list=(
+                    "Discord / Vesktop (vesktop)"
+                    "Telegram Desktop (telegram-desktop)"
+                    "Slack Desktop (slack)"
+                    "Spotify (spotify)"
+                )
+                local sel_comm
+                sel_comm=$(printf "%s\n" "${comm_list[@]}" | timeout 120 gum choose --no-limit --height 10 \
+                    --selected="Discord / Vesktop (vesktop)" \
+                    --header="Space = Toggle, Enter = Confirm Category" \
+                    --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " </dev/tty 2>/dev/null || true)
+
+                # 3. Productivity & Development
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Productivity & Development (3/5)"
+                local dev_list=(
+                    "Visual Studio Code (vscode)"
+                    "Neovim (neovim)"
+                    "Obsidian (obsidian)"
+                    "LibreOffice (libreoffice)"
+                    "LocalSend (localsend)"
+                    "Docker & Docker Compose (docker docker-compose)"
+                    "Node.js & NPM (nodejs)"
+                    "Python Suite (python3)"
+                    "GitKraken (gitkraken)"
+                    "Ollama (ollama)"
+                )
+                local sel_dev
+                sel_dev=$(printf "%s\n" "${dev_list[@]}" | timeout 120 gum choose --no-limit --height 10 \
+                    --selected="Visual Studio Code (vscode)" \
+                    --header="Space = Toggle, Enter = Confirm Category" \
+                    --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " </dev/tty 2>/dev/null || true)
+
+                # 4. Media, Creativity & Gaming
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Media, Creativity & Gaming (4/5)"
+                local media_list=(
+                    "Steam (steam)"
+                    "Lutris (lutris)"
+                    "Heroic Games Launcher (heroic)"
+                    "OBS Studio (obs-studio)"
+                    "VLC Media Player (vlc)"
+                    "MPV Media Player (mpv)"
+                    "GIMP (gimp)"
+                    "Inkscape (inkscape)"
+                    "Kdenlive (kdenlive)"
+                    "Blender (blender)"
+                    "Audacity (audacity)"
+                )
+                local sel_media
+                sel_media=$(printf "%s\n" "${media_list[@]}" | timeout 120 gum choose --no-limit --height 10 \
+                    --header="Space = Toggle, Enter = Confirm Category" \
+                    --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " </dev/tty 2>/dev/null || true)
+
+                # 5. System Utilities & Flatpaks
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: System Utilities & Flatpaks (5/5)"
+                local utils_list=(
+                    "Btop System Monitor (btop)"
+                    "Fastfetch (fastfetch)"
+                    "Mission Center (flatpak: io.missioncenter.MissionCenter)"
+                    "Clapper Media Player (flatpak: com.github.rafostar.Clapper)"
+                    "Eye of GNOME (flatpak: org.gnome.eog)"
+                    "Sober Roblox Player (flatpak: org.vinegarhq.Sober)"
+                )
+                local sel_utils
+                sel_utils=$(printf "%s\n" "${utils_list[@]}" | timeout 120 gum choose --no-limit --height 10 \
+                    --selected="Mission Center (flatpak: io.missioncenter.MissionCenter)" \
+                    --header="Space = Toggle, Enter = Confirm Category" \
+                    --cursor-prefix="> " --selected-prefix="[x] " --unselected-prefix="[ ] " </dev/tty 2>/dev/null || true)
+
+                local all_selected="${sel_browsers}"$'\n'"${sel_comm}"$'\n'"${sel_dev}"$'\n'"${sel_media}"$'\n'"${sel_utils}"
+                while IFS= read -r line; do
+                    [ -z "$line" ] && continue
+                    case "$line" in
+                        *"(brave)"*)                  nix_user_pkgs+=("brave") ;;
+                        *"(chromium)"*)               nix_user_pkgs+=("chromium") ;;
+                        *"(firefox)"*)                nix_user_pkgs+=("firefox") ;;
+                        *"(firefox-devedition)"*)     nix_user_pkgs+=("firefox-devedition") ;;
+                        *"(google-chrome)"*)          nix_user_pkgs+=("google-chrome") ;;
+                        *"(microsoft-edge)"*)         nix_user_pkgs+=("microsoft-edge") ;;
+                        *"(zen-browser)"*)            nix_user_pkgs+=("zen-browser") ;;
+                        *"(vesktop)"*)                nix_user_pkgs+=("vesktop") ;;
+                        *"(telegram-desktop)"*)       nix_user_pkgs+=("telegram-desktop") ;;
+                        *"(slack)"*)                  nix_user_pkgs+=("slack") ;;
+                        *"(spotify)"*)                nix_user_pkgs+=("spotify") ;;
+                        *"(vscode)"*)                 nix_user_pkgs+=("vscode") ;;
+                        *"(neovim)"*)                 nix_user_pkgs+=("neovim") ;;
+                        *"(obsidian)"*)               nix_user_pkgs+=("obsidian") ;;
+                        *"(libreoffice)"*)            nix_user_pkgs+=("libreoffice") ;;
+                        *"(localsend)"*)              nix_user_pkgs+=("localsend") ;;
+                        *"(docker docker-compose)"*)  nix_user_pkgs+=("docker" "docker-compose") ;;
+                        *"(nodejs)"*)                 nix_user_pkgs+=("nodejs") ;;
+                        *"(python3)"*)                nix_user_pkgs+=("python3") ;;
+                        *"(gitkraken)"*)              nix_user_pkgs+=("gitkraken") ;;
+                        *"(ollama)"*)                 nix_user_pkgs+=("ollama") ;;
+                        *"(steam)"*)                  nix_user_pkgs+=("steam"); enable_steam_system=true ;;
+                        *"(lutris)"*)                 nix_user_pkgs+=("lutris") ;;
+                        *"(heroic)"*)                 nix_user_pkgs+=("heroic") ;;
+                        *"(obs-studio)"*)             nix_user_pkgs+=("obs-studio") ;;
+                        *"(vlc)"*)                    nix_user_pkgs+=("vlc") ;;
+                        *"(mpv)"*)                    nix_user_pkgs+=("mpv") ;;
+                        *"(gimp)"*)                   nix_user_pkgs+=("gimp") ;;
+                        *"(inkscape)"*)               nix_user_pkgs+=("inkscape") ;;
+                        *"(kdenlive)"*)               nix_user_pkgs+=("kdenlive") ;;
+                        *"(blender)"*)                nix_user_pkgs+=("blender") ;;
+                        *"(audacity)"*)               nix_user_pkgs+=("audacity") ;;
+                        *"(btop)"*)                   nix_user_pkgs+=("btop") ;;
+                        *"(fastfetch)"*)              nix_user_pkgs+=("fastfetch") ;;
+                        *"(flatpak:"*)                flatpaks="1" ;;
+                    esac
+                done <<< "$all_selected"
+
+                # Additional search or custom package input
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Additional Custom Software"
+                if timeout 120 gum confirm "Would you like to search or add any extra packages from Nixpkgs?" </dev/tty 2>/dev/null; then
+                    local add_choice
+                    add_choice=$(timeout 120 gum choose \
+                        --height 5 \
+                        --header="How would you like to add packages?" \
+                        --cursor-prefix="> " \
+                        "Interactive Search with fzf" \
+                        "Type package names manually (space-separated)" </dev/tty 2>/dev/null || true)
+
+                    if [[ "$add_choice" == *"Interactive Search"* ]]; then
+                        nixos_search_packages
+                    elif [[ "$add_choice" == *"Type package names"* ]]; then
+                        local custom_input
+                        custom_input=$(timeout 120 gum input --prompt="Packages > " \
+                            --placeholder="e.g. blender vlc kdenlive zed-editor" </dev/tty 2>/dev/null || true)
+                        if [ -n "$custom_input" ]; then
+                            for pkg_name in $custom_input; do
+                                nix_user_pkgs+=("$pkg_name")
+                                [ "$pkg_name" = "steam" ] && enable_steam_system=true
+                            done
+                            step_ok "Added custom packages: $custom_input"
+                            sleep 1
+                        fi
+                    fi
+                fi
+            fi
+
+            # Wallpaper selection prompt
+            if [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ]; then
+                clear_logo
+                echo ""
+                gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: Wallpaper Collection"
+                local wp_pick
+                wp_pick=$(timeout 120 gum choose --height 6 \
+                    --header="Select wallpaper download mode:" \
+                    --cursor-prefix="> " \
+                    "Random selection (50, FireWalls root + Best-Collection)" \
+                    "All FireWalls (root + Best-Collection, ~850 imgs)" \
+                    "Skip wallpaper download" </dev/tty 2>/dev/null || true)
+                case "$wp_pick" in
+                    *"All"*)    wallpapers="all" ;;
+                    *"Random"*) wallpapers="random" ;;
+                    *"Skip"*)   wallpapers="none" ;;
                 esac
             fi
-        elif [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_wall" ] && [ -z "${RHYTHM_WALLPAPER:-}" ]; then
+        elif [ -z "${RHYTHM_NO_CHOICES:-}" ]; then
             nixos_tui_note
         fi
-        if [ -z "${RHYTHM_NO_CHOICES:-}" ] && [ -z "$opt_flat" ] && [ -z "${RHYTHM_FLATPAKS:-}" ] \
-            && nixos_can_ask && command -v gum >/dev/null 2>&1; then
-            if answer=$(timeout 120 gum confirm "Install Flatpak apps from flatpaks.txt?" </dev/tty 2>/dev/null); then
-                flatpaks="1"
-            fi
-        fi
+
         step_item "Wallpapers: $wallpapers - Flatpaks: $([ "$flatpaks" = "1" ] && echo on || echo off)"
+        if [ "${#nix_user_pkgs[@]}" -gt 0 ]; then
+            step_item "Selected packages: ${nix_user_pkgs[*]}"
+        fi
+
+        # Build formatted nix package list for home-manager
+        local formatted_user_pkgs=""
+        if [ "${#nix_user_pkgs[@]}" -gt 0 ]; then
+            formatted_user_pkgs="          home.packages = with pkgs; ["
+            for p in "${nix_user_pkgs[@]}"; do
+                formatted_user_pkgs+=" $p"
+            done
+            formatted_user_pkgs+=" ];"
+        fi
 
         # A home-manager consumer flake of this repo (main): self-contained,
         # survives even if ~/hyprland is deleted later. Rendered to a temp
@@ -452,6 +711,7 @@ EOF
     homeConfigurations."$user" = home-manager.lib.homeManagerConfiguration {
       pkgs = import nixpkgs {
         system = "x86_64-linux";
+        config.allowUnfree = true;
         overlays = [ hyprland.overlays.default ];
       };
       modules = [
@@ -473,6 +733,7 @@ EOF
             wallpaper.mode = "$wallpapers";
             features.flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
           };
+${formatted_user_pkgs}
         }
       ];
     };
@@ -609,7 +870,7 @@ EOF2
             step_item "System configuration skipped (--no-system). SDDM, fonts and"
             step_item "desktop programs stay uninstalled: log in from a TTY instead."
         else
-            rhythm_setup_system "$user" "$guess_gpu" "$wallpapers" "$flatpaks" \
+            rhythm_setup_system "$user" "$guess_gpu" "$wallpapers" "$flatpaks" "$enable_steam_system" "$is_asus" "$is_surface" \
                 && system_status="done" || system_status="failed"
         fi
 
@@ -642,7 +903,8 @@ EOF2
     # imports it as a module, so the machine keeps whatever the installer of
     # NixOS wrote plus the user's own edits.
     rhythm_setup_system() {
-        local user="$1" guess_gpu="$2" wallpapers="$3" flatpaks="$4"
+        local user="$1" guess_gpu="$2" wallpapers="$3" flatpaks="$4" enable_steam="${5:-false}"
+        local is_asus="${6:-false}" is_surface="${7:-false}"
         local etc_dir="/etc/nixos" channel
 
         channel="${RHYTHM_NIXOS_CHANNEL:-nixos-$rel}"
@@ -704,9 +966,14 @@ EOF2
             username = "$user";
             gpu = "$guess_gpu";
             wallpaper.mode = "$wallpapers";
-            features.flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
+            features = {
+              flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
+              asus = $([ "$is_asus" = "true" ] && echo true || echo false);
+              surface = $([ "$is_surface" = "true" ] && echo true || echo false);
+            };
           };
 $(if [ "$guess_gpu" = "nvidia" ]; then printf '          nixpkgs.config.allowUnfree = true;\n'; fi)
+$(if [ "$enable_steam" = "true" ]; then printf '          programs.steam.enable = true;\n          nixpkgs.config.allowUnfree = true;\n'; fi)
           # This is a flake now, so make sure the next rebuild does not need
           # --extra-experimental-features to work.
           nix.settings.experimental-features = [ "nix-command" "flakes" ];

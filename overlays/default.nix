@@ -20,7 +20,9 @@ final: prev: {
   # store anyway. dontCheckForBrokenSymlinks would build, but it leaves the
   # broken links in place, which is what the check exists to prevent, and
   # jdupes has already hardlinked the ~400k real files by then.
-  tela-circle-icon-theme = prev.tela-circle-icon-theme.overrideAttrs (old: {
+  tela-circle-icon-theme = (prev.tela-circle-icon-theme.override {
+    allColorVariants = true;
+  }).overrideAttrs (old: {
     postInstall = ''
       ${old.postInstall or ""}
       # Read every symlink in the shell and only fork rm for the dead ones:

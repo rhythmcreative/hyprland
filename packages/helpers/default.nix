@@ -11,13 +11,15 @@
 , bash
 , python3
 , python3Packages
-
+, rnnoise-plugin ? null
+, brightnessctl ? null
 }:
 
 let
   # Scripts replaced by Nix concepts; never deployed on NixOS.
   excluded = [
     "rust-dock" # packaged separately as rustDock (a committed Arch binary would not run: no /lib64 loader)
+    "waybar_auto_hide" # precompiled Arch ELF binary; not used and fails on NixOS without /lib64 loader
     "system-ota" # updates come from `nix flake update` plus `nixos-rebuild switch` (ADR-0005)
     "ota-updater"
     "ota-snapshot" # Arch timeshift/snapper layout; NixOS generations cover rollbacks
@@ -214,6 +216,18 @@ EOF
     # The locker probe checks FHS paths that do not exist on NixOS.
     substituteInPlace "$out/bin/powermenu-with-monitor-detection" \
       --replace '/usr/bin/hyprlock' '${hyprlock}/bin/hyprlock'
+
+    if [ -f "$out/bin/toggle-noise-suppression" ] && [ -n "${if rnnoise-plugin != null then rnnoise-plugin else ""}" ]; then
+      substituteInPlace "$out/bin/toggle-noise-suppression" \
+        --replace '/usr/lib/ladspa' '${rnnoise-plugin}/lib/ladspa' \
+        --replace 'plugin = "librnnoise_ladspa"' 'plugin = "${rnnoise-plugin}/lib/ladspa/librnnoise_ladspa.so"'
+    fi
+
+    if [ -f "$out/bin/keyboard-backlight" ] && [ -n "${if brightnessctl != null then brightnessctl else ""}" ]; then
+      substituteInPlace "$out/bin/keyboard-backlight" \
+        --replace 'echo "$new_brightness" | sudo tee "$BRIGHTNESS_FILE" > /dev/null' \
+                  '${brightnessctl}/bin/brightnessctl -d asus::kbd_backlight set "$new_brightness" > /dev/null 2>&1 || echo "$new_brightness" | sudo tee "$BRIGHTNESS_FILE" > /dev/null'
+    fi
   '';
 
   meta = {

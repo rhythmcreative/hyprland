@@ -160,6 +160,21 @@ in
           };
           Install.WantedBy = [ "default.target" ];
         };
+
+        polkit-kde-authentication-agent-1 = {
+          Unit = {
+            Description = "Polkit KDE Authentication Agent";
+            After = [ "graphical-session.target" "default.target" ];
+          };
+          Service = {
+            Type = "simple";
+            ExecStart = "${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1";
+            Restart = "on-failure";
+            RestartSec = "1s";
+            TimeoutStopSec = "10s";
+          };
+          Install.WantedBy = [ "graphical-session.target" "default.target" ];
+        };
       };
     }
 

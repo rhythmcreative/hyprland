@@ -15,9 +15,11 @@ HOME = os.path.expanduser("~")
 WAL_JSON = os.path.join(HOME, ".cache/wal/colors.json")
 WAL_COLORS = os.path.join(HOME, ".cache/wal/colors")
 
-# Directorios de iconos del sistema y del usuario
+# Directorios de iconos del sistema y del usuario (Arch y NixOS)
 ICON_DIRS = [
     "/usr/share/icons",
+    "/run/current-system/sw/share/icons",
+    os.path.join(HOME, ".nix-profile/share/icons"),
     os.path.join(HOME, ".local/share/icons"),
     os.path.join(HOME, ".icons")
 ]

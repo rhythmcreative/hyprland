@@ -27,7 +27,7 @@
 #   };
 #
 #   sudo nixos-rebuild switch --flake .#mine
-{ inputs, lib, ... }:
+{ inputs, lib, pkgs, ... }:
 
 {
   imports = [
@@ -61,22 +61,41 @@
   # flake.nix gets away with `overlays.default = import ./overlays;` because
   # the import happens there.
   nixpkgs.overlays = [ (import ../../overlays) ];
+  nixpkgs.config.allowUnfree = true;
 
-  networking.hostName = "rhythm-nixos";
+  networking.hostName = "Asus";
 
   rhythm = {
     enable = true;
     username = "rhythm";
-    # Set explicitly when the hardware is known: "nvidia", "amd", "intel".
-    gpu = "auto";
+    # En este portatil Asus con Ryzen Rembrandt + NVIDIA RTX 3050 Mobile:
+    gpu = "nvidia";
     wallpaper.mode = "random";
     features = {
       flatpaks = true;
+      asus = true;
     };
     monitors.seedText = ''
-      monitor=,preferred,auto,1
+      monitor=eDP-1,1920x1080@144.0,2560x0,1.0,vrr,1
+      monitor=DP-6,2560x1440@239.97,0x0,1,vrr,1
     '';
   };
+
+  # Graficos Hibridos PRIME (AMD Ryzen 680M + NVIDIA RTX 3050 Mobile)
+  hardware.nvidia = {
+    powerManagement.finegrained = true;
+    prime = {
+      offload = {
+        enable = true;
+        enableOffloadCmd = true;
+      };
+      amdgpuBusId = "PCI:5:0:0";
+      nvidiaBusId = "PCI:1:0:0";
+    };
+  };
+
+  # Sudo sin contraseña para el grupo wheel (necesario para rhythm-battery-limit)
+  security.sudo.wheelNeedsPassword = lib.mkDefault false;
 
   # Wire the home-manager module with the same values.
   home-manager = {
@@ -85,8 +104,20 @@
     # `inputs` is still passed through: home-manager.nixosModules needs it, and
     # a caller's flake will have it. Nothing in the desktop module requires it.
     extraSpecialArgs = { inherit inputs; };
-    users.rhythm = import ../../homes/rhythm/home.nix;
+    users.rhythm = {
+      imports = [ ../../homes/rhythm/home.nix ];
+      rhythm.monitors.seedText = ''
+        monitor=eDP-1,1920x1080@144.0,2560x0,1.0,vrr,1
+        monitor=DP-6,2560x1440@239.97,0x0,1,vrr,1
+      '';
+    };
   };
+
+  # Fallback minimo para evaluar el flake cuando aun no existe
+  # hardware-configuration.nix en un clon limpio. nixos-generate-config
+  # sobreescribira estos valores prioritariamente.
+  fileSystems."/" = lib.mkDefault { device = "/dev/null"; fsType = "ext4"; };
+  boot.loader.systemd-boot.enable = lib.mkDefault true;
 
   # nixos-unstable moves fast; pin the release you tested with.
   system.stateVersion = "25.11";
@@ -95,7 +126,7 @@
   # (no stateVersion/user mismatch aside, users."rhythm" would not exist).
   users.users.rhythm = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ];
+    extraGroups = [ "wheel" "video" "input" "audio" ];
     # Password login is off by default and there is no password here either, so
     # an unconfigured example would lock you out on first boot.
     initialPassword = "rhythm";

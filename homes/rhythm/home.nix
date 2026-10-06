@@ -2,7 +2,7 @@
 #
 # Used standalone (`home-manager switch --flake .#rhythm`) or from a NixOS
 # host module (see hosts/asus). Values must match the system side.
-{ ... }:
+{ lib, ... }:
 
 {
   # The module is imported BY PATH, not through `inputs.hyprland`.
@@ -23,8 +23,8 @@
     ../../modules/home-manager
   ];
 
-  home.username = "rhythm";
-  home.homeDirectory = "/home/rhythm";
+  home.username = lib.mkDefault "rhythm";
+  home.homeDirectory = lib.mkDefault "/home/rhythm";
   home.stateVersion = "25.11";
 
   # NOTE: no nixpkgs.overlays here. This example runs with the flake's own
@@ -34,11 +34,11 @@
 
   rhythm = {
     enable = true;
-    username = "rhythm";
+    username = lib.mkDefault "rhythm";
     features = {
       flatpaks = true;
     };
-    monitors.seedText = ''
+    monitors.seedText = lib.mkDefault ''
       monitor=,preferred,auto,1
     '';
   };

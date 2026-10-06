@@ -431,10 +431,10 @@ EOF
                 --height 9 \
                 --header="Select software installation mode:" \
                 --cursor-prefix="> " \
-                "Custom Categorized Menus (Browsers, Chat, Dev, Media, Gaming, Utilities)" \
-                "Search & Select ANY Packages with fzf (Nixpkgs database)" \
-                "Full Package Stack (Recommended standard application bundle)" \
-                "Minimal Desktop Core (Essential Hyprland stack only)" </dev/tty 2>/dev/null || true)
+                "Fast Core Desktop (Instant setup: Hyprland, Waybar, Island, Kitty, Thunar)" \
+                "Custom Categorized Menus (Pick browsers, chat, dev, media apps)" \
+                "Full Heavy Stack (Brave, Steam, VSCode, Discord, LibreOffice, GIMP...)" \
+                "Search & Select ANY Packages with fzf (Nixpkgs database)" </dev/tty 2>/dev/null || true)
 
             nixos_search_packages() {
                 if ! command -v fzf >/dev/null 2>&1; then
@@ -474,7 +474,7 @@ EOF
                 fi
             }
 
-            if [[ "$mode_raw" == *"Full Package Stack"* ]]; then
+            if [[ "$mode_raw" == *"Full Heavy Stack"* ]] || [[ "$mode_raw" == *"Full Package Stack"* ]]; then
                 nix_user_pkgs+=(
                     "brave" "vesktop" "telegram-desktop" "spotify"
                     "vscode" "neovim" "obsidian" "libreoffice" "localsend"
@@ -482,8 +482,8 @@ EOF
                 )
                 enable_steam_system=true
                 flatpaks="1"
-            elif [[ "$mode_raw" == *"Minimal"* ]] || [ -z "$mode_raw" ]; then
-                : # Minimal stack: no extra user packages
+            elif [[ "$mode_raw" == *"Fast Core"* ]] || [[ "$mode_raw" == *"Minimal"* ]] || [ -z "$mode_raw" ]; then
+                : # Fast core stack: essential Hyprland suite only (instant deployment)
             elif [[ "$mode_raw" == *"Search & Select ANY Packages"* ]]; then
                 nixos_search_packages
             else

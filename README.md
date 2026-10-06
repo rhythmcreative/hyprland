@@ -1,7 +1,7 @@
 <h1 align="center">rhythm's hyprland</h1>
 
 <div align="center">
-  <p><i>Personal setup, customized for everyday use on Arch Linux & Fedora. </i></p>
+  <p><i>Personal setup, customized for everyday use. </i></p>
 </div>
 
 <div align="center">

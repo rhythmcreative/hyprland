@@ -115,10 +115,28 @@ in
             cp "${vendoredTheme}/theme.conf" "$confFile"
           fi
 
-          # Fonts and Assets come from the vendored theme too, and the package
-          # may carry older copies of both.
-          for extra in Fonts Assets; do
+          # Main.qml is the load-bearing one, and it is why this is not just a
+          # matter of copying a config file. Upstream v1.3 opens with
+          # `import QtMultimedia`, for its video backgrounds, and SDDM's QML
+          # import path carries only SddmComponents -- qtmultimedia is not
+          # there. The import fails, the engine logs "Fallback to embedded
+          # theme" and paints SDDM's built-in grey login, ignoring this entire
+          # directory: at which point theme.conf, the wallpaper and the layout
+          # are all dead weight and the greeter looks unthemed no matter how
+          # correct they are. The vendored Main.qml is v1.1 and has no such
+          # import, which is also what Arch installs.
+          if [ -f "${vendoredTheme}/Main.qml" ]; then
+            cp "${vendoredTheme}/Main.qml" "$themeDir/Main.qml"
+          fi
+
+          # Fonts, Assets and Components come from the vendored theme too, and
+          # the package may carry older copies. Components has to move with
+          # Main.qml: v1.3 split VirtualKeyboardButton.qml out of
+          # VirtualKeyboard.qml and dropped UserList.qml, so the two revisions
+          # are only consistent as a pair.
+          for extra in Fonts Assets Components; do
             if [ -d "${vendoredTheme}/$extra" ]; then
+              mkdir -p "$themeDir/$extra"
               cp -r "${vendoredTheme}/$extra/." "$themeDir/$extra/"
             fi
           done

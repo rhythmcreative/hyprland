@@ -68,16 +68,25 @@ in
       # there, so what is missing is exactly the wallpaper and layout the login
       # screen is supposed to show.
       #
-      # postInstall is the last phase the derivation defines, so that is where
-      # the copy has to live. It runs after upstream's own install, which is
-      # what leaves Fonts/ and Assets/ read-only, hence the chmod.
+      # installPhase, NOT postInstall. Upstream sddm-astronaut overrides
+      # installPhase with its own string, and stdenv's runPhase evaluates the
+      # env var in preference to the shell function
+      # (`eval "${!curPhase:-$curPhase}"`), so that string replaces the
+      # installPhase function entirely -- and the function is the only thing
+      # that calls `runHook postInstall`. postInstall is a hook name, not a
+      # phase: setting it here defined a variable nothing ever evaluated, so
+      # every copy below was dead code and the greeter started with upstream's
+      # bare theme (no theme.conf, no current_wallpaper.jpg, bundled
+      # astronaut.png). Appending to installPhase runs after upstream's own
+      # install, which is what leaves Fonts/ and Assets/ read-only, hence the
+      # chmod.
       (theme.overrideAttrs (old: {
         nativeBuildInputs = lib.concatLists [
           (old.nativeBuildInputs or [ ])
           [ wallpaperDrv ]
         ];
 
-        postInstall = (old.postInstall or "") + ''
+        installPhase = (old.installPhase or "") + ''
           themeDir="$out/share/sddm/themes/sddm-astronaut-theme"
 
           chmod -R u+w "$themeDir" 2>/dev/null || true

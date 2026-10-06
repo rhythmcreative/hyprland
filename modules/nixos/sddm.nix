@@ -91,10 +91,28 @@ in
 
           chmod -R u+w "$themeDir" 2>/dev/null || true
 
+          # Which file the greeter reads is NOT theme.conf. sddm-greeter
+          # follows ConfigFile from metadata.desktop, and upstream v1.3
+          # points that at Themes/<embeddedTheme>.conf. So writing the
+          # user's config to theme.conf leaves the greeter on the bundled
+          # astronaut.png -- the "no theme" login screen -- no matter how
+          # correct theme.conf is. The name is therefore read back out of
+          # the installed metadata instead of hardcoded: it differs per
+          # source (the vendored theme names Themes/theme1.conf) and per
+          # embeddedTheme, and the log line "Loading theme configuration
+          # from ..." is the only thing that says which one won.
+          confFile="$themeDir/theme.conf"
+          confRel=$(sed -n 's/^ConfigFile=//p' "$themeDir/metadata.desktop" 2>/dev/null | head -n1 | tr -d '[:space:]')
+          case "$confRel" in
+            /*) confFile="$confRel" ;;
+            ?*) confFile="$themeDir/$confRel" ;;
+          esac
+
           # The repo's theme.conf is the one that sets Background and the
           # layout; upstream ships none.
           if [ -f "${vendoredTheme}/theme.conf" ]; then
-            cp "${vendoredTheme}/theme.conf" "$themeDir/theme.conf"
+            mkdir -p "$(dirname "$confFile")"
+            cp "${vendoredTheme}/theme.conf" "$confFile"
           fi
 
           # Fonts and Assets come from the vendored theme too, and the package
@@ -117,7 +135,7 @@ in
             # not there, which reads as an empty grey login screen.
             echo "AVISO: sin wallpaper para el greeter" >&2
             sed -i 's|^Background=.*|Background="Backgrounds/astronaut.png"|' \
-              "$themeDir/theme.conf" 2>/dev/null || true
+              "$confFile" 2>/dev/null || true
           fi
         '';
       }))

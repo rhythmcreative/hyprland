@@ -83,9 +83,17 @@ in
 
     # Politicas de Chromium para Brave: sin esto Brave sale pidiendo clave de
     # API, sin sincronizacion y con las notificaciones de oferta activadas.
-    programs.chromium = {
-      enable = true;
-      package = if pkgs ? brave-origin then pkgs.brave-origin else pkgs.brave;
-    };
+    #
+    # SOLO enable. `package` no es una opcion de programs.chromium: el modulo de
+    # nixpkgs fusiono el de brave y expone enable, defaultBrowser, policy,
+    # extensions y extraOpts, pero ningun atributo para elegir el binario
+    # (comprobado en nixos-26.05 y en nixos-unstable). Declararla hacia fallar
+    # la evaluacion entera con
+    #     error: The option `programs.chromium.package' does not exist
+    # y con ella el rebuild completo, no solo el navegador.
+    #
+    # El navegador se instala igualmente por environment.systemPackages mas
+    # arriba, que es donde se elige brave-origin con degradacion a brave.
+    programs.chromium.enable = true;
   };
 }

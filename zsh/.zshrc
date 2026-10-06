@@ -8,8 +8,17 @@
 ZSH_THEME="robbyrussell"
 
 # Source plugins from pacman/AUR (Clean installation without Oh-My-Zsh)
-[ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-[ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ] && source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+#
+# En Arch pacman los deja en /usr/share/zsh/plugins. En NixOS no existe
+# /usr/share: los plugins viven en el store, y el modulo del escritorio
+# exporta la ruta exacta de cada fichero en estas dos variables. El valor por
+# defecto es la ruta de Arch, asi que el mismo .zshrc funciona en las dos
+# plataformas sin cambiar el comportamiento de ninguna.
+: "${ZSH_AUTOSUGGESTIONS_SRC:=/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh}"
+: "${ZSH_SYNTAX_HIGHLIGHTING_SRC:=/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh}"
+
+[ -f "$ZSH_AUTOSUGGESTIONS_SRC" ] && source "$ZSH_AUTOSUGGESTIONS_SRC"
+[ -f "$ZSH_SYNTAX_HIGHLIGHTING_SRC" ] && source "$ZSH_SYNTAX_HIGHLIGHTING_SRC"
 
 # Starship Prompt
 if command -v starship > /dev/null; then

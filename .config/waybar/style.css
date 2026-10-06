@@ -29,7 +29,7 @@
 #workspaces {
   background-color: @background;
   padding: 2px;
-  margin: 2px 3px 5px 7px;
+  margin: 5px 5px 5px 7px;
   /* Margin from left edge and spacing after */
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -42,11 +42,10 @@
 #cpu,
 #memory,
 #temperature,
-#custom-cpu-temp,
 #custom-nvidia-temp {
   background-color: @background;
-  padding: 0.1rem 0.45rem;
-  margin: 2px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
   border-radius: 0;
   box-shadow: none;
   min-width: 0;
@@ -89,7 +88,7 @@
   color: @foreground;
   border-radius: 5px;
   /* Workspaces buttons are always rounded */
-  padding: 0.1rem 0.4rem;
+  padding: 0.3rem 0.6rem;
   background: transparent;
   transition: all 0.2s ease-in-out;
   border: none;
@@ -111,8 +110,8 @@
 /* --- Center Module (Individual, Fully Rounded Block) --- */
 #clock {
   background-color: @background;
-  padding: 0.1rem 0.45rem;
-  margin: 2px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
   border-radius: 6px;
   /* This module is always rounded */
   box-shadow: 0 1px 3px alpha(@color4, 0.38);
@@ -125,8 +124,8 @@
 
 #custom-cava {
   background-color: @background;
-  padding: 0.1rem 0.45rem;
-  margin: 2px 3px 5px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 5px 5px 0px;
   border-radius: 6px;
   box-shadow: 0 1px 3px alpha(@color6, 0.3);
   min-width: 0;
@@ -145,9 +144,9 @@
 #custom-pomodoro {
   background-color: @background;
   /* Consistent dark background */
-  padding: 0.1rem 0.45rem;
+  padding: 0.3rem 0.7rem;
   /* Consistent padding with other modules */
-  margin: 2px 0px;
+  margin: 5px 0px;
   /* 5px top/bottom margin, 0px left/right */
   border-radius: 6px;
   /* Consistent rounded corners with other individual modules */
@@ -198,8 +197,8 @@
 #language {
   background-color: @background;
   color: @color5;
-  padding: 0.1rem 0.45rem;
-  margin: 2px 4px 5px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 6px 5px 0px;
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   min-width: 0;
@@ -225,8 +224,8 @@
 #custom-desktop-power,
 #custom-dual-battery {
   background-color: @background;
-  padding: 0.1rem 0.45rem;
-  margin: 2px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 0px;
   border-radius: 0;
   box-shadow: none;
   min-width: 0;
@@ -455,8 +454,8 @@
   background-color: @background;
   color: #94e2d5;
   /* Color fijo original como solicitaste */
-  padding: 0.1rem 0.45rem;
-  margin: 2px 3px 5px 0px;
+  padding: 0.3rem 0.7rem;
+  margin: 5px 5px 5px 0px;
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(148, 226, 213, 0.2);
   /* Color fijo */
@@ -491,7 +490,7 @@ tooltip {
   background-color: @background;
   color: @foreground;
   padding: 5px 12px;
-  margin: 2px 0px;
+  margin: 5px 0px;
   border-radius: 6px;
   border: 1px solid @color8;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);

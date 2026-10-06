@@ -14,7 +14,7 @@
     "group/system-info",
     "custom/cava"
   ],
-"modules-center": [],
+  "modules-center": [],
   "modules-right": [
     "hyprland/language",
     "bluetooth",
@@ -122,7 +122,7 @@
     "modules": [
       "cpu",
       "memory",
-      "custom/cpu-temp",
+      "temperature#cpu",
       "custom/nvidia-temp"
     ]
   },
@@ -291,14 +291,8 @@
     "on-click": "blueman-manager",
     "on-click-right": "nm-applet"
   },
-  "custom/cpu-temp": {
-    "format": "{}",
-    "return-type": "json",
-    "exec": "$HOME/.config/waybar/scripts/cpu_temp.sh",
-    "interval": 10,
-    "class": "cpu-temp"
-  },
   "temperature#cpu": {
+    "hwmon-path": "/sys/class/hwmon/hwmon5/temp1_input",
     "critical-threshold": 85,
     "format": "󰔏 {temperatureC}°C",
     "format-critical": "󰸁 {temperatureC}°C",

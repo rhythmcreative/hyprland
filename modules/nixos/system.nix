@@ -12,6 +12,17 @@ in
     users.users.${cfg.username} = {
       isNormalUser = true;
       shell = pkgs.zsh;
+      # Mismos grupos que el usermod de install.sh:2511, con dos
+      # equivalencias propias de NixOS.
+      #
+      # `network` no existe como tal: NetworkManager declara aqui su grupo
+      # `networkmanager`, que es el que da a nmcli y a los clientes de NM
+      # acceso al demonio. Es el equivalente, no una omission.
+      #
+      # `optical` si falta y es real: sin el, Thunar no puede leer ni
+      # escribir CDs/DVDs, que es justo para lo que instala
+      # thunar-archive-plugin en Arch. Comprobado que `optical` es un grupo
+      # valido de nixpkgs antes de declararlo.
       extraGroups = [
         "video"
         "input"
@@ -21,10 +32,28 @@ in
         "storage"
         "networkmanager"
         "lp"
+        "optical"
       ];
     };
 
     programs.zsh.enable = true;
+
+    # Rutas de los dos plugins de zsh que el .zshrc sourcea.
+    #
+    # El .zshrc del repo esta escrito para Arch, donde pacman deja los plugins
+    # en /usr/share/zsh/plugins. En NixOS esa ruta no existe y el store es
+    # de solo lectura, con lo que sin esto el shell abria sin resaltado de
+    # sintaxis ni autosuggestiones: los dos `source` fallan en silencio porque
+    # van con `[ -f ... ]`.
+    #
+    # Se exporta el fichero exacto, no el directorio, porque los dos plugins
+    # no comparten layout en nixpkgs y porque el .zshrc solo necesita el
+    # .zsh. sessionVariables y no environment.variables porque esto tiene que
+    # existir en la sesion que arranca SDDM, no solo en una shell de login.
+    environment.sessionVariables = {
+      ZSH_AUTOSUGGESTIONS_SRC = "${pkgs.zsh-autosuggestions}/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh";
+      ZSH_SYNTAX_HIGHLIGHTING_SRC = "${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh";
+    };
 
     networking.networkmanager.enable = true;
     hardware.bluetooth.enable = true;
@@ -39,6 +68,16 @@ in
     # Super+B / F10, que llaman a blueman-manager bajo demanda.
     services.blueman.enable = false;
     services.power-profiles-daemon.enable = true;
+
+    # Thunar llega con gvfs y tumbler en Arch solo porque estan instalados en
+    # el sistema base. En NixOS hay que pedirlos, y sin ellos el gestor de
+    # archivos abre pero no monta los volumenes de red (gvfs), no crea la
+    # papelera ni los montajes de disco (gvfsd-trash, gvfsd-fuse) y no genera
+    # ninguna miniatura (tumbler). Los dos modulos existen y son no-op sin
+    # esto, asi que declararlos es la diferencia entre un Thunar utilizable y
+    # uno que solo muestra la carpeta.
+    services.gvfs.enable = true;
+    services.tumbler.enable = true;
 
     # SSH on by default, like the Arch installer leaves it: remote access
     # and `gh`/`opencode` flows work out of the box. mkDefault so any

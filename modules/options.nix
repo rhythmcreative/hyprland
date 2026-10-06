@@ -106,6 +106,55 @@ glib
         # imagemagick) lo usa el backend de fondos para detectar .webp
         # animados, que si no se tratan como estaticos.
         imagemagick
+        # --- Shell -------------------------------------------------------
+        # El .zshrc del repo sourcea los dos plugins de abajo y arranca
+        # starship. En Arch pacman los deja en /usr/share/zsh/plugins y starship
+        # esta en el PATH, asi que los tres existen. En NixOS no hay
+        # /usr/share: sin declararlos el shell abria limpio pero SIN
+        # resaltado de sintaxis, SIN autosuggestiones y SIN el prompt de
+        # starship, que es justo lo que hace util el .zshrc.
+        #
+        # Las rutas exactas de los dos .zsh las exporta modules/nixos/system.nix
+        # en sessionVariables, que es lo que .zshrc lee
+        # (ZSH_AUTOSUGGESTIONS_SRC / ZSH_SYNTAX_HIGHLIGHTING_SRC).
+        zsh-autosuggestions
+        zsh-syntax-highlighting
+        starship
+        # --- Thunar: operaciones de fichero -------------------------------
+        # Sin esto Thunar abria pero no podia hacer casi nada con los
+        # archivos: sin file-roller no descomprime nada, sin gvfs no aparecen
+        # los volumenes de red, y sin tumbler no hay miniaturas. En Arch los
+        # cuatro vienen del gestor de archivos, que aqui no hay.
+        file-roller
+        gvfs
+        tumbler
+        thunar-archive-plugin
+        thunar-volman
+        # ffmpegthumbnailer genera las miniaturas de video, que tumbler no
+        # sabe hacer por si mismo.
+        ffmpegthumbnailer
+        # --- Utilidades ---------------------------------------------------
+        # lsof lo usan privacy-shield-daemon y privacy-status para detectar la
+        # camara abierta por un descriptor de fichero. Hay un respaldo con
+        # fuser, pero en Arch es lsof y el comportamiento debe coincidir.
+        lsof
+        xdg-user-dirs
+        htop
+        btop
+        fastfetch
+        # v4l-utils aporta v4l2-utility, con el que se enumera y ajusta la
+        # camara.
+        v4l-utils
+        # gnome-keyring aporta gnome-keyring-daemon, que hyprland.lua lanza en
+        # el autostart con
+        #     gnome-keyring-daemon --start --components=secrets &
+        # El modulo NixOS lo declaraba solo para el modulo PAM (sddm.nix), que
+        # es el cierre del servicio y no el PATH del usuario: con
+        # enableGnomeKeyring el llavero se desbloquea al iniciar sesion, pero el
+        # daemon no llegaba a existir y por eso las aplicaciones no recordaban
+        # ninguna contrasena. En Arch el paquete ya estaba en el sistema, que
+        # es por lo que nadie noto que era una dependencia.
+        gnome-keyring
         # brave-origin es el navegador por defecto. En Arch install.sh lo ofrece como
         # la opcion AUR brave-origin-nightly-bin; el sufijo -bin es de Arch y
         # en nixpkgs el mismo navegador es brave-origin. Ese atributo solo

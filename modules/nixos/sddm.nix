@@ -46,6 +46,20 @@ let
   # greeter has to be told to scan it.
   cursorDataDir = "${pkgs.bibata-cursors}/share";
 
+  # SDDM lists every session file in SessionDir, so the greeter's list is
+  # whatever this directory holds. Built from the hyprland package's own file,
+  # unmodified: the point is to drop hyprland-uwsm.desktop from the list, not
+  # to alter how the remaining session starts.
+  sessionDir = pkgs.runCommand "hyprland-wayland-sessions" { } ''
+    mkdir -p "$out"
+
+    if [ -f "${pkgs.hyprland}/share/wayland-sessions/hyprland.desktop" ]; then
+      cp "${pkgs.hyprland}/share/wayland-sessions/hyprland.desktop" "$out/"
+    else
+      echo "AVISO: hyprland no trae hyprland.desktop" >&2
+    fi
+  '';
+
   # The wallpaper is a loose file inside another store path. A path written by
   # hand is not mounted into the build sandbox, so it is wrapped in its own
   # tiny derivation and declared as a build input; without that the copy in
@@ -76,6 +90,23 @@ in
         compositor = "weston";
       };
       settings.Wayland.CompositorCommand = "${cfg.packageSet.greeterMonitor}/bin/sddm-greeter-monitor";
+
+      # hyprland ships two session files -- hyprland.desktop, which execs
+      # start-hyprland directly, and hyprland-uwsm.desktop, which goes through
+      # `uwsm start` -- and SDDM lists every one it finds in SessionDir, so the
+      # greeter offered both. SessionDir is narrowed to the plain one so the
+      # list has a single entry.
+      #
+      # The consequence is deliberate and worth stating: with uwsom the
+      # compositor is started by the systemd --user manager, which is what
+      # reads ~/.config/environment.d and therefore what delivers
+      # RHYTHM_PLUGIN_HYPRBARS and the zsh plugin paths (see
+      # modules/home-manager/packages.nix). Started by SDDM's helper instead,
+      # Hyprland is a child of that helper and inherits nothing from the user
+      # manager, so hyprctl plugin load never runs and kitty falls back to
+      # /usr/share/zsh/plugins, which does not exist here.
+      settings.Wayland.SessionDir = "${sessionDir}";
+
       theme = "sddm-astronaut-theme";
     };
 

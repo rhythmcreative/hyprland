@@ -30,6 +30,21 @@
 
 -- @@MONITOR@@
 
+-- El puntero lo dibuja Hyprland, no el greeter de SDDM: Hyprland implementa
+-- wp_cursor_shape_manager_v1, asi que el cliente Qt pide una "forma" por nombre
+-- y el compositor devuelve la imagen desde su propio tema. Por eso
+-- CursorTheme en sddm.conf no cambia nada aqui.
+--
+-- Hyprland 0.55 trae enable_hyprcursor = true por defecto, que usa hyprcursor y
+-- solo acepta temas .hlc; no hay ningun hyprcursor.conf en esta maquina, asi que
+-- cae al tema por defecto. Con enable_hyprcursor = false vuelve al cargador
+-- Xcursor clasico, que si lee XCURSOR_THEME -- que el modulo NixOS pone a
+-- Bibata-Modern-Ice en el unit del display-manager. Asi el login y el escritorio
+-- usan el mismo puntero.
+cursor = {
+    enable_hyprcursor = false,
+},
+
 hl.config({
     misc = {
         disable_hyprland_logo = true,

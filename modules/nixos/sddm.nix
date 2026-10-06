@@ -220,16 +220,40 @@ in
     services.displayManager.sddm.settings.General.CursorTheme = cursorName;
 
     # CursorTheme is only a name handed to QIcon::setThemeName() (see the note
-    # on cursorDataDir), so on its own it cannot make the cursor appear: Qt has
-    # to find the theme somewhere it scans. /etc/environment is not generated
-    # on this system, so pam_env.so in the greeter's PAM stack has nothing to
-    # read and the greeter ends up with Qt's built-in /usr/local/share:/usr/share
-    # -- both absent under NixOS. Setting it on the unit reaches the daemon,
-    # which passes its environment down to the helper and the greeter; the
-    # system profile is kept first so the greeter still sees the fonts and
-    # icons the desktop entries rely on.
-    systemd.services.display-manager.environment.XDG_DATA_DIRS =
-      "/run/current-system/sw/share:${cursorDataDir}:/etc/xdg/share";
+    # on cursorDataDir), and that is not even what paints the pointer here:
+    # Hyprland implements wp_cursor_shape_manager_v1, so a client asks the
+    # compositor for a cursor shape by name and the compositor returns the
+    # image from its own theme. The greeter is a Hyprland instance (see
+    # sddm-greeter-monitor), so its pointer is drawn by Hyprland and
+    # QIcon::setThemeName() has no bearing on it at all.
+    #
+    # What Hyprland reads is XCURSOR_THEME, with XCURSOR_PATH as the search
+    # path -- the classic Xcursor lookup.
+    #
+    # Not set on display-manager.service: measured on a live greeter, that
+    # environment never reaches the greeter's compositor. sddm opens a session
+    # for user sddm, which starts a systemd --user manager, and that manager
+    # is what populates the environment the greeter's Hyprland actually runs
+    # with. A display-manager.service override is discarded there -- the
+    # greeter came up with XCURSOR_THEME empty and XDG_DATA_DIRS rewritten to
+    # the profile list, both of which had been set correctly on the unit.
+    #
+    # environment.sessionVariables is the option that works: it is the same
+    # one nixpkgs itself uses for XCURSOR_PATH (config/xdg/icons.nix), and
+    # XCURSOR_PATH demonstrably does reach the greeter's manager -- its value
+    # there already ends in /run/current-system/sw/share/icons, where
+    # bibata-cursors below puts the theme. So only the name was missing.
+    environment.sessionVariables.XCURSOR_THEME = cursorName;
+
+    # And only for Qt's own lookup, which needs the theme reachable through
+    # XDG_DATA_DIRS. Hyprland does not read it, but the greeter's Qt client
+    # still resolves icon themes that way, and /etc/environment is not
+    # generated on this system so pam_env has nothing to supply.
+    environment.sessionVariables.XDG_DATA_DIRS = [
+      "/run/current-system/sw/share"
+      cursorDataDir
+      "/etc/xdg/share"
+    ];
 
     # Kept in the system profile as well, so the theme lands in
     # /run/current-system/sw/share/icons/<name> rather than only in a path Qt

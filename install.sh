@@ -197,8 +197,7 @@ rhythm_spin() {
     local msg="$1"; shift
     [ "${1:-}" = "--" ] && shift
     if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
-        gum spin --spinner dot --title "$msg" \
-            --padding "0 0 0 $PADDING_LEFT" -- "$@"
+        gum spin --spinner dot --title "$msg" -- "$@"
     else
         # The hint goes on its own line: appended to the message it ran past
         # the terminal width and wrapped back to column 0.

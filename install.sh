@@ -21,6 +21,10 @@ handle_error() {
         echo "  [ERROR] Installation halted to protect system integrity."
         echo "  → Detailed log saved to: $LOG_FILE"
     fi
+    # Drain any remaining bytes from pipe (e.g. curl | bash) so curl doesn't encounter EPIPE (error 23)
+    if [ ! -t 0 ]; then
+        cat >/dev/null 2>&1 || true
+    fi
     exit "$exit_code"
 }
 trap 'handle_error $LINENO' ERR
@@ -1250,7 +1254,12 @@ http-connections = 50" \
     }
 
     rhythm_nixos_log install_nixos "$@"
-    exit $?
+    nixos_ret=$?
+    # Drain any remaining bytes from pipe (e.g. curl | bash) so curl doesn't encounter EPIPE (error 23)
+    if [ ! -t 0 ]; then
+        cat >/dev/null 2>&1 || true
+    fi
+    exit "$nixos_ret"
 fi
 
 # Detect operating system

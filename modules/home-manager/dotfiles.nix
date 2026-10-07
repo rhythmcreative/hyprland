@@ -37,11 +37,13 @@ in
     home.file.".zshrc".source = ../../zsh/.zshrc;
 
     home.activation.seedMonitorsConf = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      target="${config.home.homeDirectory}/.config/hypr/monitors.conf"
-      if [ ! -e "$target" ]; then
-        mkdir -p "$(dirname "$target")"
-        printf '%s\n' ${lib.escapeShellArg cfg.monitors.seedText} > "$target"
-      fi
+      (
+        target="${config.home.homeDirectory}/.config/hypr/monitors.conf"
+        if [ ! -e "$target" ]; then
+          mkdir -p "$(dirname "$target")"
+          printf '%s\n' ${lib.escapeShellArg cfg.monitors.seedText} > "$target"
+        fi
+      ) || true
     '';
 
     # The same wallpaper seeding install.sh does on Arch, which had no
@@ -64,32 +66,34 @@ in
     # repairs a cache pointing at a file that no longer exists -- which was the
     # case that black-screened every boot.
     home.activation.seedWallpaper = lib.hm.dag.entryAfter ([ "writeBoundary" ] ++ lib.optional (cfg.wallpaper.mode != "none") "fetchWallpapers") ''
-      home="${config.home.homeDirectory}"
-      default_wp="$home/.config/hypr/wallpapers/default.jpg"
-      cache="$home/.cache/current-wallpaper"
-      mkdir -p "$home/.cache" "$home/Pictures/Wallpapers"
+      (
+        home="${config.home.homeDirectory}"
+        default_wp="$home/.config/hypr/wallpapers/default.jpg"
+        cache="$home/.cache/current-wallpaper"
+        mkdir -p "$home/.cache" "$home/Pictures/Wallpapers"
 
-      seed=0
-      if [ -f "$cache" ]; then
-        cached="$(cat "$cache" 2>/dev/null || true)"
-        if [ -z "$cached" ] || [ ! -f "$cached" ]; then
-          # Points at something that is gone: that is a stale cache, not a
-          # wallpaper the user chose.
+        seed=0
+        if [ -f "$cache" ]; then
+          cached="$(cat "$cache" 2>/dev/null || true)"
+          if [ -z "$cached" ] || [ ! -f "$cached" ]; then
+            # Points at something that is gone: that is a stale cache, not a
+            # wallpaper the user chose.
+            seed=1
+          fi
+        else
           seed=1
         fi
-      else
-        seed=1
-      fi
 
-      if [ "$seed" = 1 ] && [ -f "$default_wp" ]; then
-        printf '%s\n' "$default_wp" > "$cache"
-      fi
+        if [ "$seed" = 1 ] && [ -f "$default_wp" ]; then
+          printf '%s\n' "$default_wp" > "$cache"
+        fi
 
-      # wallpaper-random and wallpaper-selector fail on an empty library, so
-      # the default goes there too when nothing is present.
-      if [ -f "$default_wp" ] && [ -z "$(ls -A "$home/Pictures/Wallpapers" 2>/dev/null)" ]; then
-        cp -f "$default_wp" "$home/Pictures/Wallpapers/default.jpg"
-      fi
+        # wallpaper-random and wallpaper-selector fail on an empty library, so
+        # the default goes there too when nothing is present.
+        if [ -f "$default_wp" ] && [ -z "$(ls -A "$home/Pictures/Wallpapers" 2>/dev/null || true)" ]; then
+          cp -f "$default_wp" "$home/Pictures/Wallpapers/default.jpg" 2>/dev/null || true
+        fi
+      ) || true
     '';
 
     # La ruta de ffmpeg que usa el selector de la Isla.
@@ -104,32 +108,34 @@ in
     # en settings.json, que es lo que el QML lee, y solo si el usuario no ha
     # configurado otra a mano.
     home.activation.resolveFfmpeg = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      home="${config.home.homeDirectory}"
-      settings="$home/.config/quickshell/wallpaper/settings.json"
-      ffmpeg=""
-      if command -v ffmpeg >/dev/null 2>&1; then
-        ffmpeg="$(command -v ffmpeg)"
-      fi
-      if [ -n "$ffmpeg" ] && [ -w "$(dirname "$settings")" ]; then
-        if [ -f "$settings" ] && grep -q '"ffmpegPath"' "$settings"; then
-          echo "ffmpeg ya configurado a mano; no se toca."
-        else
-          tmp="$settings.ffmpeg.$$"
-          if command -v jq >/dev/null 2>&1; then
-            if [ -f "$settings" ]; then
-              jq --arg f "$ffmpeg" '. + {ffmpegPath: $f}' "$settings" > "$tmp" \
-                && mv -f "$tmp" "$settings" \
-                || rm -f "$tmp"
-            else
-              printf '{"ffmpegPath":"%s"}\n' "$ffmpeg" > "$tmp" \
-                && mv -f "$tmp" "$settings" \
-                || rm -f "$tmp"
+      (
+        home="${config.home.homeDirectory}"
+        settings="$home/.config/quickshell/wallpaper/settings.json"
+        ffmpeg=""
+        if command -v ffmpeg >/dev/null 2>&1; then
+          ffmpeg="$(command -v ffmpeg)"
+        fi
+        if [ -n "$ffmpeg" ] && [ -w "$(dirname "$settings")" ]; then
+          if [ -f "$settings" ] && grep -q '"ffmpegPath"' "$settings" 2>/dev/null; then
+            :
+          else
+            tmp="$settings.ffmpeg.$$"
+            if command -v jq >/dev/null 2>&1; then
+              if [ -f "$settings" ]; then
+                jq --arg f "$ffmpeg" '. + {ffmpegPath: $f}' "$settings" > "$tmp" 2>/dev/null \
+                  && mv -f "$tmp" "$settings" 2>/dev/null \
+                  || rm -f "$tmp" 2>/dev/null
+              else
+                printf '{"ffmpegPath":"%s"}\n' "$ffmpeg" > "$tmp" 2>/dev/null \
+                  && mv -f "$tmp" "$settings" 2>/dev/null \
+                  || rm -f "$tmp" 2>/dev/null
+              fi
             fi
           fi
+        elif [ -z "$ffmpeg" ]; then
+          echo "AVISO: ffmpeg no esta en el PATH; la Isla no podra previsualizar .gif"
         fi
-      elif [ -z "$ffmpeg" ]; then
-        echo "AVISO: ffmpeg no esta en el PATH; la Isla no podra previsualizar .gif"
-      fi
+      ) || true
     '';
 
   };

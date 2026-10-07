@@ -1124,6 +1124,8 @@ if [ -f /etc/arch-release ] || grep -qi 'ID=.*arch' /etc/os-release 2>/dev/null;
     DISTRO="arch"
 elif [ -f /etc/fedora-release ] || grep -qi 'ID=.*fedora' /etc/os-release 2>/dev/null; then
     DISTRO="fedora"
+elif grep -qi 'ID=.*ubuntu' /etc/os-release 2>/dev/null; then
+    DISTRO="ubuntu"
 elif [ -f /etc/debian_version ] || grep -qi 'ID=.*debian' /etc/os-release 2>/dev/null; then
     DISTRO="debian"
 elif [ -f /etc/alpine-release ] || grep -qi 'ID=.*alpine' /etc/os-release 2>/dev/null; then
@@ -1145,7 +1147,7 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         echo "Installing git..."
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y git
-        elif [ "$DISTRO" = "debian" ]; then
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo apt-get update -y && sudo apt-get install -y git
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
@@ -1370,11 +1372,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "alpine" ] && [ "$DISTRO" != "opensuse" ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "alpine" ] && [ "$DISTRO" != "opensuse" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
         # about: no pacman, no dnf, no apt, no apk, no zypper, no supported layout.
-        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, Alpine, and openSUSE."
+        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, Ubuntu, Alpine, and openSUSE."
         exit 1
     fi
 
@@ -1466,10 +1468,10 @@ CHARM_EOF
 
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
-    elif [ "$DISTRO" = "debian" ]; then
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         # Handle background unattended-upgrades / apt-daily lock
         if systemctl is-active --quiet apt-daily.service 2>/dev/null || systemctl is-active --quiet apt-daily-upgrade.service 2>/dev/null || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
-            step_item "Waiting for background Debian package updates (apt-daily) to release lock..."
+            step_item "Waiting for background package updates (apt-daily) to release lock..."
             sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
             local wait_count=0
             while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; do
@@ -1480,7 +1482,16 @@ CHARM_EOF
         fi
         echo 'DPkg::Lock::Timeout "60";' | sudo tee /etc/apt/apt.conf.d/99wait-for-lock >/dev/null 2>&1 || true
 
-        # Setup Charm repository for gum on Debian
+        if [ "$DISTRO" = "ubuntu" ]; then
+            # Ensure software-properties-common is available for PPAs and universe repo is enabled
+            sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+            sudo apt-get install -y software-properties-common >> "$LOG_FILE" 2>&1 || true
+            sudo add-apt-repository -y universe >> "$LOG_FILE" 2>&1 || true
+            # Enable community Hyprland PPA for Ubuntu
+            sudo add-apt-repository -y ppa:cpiber/hyprland-ppa >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        # Setup Charm repository for gum on Debian/Ubuntu
         if ! command -v gum >/dev/null 2>&1; then
             sudo mkdir -p /etc/apt/keyrings
             if curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/charm.gpg >> "$LOG_FILE" 2>&1; then
@@ -1564,7 +1575,7 @@ CHARM_EOF
 
 # --- AUR HELPER SETUP (YAY) ---
 install_yay() {
-    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "alpine" ] || [ "$DISTRO" = "opensuse" ]; then
+    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "alpine" ] || [ "$DISTRO" = "opensuse" ]; then
         return 0
     fi
     if ! command -v yay > /dev/null 2>&1; then
@@ -1673,10 +1684,11 @@ EOF
         fi
         step_ok "Hardware drivers configured."
         return 0
-    elif [ "$DISTRO" = "debian" ]; then
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         if [ "$IS_NVIDIA" = true ]; then
-            step_item "Preparing Debian DKMS driver for NVIDIA..."
-            sudo apt-get install -y linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian packages."
+            step_item "Preparing NVIDIA DKMS driver..."
+            local kernel_headers="linux-headers-$(uname -r)"
+            sudo apt-get install -y "$kernel_headers" linux-headers-generic linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian/Ubuntu packages."
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
@@ -1684,11 +1696,11 @@ EOF
         fi
         if [[ $GPU_INFO == *"Intel"* ]]; then
             step_item "Intel GPU detected. Adding hardware acceleration drivers..."
-            sudo apt-get install -y intel-media-va-driver-non-free i965-va-driver-shaders mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
+            sudo apt-get install -y intel-media-va-driver-non-free intel-media-va-driver i965-va-driver-shaders i965-va-driver mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
         fi
 
         if [ "$IS_NVIDIA" = true ]; then
-            section "NVIDIA System & Wayland Optimization (Debian)"
+            section "NVIDIA System & Wayland Optimization ($DISTRO)"
             step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
             sudo mkdir -p /etc/modprobe.d
             cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
@@ -1917,13 +1929,13 @@ install_rust_dock() {
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
-    elif [ "$DISTRO" = "debian" ]; then
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev >> "$LOG_FILE" 2>&1 || \
             sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
 
-        # Build gtk4-layer-shell from source if not available in Debian repos (e.g. Debian 12 Bookworm)
+        # Build gtk4-layer-shell from source if not available in repos (e.g. Debian 12 Bookworm)
         if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
-            step_item "Building gtk4-layer-shell from source for Debian..."
+            step_item "Building gtk4-layer-shell from source for $DISTRO..."
             sudo apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
             if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
                 local gls_dir
@@ -1951,7 +1963,7 @@ install_rust_dock() {
     export PATH="$HOME/.cargo/bin:$PATH"
 
     if ! command -v cargo > /dev/null 2>&1; then
-        if [ "$DISTRO" = "debian" ]; then
+        if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             step_item "Installing Cargo & Rust toolchain..."
             sudo apt-get install -y cargo rustc >> "$LOG_FILE" 2>&1 || true
             if ! command -v cargo > /dev/null 2>&1; then
@@ -2121,7 +2133,7 @@ install_themes_and_fonts() {
         step_item "Setting up Pywal..."
         if [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache py3-pywal >> "$LOG_FILE" 2>&1 || true
-        elif [ "$DISTRO" = "debian" ]; then
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
             sudo zypper --non-interactive install --no-confirm python3-pipx >> "$LOG_FILE" 2>&1 || true
@@ -2268,7 +2280,7 @@ step_software() {
         install_rust_dock
         auto_detect_drivers
         return 0
-    elif [ "$DISTRO" = "debian" ]; then
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         sudo -v
 
         # Ensure Debian backports is available if Debian 13 (Trixie)
@@ -2375,9 +2387,13 @@ step_software() {
         rhythm_spin "Installing core packages via apt-get..." -- \
             bash -c "
                 export DEBIAN_FRONTEND=noninteractive
-                # Try batch install with backports priority for Hyprland ecosystem
-                sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
-                if ! sudo apt-get install -y ${DEBIAN_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
+                if [ \"$DISTRO\" = \"debian\" ]; then
+                    # Try batch install with backports priority for Hyprland ecosystem
+                    sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
+                elif [ \"$DISTRO\" = \"ubuntu\" ]; then
+                    sudo apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
+                fi
+                if ! sudo apt-get install -y ${DEBIAN_CORE_PKGS[*]}; then
                     for pkg in ${DEBIAN_CORE_PKGS[*]}; do
                         sudo apt-get install -y \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
                     done
@@ -2850,8 +2866,8 @@ unified_app_search() {
             sleep 0.5
         fi
         return 0
-    elif [ "$DISTRO" = "debian" ]; then
-        step_item "Launching fzf package search (Debian APT repositories)..."
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+        step_item "Launching fzf package search ($DISTRO APT repositories)..."
         step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
         sleep 0.8
 
@@ -3049,8 +3065,8 @@ first_run_choices() {
         if [ "$DISTRO" = "fedora" ]; then
             search_label="Universal Package Search with fzf (Search & install ANY package from Fedora DNF)"
             full_label="Full Package Stack (Install full curated stack via DNF + Flatpaks)"
-        elif [ "$DISTRO" = "debian" ]; then
-            search_label="Universal Package Search with fzf (Search & install ANY package from Debian APT)"
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            search_label="Universal Package Search with fzf (Search & install ANY package from APT)"
             full_label="Full Package Stack (Install full curated stack via APT + Flatpaks)"
         elif [ "$DISTRO" = "alpine" ]; then
             search_label="Universal Package Search with fzf (Search & install ANY package from Alpine APK)"
@@ -3085,7 +3101,7 @@ first_run_choices() {
             if [ "$DISTRO" = "fedora" ]; then
                 repo_tag="[DNF]"
                 ext_tag="[Flatpak]"
-            elif [ "$DISTRO" = "debian" ]; then
+            elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
                 repo_tag="[APT]"
                 ext_tag="[APT/Flatpak]"
             elif [ "$DISTRO" = "alpine" ]; then
@@ -3266,7 +3282,7 @@ first_run_choices() {
             local fzf_prompt="Would you like to search and add any extra packages with fzf?"
             if [ "$DISTRO" = "fedora" ]; then
                 fzf_prompt="Would you like to search and add extra packages from DNF with fzf?"
-            elif [ "$DISTRO" = "debian" ]; then
+            elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
                 fzf_prompt="Would you like to search and add extra packages from APT with fzf?"
             elif [ "$DISTRO" = "alpine" ]; then
                 fzf_prompt="Would you like to search and add extra packages from Alpine APK with fzf?"
@@ -3432,8 +3448,8 @@ step_applications() {
             return 0
         fi
 
-        if [ "$DISTRO" = "debian" ]; then
-            step_item "Full stack requested for Debian: deploying Flatpaks and available packages..."
+        if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            step_item "Full stack requested for $DISTRO: deploying Flatpaks and available packages..."
             if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
                 sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
                 while IFS= read -r fapp || [ -n "$fapp" ]; do
@@ -3530,13 +3546,13 @@ step_applications() {
                     *) sudo dnf install -y --skip-broken "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
-        elif [ "$DISTRO" = "debian" ]; then
-            step_item "Deploying application selections for Debian..."
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            step_item "Deploying application selections for $DISTRO..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
             for app in "${PACMAN_INSTALL[@]}"; do
                 case "$app" in
                     *brave*)
-                        # Setup official Brave browser repo for Debian if requested
+                        # Setup official Brave browser repo for Debian/Ubuntu if requested
                         if ! command -v brave-browser >/dev/null 2>&1; then
                             sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg >> "$LOG_FILE" 2>&1 || true
                             sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources >> "$LOG_FILE" 2>&1 || true
@@ -4109,7 +4125,7 @@ step_system() {
         step_item "Installing SDDM display manager..."
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
-        elif [ "$DISTRO" = "debian" ]; then
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
@@ -4397,6 +4413,7 @@ step_update() {
             local pkg_label="pacman"
             [ "$DISTRO" = "fedora" ] && pkg_label="dnf"
             [ "$DISTRO" = "debian" ] && pkg_label="apt"
+            [ "$DISTRO" = "ubuntu" ] && pkg_label="apt"
             [ "$DISTRO" = "alpine" ] && pkg_label="apk"
             [ "$DISTRO" = "opensuse" ] && pkg_label="zypper"
             if gum confirm "Would you also like to update system packages with $pkg_label?"; then
@@ -4528,6 +4545,11 @@ if [ "$DRY_RUN" = true ]; then
         step_ok "APT package manager & Charm repositories active."
         section "Package Toolchain & Repositories"
         step_ok "Official Debian & Backports repositories verified."
+    elif [ "$DISTRO" = "ubuntu" ]; then
+        step_ok "Ubuntu Linux x86_64 verified."
+        step_ok "APT package manager, Universe & Hyprland PPA repositories active."
+        section "Package Toolchain & Repositories"
+        step_ok "Official Ubuntu & Hyprland PPA repositories verified."
     else
         step_ok "Arch Linux x86_64 verified."
         step_ok "Parallel downloads & multilib repository active."
@@ -4546,7 +4568,7 @@ if [ "$DRY_RUN" = true ]; then
     sleep 0.5
     if [ "$DISTRO" = "fedora" ]; then
         step_ok "NVIDIA Akmod, kernel-devel, DRM modesetting & dracut initramfs verified."
-    elif [ "$DISTRO" = "debian" ]; then
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         step_ok "NVIDIA DKMS, kernel headers, DRM modesetting & initramfs verified."
     else
         step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."

@@ -2511,13 +2511,13 @@ step_software() {
             sudo apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
         fi
         if ! rhythm_install_with_progress "${#DEBIAN_CORE_PKGS[@]}" "Installing core packages via apt-get..." \
-            sudo apt-get install -y "${DEBIAN_CORE_PKGS[@]}"; then
+            sudo apt-get install -y --no-install-recommends "${DEBIAN_CORE_PKGS[@]}"; then
             local total_d=${#DEBIAN_CORE_PKGS[@]}
             local idx=0
             for pkg in "${DEBIAN_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
-                sudo apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             [ "$total_d" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
@@ -4249,7 +4249,7 @@ step_system() {
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then

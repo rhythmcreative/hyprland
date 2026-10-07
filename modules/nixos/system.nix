@@ -80,7 +80,7 @@ in
     services.tumbler.enable = true;
 
     # SSH on by default, like the Arch installer leaves it: remote access
-    # and `gh`/`opencode` flows work out of the box. mkDefault so any
+    # and `gh` flows work out of the box. mkDefault so any
     # explicit `services.openssh.enable = false;` still wins.
     services.openssh = {
       enable = lib.mkDefault true;

@@ -999,9 +999,9 @@ EOF2
             exit 1
         fi
         echo ""
-        # GitHub CLI + OpenCode at user level (nix profile, no rebuild).
-        section "Developer tools (gh, opencode)"
-        for tool in gh opencode; do
+        # GitHub CLI at user level (nix profile, no rebuild).
+        section "Developer tools (gh)"
+        for tool in gh; do
             if ! command -v "$tool" >/dev/null 2>&1; then
                 nixos_spin "Installing $tool..." -- \
                     bash -c "nix --extra-experimental-features 'nix-command flakes' profile install 'nixpkgs#$tool' >>'$LOG_FILE' 2>&1" \
@@ -1019,9 +1019,6 @@ EOF2
                 step_item "Run 'gh auth login' later to authenticate GitHub CLI."
             fi
         fi
-        command -v opencode >/dev/null 2>&1 \
-            && step_ok "opencode ready ($(opencode --version 2>/dev/null | head -1))." \
-            || true
 
         # System scope: SDDM, fonts, portals, audio and the desktop programs
         # live outside $HOME, so they need the NixOS module. Skip with

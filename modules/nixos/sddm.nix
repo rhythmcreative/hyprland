@@ -79,6 +79,10 @@ let
 in
 {
   config = lib.mkIf (cfg.enable && cfg.features.sddm) {
+    # Ensure systemd boots into graphical target and automatically starts SDDM
+    systemd.defaultUnit = "graphical.target";
+    systemd.services.display-manager.wantedBy = [ "graphical.target" ];
+
     services.displayManager = {
       defaultSession = "hyprland";
       sddm = {

@@ -8,7 +8,31 @@
 
 let
   cfg = config.rhythm;
-  names = builtins.attrNames (builtins.readDir "${cfg.packageSet.helpers}/bin");
+  srcDir = ../../.local/bin;
+  entries = builtins.readDir srcDir;
+  excluded = [
+    "rust-dock"
+    "waybar_auto_hide"
+    "ota-updater"
+    "ota-snapshot"
+    "rhythm-sddm-deploy"
+    "enable-user-services"
+    "rhythm-materialize"
+    "sddm-sync-wrapper"
+    "sddm-auto-sync-local"
+    "sync-sddm-wallpaper"
+    "sync-sddm-wallpaper-sudo"
+    "sddm-wallpaper-watcher"
+  ];
+  fallbackNames = builtins.filter
+    (name: entries.${name} == "regular"
+      && !(lib.elem name excluded)
+      && !(lib.hasSuffix ".bak" name)
+      && !(lib.hasSuffix ".pyc" name)
+      && name != "__pycache__")
+    (builtins.attrNames entries);
+
+  names = cfg.packageSet.helpers.scriptNames or fallbackNames;
 in
 {
   config = lib.mkIf cfg.enable {

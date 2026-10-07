@@ -37,6 +37,16 @@ let
   ];
   excludedList = lib.concatStringsSep " " excluded;
 
+  srcDir = ../../.local/bin;
+  entries = builtins.readDir srcDir;
+  scriptNames = builtins.filter
+    (name: entries.${name} == "regular"
+      && !(lib.elem name excluded)
+      && !(lib.hasSuffix ".bak" name)
+      && !(lib.hasSuffix ".pyc" name)
+      && name != "__pycache__")
+    (builtins.attrNames entries);
+
   # site-packages del modulo de dbus, resuelto en build time en vez de
   # escribir la version de Python a mano.
   # El path de site-packages del modulo de dbus se resuelve en el shell del
@@ -228,6 +238,10 @@ EOF
                   '${brightnessctl}/bin/brightnessctl -d asus::kbd_backlight set "$new_brightness" > /dev/null 2>&1 || echo "$new_brightness" | sudo tee "$BRIGHTNESS_FILE" > /dev/null'
     fi
   '';
+
+  passthru = {
+    inherit scriptNames;
+  };
 
   meta = {
     description = "Helper scripts for the Rhythm Hyprland desktop";

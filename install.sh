@@ -515,7 +515,11 @@ EOF
         # Auto-detected values; override with RHYTHM_USER / RHYTHM_GPU in the
         # rare case the guess is wrong.
         local user="${RHYTHM_USER:-$USER}" guess_gpu="${opt_gpu:-${RHYTHM_GPU:-auto}}" rel hm_dir
-        rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || echo "25.11")
+        rel=$(grep -oP '^VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null || true)
+        if [ -z "$rel" ] && command -v nixos-version >/dev/null 2>&1; then
+            rel=$(nixos-version 2>/dev/null | cut -d. -f1,2 || true)
+        fi
+        [ -z "$rel" ] && rel="25.11"
         if [ "$guess_gpu" = "auto" ]; then
             for dev in /sys/bus/pci/devices/*; do
                 [ "$(cat "$dev/class" 2>/dev/null)" = "0x030000" ] || [ "$(cat "$dev/class" 2>/dev/null)" = "0x030200" ] || continue
@@ -1103,6 +1107,10 @@ EOF2
 
         section "System configuration (greeter, fonts, portals, audio, apps)"
 
+        local host
+        host=$(hostname 2>/dev/null || echo "nixos")
+        [ -z "$host" ] && host="nixos"
+
         # The generated flake, compared by content so re-runs are no-ops.
         local new_sys_flake sys_stamp
         new_sys_flake=$(mktemp)
@@ -1121,42 +1129,49 @@ EOF2
     };
   };
 
-  outputs = { nixpkgs, hyprland, ... }: {
-    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        # The machine's own configuration, imported untouched.
-        ./configuration.nix
-        hyprland.nixosModules.rhythm-hyprland
-        {
-          rhythm = {
-            enable = true;
-            username = "$user";
-            gpu = "$guess_gpu";
-            wallpaper.mode = "$wallpapers";
-            features = {
-              sddm = $sddm_feature;
-              flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
-              asus = $([ "$is_asus" = "true" ] && echo true || echo false);
-              surface = $([ "$is_surface" = "true" ] && echo true || echo false);
+  outputs = { nixpkgs, hyprland, ... }:
+    let
+      sys = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          # The machine's own configuration, imported untouched.
+          ./configuration.nix
+          hyprland.nixosModules.rhythm-hyprland
+          {
+            rhythm = {
+              enable = true;
+              username = "$user";
+              gpu = "$guess_gpu";
+              wallpaper.mode = "$wallpapers";
+              features = {
+                sddm = $sddm_feature;
+                flatpaks = $([ "$flatpaks" = "1" ] && echo true || echo false);
+                asus = $([ "$is_asus" = "true" ] && echo true || echo false);
+                surface = $([ "$is_surface" = "true" ] && echo true || echo false);
+              };
             };
-          };
-$(if [ "$guess_gpu" = "nvidia" ]; then printf '          nixpkgs.config.allowUnfree = true;\n'; fi)
-$(if [ "$enable_steam" = "true" ]; then printf '          programs.steam.enable = true;\n          nixpkgs.config.allowUnfree = true;\n'; fi)
-          # This is a flake now, so make sure the next rebuild does not need
-          # --extra-experimental-features to work.
-          nix.settings.experimental-features = [ "nix-command" "flakes" ];
-          # SSH server on by default (port 22 opens automatically), same as the
-          # Arch installer leaves it.
-          services.openssh.enable = true;
-          # home-manager is deliberately NOT enabled here: the user scope is
-          # the standalone flake in ~/.config/home-manager. Turning on
-          # home-manager.users as well would give every file two owners and
-          # two conflicting activations.
-        }
-      ];
+$(if [ "$guess_gpu" = "nvidia" ]; then printf '            nixpkgs.config.allowUnfree = true;\n'; fi)
+$(if [ "$enable_steam" = "true" ]; then printf '            programs.steam.enable = true;\n            nixpkgs.config.allowUnfree = true;\n'; fi)
+            # This is a flake now, so make sure the next rebuild does not need
+            # --extra-experimental-features to work.
+            nix.settings.experimental-features = [ "nix-command" "flakes" ];
+            # SSH server on by default (port 22 opens automatically), same as the
+            # Arch installer leaves it.
+            services.openssh.enable = true;
+            # home-manager is deliberately NOT enabled here: the user scope is
+            # the standalone flake in ~/.config/home-manager. Turning on
+            # home-manager.users as well would give every file two owners and
+            # two conflicting activations.
+          }
+        ];
+      };
+    in {
+      nixosConfigurations = {
+        nixos = sys;
+        default = sys;
+        "$host" = sys;
+      };
     };
-  };
 }
 EOF3
 
@@ -1174,6 +1189,10 @@ EOF3
             sudo cp -f "$new_sys_flake" "$etc_dir/flake.nix"
             rm -f "$new_sys_flake"
             step_ok "Wrote $etc_dir/flake.nix (nixpkgs pinned to $channel)."
+        fi
+
+        if [ -d "$etc_dir/.git" ]; then
+            sudo git -C "$etc_dir" add -A 2>/dev/null || true
         fi
 
         # The old hand-written stub enabled SDDM and programs.hyprland itself.

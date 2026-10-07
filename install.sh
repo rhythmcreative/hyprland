@@ -1150,6 +1150,8 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
     # clone necesita que el destino no exista, y mktemp ya lo ha creado.
     rmdir "$CLONE_DIR"
     git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$CLONE_DIR"
+    # Drain any remaining bytes from pipe (e.g. curl | bash) so curl doesn't encounter EPIPE (error 23)
+    cat >/dev/null 2>&1 || true
     if [ -e /dev/tty ]; then
         exec bash "$CLONE_DIR/install.sh" "$@" < /dev/tty
     else

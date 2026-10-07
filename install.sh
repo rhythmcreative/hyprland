@@ -1774,16 +1774,39 @@ install_rust_dock() {
 
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
     if [ "$DISTRO" = "fedora" ]; then
-        sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1
+        sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ]; then
-        sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev libgtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1
+        sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev >> "$LOG_FILE" 2>&1 || \
+            sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
+
+        # Build gtk4-layer-shell from source if not available in Debian repos (e.g. Debian 12 Bookworm)
+        if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
+            step_item "Building gtk4-layer-shell from source for Debian..."
+            sudo apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
+            if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
+                local gls_dir
+                gls_dir=$(mktemp -d "${TMPDIR:-/tmp}/gtk4-layer-shell.XXXXXXXX")
+                if git clone --depth=1 https://github.com/wmww/gtk4-layer-shell.git "$gls_dir" >> "$LOG_FILE" 2>&1; then
+                    (cd "$gls_dir" && meson setup -Dexamples=false -Ddocs=false -Dtests=false build >> "$LOG_FILE" 2>&1 && \
+                     ninja -C build >> "$LOG_FILE" 2>&1 && \
+                     sudo ninja -C build install >> "$LOG_FILE" 2>&1 && \
+                     sudo ldconfig 2>/dev/null || true)
+                fi
+                rm -rf "$gls_dir"
+            fi
+        fi
     else
-        yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1
+        yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
     fi
 
     if ! command -v cargo > /dev/null 2>&1; then
         step_warn "Cargo not found. Skipping rust-dock build."
-        return
+        return 0
+    fi
+
+    if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
+        step_warn "gtk4-layer-shell not found. Skipping rust-dock build (falling back to Waybar dock)."
+        return 0
     fi
 
     local source_dir=""
@@ -1874,7 +1897,7 @@ install_themes_and_fonts() {
         step_ok "JetBrains Mono Nerd Font already present."
     fi
 
-    # 2. Tela Circle Icon Theme (All variants prebuilt from Release v0.25)
+    # 2. Tela Circle Icon Theme (All variants)
     if [ ! -d "/usr/share/icons/Tela-circle" ] && [ ! -d "$HOME/.local/share/icons/Tela-circle" ]; then
         step_item "Installing Tela Circle Icon Theme (All Variants)..."
         local tmp_tela
@@ -1886,7 +1909,15 @@ install_themes_and_fonts() {
             sudo tar -xzf "$tmp_tela" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
             step_ok "Tela Circle Icon Theme deployed."
         else
-            step_warn "Could not download precompiled Tela Circle theme."
+            step_item "Installing Tela Circle Icon Theme from upstream..."
+            local tela_src
+            tela_src=$(mktemp -d "${TMPDIR:-/tmp}/tela-circle.XXXXXXXX")
+            if git clone --depth=1 https://github.com/vinceliuice/Tela-circle-icon-theme.git "$tela_src" >> "$LOG_FILE" 2>&1; then
+                sudo bash "$tela_src/install.sh" -a >> "$LOG_FILE" 2>&1 && step_ok "Tela Circle Icon Theme deployed." || step_warn "Could not install Tela Circle theme."
+            else
+                step_warn "Could not download Tela Circle theme."
+            fi
+            rm -rf "$tela_src"
         fi
         rm -f "$tmp_tela"
     else
@@ -1916,9 +1947,14 @@ install_themes_and_fonts() {
     fi
 
     # 4. Pywal (Command-line color palette engine)
-    if ! command -v wal >/dev/null 2>&1; then
+    if ! command -v wal >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/wal" ]; then
         step_item "Setting up Pywal..."
-        pip3 install --user pywal >> "$LOG_FILE" 2>&1 || pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || true
+        if [ "$DISTRO" = "debian" ]; then
+            sudo apt-get install -y python3-pip pipx >> "$LOG_FILE" 2>&1 || true
+        fi
+        pipx install pywal >> "$LOG_FILE" 2>&1 || \
+            pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || \
+            pip3 install --user pywal >> "$LOG_FILE" 2>&1 || true
         if command -v wal >/dev/null 2>&1 || [ -x "$HOME/.local/bin/wal" ]; then
             step_ok "Pywal initialized."
         else

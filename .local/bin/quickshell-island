@@ -162,4 +162,9 @@ for _proc in /proc/[0-9]*; do
 done
 sleep 0.2
 
+if ! command -v quickshell >/dev/null 2>&1; then
+    echo "quickshell-island: quickshell binary not found in PATH" >&2
+    exit 1
+fi
+
 exec quickshell -p "$HOME/.config/quickshell/waybar-island/shell.qml"

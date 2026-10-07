@@ -2465,6 +2465,17 @@ step_software() {
             qml-module-qtquick-controls2
             qml-module-qtsvg
             qml-module-qtquick-shapes
+            qml6-module-qtquick
+            qml6-module-qtquick-controls
+            qml6-module-qtquick-shapes
+            qml6-module-qtquick-layouts
+            qml6-module-qtquick-templates
+            qml6-module-qtquick-window
+            qml6-module-qtcore
+            qml6-module-qt5compat
+            libqt6svg6
+            hyprpaper
+            swaybg
             qt5ct
             qt6ct
             qt-style-kvantum
@@ -2529,7 +2540,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww; do
+        for extra in swww mpvpaper awww hyprpaper swaybg; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."

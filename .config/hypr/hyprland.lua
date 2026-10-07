@@ -121,16 +121,13 @@ aplicar_monitors_nwg()
 hl.on("hyprland.start", function ()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-    hl.exec_cmd("awww-daemon --format xrgb --no-cache &")
+    hl.exec_cmd("command -v awww-daemon >/dev/null 2>&1 && awww-daemon --format xrgb --no-cache &")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets &")
     hl.exec_cmd("nm-applet --indicator &")
     hl.exec_cmd("hypridle &")
     hl.exec_cmd("~/.config/waybar/launch.sh &")
     hl.exec_cmd("~/.local/bin/rust-dock-launcher &")
-    -- La isla, el watcher de monitores y el de wallpapers arrancan desde sus
-    -- unidades de systemd de usuario (waybar-island, rust-dock-monitor-watcher,
-    -- wallpaper-monitor-watcher), que son las que los reinician si mueren.
-    -- Lanzarlos aqui tambien dejaba la unidad muerta, sin supervision.
+    hl.exec_cmd("~/.local/bin/quickshell-island &")
     hl.exec_cmd("sleep 0.3 && ~/.local/bin/load-last-wallpaper-fast")
     hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
     -- Pinned compositor plugins on NixOS. The flake exports one env var per

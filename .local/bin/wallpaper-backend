@@ -73,13 +73,28 @@ monitors() {
     fi
 }
 
-ensure_awww() {
-    if ! pgrep -x "awww-daemon" >/dev/null 2>&1; then
-        setsid awww-daemon --format xrgb --no-cache >/dev/null 2>&1 &
-        for _ in $(seq 1 50); do
-            awww query >/dev/null 2>&1 && break
-            sleep 0.1
-        done
+ensure_daemon() {
+    if command -v awww >/dev/null 2>&1; then
+        if ! pgrep -x "awww-daemon" >/dev/null 2>&1; then
+            setsid awww-daemon --format xrgb --no-cache >/dev/null 2>&1 &
+            for _ in $(seq 1 50); do
+                awww query >/dev/null 2>&1 && break
+                sleep 0.1
+            done
+        fi
+    elif command -v swww >/dev/null 2>&1; then
+        if ! pgrep -x "swww-daemon" >/dev/null 2>&1; then
+            setsid swww-daemon --format xrgb --no-cache >/dev/null 2>&1 &
+            for _ in $(seq 1 50); do
+                swww query >/dev/null 2>&1 && break
+                sleep 0.1
+            done
+        fi
+    elif command -v hyprpaper >/dev/null 2>&1; then
+        if ! pgrep -x "hyprpaper" >/dev/null 2>&1; then
+            setsid hyprpaper >/dev/null 2>&1 &
+            sleep 0.2
+        fi
     fi
 }
 
@@ -91,28 +106,52 @@ stop_mpvpaper() {
 apply_static() {
     local f="$1" trans="$2"
     stop_mpvpaper
-    ensure_awww
-    # El resultado se mira de verdad. Antes el log de abajo se escribia siempre,
-    # con un `|| true` debajo, de modo que un `awww img` que no habia llegado al
-    # daemon dejaba un "static applied via awww" que era mentira. Con el log
-    # mintiendo no habia forma de enterarse de que el fondo no se ponia en
-    # ninguna pantalla, y por eso el fallo era tan silencioso.
+    ensure_daemon
     local ok=1
-    if [ "$trans" = "login" ]; then
-        awww img "$f" --transition-type wave --transition-angle 120 --transition-duration 2.2 --transition-fps 60 >/dev/null 2>&1 || \
-        awww img "$f" >/dev/null 2>&1 || ok=0
-    elif [ "$trans" = "yes" ]; then
-        awww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
-        awww img "$f" >/dev/null 2>&1 || ok=0
+    local engine="none"
+
+    if command -v awww >/dev/null 2>&1; then
+        engine="awww"
+        if [ "$trans" = "login" ]; then
+            awww img "$f" --transition-type wave --transition-angle 120 --transition-duration 2.2 --transition-fps 60 >/dev/null 2>&1 || \
+            awww img "$f" >/dev/null 2>&1 || ok=0
+        elif [ "$trans" = "yes" ]; then
+            awww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
+            awww img "$f" >/dev/null 2>&1 || ok=0
+        else
+            awww img "$f" >/dev/null 2>&1 || ok=0
+        fi
+    elif command -v swww >/dev/null 2>&1; then
+        engine="swww"
+        if [ "$trans" = "login" ]; then
+            swww img "$f" --transition-type wave --transition-angle 120 --transition-duration 2.2 --transition-fps 60 >/dev/null 2>&1 || \
+            swww img "$f" >/dev/null 2>&1 || ok=0
+        elif [ "$trans" = "yes" ]; then
+            swww img "$f" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 >/dev/null 2>&1 || \
+            swww img "$f" >/dev/null 2>&1 || ok=0
+        else
+            swww img "$f" >/dev/null 2>&1 || ok=0
+        fi
+    elif command -v hyprpaper >/dev/null 2>&1; then
+        engine="hyprpaper"
+        hyprctl hyprpaper preload "$f" >/dev/null 2>&1 || true
+        hyprctl hyprpaper wallpaper ",$f" >/dev/null 2>&1 || ok=0
+    elif command -v swaybg >/dev/null 2>&1; then
+        engine="swaybg"
+        pkill -x "swaybg" 2>/dev/null || true
+        setsid swaybg -i "$f" -m fill >/dev/null 2>&1 &
+        ok=1
     else
-        awww img "$f" >/dev/null 2>&1 || ok=0
+        ok=0
+        log "ERROR: No hay ningún motor de wallpaper instalado (awww, swww, hyprpaper, swaybg)"
     fi
-    echo "awww" > "$BACKEND_FILE"
+
+    echo "$engine" > "$BACKEND_FILE"
     echo "$f" > "$PYWAL_SRC"
     if [ "$ok" = "1" ]; then
-        log "static applied via awww: $(basename "$f")"
+        log "static applied via $engine: $(basename "$f")"
     else
-        log "ERROR: awww no pinto $(basename "$f") (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<sin>}); el fondo sigue como estaba"
+        log "ERROR: $engine no pinto $(basename "$f") (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<sin>}); el fondo sigue como estaba"
     fi
 }
 

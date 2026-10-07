@@ -39,35 +39,52 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     unset _sig
 fi
 
-# Verificación de daemon (soporta awww)
+# Verificación de daemon (soporta awww, swww, hyprpaper, swaybg)
 DAEMON_RUNNING=false
-if awww query > /dev/null 2>&1 || pgrep -x "awww-daemon" > /dev/null; then
+if command -v awww > /dev/null 2>&1; then
+    if awww query > /dev/null 2>&1 || pgrep -x "awww-daemon" > /dev/null; then
+        DAEMON_RUNNING=true
+    else
+        log "Daemon no detectado, intentando iniciar awww-daemon..."
+        setsid awww-daemon --format xrgb --no-cache > /dev/null 2>&1 &
+        for i in {1..50}; do
+            if awww query > /dev/null 2>&1; then
+                log "Daemon listo tras $((i*100))ms"
+                DAEMON_RUNNING=true
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+elif command -v swww > /dev/null 2>&1; then
+    if swww query > /dev/null 2>&1 || pgrep -x "swww-daemon" > /dev/null; then
+        DAEMON_RUNNING=true
+    else
+        log "Daemon no detectado, intentando iniciar swww-daemon..."
+        setsid swww-daemon --format xrgb --no-cache > /dev/null 2>&1 &
+        for i in {1..50}; do
+            if swww query > /dev/null 2>&1; then
+                log "Daemon listo tras $((i*100))ms"
+                DAEMON_RUNNING=true
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+elif command -v hyprpaper > /dev/null 2>&1; then
+    if pgrep -x "hyprpaper" > /dev/null; then
+        DAEMON_RUNNING=true
+    else
+        log "Iniciando hyprpaper..."
+        setsid hyprpaper > /dev/null 2>&1 &
+        DAEMON_RUNNING=true
+    fi
+elif command -v swaybg > /dev/null 2>&1; then
     DAEMON_RUNNING=true
 fi
 
 if [ "$DAEMON_RUNNING" = false ]; then
-    log "Daemon no detectado, intentando iniciar awww-daemon..."
-    # Usar setsid para que el daemon no muera con el script
-    setsid awww-daemon --format xrgb --no-cache > /dev/null 2>&1 &
-
-    # Esperar a que el daemon esté listo
-    for i in {1..50}; do
-        if awww query > /dev/null 2>&1; then
-            log "Daemon listo tras $((i*100))ms"
-            DAEMON_RUNNING=true
-            break
-        fi
-        sleep 0.1
-    done
-fi
-
-if [ "$DAEMON_RUNNING" = false ]; then
-    # Antes salia aqui con exit 1, y como estaba ANTES de mirar el cache, una
-    # arranque lento (5 s no bastan) se comia la puesta de fondo entero aunque
-    # hubiera una imagen valida perfectamente conocida. Se avisa y se sigue: la
-    # cadena de abajo lo intentara de nuevo y, si tampoco puede, lo deja escrito
-    # en el log en vez de terminar en silencio.
-    log "AVISO: awww-daemon no respondio; se intenta poner el fondo igualmente"
+    log "AVISO: Ningun daemon de wallpaper respondio; se intenta poner el fondo igualmente"
 fi
 
 # ── RED DE SEGURIDAD: el wallpaper por defecto del repo ──────────────────────

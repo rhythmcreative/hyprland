@@ -677,15 +677,15 @@ if [[ ! -d "$WALLPAPER_DIR" ]]; then
     exit 1
 fi
 
-# Verificar awww
-if ! command -v awww &> /dev/null; then
-    log "ERROR: awww no está instalado"
-    notify "Error: awww no está instalado"
+# Verificar motor de wallpaper
+if ! command -v awww &> /dev/null && ! command -v swww &> /dev/null && ! command -v hyprpaper &> /dev/null && ! command -v swaybg &> /dev/null; then
+    log "ERROR: Ningun motor de wallpaper instalado (awww, swww, hyprpaper, swaybg)"
+    notify "Error: Ningun motor de wallpaper instalado"
     exit 1
 fi
 
-# Verificar e iniciar awww-daemon si es necesario
-if ! pgrep -x "awww-daemon" > /dev/null; then
+# Iniciar awww-daemon si awww es el motor
+if command -v awww &> /dev/null && ! pgrep -x "awww-daemon" > /dev/null; then
     log "Iniciando awww-daemon..."
     awww-daemon --format xrgb --no-cache &
 fi

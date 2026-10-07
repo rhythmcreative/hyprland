@@ -95,11 +95,15 @@ apply_wallpaper_with_waybar_sync() {
     if [ -x "$HOME/.local/bin/sync-wallpaper-animation" ]; then
         "$HOME/.local/bin/sync-wallpaper-animation" "$wallpaper_file"
         log "Sistema sincronizado"
-    else
-        awww img "$wallpaper_file" --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60
+    elif [ -x "$HOME/.local/bin/wallpaper-backend" ]; then
+        "$HOME/.local/bin/wallpaper-backend" apply "$wallpaper_file"
         echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
-        wal -i "$wallpaper_file" -n -q
-        "$HOME/.local/bin/modern-pywal-sync"
+        wal -i "$wallpaper_file" -n -q 2>/dev/null || true
+        "$HOME/.local/bin/modern-pywal-sync" 2>/dev/null || true
+    else
+        echo "$wallpaper_file" > "$HOME/.cache/current-wallpaper"
+        wal -i "$wallpaper_file" -n -q 2>/dev/null || true
+        "$HOME/.local/bin/modern-pywal-sync" 2>/dev/null || true
     fi
 }
 
@@ -110,19 +114,19 @@ if [[ ! -d "$WALLPAPER_DIR" ]]; then
     exit 1
 fi
 
-# Verificar awww
-if ! command -v awww &>/dev/null; then
-    log "ERROR: awww no está instalado"
-    notify-send "Error" "awww no está instalado" -u critical
+# Verificar motor de wallpaper
+if ! command -v awww &>/dev/null && ! command -v swww &>/dev/null && ! command -v hyprpaper &>/dev/null && ! command -v swaybg &>/dev/null; then
+    log "ERROR: Ningun motor de wallpaper instalado"
+    notify-send "Error" "Ningun motor de wallpaper instalado" -u critical
     exit 1
 fi
 
-# Verificar e iniciar awww-daemon si es necesario
-if ! pgrep -x "awww-daemon" > /dev/null; then
+# Iniciar awww-daemon si awww es el motor
+if command -v awww &>/dev/null && ! pgrep -x "awww-daemon" > /dev/null; then
     log "Iniciando awww-daemon..."
     notify-send "Iniciando awww..." "Preparando sistema de wallpapers"
     awww-daemon --format xrgb --no-cache &
-    sleep 3
+    sleep 1
 fi
 
 # Buscar imágenes

@@ -250,7 +250,6 @@ hl.config({
         disable_splash_rendering = true,
         background_color = "0x111319",
         disable_hyprland_guiutils_check = true,
-        disable_hyprland_qtutils_check = true,
         disable_watchdog_warning = true,
         vrr = 1,
         animate_manual_resizes = false,

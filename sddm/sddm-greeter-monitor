@@ -174,41 +174,40 @@ rm -f "$lista"
 reglas=$(mktemp)
 trap 'rm -f "$reglas"' EXIT INT TERM
 
-if [ "$hay_panel" -eq 1 ]; then
-    # El panel manda. Todo lo demas se apaga: el login se ve una vez y sin
-    # encender la dGPU entera por duplicar la misma pantalla.
-    for c in $salidas; do
-        if es_panel "$c"; then
-            # La escala se fija a 1 a proposito: Hyprland usa 1.5 por defecto en
-            # 1080p y el tema del greeter esta hecho en pixeles fijos, asi que a
-            # 1.5 sale con todo enorme.
-            if [ "$is_lua" -eq 1 ]; then
-                echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
-            else
-                echo "monitor = $c, preferred, auto, 1" >>"$reglas"
-            fi
+tapa_cerrada=0
+for lid in /proc/acpi/button/lid/*/state; do
+    if [ -r "$lid" ] && grep -qi "closed" "$lid" 2>/dev/null; then
+        tapa_cerrada=1
+        break
+    fi
+done
+
+salidas_externas=""
+for c in $salidas; do
+    if ! es_panel "$c"; then
+        salidas_externas="$salidas_externas $c"
+    fi
+done
+
+for c in $salidas; do
+    if es_panel "$c" && [ "$tapa_cerrada" -eq 1 ] && [ -n "$salidas_externas" ]; then
+        # Con la tapa del portatil cerrada y monitor externo conectado,
+        # apagamos unicamente el panel interno.
+        if [ "$is_lua" -eq 1 ]; then
+            echo "hl.monitor({ output = \"$c\", disabled = true })" >>"$reglas"
         else
-            # En formato clásico es "monitor = <salida>, disable". En formato Lua es disabled = true.
-            if [ "$is_lua" -eq 1 ]; then
-                echo "hl.monitor({ output = \"$c\", disabled = true })" >>"$reglas"
-            else
-                echo "monitor = $c, disable" >>"$reglas"
-            fi
+            echo "monitor = $c, disable" >>"$reglas"
         fi
-    done
-    modo="panel"
-else
-    # Sin panel no se apaga nada: si la tapa esta cerrada, el externo es la
-    # unica pantalla que queda y un login en negro deja al usuario fuera.
-    for c in $salidas; do
+    else
+        # Mantener todas las salidas conectadas encendidas con su resolucion preferida
         if [ "$is_lua" -eq 1 ]; then
             echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
         else
             echo "monitor = $c, preferred, auto, 1" >>"$reglas"
         fi
-    done
-    modo="sin-panel"
-fi
+    fi
+done
+modo="activo"
 
 if [ ! -r "$PLANTILLA" ]; then
     echo "sddm-greeter-monitor: no se encuentra la plantilla $PLANTILLA" >&2
@@ -229,32 +228,30 @@ awk -v fichero="$reglas" '
 chmod 644 "$GENERADO"
 
 registro="${RHYTHM_SDDM_LOG:-$WORK/sddm-greeter-monitor.log}"
-{ echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] panel=${tarjeta_panel:-(ninguno)} reglas=$(wc -l <"$reglas") config=$GENERADO" >"$registro"; } 2>/dev/null || true
+{ echo "sddm-greeter-monitor: modo=$modo salidas=[${salidas# }] panel=${tarjeta_panel:-(ninguno)} tapa_cerrada=$tapa_cerrada reglas=$(wc -l <"$reglas") config=$GENERADO" >"$registro"; } 2>/dev/null || true
 
-# Espera a que el Hyprland de la sesion anterior termine de desmontarse.
-#
-# Al salir de sesion, SDDM rearranca el greeter enseguida. Si el compositor del
-# usuario aun no ha soltado DRM/KMS, el nuevo falla CBackend::create() igual que
-# con el bug de AQ_DRM_DEVICES y SDDM reintenta contra una pantalla negra: el
-# login "a veces no sale". En este punto ningun Hyprland deberia estar corriendo
-# —el del greeter arranca abajo, con el exec— asi que cualquiera que haya es la
-# sesion anterior apagandose. Con tope: si en 12 s sigue ahi, se arranca igual y
-# queda escrito, que un arranque tardio vale mas que no arrancar.
+# Espera breve a que el Hyprland de la sesion anterior termine de desmontarse
+# para que no haya conflicto en el acceso a DRM/KMS.
+# Usamos pasos de 100ms con tope de 2s para no sobrepasar el timeout de SDDM.
+antiguo_hyprland_vivo() {
+    pgrep -x Hyprland >/dev/null 2>&1 || \
+    pgrep -x .Hyprland-wrap >/dev/null 2>&1 || \
+    pgrep -x .Hyprland-wrappe >/dev/null 2>&1 || \
+    pgrep -x start-hyprland >/dev/null 2>&1
+}
+
 espera=0
 if command -v pgrep >/dev/null 2>&1; then
-    while pgrep -x Hyprland >/dev/null 2>&1 && [ "$espera" -lt 12 ]; do
-        sleep 1
+    while antiguo_hyprland_vivo && [ "$espera" -lt 15 ]; do
+        sleep 0.1
         espera=$((espera + 1))
     done
 fi
 
-# Log persistente para los arranques que fallan al salir de sesion. El de $WORK
-# se borra con la sesion y no sirve para diagnosticar despues; este sobrevive.
-# Con tope de lineas para que un bucle de reintentos no llene el disco. Todo con
-# red de seguridad: si no se puede escribir, se arranca igual.
+# Log persistente para los arranques que fallan al salir de sesion.
 LOG_FIJO="${RHYTHM_SDDM_LOG_FIJO:-/var/log/sddm-greeter-monitor.log}"
 if touch "$LOG_FIJO" 2>/dev/null; then
-    echo "$(date '+%F %T') modo=$modo espera=${espera}s salidas=[${salidas# }] config=$GENERADO" >>"$LOG_FIJO" 2>/dev/null || true
+    echo "$(date '+%F %T') modo=$modo espera=${espera} salidas=[${salidas# }] config=$GENERADO" >>"$LOG_FIJO" 2>/dev/null || true
     tail -n 200 "$LOG_FIJO" >"$LOG_FIJO.tmp" 2>/dev/null && mv "$LOG_FIJO.tmp" "$LOG_FIJO" 2>/dev/null || true
 fi
 
@@ -263,22 +260,19 @@ if [ "$(id -u)" -eq 0 ]; then
     extra_flags="--i-am-really-stupid"
 fi
 
+# Arrancar Hyprland directamente como compositor de SDDM
 if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then
-    _bin_dir=$(dirname "$HYPRLAND_CMD")
-    if [ -x "$_bin_dir/start-hyprland" ]; then
-        exec "$_bin_dir/start-hyprland" -- $extra_flags --config "$GENERADO"
-    fi
     exec "$HYPRLAND_CMD" $extra_flags --config "$GENERADO"
-elif command -v start-hyprland >/dev/null 2>&1; then
-    exec start-hyprland -- $extra_flags --config "$GENERADO"
 elif command -v Hyprland >/dev/null 2>&1; then
     exec Hyprland $extra_flags --config "$GENERADO"
-elif [ -x /usr/bin/start-hyprland ]; then
-    exec /usr/bin/start-hyprland -- $extra_flags --config "$GENERADO"
 elif [ -x /usr/bin/Hyprland ]; then
     exec /usr/bin/Hyprland $extra_flags --config "$GENERADO"
 elif [ -x /usr/local/bin/Hyprland ]; then
     exec /usr/local/bin/Hyprland $extra_flags --config "$GENERADO"
+elif command -v start-hyprland >/dev/null 2>&1; then
+    exec start-hyprland -- $extra_flags --config "$GENERADO"
+elif [ -x /usr/bin/start-hyprland ]; then
+    exec /usr/bin/start-hyprland -- $extra_flags --config "$GENERADO"
 else
     echo "sddm-greeter-monitor: no Hyprland executable found" >&2
     exit 1

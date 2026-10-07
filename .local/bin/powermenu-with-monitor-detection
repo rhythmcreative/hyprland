@@ -486,8 +486,10 @@ run_cmd() {
             amixer set Master mute 2>/dev/null || true
             systemctl suspend
         elif [[ $1 == '--logout' ]]; then
-            if [[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]]; then
-                loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || pkill -x Hyprland
+            if command -v hyprctl >/dev/null 2>&1 && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+                hyprctl dispatch exit
+            elif [[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]]; then
+                hyprctl dispatch exit 2>/dev/null || loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || pkill -x Hyprland
             elif [[ "$DESKTOP_SESSION" == 'openbox' ]]; then
                 openbox --exit
             elif [[ "$DESKTOP_SESSION" == 'bspwm' ]]; then

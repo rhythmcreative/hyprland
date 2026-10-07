@@ -342,6 +342,42 @@ if [ -x "$HOME/.local/bin/sync-mako-pywal" ]; then
     "$HOME/.local/bin/sync-mako-pywal" >/dev/null 2>&1 || true
 fi
 
+# 9b. Sincronizar Hyprlock (Colores mejorados para bloqueo)
+echo "  • Hyprlock..."
+mkdir -p "$HOME/.cache/wal"
+cat > "$HOME/.cache/wal/colors-hyprland-enhanced.conf" <<EOF
+# Hyprland enhanced colors generated for hyprlock
+\$color0 = rgb(${color0#'#'})
+\$color1 = rgb(${color1#'#'})
+\$color2 = rgb(${color2#'#'})
+\$color3 = rgb(${color3#'#'})
+\$color4 = rgb(${color4#'#'})
+\$color5 = rgb(${color5#'#'})
+\$color6 = rgb(${color6#'#'})
+\$color7 = rgb(${color7#'#'})
+\$color8 = rgb(${color8#'#'})
+\$color9 = rgb(${color9#'#'})
+\$color10 = rgb(${color10#'#'})
+\$color11 = rgb(${color11#'#'})
+\$color12 = rgb(${color12#'#'})
+\$color13 = rgb(${color13#'#'})
+\$color14 = rgb(${color14#'#'})
+\$color15 = rgb(${color15#'#'})
+
+\$background = rgb(${background#'#'})
+\$foreground = rgb(${foreground#'#'})
+\$cursor = rgb(${cursor#'#'})
+
+\$primary_accent = \$color1
+\$secondary_accent = \$color2
+\$error_color = \$color9
+\$warning_color = \$color11
+\$text_color = \$foreground
+\$dim_text = \$color7
+\$bg_dark = \$color0
+\$bg_medium = \$color8
+EOF
+
 # 10. Recargar Hyprland (Bordes y colores de ventana)
 echo "  • Hyprland..."
 hyprctl reload >/dev/null 2>&1 || true

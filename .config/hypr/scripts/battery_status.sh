@@ -1,11 +1,11 @@
 #!/bin/bash
 # Fast battery status for hyprlock (<2ms, 0 latency, no emojis)
 
-BATTERY_PATH="/sys/class/power_supply/BAT0"
+BAT_DIR=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -n 1)
 
-if [[ -f "$BATTERY_PATH/capacity" ]]; then
-    capacity=$(cat "$BATTERY_PATH/capacity")
-    status=$(cat "$BATTERY_PATH/status")
+if [[ -n "$BAT_DIR" && -f "$BAT_DIR/capacity" ]]; then
+    capacity=$(cat "$BAT_DIR/capacity" 2>/dev/null)
+    status=$(cat "$BAT_DIR/status" 2>/dev/null)
     
     prefix="BAT"
     if [[ "$status" == "Charging" ]]; then

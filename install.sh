@@ -4613,6 +4613,12 @@ step_system() {
             printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" \
                 "$seed_wp" "$seed_wp" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
         fi
+
+        # Ensure user avatar fallback exists for hyprlock and SDDM
+        if [ ! -f "$HOME/.face" ] && [ ! -f "$HOME/.face.icon" ] && [ -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" ]; then
+            cp -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" "$HOME/.face.icon" 2>/dev/null || true
+            cp -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" "$HOME/.face" 2>/dev/null || true
+        fi
         step_ok "SDDM Astronaut theme configured."
     fi
 
@@ -4736,6 +4742,15 @@ DESK_EOF
             sudo sed -i '/^session.*pam_unix/a session    optional     pam_gnome_keyring.so auto_start' "$pam_file"
         fi
     done
+
+    # PAM hyprlock unlock
+    if [ ! -f /etc/pam.d/hyprlock ]; then
+        if [ -f /etc/pam.d/login ]; then
+            printf "auth        include     login\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+        elif [ -f /etc/pam.d/common-auth ]; then
+            printf "auth        include     common-auth\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+        fi
+    fi
 
     # Pipewire audio sockets
     if command -v systemctl >/dev/null 2>&1; then

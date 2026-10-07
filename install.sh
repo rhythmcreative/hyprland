@@ -218,6 +218,122 @@ nixos_spin() {
     rhythm_spin "$@"
 }
 
+# --- PROGRESS BAR & PACKAGE INSTALLATION MONITOR ---
+render_progress_bar() {
+    local curr="$1"
+    local total="$2"
+    local label="${3:-Installing packages...}"
+    [ "$total" -le 0 ] && total=1
+    [ "$curr" -gt "$total" ] && curr="$total"
+    local pct=$(( curr * 100 / total ))
+    local bar_width=24
+    local filled=$(( curr * bar_width / total ))
+    local empty=$(( bar_width - filled ))
+
+    local bar_fill=""
+    local bar_empty=""
+    local i
+    for ((i=0; i<filled; i++)); do bar_fill="${bar_fill}█"; done
+    for ((i=0; i<empty; i++)); do bar_empty="${bar_empty}░"; done
+
+    local cols
+    cols=$(tput cols 2>/dev/null || echo 80)
+    local max_label_len=$(( cols - 50 ))
+    [ "$max_label_len" -lt 12 ] && max_label_len=12
+    if [ ${#label} -gt $max_label_len ]; then
+        label="${label:0:$((max_label_len - 3))}..."
+    fi
+
+    if [ -t 1 ]; then
+        printf "\r  [\033[38;5;39m%s\033[38;5;238m%s\033[0m] \033[1;37m%3d%%\033[0m \033[38;5;245m(%d/%d)\033[0m \033[38;5;252m%s\033[0m\033[K" \
+            "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label"
+    fi
+}
+
+clear_progress_bar() {
+    if [ -t 1 ]; then
+        printf "\r\033[K"
+    fi
+}
+
+rhythm_install_with_progress() {
+    local total="${1:-1}"
+    local title="${2:-Installing packages...}"
+    shift 2
+
+    step_item "$title"
+
+    if [ ! -t 1 ] || [ "${DRY_RUN:-false}" = true ]; then
+        "$@" >> "$LOG_FILE" 2>&1
+        return $?
+    fi
+
+    local curr=0
+    local re_pacman="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(installing|upgrading|reinstalling|downloading)[[:space:]]+([^.[:space:]]+)"
+    local re_apt_setup="^Setting up[[:space:]]+([^[:space:]:(]+)"
+    local re_apt_get="^Get:[0-9]+[[:space:]]+"
+    local re_dnf="^\[[[:space:]]*([0-9]+)/([0-9]+)\][[:space:]]+(Installing|Upgrading|Downloading):[[:space:]]+([^.[:space:]]+)"
+    local re_apk="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(Installing|Upgrading|Downloading)[[:space:]]+([^.[:space:]]+)"
+    local re_zypper="^(Installing|Retrieving):[[:space:]]+([^.[:space:]]+)[[:space:]]+\[([0-9]+)/([0-9]+)\]"
+    local re_step="^::[[:space:]]+(.+)"
+
+    render_progress_bar 0 "$total" "Starting package installation..."
+
+    local cmd=("$@")
+    if command -v stdbuf >/dev/null 2>&1; then
+        cmd=(stdbuf -oL -eL "$@")
+    fi
+
+    "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
+        echo "$line" >> "$LOG_FILE"
+        if [[ "$line" =~ $re_pacman ]]; then
+            curr="${BASH_REMATCH[1]}"
+            local dyn_tot="${BASH_REMATCH[2]}"
+            local action="${BASH_REMATCH[3]}"
+            local pkg="${BASH_REMATCH[4]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            local action_label="Installing"
+            [ "$action" = "downloading" ] && action_label="Downloading"
+            render_progress_bar "$curr" "$total" "$action_label $pkg..."
+        elif [[ "$line" =~ $re_dnf ]]; then
+            curr="${BASH_REMATCH[1]}"
+            local dyn_tot="${BASH_REMATCH[2]}"
+            local action="${BASH_REMATCH[3]}"
+            local pkg="${BASH_REMATCH[4]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            render_progress_bar "$curr" "$total" "$action $pkg..."
+        elif [[ "$line" =~ $re_apk ]]; then
+            curr="${BASH_REMATCH[1]}"
+            local dyn_tot="${BASH_REMATCH[2]}"
+            local action="${BASH_REMATCH[3]}"
+            local pkg="${BASH_REMATCH[4]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            render_progress_bar "$curr" "$total" "$action $pkg..."
+        elif [[ "$line" =~ $re_zypper ]]; then
+            curr="${BASH_REMATCH[3]}"
+            local dyn_tot="${BASH_REMATCH[4]}"
+            local action="${BASH_REMATCH[1]}"
+            local pkg="${BASH_REMATCH[2]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            render_progress_bar "$curr" "$total" "$action $pkg..."
+        elif [[ "$line" =~ $re_apt_setup ]]; then
+            ((curr++))
+            local pkg="${BASH_REMATCH[1]}"
+            [ "$curr" -gt "$total" ] && curr="$total"
+            render_progress_bar "$curr" "$total" "Configuring $pkg..."
+        elif [[ "$line" =~ $re_apt_get ]]; then
+            render_progress_bar "$curr" "$total" "Downloading packages..."
+        elif [[ "$line" =~ $re_step ]]; then
+            local step_name="${BASH_REMATCH[1]}"
+            render_progress_bar "$curr" "$total" "$step_name"
+        fi
+    done
+    local ret="${PIPESTATUS[0]}"
+    render_progress_bar "$total" "$total" "Installation complete."
+    [ -t 1 ] && printf "\n"
+    return "$ret"
+}
+
 # Same reason as nixos_tui_ok: a TUI on a dumb/limited terminal never draws and
 # never returns, so the run would hang on that step forever. Wrapping the
 # spinner in the timeout costs nothing (builds run far longer than the
@@ -2262,18 +2378,21 @@ step_software() {
             btrfs-progs
         )
 
-        rhythm_spin "Installing core packages via dnf..." -- \
-            bash -c "
-                if ! sudo dnf install -y --skip-broken --allowerasing ${FEDORA_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
-                    for pkg in ${FEDORA_CORE_PKGS[*]}; do
-                        sudo dnf install -y --skip-broken --allowerasing \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
-                    done
-                fi
+        if ! rhythm_install_with_progress "${#FEDORA_CORE_PKGS[@]}" "Installing core packages via dnf..." \
+            sudo dnf install -y --skip-broken --allowerasing "${FEDORA_CORE_PKGS[@]}"; then
+            local total_f=${#FEDORA_CORE_PKGS[@]}
+            local idx=0
+            for pkg in "${FEDORA_CORE_PKGS[@]}"; do
+                ((idx++))
+                render_progress_bar "$idx" "$total_f" "Installing $pkg (fallback)..."
+                sudo dnf install -y --skip-broken --allowerasing "$pkg" >> "$LOG_FILE" 2>&1 || true
+            done
+            [ "$total_f" -gt 0 ] && [ -t 1 ] && printf "\n"
+        fi
 
-                for extra in awww swww mpvpaper; do
-                    sudo dnf install -y --skip-broken --allowerasing \"\$extra\" >> '$LOG_FILE' 2>&1 || true
-                done
-            "
+        for extra in awww swww mpvpaper; do
+            sudo dnf install -y --skip-broken --allowerasing "$extra" >> "$LOG_FILE" 2>&1 || true
+        done
         step_ok "Core packages installed."
 
         install_themes_and_fonts
@@ -2384,26 +2503,29 @@ step_software() {
             timeshift
         )
 
-        rhythm_spin "Installing core packages via apt-get..." -- \
-            bash -c "
-                export DEBIAN_FRONTEND=noninteractive
-                if [ \"$DISTRO\" = \"debian\" ]; then
-                    # Try batch install with backports priority for Hyprland ecosystem
-                    sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
-                elif [ \"$DISTRO\" = \"ubuntu\" ]; then
-                    sudo apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> '$LOG_FILE' 2>&1 || true
-                fi
-                if ! sudo apt-get install -y ${DEBIAN_CORE_PKGS[*]}; then
-                    for pkg in ${DEBIAN_CORE_PKGS[*]}; do
-                        sudo apt-get install -y \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
-                    done
-                fi
+        export DEBIAN_FRONTEND=noninteractive
+        if [ "$DISTRO" = "debian" ]; then
+            # Try batch install with backports priority for Hyprland ecosystem
+            sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "ubuntu" ]; then
+            sudo apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+        fi
+        if ! rhythm_install_with_progress "${#DEBIAN_CORE_PKGS[@]}" "Installing core packages via apt-get..." \
+            sudo apt-get install -y "${DEBIAN_CORE_PKGS[@]}"; then
+            local total_d=${#DEBIAN_CORE_PKGS[@]}
+            local idx=0
+            for pkg in "${DEBIAN_CORE_PKGS[@]}"; do
+                ((idx++))
+                render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
+                sudo apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || true
+            done
+            [ "$total_d" -gt 0 ] && [ -t 1 ] && printf "\n"
+        fi
 
-                # Extra utilities if available in repos
-                for extra in swww mpvpaper awww; do
-                    sudo apt-get install -y \"\$extra\" >> '$LOG_FILE' 2>&1 || true
-                done
-            "
+        # Extra utilities if available in repos
+        for extra in swww mpvpaper awww; do
+            sudo apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
+        done
         step_ok "Core packages installed."
 
         install_themes_and_fonts
@@ -2516,19 +2638,22 @@ step_software() {
             btrfs-progs
         )
 
-        rhythm_spin "Installing core packages via apk..." -- \
-            bash -c "
-                if ! sudo apk add --no-cache ${ALPINE_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
-                    for pkg in ${ALPINE_CORE_PKGS[*]}; do
-                        sudo apk add --no-cache \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
-                    done
-                fi
+        if ! rhythm_install_with_progress "${#ALPINE_CORE_PKGS[@]}" "Installing core packages via apk..." \
+            sudo apk add --no-cache "${ALPINE_CORE_PKGS[@]}"; then
+            local total_a=${#ALPINE_CORE_PKGS[@]}
+            local idx=0
+            for pkg in "${ALPINE_CORE_PKGS[@]}"; do
+                ((idx++))
+                render_progress_bar "$idx" "$total_a" "Installing $pkg (fallback)..."
+                sudo apk add --no-cache "$pkg" >> "$LOG_FILE" 2>&1 || true
+            done
+            [ "$total_a" -gt 0 ] && [ -t 1 ] && printf "\n"
+        fi
 
-                # Extra utilities if available
-                for extra in swww mpvpaper awww; do
-                    sudo apk add --no-cache \"\$extra\" >> '$LOG_FILE' 2>&1 || true
-                done
-            "
+        # Extra utilities if available
+        for extra in swww mpvpaper awww; do
+            sudo apk add --no-cache "$extra" >> "$LOG_FILE" 2>&1 || true
+        done
         step_ok "Core packages installed."
 
         install_themes_and_fonts
@@ -2638,19 +2763,22 @@ step_software() {
             snapper
         )
 
-        rhythm_spin "Installing core packages via zypper..." -- \
-            bash -c "
-                if ! sudo zypper --non-interactive install --no-confirm ${OPENSUSE_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
-                    for pkg in ${OPENSUSE_CORE_PKGS[*]}; do
-                        sudo zypper --non-interactive install --no-confirm \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
-                    done
-                fi
+        if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
+            sudo zypper --non-interactive install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
+            local total_s=${#OPENSUSE_CORE_PKGS[@]}
+            local idx=0
+            for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
+                ((idx++))
+                render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
+                sudo zypper --non-interactive install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
+            done
+            [ "$total_s" -gt 0 ] && [ -t 1 ] && printf "\n"
+        fi
 
-                # Extra utilities if available in repos
-                for extra in swww mpvpaper awww; do
-                    sudo zypper --non-interactive install --no-confirm \"\$extra\" >> '$LOG_FILE' 2>&1 || true
-                done
-            "
+        # Extra utilities if available in repos
+        for extra in swww mpvpaper awww; do
+            sudo zypper --non-interactive install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
+        done
         step_ok "Core packages installed."
 
         install_themes_and_fonts
@@ -2801,8 +2929,8 @@ step_software() {
         timeshift
     )
 
-    rhythm_spin "Installing core packages and dependencies..." -- \
-        bash -c "yay -S --needed --noconfirm ${CORE_PKGS[*]} >> '$LOG_FILE' 2>&1"
+    rhythm_install_with_progress "${#CORE_PKGS[@]}" "Installing core packages and dependencies via yay..." \
+        yay -S --needed --noconfirm "${CORE_PKGS[@]}"
     step_ok "Core packages installed."
 
     # Build and deploy rust-dock
@@ -3433,61 +3561,25 @@ step_applications() {
     fi
 
     if [ "$INSTALL_MODE" = "full" ]; then
-        if [ "$DISTRO" = "fedora" ]; then
-            step_item "Full stack requested for Fedora: deploying Flatpaks and available packages..."
-            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
-                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
-                while IFS= read -r fapp || [ -n "$fapp" ]; do
-                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-                    [ -z "$fapp" ] && continue
-                    [[ "$fapp" =~ ^# ]] && continue
-                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
-                done < "$DOTFILES_DIR/flatpaks.txt"
-            fi
-            step_ok "Full package stack successfully deployed."
-            return 0
-        fi
-
-        if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+        if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "alpine" ] || [ "$DISTRO" = "opensuse" ]; then
             step_item "Full stack requested for $DISTRO: deploying Flatpaks and available packages..."
             if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
                 sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                local flatpaks=()
                 while IFS= read -r fapp || [ -n "$fapp" ]; do
                     fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
                     [ -z "$fapp" ] && continue
                     [[ "$fapp" =~ ^# ]] && continue
-                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                    flatpaks+=("$fapp")
                 done < "$DOTFILES_DIR/flatpaks.txt"
-            fi
-            step_ok "Full package stack successfully deployed."
-            return 0
-        fi
-
-        if [ "$DISTRO" = "alpine" ]; then
-            step_item "Full stack requested for Alpine: deploying Flatpaks and available packages..."
-            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
-                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
-                while IFS= read -r fapp || [ -n "$fapp" ]; do
-                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-                    [ -z "$fapp" ] && continue
-                    [[ "$fapp" =~ ^# ]] && continue
+                local total_fp=${#flatpaks[@]}
+                local fp_idx=0
+                for fapp in "${flatpaks[@]}"; do
+                    ((fp_idx++))
+                    render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $fapp..."
                     sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
-                done < "$DOTFILES_DIR/flatpaks.txt"
-            fi
-            step_ok "Full package stack successfully deployed."
-            return 0
-        fi
-
-        if [ "$DISTRO" = "opensuse" ]; then
-            step_item "Full stack requested for openSUSE: deploying Flatpaks and available packages..."
-            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
-                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
-                while IFS= read -r fapp || [ -n "$fapp" ]; do
-                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-                    [ -z "$fapp" ] && continue
-                    [[ "$fapp" =~ ^# ]] && continue
-                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
-                done < "$DOTFILES_DIR/flatpaks.txt"
+                done
+                [ "$total_fp" -gt 0 ] && [ -t 1 ] && printf "\n"
             fi
             step_ok "Full package stack successfully deployed."
             return 0
@@ -3505,21 +3597,29 @@ step_applications() {
             done < "$DOTFILES_DIR/packages.txt"
 
             if [ ${#FULL_PKGS[@]} -gt 0 ]; then
-                step_item "Deploying full package stack (${#FULL_PKGS[@]} packages via yay)..."
-                yay -S --needed --noconfirm "${FULL_PKGS[@]}" >> "$LOG_FILE" 2>&1 || step_warn "Some packages from packages.txt encountered errors during installation."
+                rhythm_install_with_progress "${#FULL_PKGS[@]}" "Deploying full package stack (${#FULL_PKGS[@]} packages via yay)..." \
+                    yay -S --needed --noconfirm "${FULL_PKGS[@]}" || step_warn "Some packages from packages.txt encountered errors during installation."
             fi
         fi
 
         if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
             step_item "Configuring Flathub and deploying default Flatpaks..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            local flatpaks=()
             while IFS= read -r fapp || [ -n "$fapp" ]; do
                 fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
                 [ -z "$fapp" ] && continue
                 [[ "$fapp" =~ ^# ]] && continue
-                step_item "Installing flatpak: $fapp"
-                sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                flatpaks+=("$fapp")
             done < "$DOTFILES_DIR/flatpaks.txt"
+            local total_fp=${#flatpaks[@]}
+            local fp_idx=0
+            for fapp in "${flatpaks[@]}"; do
+                ((fp_idx++))
+                render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $fapp..."
+                sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+            done
+            [ "$total_fp" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
 
         step_ok "Full package stack successfully deployed."
@@ -3535,7 +3635,11 @@ step_applications() {
         if [ "$DISTRO" = "fedora" ]; then
             step_item "Deploying application selections for Fedora..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            local total_app=${#PACMAN_INSTALL[@]}
+            local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
+                ((app_idx++))
+                render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
@@ -3546,10 +3650,15 @@ step_applications() {
                     *) sudo dnf install -y --skip-broken "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
+            [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             step_item "Deploying application selections for $DISTRO..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            local total_app=${#PACMAN_INSTALL[@]}
+            local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
+                ((app_idx++))
+                render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*)
                         # Setup official Brave browser repo for Debian/Ubuntu if requested
@@ -3568,10 +3677,15 @@ step_applications() {
                     *) sudo apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
+            [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
         elif [ "$DISTRO" = "alpine" ]; then
             step_item "Deploying application selections for Alpine..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            local total_app=${#PACMAN_INSTALL[@]}
+            local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
+                ((app_idx++))
+                render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
@@ -3582,10 +3696,15 @@ step_applications() {
                     *) sudo apk add --no-cache "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
+            [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
         elif [ "$DISTRO" = "opensuse" ]; then
             step_item "Deploying application selections for openSUSE..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            local total_app=${#PACMAN_INSTALL[@]}
+            local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
+                ((app_idx++))
+                render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
@@ -3596,22 +3715,26 @@ step_applications() {
                     *) sudo zypper --non-interactive install --no-confirm "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
+            [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
         else
             local unique_pkgs=($(printf "%s\n" "${PACMAN_INSTALL[@]}" | sort -u))
             PACMAN_INSTALL=("${unique_pkgs[@]}")
-            step_item "Installing selected native/AUR packages (${#PACMAN_INSTALL[@]} items): ${PACMAN_INSTALL[*]}"
-            rhythm_spin "Installing applications via yay..." -- \
-                bash -c "yay -S --needed --noconfirm ${PACMAN_INSTALL[*]} >> '$LOG_FILE' 2>&1" || step_warn "Some native packages could not be installed."
+            rhythm_install_with_progress "${#PACMAN_INSTALL[@]}" "Installing selected applications via yay (${#PACMAN_INSTALL[@]} items)..." \
+                yay -S --needed --noconfirm "${PACMAN_INSTALL[@]}" || step_warn "Some native packages could not be installed."
         fi
     fi
 
     if [ ${#FLATPAK_INSTALL[@]} -gt 0 ] && [ "$SKIP_FLATPAKS" = false ]; then
         step_item "Configuring Flathub and installing selected Flatpaks (${#FLATPAK_INSTALL[@]} items)..."
         sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+        local total_fp=${#FLATPAK_INSTALL[@]}
+        local fp_idx=0
         for app in "${FLATPAK_INSTALL[@]}"; do
-            step_item "Installing flatpak: $app"
+            ((fp_idx++))
+            render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $app..."
             sudo flatpak install -y --system flathub "$app" >> "$LOG_FILE" 2>&1 || true
         done
+        [ "$total_fp" -gt 0 ] && [ -t 1 ] && printf "\n"
     fi
 
     step_ok "Application selection successfully deployed."
@@ -4560,7 +4683,12 @@ if [ "$DRY_RUN" = true ]; then
 
     section "Core Packages & System Libraries"
     step_item "Simulating package dependency resolution..."
-    rhythm_spin "Checking 65+ core packages..." -- sleep 1.2
+    for ((i=1; i<=10; i++)); do
+        render_progress_bar "$((i*7))" 70 "Resolving packages ($((i*10))%)..."
+        sleep 0.08
+    done
+    render_progress_bar 70 70 "Completed."
+    [ -t 1 ] && printf "\n"
     step_ok "Compositor, Waybar, Quickshell, Rofi, Audio, Fonts resolved."
 
     section "Hardware Drivers & GPU Optimization"

@@ -233,10 +233,12 @@ if touch "$LOG_FIJO" 2>/dev/null; then
     tail -n 200 "$LOG_FIJO" >"$LOG_FIJO.tmp" 2>/dev/null && mv "$LOG_FIJO.tmp" "$LOG_FIJO" 2>/dev/null || true
 fi
 
-if command -v start-hyprland >/dev/null 2>&1; then
-    exec start-hyprland -- --config "$GENERADO"
+if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then
+    exec "$HYPRLAND_CMD" --config "$GENERADO"
 elif command -v Hyprland >/dev/null 2>&1; then
     exec Hyprland --config "$GENERADO"
+elif command -v start-hyprland >/dev/null 2>&1; then
+    exec start-hyprland -- --config "$GENERADO"
 elif [ -x /usr/bin/Hyprland ]; then
     exec /usr/bin/Hyprland --config "$GENERADO"
 elif [ -x /usr/local/bin/Hyprland ]; then

@@ -79,8 +79,10 @@ let
 in
 {
   config = lib.mkIf (cfg.enable && cfg.features.sddm) {
-    services.displayManager.sddm = {
-      enable = true;
+    services.displayManager = {
+      defaultSession = "hyprland";
+      sddm = {
+        enable = true;
       wayland = {
         enable = true;
         # Weston is only the fallback selected for its dependencies: picking
@@ -109,6 +111,7 @@ in
 
       theme = "sddm-astronaut-theme";
     };
+  };
 
     environment.systemPackages = [
       # overrideAttrs, not a plain override: the vendored theme.conf has to be

@@ -29,18 +29,9 @@ stdenv.mkDerivation {
     cp "$src/sddm-greeter-monitor" "$out/bin/sddm-greeter-monitor"
     cp "$src/hyprland.lua" "$out/share/rhythm/hyprland.lua"
     chmod +x "$out/bin/sddm-greeter-monitor"
-    # `start-hyprland` is an Arch-packaging helper that may not ship with
-    # the nixpkgs Hyprland; SDDM already sets the Wayland session
-    # environment for the greeter, so exec the compositor directly.
-    substituteInPlace "$out/bin/sddm-greeter-monitor" \
-      --replace 'exec start-hyprland -- --config' 'exec ${hyprland}/bin/Hyprland --config'
-    # SDDM starts the greeter with a minimal PATH (/usr/bin does not exist
-    # on NixOS), while the wrapper uses plain coreutils/pgrep/awk/grep/sed
-    # throughout. Everything it shells out to goes on the wrapped PATH, or
-    # the wrapper exits on the first `cat` and SDDM retries against a black
-    # screen, which is exactly the failure this wrapper was written to avoid.
     wrapProgram "$out/bin/sddm-greeter-monitor" \
-      --prefix PATH : '${lib.makeBinPath [ coreutils procps gawk gnugrep gnused jq ]}' \
+      --prefix PATH : '${lib.makeBinPath [ hyprland coreutils procps gawk gnugrep gnused jq ]}' \
+      --set HYPRLAND_CMD "${hyprland}/bin/Hyprland" \
       --set RHYTHM_SDDM_PLANTILLA "$out/share/rhythm/hyprland.lua"
   '';
 

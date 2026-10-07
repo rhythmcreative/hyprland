@@ -92,9 +92,18 @@ ensure_daemon() {
         fi
     elif command -v hyprpaper >/dev/null 2>&1; then
         if ! pgrep -x "hyprpaper" >/dev/null 2>&1; then
-            [ -f "$HOME/.config/hypr/hyprpaper.conf" ] || touch "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
+            if [ ! -s "$HOME/.config/hypr/hyprpaper.conf" ] || ! grep -q "wallpaper" "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null; then
+                local cur_f=""
+                [ -f "$HOME/.cache/current-wallpaper" ] && cur_f=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || true)
+                [ -z "$cur_f" ] && [ -f "$HOME/.config/hypr/wallpapers/default.jpg" ] && cur_f="$HOME/.config/hypr/wallpapers/default.jpg"
+                if [ -n "$cur_f" ] && [ -f "$cur_f" ]; then
+                    printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" "$cur_f" "$cur_f" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
+                else
+                    printf "splash = false\nipc = on\n" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
+                fi
+            fi
             setsid hyprpaper >/dev/null 2>&1 &
-            sleep 0.2
+            sleep 0.1
         fi
     fi
 }
@@ -135,6 +144,7 @@ apply_static() {
         fi
     elif command -v hyprpaper >/dev/null 2>&1; then
         engine="hyprpaper"
+        printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" "$f" "$f" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
         hyprctl hyprpaper preload "$f" >/dev/null 2>&1 || true
         if hyprctl hyprpaper wallpaper ",$f" >/dev/null 2>&1; then
             ok=1

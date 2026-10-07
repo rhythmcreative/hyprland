@@ -4584,6 +4584,35 @@ step_system() {
         else
             step_ok "Existing wallpaper kept: $(basename "$CACHE_WP_NOW")"
         fi
+
+        # Neutralize Hyprland's internal default mascot wallpapers to eliminate startup flash
+        if [ -d /usr/share/hypr ]; then
+            local def_wp="$HOME/.config/hypr/wallpapers/default.jpg"
+            [ ! -f "$def_wp" ] && [ -f "$DOTFILES_DIR/.config/hypr/wallpapers/default.jpg" ] && def_wp="$DOTFILES_DIR/.config/hypr/wallpapers/default.jpg"
+            if [ -f "$def_wp" ]; then
+                local tmp_wall_png="/tmp/rhythm-hypr-default.png"
+                if command -v magick >/dev/null 2>&1; then
+                    magick "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                elif command -v convert >/dev/null 2>&1; then
+                    convert "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                fi
+                if [ -f "$tmp_wall_png" ]; then
+                    for w in wall0.png wall1.png wall2.png; do
+                        [ -f "/usr/share/hypr/$w" ] && sudo cp -f "$tmp_wall_png" "/usr/share/hypr/$w" >> "$LOG_FILE" 2>&1 || true
+                    done
+                    rm -f "$tmp_wall_png"
+                fi
+            fi
+        fi
+
+        # Preseed hyprpaper.conf with absolute wallpaper path for instant first start
+        local seed_wp="$HOME/.config/hypr/wallpapers/default.jpg"
+        [ -f "$HOME/.cache/current-wallpaper" ] && seed_wp=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || echo "$seed_wp")
+        if [ -f "$seed_wp" ]; then
+            mkdir -p "$HOME/.config/hypr"
+            printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" \
+                "$seed_wp" "$seed_wp" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
+        fi
         step_ok "SDDM Astronaut theme configured."
     fi
 

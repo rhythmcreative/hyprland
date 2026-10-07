@@ -1601,10 +1601,12 @@ CHARM_EOF
         if [ "$DISTRO" = "ubuntu" ]; then
             # Ensure software-properties-common is available for PPAs and universe repo is enabled
             sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
-            sudo apt-get install -y software-properties-common >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common >> "$LOG_FILE" 2>&1 || true
             sudo add-apt-repository -y universe >> "$LOG_FILE" 2>&1 || true
-            # Enable community Hyprland PPA for Ubuntu
-            sudo add-apt-repository -y ppa:cpiber/hyprland-ppa >> "$LOG_FILE" 2>&1 || true
+            # Enable community Hyprland & Quickshell PPAs for Ubuntu
+            sudo add-apt-repository -y ppa:cppiber/hyprland >> "$LOG_FILE" 2>&1 || true
+            sudo add-apt-repository -y ppa:avengemedia/danklinux >> "$LOG_FILE" 2>&1 || true
+            sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
         fi
 
         # Setup Charm repository for gum on Debian/Ubuntu
@@ -3855,6 +3857,36 @@ step_dotfiles() {
         step_ok "Default wallpaper added to the library."
     fi
 
+    # Seed fallback colors for Hyprland and Hyprlock if wal has not run yet
+    mkdir -p "$HOME/.cache/wal"
+    if [ ! -f "$HOME/.cache/wal/colors-hyprland.conf" ]; then
+        cat << 'WAL_EOF' > "$HOME/.cache/wal/colors-hyprland.conf"
+$color0 = rgb(101012)
+$color1 = rgb(546065)
+$color2 = rgb(A45E4C)
+$color3 = rgb(E59A78)
+$color4 = rgb(5B7A84)
+$color5 = rgb(6F8C94)
+$color6 = rgb(9A9D9E)
+$color7 = rgb(c2c8c9)
+$color8 = rgb(878c8c)
+$color9 = rgb(546065)
+$color10 = rgb(A45E4C)
+$color11 = rgb(E59A78)
+$color12 = rgb(5B7A84)
+$color13 = rgb(6F8C94)
+$color14 = rgb(9A9D9E)
+$color15 = rgb(c2c8c9)
+$background = rgb(101012)
+$foreground = rgb(c2c8c9)
+$cursor = rgb(c2c8c9)
+$wallpaper = default.jpg
+WAL_EOF
+    fi
+    if [ ! -f "$HOME/.cache/wal/colors-hyprland-enhanced.conf" ]; then
+        cp -f "$HOME/.cache/wal/colors-hyprland.conf" "$HOME/.cache/wal/colors-hyprland-enhanced.conf" 2>/dev/null || true
+    fi
+
     # Restore the saved monitors.conf, if we had one
     if [ -n "$saved_monitors" ] && [ -f "$saved_monitors" ]; then
         cp -f "$saved_monitors" "$HOME/.config/hypr/monitors.conf"
@@ -4479,6 +4511,26 @@ step_system() {
                 getent group "$grp" >/dev/null 2>&1 && sudo usermod -aG "$grp" sddm 2>/dev/null || true
             done
             [ -d /var/lib/sddm ] && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
+        fi
+
+        # Ensure Hyprland desktop entry exists in wayland-sessions
+        sudo mkdir -p /usr/share/wayland-sessions
+        if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+            cat << 'DESK_EOF' | sudo tee /usr/share/wayland-sessions/hyprland.desktop > /dev/null
+[Desktop Entry]
+Name=Hyprland
+Comment=An intelligent dynamic tiling Wayland compositor
+Exec=Hyprland
+Type=Application
+DesktopNames=Hyprland
+DESK_EOF
+        fi
+
+        # Preconfigure SDDM default session to Hyprland
+        sudo mkdir -p /var/lib/sddm
+        if [ ! -f /var/lib/sddm/state.conf ]; then
+            echo -e "[Last]\nSession=hyprland.desktop" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
+            sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
 
         step_item "Enabling SDDM display manager..."

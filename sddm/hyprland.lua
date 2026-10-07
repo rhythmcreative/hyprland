@@ -41,11 +41,11 @@
 -- Xcursor clasico, que si lee XCURSOR_THEME -- que el modulo NixOS pone a
 -- Bibata-Modern-Ice en el unit del display-manager. Asi el login y el escritorio
 -- usan el mismo puntero.
-cursor = {
-    enable_hyprcursor = false,
-},
-
 hl.config({
+    cursor = {
+        enable_hyprcursor = false,
+    },
+
     misc = {
         disable_hyprland_logo = true,
         disable_splash_rendering = true,

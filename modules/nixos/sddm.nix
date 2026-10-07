@@ -87,35 +87,35 @@ in
       defaultSession = "hyprland";
       sddm = {
         enable = true;
-      wayland = {
-        enable = true;
-        # Weston is only the fallback selected for its dependencies: picking
-        # it pulls qtwayland into the SDDM package, which the QML greeter
-        # theme needs under any Wayland compositor. The actual command is
-        # replaced below through settings, the module's designed override.
-        compositor = "weston";
+        wayland = {
+          enable = true;
+          # Weston is only the fallback selected for its dependencies: picking
+          # it pulls qtwayland into the SDDM package, which the QML greeter
+          # theme needs under any Wayland compositor. The actual command is
+          # replaced below through settings, the module's designed override.
+          compositor = "weston";
+        };
+        extraPackages = with pkgs.kdePackages; [
+          layer-shell-qt
+          qtmultimedia
+          qtvirtualkeyboard
+          qtsvg
+        ];
+        settings = {
+          General = {
+            GreeterEnvironment = "QT_WAYLAND_SHELL_INTEGRATION=layer-shell";
+          };
+          Wayland = {
+            CompositorCommand = "${cfg.packageSet.greeterMonitor}/bin/sddm-greeter-monitor";
+            SessionDir = "${sessionDir}";
+          };
+        };
+        theme = "sddm-astronaut-theme";
       };
-      settings.Wayland.CompositorCommand = "${cfg.packageSet.greeterMonitor}/bin/sddm-greeter-monitor";
-
-      # hyprland ships two session files -- hyprland.desktop, which execs
-      # start-hyprland directly, and hyprland-uwsm.desktop, which goes through
-      # `uwsm start` -- and SDDM lists every one it finds in SessionDir, so the
-      # greeter offered both. SessionDir is narrowed to the plain one so the
-      # list has a single entry.
-      #
-      # The consequence is deliberate and worth stating: with uwsom the
-      # compositor is started by the systemd --user manager, which is what
-      # reads ~/.config/environment.d and therefore what delivers
-      # RHYTHM_PLUGIN_HYPRBARS and the zsh plugin paths (see
-      # modules/home-manager/packages.nix). Started by SDDM's helper instead,
-      # Hyprland is a child of that helper and inherits nothing from the user
-      # manager, so hyprctl plugin load never runs and kitty falls back to
-      # /usr/share/zsh/plugins, which does not exist here.
-      settings.Wayland.SessionDir = "${sessionDir}";
-
-      theme = "sddm-astronaut-theme";
     };
-  };
+
+    # Direct DRM render node and video access for the unprivileged greeter session
+    users.users.sddm.extraGroups = [ "video" "render" ];
 
     environment.systemPackages = [
       # overrideAttrs, not a plain override: the vendored theme.conf has to be

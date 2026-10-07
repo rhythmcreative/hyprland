@@ -63,7 +63,7 @@ if ! WORK=$(elegir_directorio); then
     exit 1
 fi
 
-GENERADO="${RHYTHM_SDDM_CONFIG:-$WORK/sddm-hyprland-greeter.lua}"
+GENERADO="${RHYTHM_SDDM_CONFIG:-$(mktemp "$WORK/sddm-hyprland-greeter.XXXXXX.lua" 2>/dev/null || echo "$WORK/sddm-hyprland-greeter-$$.lua")}"
 
 # La raiz de DRM se puede apuntar a otro sitio para poder probar los dos casos
 # (con panel y con la tapa cerrada) sin desenchufar nada. En el arranque normal
@@ -233,16 +233,21 @@ if touch "$LOG_FIJO" 2>/dev/null; then
     tail -n 200 "$LOG_FIJO" >"$LOG_FIJO.tmp" 2>/dev/null && mv "$LOG_FIJO.tmp" "$LOG_FIJO" 2>/dev/null || true
 fi
 
+extra_flags=""
+if [ "$(id -u)" -eq 0 ]; then
+    extra_flags="--i-am-really-stupid"
+fi
+
 if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then
-    exec "$HYPRLAND_CMD" --config "$GENERADO"
+    exec "$HYPRLAND_CMD" $extra_flags --config "$GENERADO"
 elif command -v Hyprland >/dev/null 2>&1; then
-    exec Hyprland --config "$GENERADO"
+    exec Hyprland $extra_flags --config "$GENERADO"
 elif command -v start-hyprland >/dev/null 2>&1; then
-    exec start-hyprland -- --config "$GENERADO"
+    exec start-hyprland -- $extra_flags --config "$GENERADO"
 elif [ -x /usr/bin/Hyprland ]; then
-    exec /usr/bin/Hyprland --config "$GENERADO"
+    exec /usr/bin/Hyprland $extra_flags --config "$GENERADO"
 elif [ -x /usr/local/bin/Hyprland ]; then
-    exec /usr/local/bin/Hyprland --config "$GENERADO"
+    exec /usr/local/bin/Hyprland $extra_flags --config "$GENERADO"
 else
     echo "sddm-greeter-monitor: no Hyprland executable found" >&2
     exit 1

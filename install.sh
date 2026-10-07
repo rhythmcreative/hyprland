@@ -510,6 +510,9 @@ EOF
                 git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$repo" || exit 1
         else
             step_item "Using existing checkout at $repo."
+            if [ -z "${RHYTHM_DEV:-}" ]; then
+                git -C "$repo" pull --rebase origin main >/dev/null 2>&1 || true
+            fi
         fi
         rhythm_presentation_init "$repo"
         clear_logo

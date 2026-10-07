@@ -23,7 +23,15 @@ in
       enable = true;
       iconTheme = {
         name = "Tela-circle";
-        package = pkgs.tela-circle-icon-theme;
+        # Upstream tela-circle-icon-theme has 3 dangling symlinks (xsi-addon-symbolic,
+        # org.xfce.appfinder, application-x-addon-symbolic) that fail nixpkgs's
+        # noBrokenSymlinks hook. We disable the check and prune broken symlinks in postInstall.
+        package = pkgs.tela-circle-icon-theme.overrideAttrs (old: {
+          dontCheckForBrokenSymlinks = true;
+          postInstall = (old.postInstall or "") + ''
+            find $out/share/icons -xtype l -delete 2>/dev/null || true
+          '';
+        });
       };
       # gtk/.themes/PywalSync-Mono existe en el repo pero ningun modulo lo
       # desplegaba: no hay home.file ni xdg.dataFile para el, y gtk.theme

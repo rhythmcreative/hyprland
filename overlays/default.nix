@@ -6,6 +6,14 @@ final: prev: {
   greeterMonitor = final.callPackage ../packages/greeter-monitor { };
   pywalSyncMono = final.callPackage ../packages/pywal-sync-mono { };
 
+  # Fix upstream tela-circle-icon-theme dangling symlinks that cause noBrokenSymlinks build failures
+  tela-circle-icon-theme = prev.tela-circle-icon-theme.overrideAttrs (old: {
+    dontCheckForBrokenSymlinks = true;
+    postInstall = (old.postInstall or "") + ''
+      find $out/share/icons -xtype l -delete 2>/dev/null || true
+    '';
+  });
+
   # Config trees that carry shell scripts, wrapped so their shebangs get
   # patched at build time. See packages/patched-dotfiles for why this is
   # needed and why it is not done with sed on the deployed copies.

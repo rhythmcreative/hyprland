@@ -150,9 +150,16 @@ if [ "$modo_check" -eq 1 ]; then
     comparar_fichero "wrapper" \
         /usr/local/lib/rhythm/sddm-greeter-monitor \
         "$REPO_DIR/sddm/sddm-greeter-monitor"
-    comparar_fichero "template" \
-        /usr/share/sddm/hyprland.lua \
-        "$REPO_DIR/sddm/hyprland.lua"
+    if [ -f "$REPO_DIR/sddm/hyprland.conf" ]; then
+        comparar_fichero "template (conf)" \
+            /usr/share/sddm/hyprland.conf \
+            "$REPO_DIR/sddm/hyprland.conf"
+    fi
+    if [ -f "$REPO_DIR/sddm/hyprland.lua" ]; then
+        comparar_fichero "template (lua)" \
+            /usr/share/sddm/hyprland.lua \
+            "$REPO_DIR/sddm/hyprland.lua"
+    fi
     comparar_generado "sddm.conf" /etc/sddm.conf.d/10-wayland.conf conf_sddm
     comparar_generado "login cursor" \
         /etc/systemd/system/sddm.service.d/cursor.conf conf_cursor
@@ -187,6 +194,8 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 [ -d /usr/local/lib/rhythm ] || mkdir -p /usr/local/lib/rhythm
+[ -d /usr/share/sddm ] || mkdir -p /usr/share/sddm
+[ -d /etc/sddm ] || mkdir -p /etc/sddm
 [ -d /etc/sddm.conf.d ] || mkdir -p /etc/sddm.conf.d
 [ -d /etc/systemd/system/sddm.service.d ] || mkdir -p /etc/systemd/system/sddm.service.d
 
@@ -203,11 +212,14 @@ else
     log "missing $REPO_DIR/sddm/sddm-greeter-monitor"; fallo=1
 fi
 
+if [ -f "$REPO_DIR/sddm/hyprland.conf" ]; then
+    install -T -m 644 "$REPO_DIR/sddm/hyprland.conf" /usr/share/sddm/hyprland.conf || fallo=1
+    chown root:root /usr/share/sddm/hyprland.conf 2>/dev/null
+fi
+
 if [ -f "$REPO_DIR/sddm/hyprland.lua" ]; then
     install -T -m 644 "$REPO_DIR/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua || fallo=1
     chown root:root /usr/share/sddm/hyprland.lua 2>/dev/null
-else
-    log "missing $REPO_DIR/sddm/hyprland.lua"; fallo=1
 fi
 
 conf_sddm > /etc/sddm.conf.d/10-wayland.conf || fallo=1

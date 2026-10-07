@@ -27,12 +27,15 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p $out/bin $out/share/rhythm
     cp "$src/sddm-greeter-monitor" "$out/bin/sddm-greeter-monitor"
-    cp "$src/hyprland.lua" "$out/share/rhythm/hyprland.lua"
+    cp "$src/hyprland.conf" "$out/share/rhythm/hyprland.conf"
+    if [ -f "$src/hyprland.lua" ]; then
+      cp "$src/hyprland.lua" "$out/share/rhythm/hyprland.lua"
+    fi
     chmod +x "$out/bin/sddm-greeter-monitor"
     wrapProgram "$out/bin/sddm-greeter-monitor" \
       --prefix PATH : '${lib.makeBinPath [ hyprland coreutils procps gawk gnugrep gnused jq ]}' \
       --set HYPRLAND_CMD "${hyprland}/bin/Hyprland" \
-      --set RHYTHM_SDDM_PLANTILLA "$out/share/rhythm/hyprland.lua"
+      --set RHYTHM_SDDM_PLANTILLA "$out/share/rhythm/hyprland.conf"
   '';
 
   meta = {

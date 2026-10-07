@@ -34,7 +34,16 @@
 
 set -eu
 
-PLANTILLA="${RHYTHM_SDDM_PLANTILLA:-/usr/share/sddm/hyprland.lua}"
+PLANTILLA="${RHYTHM_SDDM_PLANTILLA:-}"
+if [ -z "$PLANTILLA" ]; then
+    if [ -f /usr/share/sddm/hyprland.conf ]; then
+        PLANTILLA="/usr/share/sddm/hyprland.conf"
+    elif [ -f /usr/share/sddm/hyprland.lua ]; then
+        PLANTILLA="/usr/share/sddm/hyprland.lua"
+    else
+        PLANTILLA="/usr/share/sddm/hyprland.conf"
+    fi
+fi
 
 # DONDE SE ESCRIBE LA CONFIG GENERADA
 #

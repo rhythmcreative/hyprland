@@ -2305,6 +2305,70 @@ install_themes_and_fonts() {
     fi
 }
 
+install_quickshell() {
+    if command -v quickshell >/dev/null 2>&1; then
+        return 0
+    fi
+    step_item "Setting up Quickshell..."
+    if [ "$DISTRO" = "ubuntu" ]; then
+        if sudo add-apt-repository -y ppa:outfoxxed/quickshell >> "$LOG_FILE" 2>&1; then
+            sudo apt-get update >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y quickshell >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
+    if command -v quickshell >/dev/null 2>&1; then
+        step_ok "Quickshell installed via package manager."
+        return 0
+    fi
+
+    # Universal portable package fallback (pkgforge anylinux AppImage, works on musl and glibc without FUSE)
+    local arch
+    arch="$(uname -m 2>/dev/null || echo "x86_64")"
+    if [ "$arch" = "x86_64" ] || [ "$arch" = "amd64" ]; then
+        arch="x86_64"
+    elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
+        arch="aarch64"
+    fi
+
+    local tmp_qs="/tmp/quickshell-${arch}.AppImage"
+    rm -f "$tmp_qs"
+    local dl_url=""
+    dl_url=$(curl -sL https://api.github.com/repos/pkgforge-dev/Quickshell-AppImage/releases/latest 2>/dev/null | grep "browser_download_url" | grep "anylinux-${arch}\.AppImage\"" | head -n 1 | cut -d '"' -f 4 || true)
+    if [ -z "$dl_url" ]; then
+        dl_url="https://github.com/pkgforge-dev/Quickshell-AppImage/releases/latest/download/quickshell-0.3.1-1-anylinux-${arch}.AppImage"
+    fi
+
+    if [ -n "$dl_url" ] && curl -fsSL -L "$dl_url" -o "$tmp_qs" >> "$LOG_FILE" 2>&1; then
+        if [ -s "$tmp_qs" ]; then
+            sudo chmod +x "$tmp_qs"
+            sudo install -m 755 "$tmp_qs" /usr/local/bin/quickshell >> "$LOG_FILE" 2>&1 || true
+            rm -f "$tmp_qs"
+            if command -v quickshell >/dev/null 2>&1; then
+                step_ok "Quickshell universal binary installed in /usr/local/bin/quickshell."
+                return 0
+            fi
+        fi
+    fi
+    rm -f "$tmp_qs"
+    step_warn "Quickshell installation was skipped or encountered issues."
+    return 1
+}
+
+install_starship() {
+    if command -v starship >/dev/null 2>&1; then
+        return 0
+    fi
+    step_item "Installing Starship shell prompt..."
+    if curl -sS https://starship.rs/install.sh | sh -s -- -y >> "$LOG_FILE" 2>&1; then
+        step_ok "Starship installed."
+        return 0
+    else
+        step_warn "Starship installation skipped or failed."
+        return 1
+    fi
+}
+
 # --- SYSTEM PACKAGES DEPLOYMENT ---
 step_software() {
     section "Core Packages & System Libraries"
@@ -2430,6 +2494,8 @@ step_software() {
         step_ok "Core packages installed."
 
         install_themes_and_fonts
+        install_quickshell
+        install_starship
         install_rust_dock
         auto_detect_drivers
         return 0
@@ -2505,6 +2571,9 @@ step_software() {
             qml6-module-qtquick-window
             qml6-module-qtcore
             qml6-module-qt5compat
+            qml6-module-qtmultimedia
+            qml6-module-qtvirtualkeyboard
+            libgtk4-layer-shell0
             libqt6svg6
             hyprpaper
             swaybg
@@ -2554,6 +2623,10 @@ step_software() {
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
         if [ "$DISTRO" = "debian" ]; then
+            if ! grep -rq "${debian_codename}-backports" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+                echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
+                sudo apt-get update >> "$LOG_FILE" 2>&1 || true
+            fi
             # Try batch install with backports priority for Hyprland ecosystem
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "ubuntu" ]; then
@@ -2578,6 +2651,8 @@ step_software() {
         step_ok "Core packages installed."
 
         install_themes_and_fonts
+        install_quickshell
+        install_starship
         install_rust_dock
         auto_detect_drivers
         return 0
@@ -2653,6 +2728,14 @@ step_software() {
             # Qt & SDDM
             qt5-qtwayland
             qt6-qtwayland
+            qt6-qtdeclarative
+            qt6-qt5compat
+            qt6-qtsvg
+            qt6-qtmultimedia
+            qt6-qtvirtualkeyboard
+            gtk4-layer-shell
+            swaybg
+            hyprpaper
             qt5ct
             qt6ct
             kvantum
@@ -2706,6 +2789,8 @@ step_software() {
         step_ok "Core packages installed."
 
         install_themes_and_fonts
+        install_quickshell
+        install_starship
         install_rust_dock
         auto_detect_drivers
         return 0
@@ -2735,6 +2820,7 @@ step_software() {
 
             # Bars, Launchers & Shell
             waybar
+            rofi-wayland
             rofi
             kitty
             zsh
@@ -2781,10 +2867,18 @@ step_software() {
             # Qt & SDDM
             qt5-wayland
             qt6-wayland
+            qt6-declarative-imports
+            qt6-qt5compat-imports
+            qt6-virtualkeyboard-imports
+            qt6-svg
+            gtk4-layer-shell
+            swaybg
+            hyprpaper
             qt5ct
             qt6ct
             kvantum-manager
             sddm
+            sddm-qt6
 
             # Theming, Fonts & Utilities
             jetbrains-mono-fonts
@@ -2831,6 +2925,8 @@ step_software() {
         step_ok "Core packages installed."
 
         install_themes_and_fonts
+        install_quickshell
+        install_starship
         install_rust_dock
         auto_detect_drivers
         return 0
@@ -4369,7 +4465,7 @@ step_system() {
         fi
         
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
-        echo -e "[Theme]\nCurrent=sddm-astronaut-theme" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+        printf "[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
 
         # El greeter corre en WAYLAND, no en X11, y esto no es estetico.
         #
@@ -4401,14 +4497,16 @@ step_system() {
         # aqui se pusiera el CompositorCommand a mano y el tema del cursor aqui,
         # una actualizacion dejaria el sddm.conf de una forma y el cursor de
         # otra.
-        if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
-            if "$HOME/.local/bin/rhythm-sddm-deploy" "$DOTFILES_DIR"; then
+        local deploy_bin="$HOME/.local/bin/rhythm-sddm-deploy"
+        [ ! -x "$deploy_bin" ] && [ -x "$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy" ] && deploy_bin="$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy"
+        if [ -x "$deploy_bin" ]; then
+            if "$deploy_bin" "$DOTFILES_DIR"; then
                 step_ok "SDDM greeter deployed (login on the internal panel only, cursor set)."
             else
                 step_warn "El greeter de SDDM quedo a medias. Mira ~/.cache/rhythm-sddm-deploy.log"
             fi
         else
-            step_warn "rhythm-sddm-deploy no esta en ~/.local/bin; el login se quedaria como este."
+            step_warn "rhythm-sddm-deploy no esta disponible; el login se quedaria como este."
         fi
 
         # Red de seguridad: si algun dia hay que volver a X11, se renombra este
@@ -4503,6 +4601,15 @@ step_system() {
         sudo rc-service dbus start >> "$LOG_FILE" 2>&1 || true
         sudo rc-update add seatd default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service seatd start >> "$LOG_FILE" 2>&1 || true
+        if rc-service -l 2>/dev/null | grep -q pipewire; then
+            sudo rc-update add pipewire default >> "$LOG_FILE" 2>&1 || true
+            sudo rc-service pipewire start >> "$LOG_FILE" 2>&1 || true
+        fi
+        for grp in seat video input audio; do
+            if getent group "$grp" >/dev/null 2>&1; then
+                sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+            fi
+        done
     fi
 
     if [ "${ENABLE_SDDM:-true}" = true ]; then
@@ -4572,7 +4679,7 @@ DESK_EOF
         # Preconfigure SDDM default session to Hyprland
         sudo mkdir -p /var/lib/sddm
         if [ ! -f /var/lib/sddm/state.conf ]; then
-            echo -e "[Last]\nSession=hyprland.desktop" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
+            printf "[Last]\nSession=hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
             sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
 

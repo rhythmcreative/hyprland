@@ -92,6 +92,7 @@ ensure_daemon() {
         fi
     elif command -v hyprpaper >/dev/null 2>&1; then
         if ! pgrep -x "hyprpaper" >/dev/null 2>&1; then
+            [ -f "$HOME/.config/hypr/hyprpaper.conf" ] || touch "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
             setsid hyprpaper >/dev/null 2>&1 &
             sleep 0.2
         fi
@@ -135,7 +136,16 @@ apply_static() {
     elif command -v hyprpaper >/dev/null 2>&1; then
         engine="hyprpaper"
         hyprctl hyprpaper preload "$f" >/dev/null 2>&1 || true
-        hyprctl hyprpaper wallpaper ",$f" >/dev/null 2>&1 || ok=0
+        if hyprctl hyprpaper wallpaper ",$f" >/dev/null 2>&1; then
+            ok=1
+        elif command -v swaybg >/dev/null 2>&1; then
+            engine="swaybg"
+            pkill -x "swaybg" 2>/dev/null || true
+            setsid swaybg -i "$f" -m fill >/dev/null 2>&1 &
+            ok=1
+        else
+            ok=0
+        fi
     elif command -v swaybg >/dev/null 2>&1; then
         engine="swaybg"
         pkill -x "swaybg" 2>/dev/null || true

@@ -3527,6 +3527,18 @@ step_system() {
         fi
     fi
 
+    # Ensure SDDM package is installed if enabled
+    if [ "${ENABLE_SDDM:-true}" = true ] && ! command -v sddm >/dev/null 2>&1; then
+        step_item "Installing SDDM display manager..."
+        if [ "$DISTRO" = "fedora" ]; then
+            sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "debian" ]; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm >> "$LOG_FILE" 2>&1 || true
+        else
+            yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
     # SDDM Astronaut Theme
     if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
         step_item "Deploying SDDM Astronaut theme..."
@@ -3714,9 +3726,13 @@ step_system() {
         fi
 
         step_item "Enabling SDDM display manager..."
-        sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
-        sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
-        step_ok "SDDM enabled as default display manager."
+        if systemctl cat sddm.service >/dev/null 2>&1; then
+            sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+            sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
+            step_ok "SDDM enabled as default display manager."
+        else
+            step_warn "SDDM service unit not found on system."
+        fi
     else
         step_ok "SDDM service activation skipped (existing display manager retained)."
     fi
@@ -4002,8 +4018,10 @@ elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
         sudo reboot
-    elif [ "${ENABLE_SDDM:-true}" = true ]; then
-        sudo systemctl start sddm
+    elif [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
+        sudo systemctl start sddm || sudo reboot
+    else
+        sudo reboot
     fi
 elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
@@ -4012,9 +4030,19 @@ elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         sudo reboot
     fi
 else
-    if [ "${ENABLE_SDDM:-true}" = true ]; then
+    local sddm_available=false
+    if [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
+        sddm_available=true
+    fi
+
+    if [ "$sddm_available" = true ]; then
         if gum confirm "Start SDDM login manager now?"; then
-            sudo systemctl start sddm
+            sudo systemctl start sddm || {
+                gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
+                sudo reboot
+            }
+        elif gum confirm "Reboot into Hyprland now?"; then
+            sudo reboot
         fi
     else
         if gum confirm "Reboot into Hyprland now?"; then

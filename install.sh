@@ -2504,27 +2504,31 @@ step_software() {
         )
 
         export DEBIAN_FRONTEND=noninteractive
+        if command -v debconf-set-selections >/dev/null 2>&1; then
+            echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+            echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+        fi
         if [ "$DISTRO" = "debian" ]; then
             # Try batch install with backports priority for Hyprland ecosystem
-            sudo apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "ubuntu" ]; then
-            sudo apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
         fi
         if ! rhythm_install_with_progress "${#DEBIAN_CORE_PKGS[@]}" "Installing core packages via apt-get..." \
-            sudo apt-get install -y --no-install-recommends "${DEBIAN_CORE_PKGS[@]}"; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEBIAN_CORE_PKGS[@]}"; then
             local total_d=${#DEBIAN_CORE_PKGS[@]}
             local idx=0
             for pkg in "${DEBIAN_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
-                sudo apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             [ "$total_d" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
 
         # Extra utilities if available in repos
         for extra in swww mpvpaper awww; do
-            sudo apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
 
@@ -4460,9 +4464,21 @@ step_system() {
             fi
         fi
 
-        # Debian default display manager file
+        # Debian default display manager file & debconf selections
+        if command -v debconf-set-selections >/dev/null 2>&1; then
+            echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+            echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+        fi
         if [ -d /etc/X11 ] || [ -f /etc/X11/default-display-manager ]; then
             echo "/usr/bin/sddm" | sudo tee /etc/X11/default-display-manager >/dev/null 2>&1 || true
+        fi
+
+        # Ensure sddm user has access to video/render devices for Wayland greeter
+        if id -u sddm >/dev/null 2>&1; then
+            for grp in video render input; do
+                getent group "$grp" >/dev/null 2>&1 && sudo usermod -aG "$grp" sddm 2>/dev/null || true
+            done
+            [ -d /var/lib/sddm ] && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
 
         step_item "Enabling SDDM display manager..."

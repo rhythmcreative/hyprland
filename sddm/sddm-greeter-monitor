@@ -233,4 +233,15 @@ if touch "$LOG_FIJO" 2>/dev/null; then
     tail -n 200 "$LOG_FIJO" >"$LOG_FIJO.tmp" 2>/dev/null && mv "$LOG_FIJO.tmp" "$LOG_FIJO" 2>/dev/null || true
 fi
 
-exec start-hyprland -- --config "$GENERADO"
+if command -v start-hyprland >/dev/null 2>&1; then
+    exec start-hyprland -- --config "$GENERADO"
+elif command -v Hyprland >/dev/null 2>&1; then
+    exec Hyprland --config "$GENERADO"
+elif [ -x /usr/bin/Hyprland ]; then
+    exec /usr/bin/Hyprland --config "$GENERADO"
+elif [ -x /usr/local/bin/Hyprland ]; then
+    exec /usr/local/bin/Hyprland --config "$GENERADO"
+else
+    echo "sddm-greeter-monitor: no Hyprland executable found" >&2
+    exit 1
+fi

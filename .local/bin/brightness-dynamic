@@ -2,14 +2,20 @@
 
 # Brightness control with Dynamic Island notifications
 
+dev_arg=""
+dev=$(ls -1 /sys/class/backlight 2>/dev/null | head -n 1)
+[ -n "$dev" ] && dev_arg="-d $dev"
+
 case "$1" in
     up)
-        brightnessctl -e4 -n2 set 5%+
+        brightnessctl $dev_arg -e4 -n2 set 5%+ 2>/dev/null || brightnessctl $dev_arg set 5%+ 2>/dev/null || brightnessctl set 5%+ 2>/dev/null || true
         ;;
     down)
-        brightnessctl -e4 -n2 set 5%-
+        brightnessctl $dev_arg -e4 -n2 set 5%- 2>/dev/null || brightnessctl $dev_arg set 5%- 2>/dev/null || brightnessctl set 5%- 2>/dev/null || true
         ;;
 esac
 
-# Send Dynamic Island notification via EWW
-~/.local/bin/eww-brightness
+# Send notification if script exists
+if [ -x "$HOME/.local/bin/eww-brightness" ]; then
+    "$HOME/.local/bin/eww-brightness"
+fi

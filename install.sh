@@ -2549,6 +2549,7 @@ step_software() {
             playerctl
             pamixer
             brightnessctl
+            brightness-udev
             v4l-utils
             lsof
             swappy
@@ -4769,6 +4770,27 @@ DESK_EOF
             fi
         fi
     done
+
+    # Backlight permissions: configure udev rule with uaccess and ensure brightnessctl works immediately
+    if [ "$IS_NIXOS" -eq 0 ] && [ -d /etc/udev/rules.d ]; then
+        step_item "Configuring backlight hardware permissions..."
+        cat << 'EOF' | sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null 2>&1 || true
+# Give logged-in seat user read/write access to backlight and keyboard LEDs
+ACTION=="add", SUBSYSTEM=="backlight", TAG+="uaccess", MODE="0664", GROUP="video"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd_backlight*", TAG+="uaccess", MODE="0664", GROUP="input"
+EOF
+        if command -v udevadm >/dev/null 2>&1; then
+            sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
+            sudo udevadm trigger --subsystem-match=backlight --subsystem-match=leds >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
+    # Set SUID on brightnessctl as fail-safe across distros (Ubuntu, Debian, Alpine, openSUSE)
+    _bctl="$(command -v brightnessctl 2>/dev/null || true)"
+    if [ -n "$_bctl" ]; then
+        sudo chmod u+s "$_bctl" >> "$LOG_FILE" 2>&1 || true
+    fi
+
     step_ok "System services and permissions configured."
 
     # Verificacion final: el doctor mira lo desplegado (ficheros) y, con

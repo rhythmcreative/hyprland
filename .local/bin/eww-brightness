@@ -1,13 +1,22 @@
 #!/bin/bash
 
-# Get current brightness
-BRIGHTNESS=$(brightnessctl g)
-MAX=$(brightnessctl m)
-PERCENT=$((BRIGHTNESS * 100 / MAX))
+# Get current brightness safely
+dev_arg=""
+dev=$(ls -1 /sys/class/backlight 2>/dev/null | head -n 1)
+[ -n "$dev" ] && dev_arg="-d $dev"
 
-# Update EWW
-eww update brightness-percent=$PERCENT
-eww update island-mode="brightness"
+BRIGHTNESS=$(brightnessctl $dev_arg g 2>/dev/null || brightnessctl g 2>/dev/null || true)
+MAX=$(brightnessctl $dev_arg m 2>/dev/null || brightnessctl m 2>/dev/null || true)
 
-# Reset to idle after 2 seconds
-(sleep 2 && eww update island-mode="idle") &
+if [ -n "$BRIGHTNESS" ] && [ -n "$MAX" ] && [ "$MAX" -gt 0 ] 2>/dev/null; then
+    PERCENT=$((BRIGHTNESS * 100 / MAX))
+else
+    exit 0
+fi
+
+# Update EWW if installed
+if command -v eww >/dev/null 2>&1; then
+    eww update brightness-percent=$PERCENT 2>/dev/null || true
+    eww update island-mode="brightness" 2>/dev/null || true
+    (sleep 2 && eww update island-mode="idle" 2>/dev/null) &
+fi

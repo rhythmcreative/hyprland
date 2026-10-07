@@ -1126,6 +1126,8 @@ elif [ -f /etc/fedora-release ] || grep -qi 'ID=.*fedora' /etc/os-release 2>/dev
     DISTRO="fedora"
 elif [ -f /etc/debian_version ] || grep -qi 'ID=.*debian' /etc/os-release 2>/dev/null; then
     DISTRO="debian"
+elif [ -f /etc/alpine-release ] || grep -qi 'ID=.*alpine' /etc/os-release 2>/dev/null; then
+    DISTRO="alpine"
 fi
 [ -n "${RHYTHM_DISTRO_OVERRIDE:-}" ] && DISTRO="$RHYTHM_DISTRO_OVERRIDE"
 
@@ -1143,6 +1145,8 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
             sudo dnf install -y git
         elif [ "$DISTRO" = "debian" ]; then
             sudo apt-get update -y && sudo apt-get install -y git
+        elif [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache git
         else
             sudo pacman -S --needed --noconfirm git
         fi
@@ -1362,11 +1366,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "alpine" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
-        # about: no pacman, no dnf, no apt, no supported layout.
-        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, and Debian (Trixie/Sid)."
+        # about: no pacman, no dnf, no apt, no apk, no supported layout.
+        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, and Alpine Linux."
         exit 1
     fi
 
@@ -1496,12 +1500,48 @@ CHARM_EOF
             fi
             rm -f "$tmp_gum"
         fi
+    elif [ "$DISTRO" = "alpine" ]; then
+        # Ensure community repo is active in /etc/apk/repositories
+        if [ -f /etc/apk/repositories ]; then
+            if grep -q '^#.*\/community' /etc/apk/repositories; then
+                sudo sed -i 's/^#\(.*\/community\)/\1/' /etc/apk/repositories
+            elif ! grep -q '\/community' /etc/apk/repositories; then
+                local alpine_ver
+                alpine_ver=$(cut -d. -f1,2 /etc/alpine-release 2>/dev/null || echo "edge")
+                if [ "$alpine_ver" = "edge" ]; then
+                    echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" | sudo tee -a /etc/apk/repositories >/dev/null
+                else
+                    echo "http://dl-cdn.alpinelinux.org/alpine/v${alpine_ver}/community" | sudo tee -a /etc/apk/repositories >/dev/null
+                fi
+            fi
+        fi
+
+        sudo apk update >> "$LOG_FILE" 2>&1 || true
+
+        # Ensure bootstrap tools exist
+        local alpine_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils build-base bash py3-pip shadow ca-certificates)
+        sudo apk add --no-cache "${alpine_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+
+        # Try installing gum directly via apk (testing/edge or newer releases)
+        sudo apk add --no-cache gum >> "$LOG_FILE" 2>&1 || true
+
+        # Standalone binary fallback for gum if not in repositories
+        if ! command -v gum >/dev/null 2>&1; then
+            local tmp_gum
+            tmp_gum=$(mktemp "${TMPDIR:-/tmp}/gum.XXXXXX.tar.gz")
+            if curl -fsSL --connect-timeout 10 "https://github.com/charmbracelet/gum/releases/download/v0.14.5/gum_0.14.5_linux_x86_64.tar.gz" -o "$tmp_gum" >> "$LOG_FILE" 2>&1; then
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ --strip-components=1 --wildcards '*/gum' >> "$LOG_FILE" 2>&1 || \
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ gum >> "$LOG_FILE" 2>&1 || true
+                sudo chmod +x /usr/local/bin/gum 2>/dev/null || true
+            fi
+            rm -f "$tmp_gum"
+        fi
     fi
 }
 
 # --- AUR HELPER SETUP (YAY) ---
 install_yay() {
-    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ]; then
+    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "alpine" ]; then
         return 0
     fi
     if ! command -v yay > /dev/null 2>&1; then
@@ -1638,6 +1678,34 @@ EOF
             sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
             step_item "Updating initramfs..."
             sudo update-initramfs -u >> "$LOG_FILE" 2>&1 || step_warn "initramfs update had warnings."
+            step_ok "NVIDIA system optimization complete."
+        fi
+        step_ok "Hardware drivers configured."
+        return 0
+    elif [ "$DISTRO" = "alpine" ]; then
+        if [ "$IS_NVIDIA" = true ]; then
+            step_item "Preparing Alpine drivers for NVIDIA..."
+            sudo apk add --no-cache mesa-dri-gallium mesa-va-gallium >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
+            step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
+            sudo apk add --no-cache mesa-dri-gallium mesa-va-gallium vulkan-loader mesa-vulkan-ati >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Intel"* ]]; then
+            step_item "Intel GPU detected. Adding hardware acceleration drivers..."
+            sudo apk add --no-cache mesa-dri-gallium intel-media-driver libva-intel-driver mesa-vulkan-intel >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if [ "$IS_NVIDIA" = true ]; then
+            section "NVIDIA System & Wayland Optimization (Alpine)"
+            step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
+            sudo mkdir -p /etc/modprobe.d
+            cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+# Enable Direct Rendering Manager (DRM) Kernel Mode Setting and Framebuffer Device for Wayland & Hyprland
+options nvidia-drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+EOF
             step_ok "NVIDIA system optimization complete."
         fi
         step_ok "Hardware drivers configured."
@@ -1818,6 +1886,8 @@ install_rust_dock() {
         fi
         export PKG_CONFIG_PATH="/usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:$PKG_CONFIG_PATH"
         export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+    elif [ "$DISTRO" = "alpine" ]; then
+        sudo apk add --no-cache rust cargo pkgconf gtk4.0-dev gtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1 || true
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
     fi
@@ -1835,6 +1905,9 @@ install_rust_dock() {
                 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
                 export PATH="$HOME/.cargo/bin:$PATH"
             fi
+        elif [ "$DISTRO" = "alpine" ]; then
+            step_item "Installing Cargo & Rust on Alpine..."
+            sudo apk add --no-cache cargo rust >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -1988,14 +2061,18 @@ install_themes_and_fonts() {
     # 4. Pywal (Command-line color palette engine)
     if ! command -v wal >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/wal" ]; then
         step_item "Setting up Pywal..."
-        if [ "$DISTRO" = "debian" ]; then
+        if [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache py3-pywal >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "debian" ]; then
             sudo apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         fi
         export PATH="$HOME/.local/bin:$PATH"
-        pipx install pywal >> "$LOG_FILE" 2>&1 || \
-            pipx install --include-deps pywal >> "$LOG_FILE" 2>&1 || \
-            pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || \
-            pip3 install --user pywal >> "$LOG_FILE" 2>&1 || true
+        if ! command -v wal >/dev/null 2>&1; then
+            pipx install pywal >> "$LOG_FILE" 2>&1 || \
+                pipx install --include-deps pywal >> "$LOG_FILE" 2>&1 || \
+                pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || \
+                pip3 install --user pywal >> "$LOG_FILE" 2>&1 || true
+        fi
         if command -v wal >/dev/null 2>&1 || [ -x "$HOME/.local/bin/wal" ]; then
             step_ok "Pywal initialized."
         else
@@ -2257,6 +2334,131 @@ step_software() {
         install_rust_dock
         auto_detect_drivers
         return 0
+    elif [ "$DISTRO" = "alpine" ]; then
+        sudo -v
+
+        # Ensure testing repo is available for packages like hypridle, hyprlock, cava if needed
+        if [ -f /etc/apk/repositories ] && ! grep -q '\/testing' /etc/apk/repositories; then
+            echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" | sudo tee -a /etc/apk/repositories >/dev/null || true
+            sudo apk update >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        local ALPINE_CORE_PKGS=(
+            # Compositor & Wayland core
+            hyprland
+            hypridle
+            hyprlock
+            hyprpicker
+            xdg-desktop-portal-hyprland
+            xdg-desktop-portal-gtk
+            xwayland
+            seatd
+            seatd-openrc
+
+            # Bars, Launchers & Shell
+            waybar
+            rofi-wayland
+            kitty
+            zsh
+            zsh-autosuggestions
+            zsh-syntax-highlighting
+            starship
+
+            # File Management & Media
+            thunar
+            thunar-archive-plugin
+            thunar-volman
+            file-roller
+            gvfs
+            tumbler
+            ffmpeg
+            ffmpegthumbnailer
+
+            # Networking & Bluetooth
+            networkmanager
+            networkmanager-cli
+            networkmanager-openrc
+            bluez
+            bluez-openrc
+            blueman
+
+            # Audio Architecture
+            pipewire
+            pipewire-pulse
+            pipewire-alsa
+            pipewire-openrc
+            wireplumber
+            pavucontrol
+            playerctl
+            pamixer
+
+            # Screen, Hardware & Capture Tools
+            brightnessctl
+            swappy
+            grim
+            slurp
+            wl-clipboard
+            wf-recorder
+            libnotify
+            socat
+            upower
+
+            # Qt & SDDM
+            qt5-qtwayland
+            qt6-qtwayland
+            qt5ct
+            qt6ct
+            kvantum
+            sddm
+            sddm-openrc
+            dbus
+            dbus-openrc
+
+            # Theming, Fonts & Utilities
+            font-jetbrains-mono-nerd
+            font-noto
+            font-noto-cjk
+            font-noto-emoji
+            font-awesome
+            py3-pywal
+            py3-pillow
+            cava
+            flatpak
+            stow
+            curl
+            wget
+            unzip
+            jq
+            bc
+            imagemagick
+            mpv
+            btop
+            fastfetch
+            inotify-tools
+            psmisc
+            xdg-user-dirs
+            btrfs-progs
+        )
+
+        rhythm_spin "Installing core packages via apk..." -- \
+            bash -c "
+                if ! sudo apk add --no-cache ${ALPINE_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
+                    for pkg in ${ALPINE_CORE_PKGS[*]}; do
+                        sudo apk add --no-cache \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
+                    done
+                fi
+
+                # Extra utilities if available
+                for extra in swww mpvpaper awww; do
+                    sudo apk add --no-cache \"\$extra\" >> '$LOG_FILE' 2>&1 || true
+                done
+            "
+        step_ok "Core packages installed."
+
+        install_themes_and_fonts
+        install_rust_dock
+        auto_detect_drivers
+        return 0
     fi
 
     local CORE_PKGS=(
@@ -2500,6 +2702,40 @@ unified_app_search() {
             sleep 0.5
         fi
         return 0
+    elif [ "$DISTRO" = "alpine" ]; then
+        step_item "Launching fzf package search (Alpine Linux APK repositories)..."
+        step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+        sleep 0.8
+
+        local fzf_args=(
+            --multi
+            --ansi
+            --prompt="Search Packages > "
+            --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
+            --preview 'apk info {1} 2>/dev/null || echo "Loading info..."'
+            --preview-window 'right:55%:wrap'
+            --bind 'change:top'
+        )
+
+        local SELECTED_SEARCH=""
+        if command -v apk >/dev/null 2>&1; then
+            SELECTED_SEARCH=$(apk list --available 2>/dev/null | awk '{print $1}' | sort -u | fzf "${fzf_args[@]}" || true)
+        fi
+
+        if [[ -n "$SELECTED_SEARCH" ]]; then
+            local count=0
+            while IFS= read -r app; do
+                [ -z "$app" ] && continue
+                PACMAN_INSTALL+=("$app")
+                ((count++))
+            done <<< "$SELECTED_SEARCH"
+            step_ok "Added $count packages from universal search."
+            sleep 1
+        else
+            step_item "No packages selected from search."
+            sleep 0.5
+        fi
+        return 0
     fi
 
     if ! command -v yay > /dev/null 2>&1; then
@@ -2542,9 +2778,16 @@ unified_app_search() {
 detect_existing_display_manager() {
     local dm
     for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
-        if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1; then
-            echo "$dm"
-            return 0
+        if command -v systemctl >/dev/null 2>&1; then
+            if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1; then
+                echo "$dm"
+                return 0
+            fi
+        elif command -v rc-status >/dev/null 2>&1; then
+            if rc-status default 2>/dev/null | grep -q "$dm" || [ -f "/etc/runlevels/default/$dm" ]; then
+                echo "$dm"
+                return 0
+            fi
         fi
     done
     if [ -e /etc/systemd/system/display-manager.service ]; then
@@ -2593,6 +2836,9 @@ first_run_choices() {
         elif [ "$DISTRO" = "debian" ]; then
             search_label="Universal Package Search with fzf (Search & install ANY package from Debian APT)"
             full_label="Full Package Stack (Install full curated stack via APT + Flatpaks)"
+        elif [ "$DISTRO" = "alpine" ]; then
+            search_label="Universal Package Search with fzf (Search & install ANY package from Alpine APK)"
+            full_label="Full Package Stack (Install full curated stack via APK + Flatpaks)"
         fi
 
         local MODE_RAW
@@ -2623,6 +2869,9 @@ first_run_choices() {
             elif [ "$DISTRO" = "debian" ]; then
                 repo_tag="[APT]"
                 ext_tag="[APT/Flatpak]"
+            elif [ "$DISTRO" = "alpine" ]; then
+                repo_tag="[APK]"
+                ext_tag="[Flatpak]"
             fi
 
             # 1. Browsers
@@ -2797,6 +3046,8 @@ first_run_choices() {
                 fzf_prompt="Would you like to search and add extra packages from DNF with fzf?"
             elif [ "$DISTRO" = "debian" ]; then
                 fzf_prompt="Would you like to search and add extra packages from APT with fzf?"
+            elif [ "$DISTRO" = "alpine" ]; then
+                fzf_prompt="Would you like to search and add extra packages from Alpine APK with fzf?"
             elif [ "$DISTRO" = "arch" ]; then
                 fzf_prompt="Would you like to search and add extra packages from Pacman/AUR with fzf?"
             fi
@@ -2972,6 +3223,21 @@ step_applications() {
             return 0
         fi
 
+        if [ "$DISTRO" = "alpine" ]; then
+            step_item "Full stack requested for Alpine: deploying Flatpaks and available packages..."
+            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                while IFS= read -r fapp || [ -n "$fapp" ]; do
+                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                    [ -z "$fapp" ] && continue
+                    [[ "$fapp" =~ ^# ]] && continue
+                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                done < "$DOTFILES_DIR/flatpaks.txt"
+            fi
+            step_ok "Full package stack successfully deployed."
+            return 0
+        fi
+
         if [ -f "$DOTFILES_DIR/packages.txt" ]; then
             step_item "Reading package list from packages.txt..."
             local FULL_PKGS=()
@@ -3045,6 +3311,20 @@ step_applications() {
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
                     *steam*) sudo apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || sudo apt-get install -y steam >> "$LOG_FILE" 2>&1 || true ;;
                     *) sudo apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                esac
+            done
+        elif [ "$DISTRO" = "alpine" ]; then
+            step_item "Deploying application selections for Alpine..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            for app in "${PACMAN_INSTALL[@]}"; do
+                case "$app" in
+                    *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
+                    *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
+                    *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
+                    *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo apk add --no-cache "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
         else
@@ -3578,6 +3858,8 @@ step_system() {
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -3736,22 +4018,42 @@ step_system() {
 
     # Core system services
     step_item "Enabling NetworkManager and Bluetooth..."
-    sudo systemctl enable NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
-    sudo systemctl start NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
+    if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl enable NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
+        sudo systemctl start NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
+    elif command -v rc-service >/dev/null 2>&1; then
+        sudo rc-update add networkmanager default >> "$LOG_FILE" 2>&1 || true
+        sudo rc-service networkmanager start >> "$LOG_FILE" 2>&1 || true
+        sudo rc-update add bluetooth default >> "$LOG_FILE" 2>&1 || true
+        sudo rc-service bluetooth start >> "$LOG_FILE" 2>&1 || true
+        sudo rc-update add dbus default >> "$LOG_FILE" 2>&1 || true
+        sudo rc-service dbus start >> "$LOG_FILE" 2>&1 || true
+        sudo rc-update add seatd default >> "$LOG_FILE" 2>&1 || true
+        sudo rc-service seatd start >> "$LOG_FILE" 2>&1 || true
+    fi
 
     if [ "${ENABLE_SDDM:-true}" = true ]; then
         local other_dm
         other_dm=$(detect_existing_display_manager || true)
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
             step_item "Disabling $other_dm in favor of SDDM..."
-            sudo systemctl disable --now "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
-            sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
+            if command -v systemctl >/dev/null 2>&1; then
+                sudo systemctl disable --now "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
+            elif command -v rc-service >/dev/null 2>&1; then
+                sudo rc-service "$other_dm" stop >> "$LOG_FILE" 2>&1 || true
+                sudo rc-update del "$other_dm" default >> "$LOG_FILE" 2>&1 || true
+            fi
         fi
 
         # Disable all other common display managers to avoid conflicts with display-manager.service alias
         for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
             if [ "$dm" != "sddm" ]; then
-                sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
+                if command -v systemctl >/dev/null 2>&1; then
+                    sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
+                elif command -v rc-service >/dev/null 2>&1; then
+                    sudo rc-update del "$dm" default >> "$LOG_FILE" 2>&1 || true
+                fi
             fi
         done
 
@@ -3770,12 +4072,17 @@ step_system() {
         fi
 
         step_item "Enabling SDDM display manager..."
-        if systemctl cat sddm.service >/dev/null 2>&1; then
-            sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
-            sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
-            step_ok "SDDM enabled as default display manager."
-        else
-            step_warn "SDDM service unit not found on system."
+        if command -v systemctl >/dev/null 2>&1; then
+            if systemctl cat sddm.service >/dev/null 2>&1; then
+                sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
+                step_ok "SDDM enabled as default display manager."
+            else
+                step_warn "SDDM service unit not found on system."
+            fi
+        elif command -v rc-service >/dev/null 2>&1; then
+            sudo rc-update add sddm default >> "$LOG_FILE" 2>&1 || true
+            step_ok "SDDM enabled as default display manager via OpenRC."
         fi
     else
         step_ok "SDDM service activation skipped (existing display manager retained)."
@@ -3790,14 +4097,20 @@ step_system() {
     done
 
     # Pipewire audio sockets
-    step_item "Enabling Pipewire user audio services..."
-    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
-    systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
+    if command -v systemctl >/dev/null 2>&1; then
+        step_item "Enabling Pipewire user audio services..."
+        systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
+        systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
+    fi
 
-    # Add user to required groups (network for nmcli, lp for printing, optical for disc)
-    for grp in video input render wheel audio storage network lp optical; do
+    # Add user to required groups (network for nmcli, lp for printing, optical for disc, seat for seatd)
+    for grp in video input render wheel audio storage network lp optical seat; do
         if getent group "$grp" >/dev/null 2>&1; then
-            sudo usermod -aG "$grp" "$USER" >> "$LOG_FILE" 2>&1 || true
+            if command -v usermod >/dev/null 2>&1; then
+                sudo usermod -aG "$grp" "$USER" >> "$LOG_FILE" 2>&1 || true
+            elif command -v adduser >/dev/null 2>&1; then
+                sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+            fi
         fi
     done
     step_ok "System services and permissions configured."
@@ -3829,6 +4142,7 @@ step_update() {
             local pkg_label="pacman"
             [ "$DISTRO" = "fedora" ] && pkg_label="dnf"
             [ "$DISTRO" = "debian" ] && pkg_label="apt"
+            [ "$DISTRO" = "alpine" ] && pkg_label="apk"
             if gum confirm "Would you also like to update system packages with $pkg_label?"; then
                 bash "$DOTFILES_DIR/.local/bin/system-ota" update --system
             else
@@ -4062,8 +4376,12 @@ elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
         rhythm_reboot
-    elif [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
-        sudo systemctl start sddm || rhythm_reboot
+    elif [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && systemctl cat sddm.service >/dev/null 2>&1 || [ -x /etc/init.d/sddm ]; }; then
+        if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl start sddm || rhythm_reboot
+        else
+            sudo rc-service sddm start || rhythm_reboot
+        fi
     else
         rhythm_reboot
     fi
@@ -4074,12 +4392,19 @@ elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         rhythm_reboot
     fi
 else
-    if [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
+    if [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && systemctl cat sddm.service >/dev/null 2>&1 || [ -x /etc/init.d/sddm ]; }; then
         if gum confirm "Start SDDM login manager now?"; then
-            sudo systemctl start sddm || {
-                gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
-                rhythm_reboot
-            }
+            if command -v systemctl >/dev/null 2>&1; then
+                sudo systemctl start sddm || {
+                    gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
+                    rhythm_reboot
+                }
+            else
+                sudo rc-service sddm start || {
+                    gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
+                    rhythm_reboot
+                }
+            fi
         elif gum confirm "Reboot into Hyprland now?"; then
             rhythm_reboot
         fi

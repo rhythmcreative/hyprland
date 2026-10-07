@@ -188,6 +188,19 @@ generate_status_json() {
             done <<< "$raw_apt"
             pacman_updates=${#pacman_pkgs[@]}
         fi
+    elif command -v apk >/dev/null 2>&1; then
+        local raw_apk
+        raw_apk=$(apk upgrade --simulate 2>/dev/null | grep -E '^Upgrading ' || true)
+        if [ -n "$raw_apk" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $2}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_apk"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
     fi
 
     local kernel_ver
@@ -817,6 +830,16 @@ cmd_update() {
             else
                 echo "Sudo not available, skipping apt-get system packages."
             fi
+        elif command -v apk >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with apk..."
+            if command -v sudo >/dev/null 2>&1; then
+                if ! (sudo apk update >> "$LOG_FILE" 2>&1 && sudo apk upgrade >> "$LOG_FILE" 2>&1); then
+                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
+                    echo "  [!] apk termino con errores. Detalle en $LOG_FILE"
+                fi
+            else
+                echo "Sudo not available, skipping apk system packages."
+            fi
         fi
     else
         echo "[3/4] Skipping system packages (run with --system to update packages)."
@@ -988,7 +1011,13 @@ cmd_gui() {
 
         echo ""
         local pkg_mgr="pacman"
-        command -v dnf >/dev/null 2>&1 && pkg_mgr="dnf"
+        if command -v dnf >/dev/null 2>&1; then
+            pkg_mgr="dnf"
+        elif command -v apt-get >/dev/null 2>&1; then
+            pkg_mgr="apt"
+        elif command -v apk >/dev/null 2>&1; then
+            pkg_mgr="apk"
+        fi
         if is_nixos; then pkg_mgr="nixos-rebuild"; fi
 
         local choice
@@ -1023,6 +1052,10 @@ cmd_gui() {
                         fi
                     elif [ "$pkg_mgr" = "dnf" ]; then
                         sudo dnf upgrade -y
+                    elif [ "$pkg_mgr" = "apt" ]; then
+                        sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
+                    elif [ "$pkg_mgr" = "apk" ]; then
+                        sudo apk update && sudo apk upgrade
                     else
                         sudo pacman -Syu
                     fi

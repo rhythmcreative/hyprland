@@ -128,7 +128,10 @@ generate_status_json() {
 
     local pacman_updates=0
     local pacman_pkgs=()
-    if command -v pacman >/dev/null 2>&1; then
+    if command -v checkupdates >/dev/null 2>&1; then
+        local raw_pacman
+        raw_pacman=$(checkupdates 2>/dev/null || true)
+    elif command -v pacman >/dev/null 2>&1; then
         local raw_pacman
         raw_pacman=$(pacman -Qu 2>/dev/null || true)
         if [ -n "$raw_pacman" ]; then
@@ -140,6 +143,45 @@ generate_status_json() {
                     pacman_pkgs+=("\"$pkg\"")
                 fi
             done <<< "$raw_pacman"
+        fi
+    elif command -v dnf >/dev/null 2>&1; then
+        local raw_dnf
+        raw_dnf=$(dnf check-update -q 2>/dev/null || true)
+        if [ -n "$raw_dnf" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $1}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_dnf"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
+    elif command -v apt-get >/dev/null 2>&1; then
+        local raw_apt
+        raw_apt=$(apt-get -s -o Debug::NoLocking=true upgrade 2>/dev/null | grep "^Inst " || true)
+        if [ -n "$raw_apt" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $2}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_apt"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
+    elif command -v apk >/dev/null 2>&1; then
+        local raw_apk
+        raw_apk=$(apk upgrade --simulate 2>/dev/null | grep -E '^Upgrading ' || true)
+        if [ -n "$raw_apk" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $2}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_apk"
+            pacman_updates=${#pacman_pkgs[@]}
         fi
     fi
 
@@ -484,16 +526,39 @@ cmd_update() {
         RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1 || echo "Warning: some migrations reported issues."
     fi
 
-    # Step 3: Pacman packages if requested
+    # Step 3: Package updates if requested
     if [ "$system_packages" = "true" ]; then
-        echo "[3/4] Updating system packages with pacman..."
-        if command -v sudo >/dev/null 2>&1; then
-            sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1 || echo "Warning: pacman update had warnings or errors."
-        else
-            echo "Sudo not available, skipping pacman system packages."
+        if command -v pacman >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with pacman..."
+            if command -v sudo >/dev/null 2>&1; then
+                sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1 || echo "Warning: pacman update had warnings or errors."
+            else
+                echo "Sudo not available, skipping pacman system packages."
+            fi
+        elif command -v dnf >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with dnf..."
+            if command -v sudo >/dev/null 2>&1; then
+                sudo dnf upgrade -y >> "$LOG_FILE" 2>&1 || echo "Warning: dnf update had warnings or errors."
+            else
+                echo "Sudo not available, skipping dnf system packages."
+            fi
+        elif command -v apt-get >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with apt-get..."
+            if command -v sudo >/dev/null 2>&1; then
+                (sudo apt-get update -y >> "$LOG_FILE" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y >> "$LOG_FILE" 2>&1) || echo "Warning: apt update had warnings or errors."
+            else
+                echo "Sudo not available, skipping apt-get system packages."
+            fi
+        elif command -v apk >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with apk..."
+            if command -v sudo >/dev/null 2>&1; then
+                (sudo apk update >> "$LOG_FILE" 2>&1 && sudo apk upgrade >> "$LOG_FILE" 2>&1) || echo "Warning: apk update had warnings or errors."
+            else
+                echo "Sudo not available, skipping apk system packages."
+            fi
         fi
     else
-        echo "[3/4] Skipping pacman packages (run with --system to update packages)."
+        echo "[3/4] Skipping system packages (run with --system to update packages)."
     fi
 
     # Step 4: Reload desktop services
@@ -613,11 +678,20 @@ cmd_gui() {
             "Status: $status_text"
 
         echo ""
+        local pkg_mgr="pacman"
+        if command -v dnf >/dev/null 2>&1; then
+            pkg_mgr="dnf"
+        elif command -v apt-get >/dev/null 2>&1; then
+            pkg_mgr="apt"
+        elif command -v apk >/dev/null 2>&1; then
+            pkg_mgr="apk"
+        fi
+
         local choice
         choice=$(gum choose \
             "1. Check for updates" \
             "2. Download & Install update (Seamless)" \
-            "3. Update system packages (pacman -Syu)" \
+            "3. Update system packages ($pkg_mgr)" \
             "4. View Changelog & Release Notes" \
             "5. Tag new release version" \
             "6. Rollback to previous checkpoint" \
@@ -636,8 +710,16 @@ cmd_gui() {
                 fi
                 ;;
             "3."*)
-                if gum confirm "Run full system package update via pacman?"; then
-                    sudo pacman -Syu
+                if gum confirm "Run full system package update via $pkg_mgr?"; then
+                    if [ "$pkg_mgr" = "dnf" ]; then
+                        sudo dnf upgrade -y
+                    elif [ "$pkg_mgr" = "apt" ]; then
+                        sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
+                    elif [ "$pkg_mgr" = "apk" ]; then
+                        sudo apk update && sudo apk upgrade
+                    else
+                        sudo pacman -Syu
+                    fi
                     generate_status_json "false" >/dev/null 2>&1 || true
                     gum confirm "Package update completed. Press enter to continue" || true
                 fi

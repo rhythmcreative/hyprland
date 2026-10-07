@@ -72,7 +72,14 @@ if ! WORK=$(elegir_directorio); then
     exit 1
 fi
 
-GENERADO="${RHYTHM_SDDM_CONFIG:-$(mktemp "$WORK/sddm-hyprland-greeter.XXXXXX.lua" 2>/dev/null || echo "$WORK/sddm-hyprland-greeter-$$.lua")}"
+is_lua=0
+case "$PLANTILLA" in
+    *.lua) is_lua=1 ;;
+esac
+
+ext="conf"
+[ "$is_lua" -eq 1 ] && ext="lua"
+GENERADO="${RHYTHM_SDDM_CONFIG:-$(mktemp "$WORK/sddm-hyprland-greeter.XXXXXX.$ext" 2>/dev/null || echo "$WORK/sddm-hyprland-greeter-$$.$ext")}"
 
 # La raiz de DRM se puede apuntar a otro sitio para poder probar los dos casos
 # (con panel y con la tapa cerrada) sin desenchufar nada. En el arranque normal
@@ -175,13 +182,18 @@ if [ "$hay_panel" -eq 1 ]; then
             # La escala se fija a 1 a proposito: Hyprland usa 1.5 por defecto en
             # 1080p y el tema del greeter esta hecho en pixeles fijos, asi que a
             # 1.5 sale con todo enorme.
-            echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+            if [ "$is_lua" -eq 1 ]; then
+                echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+            else
+                echo "monitor = $c, preferred, auto, 1" >>"$reglas"
+            fi
         else
-            # Ojo al campo: en el parser de Hyprland 0.56 apagar una salida NO
-            # es mode = "disable" (da error al aplicar) ni enable = false (el
-            # campo no existe), sino disabled = true. Comprobado con
-            # hyprctl eval sobre una salida ficticia.
-            echo "hl.monitor({ output = \"$c\", disabled = true })" >>"$reglas"
+            # En formato clásico es "monitor = <salida>, disable". En formato Lua es disabled = true.
+            if [ "$is_lua" -eq 1 ]; then
+                echo "hl.monitor({ output = \"$c\", disabled = true })" >>"$reglas"
+            else
+                echo "monitor = $c, disable" >>"$reglas"
+            fi
         fi
     done
     modo="panel"
@@ -189,7 +201,11 @@ else
     # Sin panel no se apaga nada: si la tapa esta cerrada, el externo es la
     # unica pantalla que queda y un login en negro deja al usuario fuera.
     for c in $salidas; do
-        echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+        if [ "$is_lua" -eq 1 ]; then
+            echo "hl.monitor({ output = \"$c\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+        else
+            echo "monitor = $c, preferred, auto, 1" >>"$reglas"
+        fi
     done
     modo="sin-panel"
 fi
@@ -249,10 +265,12 @@ fi
 
 if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then
     exec "$HYPRLAND_CMD" $extra_flags --config "$GENERADO"
-elif command -v Hyprland >/dev/null 2>&1; then
-    exec Hyprland $extra_flags --config "$GENERADO"
 elif command -v start-hyprland >/dev/null 2>&1; then
     exec start-hyprland -- $extra_flags --config "$GENERADO"
+elif command -v Hyprland >/dev/null 2>&1; then
+    exec Hyprland $extra_flags --config "$GENERADO"
+elif [ -x /usr/bin/start-hyprland ]; then
+    exec /usr/bin/start-hyprland -- $extra_flags --config "$GENERADO"
 elif [ -x /usr/bin/Hyprland ]; then
     exec /usr/bin/Hyprland $extra_flags --config "$GENERADO"
 elif [ -x /usr/local/bin/Hyprland ]; then

@@ -2488,7 +2488,7 @@ step_software() {
             [ "$total_f" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
 
-        for extra in awww swww mpvpaper; do
+        for extra in awww swww mpvpaper hyprland-guiutils hyprland-qtutils ImageMagick; do
             sudo dnf install -y --skip-broken --allowerasing "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -2619,7 +2619,7 @@ step_software() {
         )
 
         export DEBIAN_FRONTEND=noninteractive
-        if command -v debconf-set-selections >/dev/null 2>&1; then
+        if [ "${ENABLE_SDDM:-true}" = true ] && command -v debconf-set-selections >/dev/null 2>&1; then
             echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
@@ -2646,7 +2646,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprpaper swaybg; do
+        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -2784,7 +2784,7 @@ step_software() {
         fi
 
         # Extra utilities if available
-        for extra in swww mpvpaper awww; do
+        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils imagemagick; do
             sudo apk add --no-cache "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -2920,7 +2920,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww; do
+        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick; do
             sudo zypper --non-interactive install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -4436,7 +4436,7 @@ step_system() {
     fi
 
     # SDDM Astronaut Theme
-    if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
+    if [ "${ENABLE_SDDM:-true}" = true ] && [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
         step_item "Deploying SDDM Astronaut theme..."
         sudo mkdir -p /usr/share/sddm/themes
         # `rm -rf` antes del `cp -r`, y no confiado en que el destino no exista.
@@ -4596,6 +4596,8 @@ step_system() {
                     magick "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
                 elif command -v convert >/dev/null 2>&1; then
                     convert "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                elif command -v ffmpeg >/dev/null 2>&1; then
+                    ffmpeg -y -i "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
                 fi
                 if [ -f "$tmp_wall_png" ]; then
                     for w in wall0.png wall1.png wall2.png; do
@@ -4613,12 +4615,6 @@ step_system() {
             mkdir -p "$HOME/.config/hypr"
             printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" \
                 "$seed_wp" "$seed_wp" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
-        fi
-
-        # Ensure user avatar fallback exists for hyprlock and SDDM
-        if [ ! -f "$HOME/.face" ] && [ ! -f "$HOME/.face.icon" ] && [ -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" ]; then
-            cp -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" "$HOME/.face.icon" 2>/dev/null || true
-            cp -f "$DOTFILES_DIR/.config/hypr/assets/avatar.png" "$HOME/.face" 2>/dev/null || true
         fi
         step_ok "SDDM Astronaut theme configured."
     fi
@@ -4789,6 +4785,23 @@ EOF
     _bctl="$(command -v brightnessctl 2>/dev/null || true)"
     if [ -n "$_bctl" ]; then
         sudo chmod u+s "$_bctl" >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Battery charge limit permissions for Dynamic Island and laptops
+    if [ "$IS_NIXOS" -eq 0 ]; then
+        step_item "Configuring battery charge limit permissions..."
+        sudo mkdir -p /etc/sudoers.d /usr/local/lib/rhythm
+        local bat_limit_bin="$DOTFILES_DIR/.local/bin/battery-charge-limit"
+        [ ! -f "$bat_limit_bin" ] && [ -f "$HOME/.local/bin/battery-charge-limit" ] && bat_limit_bin="$HOME/.local/bin/battery-charge-limit"
+        if [ -f "$bat_limit_bin" ]; then
+            sudo install -m 755 -o root -g root "$bat_limit_bin" /usr/local/lib/rhythm/battery-charge-limit 2>/dev/null || true
+        fi
+        cat << 'EOF' | sudo tee /etc/sudoers.d/rhythm-battery-limit > /dev/null 2>&1 || true
+%wheel ALL=(root) NOPASSWD: /usr/local/lib/rhythm/battery-charge-limit
+%sudo ALL=(root) NOPASSWD: /usr/local/lib/rhythm/battery-charge-limit
+EOF
+        echo "$USER ALL=(root) NOPASSWD: /usr/local/lib/rhythm/battery-charge-limit" | sudo tee -a /etc/sudoers.d/rhythm-battery-limit > /dev/null 2>&1 || true
+        sudo chmod 440 /etc/sudoers.d/rhythm-battery-limit 2>/dev/null || true
     fi
 
     step_ok "System services and permissions configured."

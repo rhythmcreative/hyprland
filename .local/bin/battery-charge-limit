@@ -172,10 +172,12 @@ escribir() {
 if [ "$(id -u)" = "0" ]; then
     escribir
 else
-    # Un solo ascento de privilegios para todas las baterias. Se reejecuta este
-    # mismo guion con --escribir para no dejar un comando con formato en el
-    # arbol de procesos del root.
-    if sudo -n true 2>/dev/null; then
+    # Un solo ascenso de privilegios para todas las baterias. Se reejecuta
+    # con --escribir para no dejar un comando con formato en el arbol de procesos del root.
+    _helper="/usr/local/lib/rhythm/battery-charge-limit"
+    if [ -x "$_helper" ] && sudo -n "$_helper" --escribir "$valor" $targets 2>/dev/null; then
+        :
+    elif sudo -n true 2>/dev/null; then
         sudo -n "$0" --escribir "$valor" $targets 2>/dev/null
     elif command -v pkexec >/dev/null 2>&1; then
         pkexec "$0" --escribir "$valor" $targets 2>/dev/null

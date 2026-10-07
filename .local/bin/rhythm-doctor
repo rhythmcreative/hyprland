@@ -66,6 +66,10 @@ check_xsetup() {
         ok "SDDM managed declaratively via NixOS module (modules/nixos/sddm.nix)"
         return
     fi
+    if ! command -v sddm >/dev/null 2>&1; then
+        note "sddm is not installed; skipping Xsetup check"
+        return
+    fi
     # Ojo con las rutas: /etc/sddm.conf.d/xsetup.conf esta DESHABILITADO a
     # proposito (el login es Wayland, asi que Xsetup no debe correr), y el
     # script de verdad va a /etc/sddm/Xsetup. Mirar el otro path daria un FAIL
@@ -218,6 +222,16 @@ check_greeter() {
         ok "SDDM greeter configured declaratively via NixOS module"
         return
     fi
+    if ! command -v sddm >/dev/null 2>&1; then
+        note "sddm is not installed on this system; skipping greeter check"
+        return
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        if ! systemctl is-enabled --quiet sddm 2>/dev/null && { systemctl is-enabled --quiet gdm 2>/dev/null || systemctl is-enabled --quiet lightdm 2>/dev/null; }; then
+            note "another display manager is active; skipping SDDM greeter check"
+            return
+        fi
+    fi
     if [ ! -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
         bad "rhythm-sddm-deploy is not in ~/.local/bin; the greeter can't be deployed"
         return
@@ -276,10 +290,16 @@ check_runtime() {
         bad "hypridle is not running (no locking, no screen off)"
     fi
 
-    if systemctl is-enabled --quiet sddm 2>/dev/null || systemctl is-enabled --quiet display-manager 2>/dev/null; then
+    if systemctl is-enabled --quiet sddm 2>/dev/null \
+        || systemctl is-enabled --quiet display-manager 2>/dev/null \
+        || systemctl is-enabled --quiet gdm 2>/dev/null \
+        || systemctl is-enabled --quiet lightdm 2>/dev/null \
+        || systemctl is-enabled --quiet greetd 2>/dev/null; then
+        ok "display manager starts at boot"
+    elif [ -x /sbin/openrc ] && (rc-status default 2>/dev/null | grep -qE "sddm|display-manager|lightdm|greetd"); then
         ok "display manager starts at boot"
     else
-        bad "sddm is not enabled (no login screen after reboot)"
+        bad "no display manager is enabled (no login screen after reboot)"
     fi
 }
 

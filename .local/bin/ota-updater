@@ -183,6 +183,16 @@ generate_status_json() {
             done <<< "$raw_apk"
             pacman_updates=${#pacman_pkgs[@]}
         fi
+    elif command -v zypper >/dev/null 2>&1; then
+        local raw_zypper
+        raw_zypper=$(zypper --non-interactive list-updates 2>/dev/null | awk -F'|' 'NR>4 {gsub(/^[ \t]+|[ \t]+$/, "", $3); if ($3 != "") print $3}' || true)
+        if [ -n "$raw_zypper" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                pacman_pkgs+=("\"$line\"")
+            done <<< "$raw_zypper"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
     fi
 
     local kernel_ver
@@ -556,6 +566,13 @@ cmd_update() {
             else
                 echo "Sudo not available, skipping apk system packages."
             fi
+        elif command -v zypper >/dev/null 2>&1; then
+            echo "[3/4] Updating system packages with zypper..."
+            if command -v sudo >/dev/null 2>&1; then
+                (sudo zypper --non-interactive refresh >> "$LOG_FILE" 2>&1 && sudo zypper --non-interactive dist-upgrade --no-confirm >> "$LOG_FILE" 2>&1) || echo "Warning: zypper update had warnings or errors."
+            else
+                echo "Sudo not available, skipping zypper system packages."
+            fi
         fi
     else
         echo "[3/4] Skipping system packages (run with --system to update packages)."
@@ -685,6 +702,8 @@ cmd_gui() {
             pkg_mgr="apt"
         elif command -v apk >/dev/null 2>&1; then
             pkg_mgr="apk"
+        elif command -v zypper >/dev/null 2>&1; then
+            pkg_mgr="zypper"
         fi
 
         local choice
@@ -717,6 +736,8 @@ cmd_gui() {
                         sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
                     elif [ "$pkg_mgr" = "apk" ]; then
                         sudo apk update && sudo apk upgrade
+                    elif [ "$pkg_mgr" = "zypper" ]; then
+                        sudo zypper --non-interactive refresh && sudo zypper --non-interactive dist-upgrade --no-confirm
                     else
                         sudo pacman -Syu
                     fi

@@ -1128,6 +1128,8 @@ elif [ -f /etc/debian_version ] || grep -qi 'ID=.*debian' /etc/os-release 2>/dev
     DISTRO="debian"
 elif [ -f /etc/alpine-release ] || grep -qi 'ID=.*alpine' /etc/os-release 2>/dev/null; then
     DISTRO="alpine"
+elif [ -f /etc/SuSE-release ] || grep -qiE 'ID=.*(opensuse|suse)' /etc/os-release 2>/dev/null; then
+    DISTRO="opensuse"
 fi
 [ -n "${RHYTHM_DISTRO_OVERRIDE:-}" ] && DISTRO="$RHYTHM_DISTRO_OVERRIDE"
 
@@ -1147,6 +1149,8 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
             sudo apt-get update -y && sudo apt-get install -y git
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
+        elif [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --non-interactive install git
         else
             sudo pacman -S --needed --noconfirm git
         fi
@@ -1366,11 +1370,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "alpine" ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "alpine" ] && [ "$DISTRO" != "opensuse" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
-        # about: no pacman, no dnf, no apt, no apk, no supported layout.
-        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, and Alpine Linux."
+        # about: no pacman, no dnf, no apt, no apk, no zypper, no supported layout.
+        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, Alpine, and openSUSE."
         exit 1
     fi
 
@@ -1536,12 +1540,31 @@ CHARM_EOF
             fi
             rm -f "$tmp_gum"
         fi
+    elif [ "$DISTRO" = "opensuse" ]; then
+        # Ensure Packman repository is enabled for multimedia codecs and tools if possible
+        sudo zypper --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
+
+        # Ensure bootstrap tools exist
+        local suse_bootstrap=(git curl zsh fzf stow tar xz which gzip shadow python3 python3-pipx)
+        sudo zypper --non-interactive install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+
+        # Standalone binary fallback for gum on openSUSE
+        if ! command -v gum >/dev/null 2>&1; then
+            local tmp_gum
+            tmp_gum=$(mktemp "${TMPDIR:-/tmp}/gum.XXXXXX.tar.gz")
+            if curl -fsSL --connect-timeout 10 "https://github.com/charmbracelet/gum/releases/download/v0.14.5/gum_0.14.5_linux_x86_64.tar.gz" -o "$tmp_gum" >> "$LOG_FILE" 2>&1; then
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ --strip-components=1 --wildcards '*/gum' >> "$LOG_FILE" 2>&1 || \
+                sudo tar -xzf "$tmp_gum" -C /usr/local/bin/ gum >> "$LOG_FILE" 2>&1 || true
+                sudo chmod +x /usr/local/bin/gum 2>/dev/null || true
+            fi
+            rm -f "$tmp_gum"
+        fi
     fi
 }
 
 # --- AUR HELPER SETUP (YAY) ---
 install_yay() {
-    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "alpine" ]; then
+    if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "alpine" ] || [ "$DISTRO" = "opensuse" ]; then
         return 0
     fi
     if ! command -v yay > /dev/null 2>&1; then
@@ -1706,6 +1729,36 @@ options nvidia-drm modeset=1 fbdev=1
 options nvidia NVreg_PreserveVideoMemoryAllocations=1
 options nvidia NVreg_TemporaryFilePath=/var/tmp
 EOF
+            step_ok "NVIDIA system optimization complete."
+        fi
+        step_ok "Hardware drivers configured."
+        return 0
+    elif [ "$DISTRO" = "opensuse" ]; then
+        if [ "$IS_NVIDIA" = true ]; then
+            step_item "Preparing openSUSE NVIDIA drivers..."
+            sudo zypper --non-interactive install --no-confirm kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
+            step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
+            sudo zypper --non-interactive install --no-confirm Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
+        fi
+        if [[ $GPU_INFO == *"Intel"* ]]; then
+            step_item "Intel GPU detected. Adding hardware acceleration drivers..."
+            sudo zypper --non-interactive install --no-confirm intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if [ "$IS_NVIDIA" = true ]; then
+            section "NVIDIA System & Wayland Optimization (openSUSE)"
+            step_item "Configuring DRM kernel modesetting (modeset=1, fbdev=1)..."
+            sudo mkdir -p /etc/modprobe.d
+            cat << 'EOF' | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
+# Enable Direct Rendering Manager (DRM) Kernel Mode Setting and Framebuffer Device for Wayland & Hyprland
+options nvidia-drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_TemporaryFilePath=/var/tmp
+EOF
+            step_item "Enabling NVIDIA power management & suspend services..."
+            sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
             step_ok "NVIDIA system optimization complete."
         fi
         step_ok "Hardware drivers configured."
@@ -1888,6 +1941,8 @@ install_rust_dock() {
         export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
     elif [ "$DISTRO" = "alpine" ]; then
         sudo apk add --no-cache rust cargo pkgconf gtk4.0-dev gtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "opensuse" ]; then
+        sudo zypper --non-interactive install --no-confirm rust cargo pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
     fi
@@ -1908,6 +1963,9 @@ install_rust_dock() {
         elif [ "$DISTRO" = "alpine" ]; then
             step_item "Installing Cargo & Rust on Alpine..."
             sudo apk add --no-cache cargo rust >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "opensuse" ]; then
+            step_item "Installing Cargo & Rust on openSUSE..."
+            sudo zypper --non-interactive install --no-confirm cargo rust >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -2065,6 +2123,8 @@ install_themes_and_fonts() {
             sudo apk add --no-cache py3-pywal >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ]; then
             sudo apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --non-interactive install --no-confirm python3-pipx >> "$LOG_FILE" 2>&1 || true
         fi
         export PATH="$HOME/.local/bin:$PATH"
         if ! command -v wal >/dev/null 2>&1; then
@@ -2459,6 +2519,128 @@ step_software() {
         install_rust_dock
         auto_detect_drivers
         return 0
+    elif [ "$DISTRO" = "opensuse" ]; then
+        sudo -v
+
+        # Add X11:Wayland repository if Hyprland is not already found
+        if ! zypper search -s hyprland >/dev/null 2>&1; then
+            local suse_type="openSUSE_Tumbleweed"
+            if grep -qi "leap" /etc/os-release 2>/dev/null; then
+                suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
+            fi
+            sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/X11:Wayland/${suse_type}/X11:Wayland.repo" >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        local OPENSUSE_CORE_PKGS=(
+            # Compositor & Wayland core
+            hyprland
+            hypridle
+            hyprlock
+            hyprsunset
+            hyprpicker
+            xdg-desktop-portal-hyprland
+            xdg-desktop-portal-gtk
+            xwayland
+
+            # Bars, Launchers & Shell
+            waybar
+            rofi
+            kitty
+            zsh
+            zsh-autosuggestions
+            zsh-syntax-highlighting
+            starship
+
+            # File Management & Media
+            thunar
+            thunar-plugin-archive
+            thunar-volman
+            file-roller
+            gvfs
+            tumbler
+            ffmpeg
+            ffmpegthumbnailer
+
+            # Networking & Bluetooth
+            NetworkManager
+            NetworkManager-applet
+            bluez
+            blueman
+
+            # Audio Architecture
+            pipewire
+            pipewire-pulse
+            pipewire-alsa
+            wireplumber
+            pavucontrol
+            playerctl
+            pamixer
+
+            # Screen, Hardware & Capture Tools
+            brightnessctl
+            swappy
+            grim
+            slurp
+            wl-clipboard
+            wf-recorder
+            libnotify-tools
+            socat
+            upower
+
+            # Qt & SDDM
+            qt5-wayland
+            qt6-wayland
+            qt5ct
+            qt6ct
+            kvantum-manager
+            sddm
+
+            # Theming, Fonts & Utilities
+            jetbrains-mono-fonts
+            symbols-only-nerd-fonts
+            noto-sans-fonts
+            noto-coloremoji-fonts
+            fontawesome-fonts
+            python3-Pillow
+            cava
+            flatpak
+            stow
+            curl
+            wget
+            unzip
+            jq
+            bc
+            ImageMagick
+            mpv
+            btop
+            fastfetch
+            inotify-tools
+            psmisc
+            xdg-user-dirs
+            btrfs-progs
+            snapper
+        )
+
+        rhythm_spin "Installing core packages via zypper..." -- \
+            bash -c "
+                if ! sudo zypper --non-interactive install --no-confirm ${OPENSUSE_CORE_PKGS[*]} >> '$LOG_FILE' 2>&1; then
+                    for pkg in ${OPENSUSE_CORE_PKGS[*]}; do
+                        sudo zypper --non-interactive install --no-confirm \"\$pkg\" >> '$LOG_FILE' 2>&1 || true
+                    done
+                fi
+
+                # Extra utilities if available in repos
+                for extra in swww mpvpaper awww; do
+                    sudo zypper --non-interactive install --no-confirm \"\$extra\" >> '$LOG_FILE' 2>&1 || true
+                done
+            "
+        step_ok "Core packages installed."
+
+        install_themes_and_fonts
+        install_rust_dock
+        auto_detect_drivers
+        return 0
     fi
 
     local CORE_PKGS=(
@@ -2736,6 +2918,40 @@ unified_app_search() {
             sleep 0.5
         fi
         return 0
+    elif [ "$DISTRO" = "opensuse" ]; then
+        step_item "Launching fzf package search (openSUSE repositories)..."
+        step_item "[TAB] Select multiple, [ENTER] Confirm, [ESC] Skip"
+        sleep 0.8
+
+        local fzf_args=(
+            --multi
+            --ansi
+            --prompt="Search Packages > "
+            --header="[TAB] Toggle Select | [ENTER] Confirm Selection | [ESC] Skip Search"
+            --preview 'zypper info {1} 2>/dev/null || echo "Loading info..."'
+            --preview-window 'right:55%:wrap'
+            --bind 'change:top'
+        )
+
+        local SELECTED_SEARCH=""
+        if command -v zypper >/dev/null 2>&1; then
+            SELECTED_SEARCH=$(zypper packages 2>/dev/null | awk -F'|' 'NR>4 {gsub(/^[ \t]+|[ \t]+$/, "", $3); if ($3 != "") print $3}' | sort -u | fzf "${fzf_args[@]}" || true)
+        fi
+
+        if [[ -n "$SELECTED_SEARCH" ]]; then
+            local count=0
+            while IFS= read -r app; do
+                [ -z "$app" ] && continue
+                PACMAN_INSTALL+=("$app")
+                ((count++))
+            done <<< "$SELECTED_SEARCH"
+            step_ok "Added $count packages from universal search."
+            sleep 1
+        else
+            step_item "No packages selected from search."
+            sleep 0.5
+        fi
+        return 0
     fi
 
     if ! command -v yay > /dev/null 2>&1; then
@@ -2839,6 +3055,9 @@ first_run_choices() {
         elif [ "$DISTRO" = "alpine" ]; then
             search_label="Universal Package Search with fzf (Search & install ANY package from Alpine APK)"
             full_label="Full Package Stack (Install full curated stack via APK + Flatpaks)"
+        elif [ "$DISTRO" = "opensuse" ]; then
+            search_label="Universal Package Search with fzf (Search & install ANY package from openSUSE)"
+            full_label="Full Package Stack (Install full curated stack via Zypper + Flatpaks)"
         fi
 
         local MODE_RAW
@@ -2871,6 +3090,9 @@ first_run_choices() {
                 ext_tag="[APT/Flatpak]"
             elif [ "$DISTRO" = "alpine" ]; then
                 repo_tag="[APK]"
+                ext_tag="[Flatpak]"
+            elif [ "$DISTRO" = "opensuse" ]; then
+                repo_tag="[Zypper]"
                 ext_tag="[Flatpak]"
             fi
 
@@ -3048,6 +3270,8 @@ first_run_choices() {
                 fzf_prompt="Would you like to search and add extra packages from APT with fzf?"
             elif [ "$DISTRO" = "alpine" ]; then
                 fzf_prompt="Would you like to search and add extra packages from Alpine APK with fzf?"
+            elif [ "$DISTRO" = "opensuse" ]; then
+                fzf_prompt="Would you like to search and add extra packages from openSUSE with fzf?"
             elif [ "$DISTRO" = "arch" ]; then
                 fzf_prompt="Would you like to search and add extra packages from Pacman/AUR with fzf?"
             fi
@@ -3238,6 +3462,21 @@ step_applications() {
             return 0
         fi
 
+        if [ "$DISTRO" = "opensuse" ]; then
+            step_item "Full stack requested for openSUSE: deploying Flatpaks and available packages..."
+            if [ -f "$DOTFILES_DIR/flatpaks.txt" ] && [ "$SKIP_FLATPAKS" = false ]; then
+                sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+                while IFS= read -r fapp || [ -n "$fapp" ]; do
+                    fapp=$(echo "$fapp" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                    [ -z "$fapp" ] && continue
+                    [[ "$fapp" =~ ^# ]] && continue
+                    sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
+                done < "$DOTFILES_DIR/flatpaks.txt"
+            fi
+            step_ok "Full package stack successfully deployed."
+            return 0
+        fi
+
         if [ -f "$DOTFILES_DIR/packages.txt" ]; then
             step_item "Reading package list from packages.txt..."
             local FULL_PKGS=()
@@ -3325,6 +3564,20 @@ step_applications() {
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
                     *steam*) sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
                     *) sudo apk add --no-cache "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                esac
+            done
+        elif [ "$DISTRO" = "opensuse" ]; then
+            step_item "Deploying application selections for openSUSE..."
+            sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
+            for app in "${PACMAN_INSTALL[@]}"; do
+                case "$app" in
+                    *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
+                    *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
+                    *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
+                    *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo zypper --non-interactive install --no-confirm steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo zypper --non-interactive install --no-confirm "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
         else
@@ -3860,6 +4113,8 @@ step_system() {
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --non-interactive install --no-confirm sddm >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -4143,6 +4398,7 @@ step_update() {
             [ "$DISTRO" = "fedora" ] && pkg_label="dnf"
             [ "$DISTRO" = "debian" ] && pkg_label="apt"
             [ "$DISTRO" = "alpine" ] && pkg_label="apk"
+            [ "$DISTRO" = "opensuse" ] && pkg_label="zypper"
             if gum confirm "Would you also like to update system packages with $pkg_label?"; then
                 bash "$DOTFILES_DIR/.local/bin/system-ota" update --system
             else

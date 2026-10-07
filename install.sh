@@ -1264,7 +1264,7 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y git
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo apt-get update -y && sudo apt-get install -y git
+            sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
         elif [ "$DISTRO" = "opensuse" ]; then
@@ -1620,7 +1620,7 @@ CHARM_EOF
         # Ensure bootstrap tools exist
         local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg python3 python3-pip python3-venv pipx)
         sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
-        sudo apt-get install -y "${debian_bootstrap[@]}" gum >> "$LOG_FILE" 2>&1 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${debian_bootstrap[@]}" gum >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum if repo install had issues
         if ! command -v gum >/dev/null 2>&1; then
@@ -1806,15 +1806,15 @@ EOF
         if [ "$IS_NVIDIA" = true ]; then
             step_item "Preparing NVIDIA DKMS driver..."
             local kernel_headers="linux-headers-$(uname -r)"
-            sudo apt-get install -y "$kernel_headers" linux-headers-generic linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian/Ubuntu packages."
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$kernel_headers" linux-headers-generic linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian/Ubuntu packages."
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
-            sudo apt-get install -y mesa-va-drivers mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mesa-va-drivers mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Intel"* ]]; then
             step_item "Intel GPU detected. Adding hardware acceleration drivers..."
-            sudo apt-get install -y intel-media-va-driver-non-free intel-media-va-driver i965-va-driver-shaders i965-va-driver mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y intel-media-va-driver-non-free intel-media-va-driver i965-va-driver-shaders i965-va-driver mesa-vulkan-drivers vulkan-tools libvulkan1 >> "$LOG_FILE" 2>&1 || true
         fi
 
         if [ "$IS_NVIDIA" = true ]; then
@@ -2048,13 +2048,13 @@ install_rust_dock() {
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-        sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev >> "$LOG_FILE" 2>&1 || \
-            sudo apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
 
         # Build gtk4-layer-shell from source if not available in repos (e.g. Debian 12 Bookworm)
         if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
             step_item "Building gtk4-layer-shell from source for $DISTRO..."
-            sudo apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
             if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
                 local gls_dir
                 gls_dir=$(mktemp -d "${TMPDIR:-/tmp}/gtk4-layer-shell.XXXXXXXX")
@@ -2083,7 +2083,7 @@ install_rust_dock() {
     if ! command -v cargo > /dev/null 2>&1; then
         if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             step_item "Installing Cargo & Rust toolchain..."
-            sudo apt-get install -y cargo rustc >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc >> "$LOG_FILE" 2>&1 || true
             if ! command -v cargo > /dev/null 2>&1; then
                 step_item "Installing Cargo via rustup fallback..."
                 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal >> "$LOG_FILE" 2>&1 || true
@@ -2252,7 +2252,7 @@ install_themes_and_fonts() {
         if [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache py3-pywal >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
             sudo zypper --non-interactive install --no-confirm python3-pipx >> "$LOG_FILE" 2>&1 || true
         fi
@@ -3672,15 +3672,15 @@ step_applications() {
                             sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg >> "$LOG_FILE" 2>&1 || true
                             sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources >> "$LOG_FILE" 2>&1 || true
                             sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
-                            sudo apt-get install -y brave-browser >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true
+                            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y brave-browser >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true
                         fi
                         ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
                     *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
                     *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
-                    *steam*) sudo apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || sudo apt-get install -y steam >> "$LOG_FILE" 2>&1 || true ;;
-                    *) sudo apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
             [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"

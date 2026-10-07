@@ -2342,7 +2342,17 @@ install_quickshell() {
     if [ -n "$dl_url" ] && curl -fsSL -L "$dl_url" -o "$tmp_qs" >> "$LOG_FILE" 2>&1; then
         if [ -s "$tmp_qs" ]; then
             sudo chmod +x "$tmp_qs"
-            sudo install -m 755 "$tmp_qs" /usr/local/bin/quickshell >> "$LOG_FILE" 2>&1 || true
+            sudo mkdir -p /usr/local/lib/quickshell
+            sudo install -m 755 "$tmp_qs" /usr/local/lib/quickshell/quickshell.AppImage >> "$LOG_FILE" 2>&1 || true
+            cat << 'QSEOF' | sudo tee /usr/local/bin/quickshell > /dev/null 2>&1 || true
+#!/bin/sh
+QS_BIN="/usr/local/lib/quickshell/quickshell.AppImage"
+if [ -x "$QS_BIN" ]; then
+    exec "$QS_BIN" "$@" 2>/dev/null || exec "$QS_BIN" --appimage-extract-and-run "$@"
+fi
+exit 127
+QSEOF
+            sudo chmod 755 /usr/local/bin/quickshell
             rm -f "$tmp_qs"
             if command -v quickshell >/dev/null 2>&1; then
                 step_ok "Quickshell universal binary installed in /usr/local/bin/quickshell."
@@ -2435,7 +2445,6 @@ step_software() {
             qt5ct
             qt6ct
             kvantum
-            sddm
             polkit-kde
             plasma-polkit-agent
             gnome-keyring
@@ -2582,7 +2591,6 @@ step_software() {
             qt6ct
             qt-style-kvantum
             qt-style-kvantum-themes
-            sddm
             polkit-kde-agent-1
             gnome-keyring
             nwg-displays
@@ -2740,8 +2748,6 @@ step_software() {
             qt5ct
             qt6ct
             kvantum
-            sddm
-            sddm-openrc
             dbus
             dbus-openrc
 
@@ -2878,8 +2884,6 @@ step_software() {
             qt5ct
             qt6ct
             kvantum-manager
-            sddm
-            sddm-qt6
 
             # Theming, Fonts & Utilities
             jetbrains-mono-fonts
@@ -4429,7 +4433,7 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --non-interactive install --no-confirm sddm >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --non-interactive install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -4689,8 +4693,14 @@ step_system() {
 
         # Ensure sddm user has access to video/render devices for Wayland greeter
         if id -u sddm >/dev/null 2>&1; then
-            for grp in video render input; do
-                getent group "$grp" >/dev/null 2>&1 && sudo usermod -aG "$grp" sddm 2>/dev/null || true
+            for grp in video render input seat; do
+                if getent group "$grp" >/dev/null 2>&1; then
+                    if command -v usermod >/dev/null 2>&1; then
+                        sudo usermod -aG "$grp" sddm 2>/dev/null || true
+                    elif command -v adduser >/dev/null 2>&1; then
+                        sudo adduser sddm "$grp" 2>/dev/null || true
+                    fi
+                fi
             done
             [ -d /var/lib/sddm ] && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
@@ -4742,10 +4752,14 @@ DESK_EOF
 
     # PAM hyprlock unlock
     if [ ! -f /etc/pam.d/hyprlock ]; then
-        if [ -f /etc/pam.d/login ]; then
-            printf "auth        include     login\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+        if [ -f /etc/pam.d/system-auth ]; then
+            printf "auth        include     system-auth\naccount     include     system-auth\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
         elif [ -f /etc/pam.d/common-auth ]; then
-            printf "auth        include     common-auth\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+            printf "auth        include     common-auth\naccount     include     common-account\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+        elif [ -f /etc/pam.d/base-auth ]; then
+            printf "auth        include     base-auth\naccount     include     base-account\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
+        elif [ -f /etc/pam.d/login ]; then
+            printf "auth        include     login\n" | sudo tee /etc/pam.d/hyprlock >/dev/null || true
         fi
     fi
 

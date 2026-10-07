@@ -65,7 +65,7 @@ wallpaper_legible_para_el_usuario() {
     # ~/Pictures/Wallpapers/) se rechazaria siempre y el login se quedaria con
     # el fondo por defecto.
     case "$f" in
-        "$REAL_HOME"/.cache/*|"$REAL_HOME"/Pictures/*) ;;
+        "$REAL_HOME"/.cache/*|"$REAL_HOME"/Pictures/*|"$REAL_HOME"/.config/hypr/wallpapers/*|"$REAL_HOME"/Downloads/*|"$REAL_HOME"/wallpapers/*|"$REAL_HOME"/Wallpapers/*) ;;
         *) return 1 ;;
     esac
     # Legible por el usuario delegado, no solo por root.

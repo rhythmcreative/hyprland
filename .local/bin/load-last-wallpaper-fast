@@ -76,7 +76,16 @@ elif command -v hyprpaper > /dev/null 2>&1; then
         DAEMON_RUNNING=true
     else
         log "Iniciando hyprpaper..."
+        if [ ! -s "$HOME/.config/hypr/hyprpaper.conf" ] || ! grep -q "wallpaper" "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null; then
+            _init_wp="$HOME/.config/hypr/wallpapers/default.jpg"
+            [ -f "$HOME/.cache/current-wallpaper" ] && _cached=$(cat "$HOME/.cache/current-wallpaper" 2>/dev/null || true) && [ -f "$_cached" ] && _init_wp="$_cached"
+            if [ -f "$_init_wp" ]; then
+                mkdir -p "$HOME/.config/hypr"
+                printf "splash = false\nipc = on\npreload = %s\nwallpaper = ,%s\n" "$_init_wp" "$_init_wp" > "$HOME/.config/hypr/hyprpaper.conf" 2>/dev/null || true
+            fi
+        fi
         setsid hyprpaper > /dev/null 2>&1 &
+        sleep 0.1
         DAEMON_RUNNING=true
     fi
 elif command -v swaybg > /dev/null 2>&1; then

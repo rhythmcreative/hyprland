@@ -264,6 +264,10 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then
+    _bin_dir=$(dirname "$HYPRLAND_CMD")
+    if [ -x "$_bin_dir/start-hyprland" ]; then
+        exec "$_bin_dir/start-hyprland" -- $extra_flags --config "$GENERADO"
+    fi
     exec "$HYPRLAND_CMD" $extra_flags --config "$GENERADO"
 elif command -v start-hyprland >/dev/null 2>&1; then
     exec start-hyprland -- $extra_flags --config "$GENERADO"

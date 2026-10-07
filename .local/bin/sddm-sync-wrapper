@@ -10,4 +10,7 @@
 # a root. El sudoers solo restringe la RUTA, no el contenido, asi que la ruta
 # tiene que estar en un sitio que el usuario no controla. Esta es la misma
 # solucion que usa Ryoku, que fija su helper en /usr/bin a proposito.
-exec sudo /usr/local/lib/rhythm/sddm-auto-sync-local "$@"
+if [ -x /usr/local/lib/rhythm/sddm-auto-sync-local ]; then
+    exec sudo -n /usr/local/lib/rhythm/sddm-auto-sync-local "$@"
+fi
+exit 0

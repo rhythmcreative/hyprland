@@ -317,7 +317,7 @@ rhythm_install_with_progress() {
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
         elif [[ "$line" =~ $re_apt_setup ]]; then
-            ((curr++))
+            curr=$((curr + 1))
             local pkg="${BASH_REMATCH[1]}"
             [ "$curr" -gt "$total" ] && curr="$total"
             render_progress_bar "$curr" "$total" "Configuring $pkg..."
@@ -590,7 +590,7 @@ EOF
                         app="${app#nixpkgs.}"
                         nix_user_pkgs+=("$app")
                         [ "$app" = "steam" ] && enable_steam_system=true
-                        ((count++))
+                        count=$((count + 1))
                     done <<< "$fzf_selection"
                     step_ok "Added $count packages from package search."
                     sleep 1
@@ -1592,7 +1592,7 @@ CHARM_EOF
             local wait_count=0
             while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; do
                 sleep 2
-                ((wait_count+=2))
+                wait_count=$((wait_count + 2))
                 [ $wait_count -ge 60 ] && break
             done
         fi
@@ -2383,7 +2383,7 @@ step_software() {
             local total_f=${#FEDORA_CORE_PKGS[@]}
             local idx=0
             for pkg in "${FEDORA_CORE_PKGS[@]}"; do
-                ((idx++))
+                idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_f" "Installing $pkg (fallback)..."
                 sudo dnf install -y --skip-broken --allowerasing "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
@@ -2515,7 +2515,7 @@ step_software() {
             local total_d=${#DEBIAN_CORE_PKGS[@]}
             local idx=0
             for pkg in "${DEBIAN_CORE_PKGS[@]}"; do
-                ((idx++))
+                idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
                 sudo apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
@@ -2643,7 +2643,7 @@ step_software() {
             local total_a=${#ALPINE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${ALPINE_CORE_PKGS[@]}"; do
-                ((idx++))
+                idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_a" "Installing $pkg (fallback)..."
                 sudo apk add --no-cache "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
@@ -2768,7 +2768,7 @@ step_software() {
             local total_s=${#OPENSUSE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
-                ((idx++))
+                idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
                 sudo zypper --non-interactive install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
@@ -2985,7 +2985,7 @@ unified_app_search() {
             while IFS= read -r app; do
                 [ -z "$app" ] && continue
                 PACMAN_INSTALL+=("$app")
-                ((count++))
+                count=$((count + 1))
             done <<< "$SELECTED_SEARCH"
             step_ok "Added $count packages from universal search."
             sleep 1
@@ -3019,7 +3019,7 @@ unified_app_search() {
             while IFS= read -r app; do
                 [ -z "$app" ] && continue
                 PACMAN_INSTALL+=("$app")
-                ((count++))
+                count=$((count + 1))
             done <<< "$SELECTED_SEARCH"
             step_ok "Added $count packages from universal search."
             sleep 1
@@ -3053,7 +3053,7 @@ unified_app_search() {
             while IFS= read -r app; do
                 [ -z "$app" ] && continue
                 PACMAN_INSTALL+=("$app")
-                ((count++))
+                count=$((count + 1))
             done <<< "$SELECTED_SEARCH"
             step_ok "Added $count packages from universal search."
             sleep 1
@@ -3087,7 +3087,7 @@ unified_app_search() {
             while IFS= read -r app; do
                 [ -z "$app" ] && continue
                 PACMAN_INSTALL+=("$app")
-                ((count++))
+                count=$((count + 1))
             done <<< "$SELECTED_SEARCH"
             step_ok "Added $count packages from universal search."
             sleep 1
@@ -3124,7 +3124,7 @@ unified_app_search() {
         while IFS= read -r app; do
             [ -z "$app" ] && continue
             PACMAN_INSTALL+=("$app")
-            ((count++))
+            count=$((count + 1))
         done <<< "$SELECTED_SEARCH"
         step_ok "Added $count packages from universal search."
         sleep 1
@@ -3575,7 +3575,7 @@ step_applications() {
                 local total_fp=${#flatpaks[@]}
                 local fp_idx=0
                 for fapp in "${flatpaks[@]}"; do
-                    ((fp_idx++))
+                    fp_idx=$((fp_idx + 1))
                     render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $fapp..."
                     sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
                 done
@@ -3615,7 +3615,7 @@ step_applications() {
             local total_fp=${#flatpaks[@]}
             local fp_idx=0
             for fapp in "${flatpaks[@]}"; do
-                ((fp_idx++))
+                fp_idx=$((fp_idx + 1))
                 render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $fapp..."
                 sudo flatpak install -y --system flathub "$fapp" >> "$LOG_FILE" 2>&1 || true
             done
@@ -3638,7 +3638,7 @@ step_applications() {
             local total_app=${#PACMAN_INSTALL[@]}
             local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
-                ((app_idx++))
+                app_idx=$((app_idx + 1))
                 render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
@@ -3657,7 +3657,7 @@ step_applications() {
             local total_app=${#PACMAN_INSTALL[@]}
             local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
-                ((app_idx++))
+                app_idx=$((app_idx + 1))
                 render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*)
@@ -3684,7 +3684,7 @@ step_applications() {
             local total_app=${#PACMAN_INSTALL[@]}
             local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
-                ((app_idx++))
+                app_idx=$((app_idx + 1))
                 render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
@@ -3703,7 +3703,7 @@ step_applications() {
             local total_app=${#PACMAN_INSTALL[@]}
             local app_idx=0
             for app in "${PACMAN_INSTALL[@]}"; do
-                ((app_idx++))
+                app_idx=$((app_idx + 1))
                 render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*) sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true ;;
@@ -3730,7 +3730,7 @@ step_applications() {
         local total_fp=${#FLATPAK_INSTALL[@]}
         local fp_idx=0
         for app in "${FLATPAK_INSTALL[@]}"; do
-            ((fp_idx++))
+            fp_idx=$((fp_idx + 1))
             render_progress_bar "$fp_idx" "$total_fp" "Installing Flatpak: $app..."
             sudo flatpak install -y --system flathub "$app" >> "$LOG_FILE" 2>&1 || true
         done

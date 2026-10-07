@@ -86,7 +86,7 @@ Scope {
                     let batch = thumbBatchQueue.join("\n");
                     thumbBatchQueue = [];
                     let proc = Qt.createQmlObject('import Quickshell.Io; Process {}', window);
-                    proc.command = ["/usr/bin/env", "bash", "-c", "echo '" + batch.replace(/'/g, "'\\''") + "' | " + homeDir() + "/.local/bin/batch-thumbnails.sh"];
+                    proc.command = ["bash", "-c", "echo '" + batch.replace(/'/g, "'\\''") + "' | " + homeDir() + "/.local/bin/batch-thumbnails.sh"];
                     proc.startDetached();
                 }
             }

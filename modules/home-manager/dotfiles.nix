@@ -63,7 +63,7 @@ in
     # It does not overwrite a wallpaper the user has already chosen, and it
     # repairs a cache pointing at a file that no longer exists -- which was the
     # case that black-screened every boot.
-    home.activation.seedWallpaper = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.seedWallpaper = lib.hm.dag.entryAfter ([ "writeBoundary" ] ++ lib.optional (cfg.wallpaper.mode != "none") "fetchWallpapers") ''
       home="${config.home.homeDirectory}"
       default_wp="$home/.config/hypr/wallpapers/default.jpg"
       cache="$home/.cache/current-wallpaper"

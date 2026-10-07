@@ -43,6 +43,14 @@ if [ -z "$LOG_FILE" ] || ! touch "$LOG_FILE" 2>/dev/null; then
 fi
 : > "$LOG_FILE" 2>/dev/null || true
 
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
+[ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
+
+# Robust reboot helper that ignores systemd inhibitors (such as active APT or SSH sessions)
+rhythm_reboot() {
+    sudo systemctl reboot -i 2>/dev/null || sudo reboot -f 2>/dev/null || sudo reboot 2>/dev/null || true
+}
+
 # --- TERMINAL GEOMETRY & OMARCHY PRESENTATION SETUP ---
 # Defined here, before the NixOS branch, and used by BOTH install paths. It used
 # to live further down, after the NixOS branch had already exited, so that path
@@ -1449,6 +1457,19 @@ CHARM_EOF
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ]; then
+        # Handle background unattended-upgrades / apt-daily lock
+        if systemctl is-active --quiet apt-daily.service 2>/dev/null || systemctl is-active --quiet apt-daily-upgrade.service 2>/dev/null || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
+            step_item "Waiting for background Debian package updates (apt-daily) to release lock..."
+            sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+            local wait_count=0
+            while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; do
+                sleep 2
+                ((wait_count+=2))
+                [ $wait_count -ge 60 ] && break
+            done
+        fi
+        echo 'DPkg::Lock::Timeout "60";' | sudo tee /etc/apt/apt.conf.d/99wait-for-lock >/dev/null 2>&1 || true
+
         # Setup Charm repository for gum on Debian
         if ! command -v gum >/dev/null 2>&1; then
             sudo mkdir -p /etc/apt/keyrings
@@ -1458,7 +1479,7 @@ CHARM_EOF
         fi
 
         # Ensure bootstrap tools exist
-        local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg)
+        local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg python3 python3-pip python3-venv pipx)
         sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
         sudo apt-get install -y "${debian_bootstrap[@]}" gum >> "$LOG_FILE" 2>&1 || true
 
@@ -1785,7 +1806,7 @@ install_rust_dock() {
                 local gls_dir
                 gls_dir=$(mktemp -d "${TMPDIR:-/tmp}/gtk4-layer-shell.XXXXXXXX")
                 if git clone --depth=1 https://github.com/wmww/gtk4-layer-shell.git "$gls_dir" >> "$LOG_FILE" 2>&1; then
-                    (cd "$gls_dir" && meson setup -Dexamples=false -Ddocs=false -Dtests=false build >> "$LOG_FILE" 2>&1 && \
+                    (cd "$gls_dir" && meson setup --prefix=/usr -Dexamples=false -Ddocs=false -Dtests=false build >> "$LOG_FILE" 2>&1 && \
                      ninja -C build >> "$LOG_FILE" 2>&1 && \
                      sudo ninja -C build install >> "$LOG_FILE" 2>&1 && \
                      sudo ldconfig 2>/dev/null || true)
@@ -1793,8 +1814,26 @@ install_rust_dock() {
                 rm -rf "$gls_dir"
             fi
         fi
+        export PKG_CONFIG_PATH="/usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:$PKG_CONFIG_PATH"
+        export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
+    export PATH="$HOME/.cargo/bin:$PATH"
+
+    if ! command -v cargo > /dev/null 2>&1; then
+        if [ "$DISTRO" = "debian" ]; then
+            step_item "Installing Cargo & Rust toolchain..."
+            sudo apt-get install -y cargo rustc >> "$LOG_FILE" 2>&1 || true
+            if ! command -v cargo > /dev/null 2>&1; then
+                step_item "Installing Cargo via rustup fallback..."
+                curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal >> "$LOG_FILE" 2>&1 || true
+                [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
+                export PATH="$HOME/.cargo/bin:$PATH"
+            fi
+        fi
     fi
 
     if ! command -v cargo > /dev/null 2>&1; then
@@ -1948,9 +1987,11 @@ install_themes_and_fonts() {
     if ! command -v wal >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/wal" ]; then
         step_item "Setting up Pywal..."
         if [ "$DISTRO" = "debian" ]; then
-            sudo apt-get install -y python3-pip pipx >> "$LOG_FILE" 2>&1 || true
+            sudo apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         fi
+        export PATH="$HOME/.local/bin:$PATH"
         pipx install pywal >> "$LOG_FILE" 2>&1 || \
+            pipx install --include-deps pywal >> "$LOG_FILE" 2>&1 || \
             pip3 install --break-system-packages --user pywal >> "$LOG_FILE" 2>&1 || \
             pip3 install --user pywal >> "$LOG_FILE" 2>&1 || true
         if command -v wal >/dev/null 2>&1 || [ -x "$HOME/.local/bin/wal" ]; then
@@ -1992,6 +2033,7 @@ step_software() {
             file-roller
             gvfs
             tumbler
+            ffmpeg
             ffmpegthumbnailer
             poppler-glib
             libgsf
@@ -2120,6 +2162,7 @@ step_software() {
             gvfs-backends
             gvfs-fuse
             tumbler
+            ffmpeg
             ffmpegthumbnailer
             libgsf-1-114
             gwenview
@@ -4015,31 +4058,31 @@ if [ "$NO_REBOOT" = true ]; then
 elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
-        sudo reboot
+        rhythm_reboot
     elif [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
-        sudo systemctl start sddm || sudo reboot
+        sudo systemctl start sddm || rhythm_reboot
     else
-        sudo reboot
+        rhythm_reboot
     fi
 elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start your desktop cleanly."
     if gum confirm "Reboot into Hyprland now?"; then
-        sudo reboot
+        rhythm_reboot
     fi
 else
     if [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
         if gum confirm "Start SDDM login manager now?"; then
             sudo systemctl start sddm || {
                 gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
-                sudo reboot
+                rhythm_reboot
             }
         elif gum confirm "Reboot into Hyprland now?"; then
-            sudo reboot
+            rhythm_reboot
         fi
     else
         if gum confirm "Reboot into Hyprland now?"; then
-            sudo reboot
+            rhythm_reboot
         fi
     fi
 fi

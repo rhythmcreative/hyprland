@@ -16,7 +16,7 @@
     };
 
     gpu = lib.mkOption {
-      type = lib.types.enum [ "auto" "nvidia" "amd" "intel" ];
+      type = lib.types.enum [ "auto" "nvidia" "amd" "intel" "none" ];
       default = "auto";
       description = ''
         GPU stack to configure. "auto" only enables generic modesetting and

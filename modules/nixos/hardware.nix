@@ -20,7 +20,6 @@ in
           (lib.mkIf (cfg.gpu == "intel") (with pkgs; [
             intel-media-driver
             intel-vaapi-driver
-            vulkan-intel
           ]))
           (lib.mkIf (cfg.gpu == "amd") (with pkgs; [
             rocmPackages.clr

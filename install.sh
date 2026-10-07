@@ -774,7 +774,6 @@ EOF2
             step_item "home-manager flake already up to date, left untouched."
         else
             if [ -e "$hm_dir/flake.nix" ] || [ -e "$hm_dir/home.nix" ]; then
-                local stamp
                 stamp=$(date +%Y%m%d-%H%M%S)
                 mkdir -p "$HOME/.config/home-manager.bak-$stamp"
                 cp -rf "$hm_dir/flake.nix" "$hm_dir/flake.lock" "$hm_dir/home.nix" \
@@ -822,7 +821,7 @@ EOF2
         # as a closure. Minutes on a cold store, and nix goes quiet while it
         # works, so it gets a spinner. The store path goes to a file rather
         # than to stdout, otherwise the spinner's own output would land in it.
-        local act out_file
+        act=""
         out_file=$(mktemp)
         step_item "Tip: to view live download progress in another terminal, run: tail -f \"$LOG_FILE\""
         nixos_spin "Building the desktop (several GB the first time)..." -- \
@@ -851,7 +850,6 @@ EOF2
         if ! nixos_spin "Linking your dotfiles, helpers and user services..." -- \
             env HOME_MANAGER_BACKUP_EXT=backup "$act/activate"; then
             if grep -q "already provides the following file" "$LOG_FILE" 2>/dev/null; then
-                local conflict
                 conflict=$(grep -o '/nix/store/[^"]*site-functions/[^"]*' "$LOG_FILE" 2>/dev/null | head -1 | xargs -r basename)
                 step_warn "Two packages in your profile provide the same file${conflict:+ ($conflict)}."
                 step_warn "This is the gum completion installed both by this installer"
@@ -893,7 +891,7 @@ EOF2
         # System scope: SDDM, fonts, portals, audio and the desktop programs
         # live outside $HOME, so they need the NixOS module. Skip with
         # RHYTHM_NO_SYSTEM=1 or --no-system.
-        local system_status="skipped"
+        system_status="skipped"
         if [ "${RHYTHM_NO_SYSTEM:-0}" = "1" ] || [ "$opt_no_system" = "1" ]; then
             step_item "System configuration skipped (--no-system). SDDM, fonts and"
             step_item "desktop programs stay uninstalled: log in from a TTY instead."
@@ -4030,12 +4028,7 @@ elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         sudo reboot
     fi
 else
-    local sddm_available=false
     if [ "${ENABLE_SDDM:-true}" = true ] && systemctl cat sddm.service >/dev/null 2>&1; then
-        sddm_available=true
-    fi
-
-    if [ "$sddm_available" = true ]; then
         if gum confirm "Start SDDM login manager now?"; then
             sudo systemctl start sddm || {
                 gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."

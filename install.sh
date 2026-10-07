@@ -1114,9 +1114,12 @@ EOF2
 
         section "System configuration (greeter, fonts, portals, audio, apps)"
 
-        local host
+        local host host_attr=""
         host=$(hostname 2>/dev/null || echo "nixos")
         [ -z "$host" ] && host="nixos"
+        if [ "$host" != "nixos" ] && [ "$host" != "default" ]; then
+            host_attr="        \"$host\" = sys;"
+        fi
 
         # The generated flake, compared by content so re-runs are no-ops.
         local new_sys_flake sys_stamp
@@ -1176,7 +1179,7 @@ $(if [ "$enable_steam" = "true" ]; then printf '            programs.steam.enabl
       nixosConfigurations = {
         nixos = sys;
         default = sys;
-        "$host" = sys;
+${host_attr}
       };
     };
 }
@@ -1194,6 +1197,7 @@ EOF3
                 step_ok "Previous system flake backed up to $etc_dir.bak-$sys_stamp."
             fi
             sudo cp -f "$new_sys_flake" "$etc_dir/flake.nix"
+            sudo chmod 644 "$etc_dir/flake.nix"
             rm -f "$new_sys_flake"
             step_ok "Wrote $etc_dir/flake.nix (nixpkgs pinned to $channel)."
         fi
@@ -1212,14 +1216,11 @@ EOF3
             step_ok "Removed the old ./rhythm-sddm.nix stub (the module covers it)."
         fi
 
-        # Locked as this user so the lock file is not left root-owned, then
-        # root only has to read it.
-        if ! nix --extra-experimental-features "nix-command flakes" flake lock \
-            --update-input hyprland "$etc_dir" >>"$LOG_FILE" 2>&1; then
-            sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
-                nix flake lock --update-input hyprland "$etc_dir" >>"$LOG_FILE" 2>&1 \
-                || step_warn "Could not pre-lock $etc_dir; nixos-rebuild will do it."
-        fi
+        # Locked so nixos-rebuild does not hit dirty lock or permission issues
+        sudo env NIX_CONFIG="experimental-features = nix-command flakes" \
+            nix flake lock --update-input hyprland "$etc_dir" >>"$LOG_FILE" 2>&1 \
+            || step_warn "Could not pre-lock $etc_dir; nixos-rebuild will do it."
+        sudo chmod 644 "$etc_dir/flake.lock" 2>/dev/null || true
         step_ok "Flake inputs locked (nixpkgs $channel + latest desktop)."
 
         # nixos-rebuild prints its own progress, but it is the longest step of

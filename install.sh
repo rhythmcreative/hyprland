@@ -2287,6 +2287,7 @@ step_software() {
         file-roller
         gvfs
         tumbler
+        ffmpeg
         ffmpegthumbnailer
         poppler-glib
         libgsf

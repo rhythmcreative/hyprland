@@ -6,8 +6,11 @@ final: prev: {
   greeterMonitor = final.callPackage ../packages/greeter-monitor { };
   pywalSyncMono = final.callPackage ../packages/pywal-sync-mono { };
 
-  # Fix upstream tela-circle-icon-theme dangling symlinks that cause noBrokenSymlinks build failures
-  tela-circle-icon-theme = prev.tela-circle-icon-theme.overrideAttrs (old: {
+  # Fix upstream tela-circle-icon-theme dangling symlinks that cause noBrokenSymlinks build failures,
+  # and enable allColorVariants so all colored folders and tela variants are available
+  tela-circle-icon-theme = (prev.tela-circle-icon-theme.override {
+    allColorVariants = true;
+  }).overrideAttrs (old: {
     dontCheckForBrokenSymlinks = true;
     postInstall = (old.postInstall or "") + ''
       find $out/share/icons -xtype l -delete 2>/dev/null || true

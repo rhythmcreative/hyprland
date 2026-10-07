@@ -110,6 +110,12 @@ let
     networkmanager
     playerctl
     cliphist
+    hyprpicker
+    wf-recorder
+    slurp
+    grim
+    wl-clipboard
+    libnotify
   ];
 in
 {
@@ -152,7 +158,7 @@ in
             After = [ "default.target" ];
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
+            Environment = [ "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${lib.makeBinPath (hyprTools)}" ];
             Type = "oneshot";
             # Source rhythm-battery-limit.service: battery-charge-limit --apply.
             ExecStart = "${bin}/battery-charge-limit --apply";
@@ -192,7 +198,7 @@ in
             StartLimitIntervalSec = 0;
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ islandTools)}" ];
+            Environment = [ "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${lib.makeBinPath (hyprTools ++ islandTools)}" ];
             Type = "simple";
             # Source waybar-island.service: ExecStart=%h/.local/bin/quickshell-island.
             ExecStart = "${bin}/quickshell-island";

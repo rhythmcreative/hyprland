@@ -75,7 +75,7 @@ dock_pids() {
         pid="${entry#/proc/}"
         exe=$(readlink "$entry/exe" 2>/dev/null) || continue
         case "$exe" in
-            */rust-dock) ;;
+            *rust-dock*) ;;
             *) continue ;;
         esac
         echo "$pid"
@@ -96,9 +96,10 @@ dock_on_monitor() {
 }
 
 # Si hay alguna instancia genérica sin -o, terminarla para usar instancias por monitor
-# pgrep -x compara el NOMBRE del proceso, así que aquí no hay riesgo: solo docks.
-if pgrep -x rust-dock >/dev/null 2>&1 && ! dock_pids | grep -q .; then
-    pkill -x rust-dock 2>/dev/null
+if (pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1) && ! dock_pids | grep -q .; then
+    pkill -x rust-dock 2>/dev/null || true
+    pkill -x .rust-dock-wrap 2>/dev/null || true
+    pkill -x .rust-dock-wrapped 2>/dev/null || true
     sleep 0.2
 fi
 

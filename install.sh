@@ -4813,6 +4813,18 @@ EOF
 EOF
         echo "$USER ALL=(root) NOPASSWD: /usr/local/lib/rhythm/battery-charge-limit" | sudo tee -a /etc/sudoers.d/rhythm-battery-limit > /dev/null 2>&1 || true
         sudo chmod 440 /etc/sudoers.d/rhythm-battery-limit 2>/dev/null || true
+
+        if [ -d /etc/udev/rules.d ]; then
+            cat << 'EOF' | sudo tee /etc/udev/rules.d/99-rhythm-battery.rules >/dev/null 2>&1 || true
+ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_end_threshold}!="", RUN+="/bin/sh -c 'chmod 0666 /sys%p/charge_control_end_threshold'"
+ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_start_threshold}!="", RUN+="/bin/sh -c 'chmod 0666 /sys%p/charge_control_start_threshold'"
+ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_limit_max}!="", RUN+="/bin/sh -c 'chmod 0666 /sys%p/charge_control_limit_max'"
+EOF
+            if command -v udevadm >/dev/null 2>&1; then
+                sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
+                sudo udevadm trigger --subsystem-match=power_supply >> "$LOG_FILE" 2>&1 || true
+            fi
+        fi
     fi
 
     step_ok "System services and permissions configured."

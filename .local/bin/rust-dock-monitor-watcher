@@ -56,7 +56,7 @@ dock_pids() {
         pid="${entry#/proc/}"
         exe=$(readlink "$entry/exe" 2>/dev/null) || continue
         case "$exe" in
-            */rust-dock) ;;
+            *rust-dock*) ;;
             *) continue ;;
         esac
         echo "$pid"

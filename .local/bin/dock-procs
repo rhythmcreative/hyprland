@@ -54,17 +54,7 @@ signal="${4:-}"
 # glob `*waybar` cubre /usr/bin/waybar y /nix/store/.../.waybar-wrapped, y el
 # `pgrep -x` de arriba ya acota que procesos entran.
 case "$kind" in
-    rust-dock) want_exe='*rust-dock' ;;
-    # Un solo glob, no dos separados por `|`. Medido: '*waybar|*waybar-wrapped'
-    # no casa con NADA -- bash reparte la linea en alternativas y el `|` se come
-    # el `*` final del primer patron -- y '*waybar' a secas tampoco, porque el
-    # ejecutable real de Nix es .waybar-wrapped y no termina en waybar.
-    # '*waybar*' cubre los dos: /usr/bin/waybar y
-    # /nix/store/.../bin/.waybar-wrapped.
-    #
-    # Sin esto pids_of_kind devolvia vacio con la barra corriendo, y por eso la
-    # barra no se ocultaba al abrir un menu aunque el pgrep -x de abajo si la
-    # encontrara.
+    rust-dock) want_exe='*rust-dock*' ;;
     waybar)    want_exe='*waybar*' ;;
     *) echo "tipo desconocido: $kind" >&2; exit 2 ;;
 esac
@@ -82,20 +72,8 @@ monitor_of() {
 }
 
 pids_of_kind() {
-    # `pgrep -x` compara el NOMBRE del proceso (comm), no la linea de comandos:
-    # es preciso —una terminal que mencione "rust-dock" no se llama rust-dock—
-    # y tarda ~40 ms.
-    #
-    # La primera version de esto recorria /proc/[0-9]* con un readlink por
-    # entrada para no depender de comm. Sonaba bien y era seguro, pero costaba
-    # mas de un segundo: las barras recibian la orden un segundo despues que la
-    # isla, y al abrir y cerrar los menus se notaia clarisimo. Ahora el nombre
-    # estrecha primero y el ejecutable confirma despues, sobre cuatro o cinco
-    # procesos en vez de cuatrocientos.
     local pid exe
-    # Se prueban los dos nombres, el normal y el de Nix (.foo-wrapped), porque
-    # `pgrep -x` compara con comm y en NixOS no existe /usr/bin/<kind>.
-    for pid in $(pgrep -x "$kind" 2>/dev/null; pgrep -x ".$kind-wrapped" 2>/dev/null); do
+    for pid in $(pgrep -x "$kind" 2>/dev/null; pgrep -x ".$kind-wrapped" 2>/dev/null; pgrep -x ".rust-dock-wrap" 2>/dev/null); do
         exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
         case "$exe" in
             $want_exe) echo "$pid" ;;

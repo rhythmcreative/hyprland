@@ -7,6 +7,7 @@
 , rustPlatform
 , fetchFromGitHub
 , pkg-config
+, wrapGAppsHook4
 , gtk4
 , gtk4-layer-shell
 , cargoHash ? "sha256-YoRqqrFjjeF4sQ1IPuQSyKaFrq+FP83kVq2v0c7ZtLQ="
@@ -27,7 +28,7 @@ rustPlatform.buildRustPackage {
 
   inherit cargoHash;
 
-  nativeBuildInputs = [ pkg-config ];
+  nativeBuildInputs = [ pkg-config wrapGAppsHook4 ];
   buildInputs = [ gtk4 gtk4-layer-shell ];
 
   # Upstream must commit Cargo.lock for reproducible vendoring; without it

@@ -22,53 +22,44 @@ mons=$(hyprctl monitors -j 2>/dev/null) || exit 0
 layers=$(hyprctl layers 2>/dev/null) || exit 0
 [ -n "$mons" ] && [ -n "$layers" ] || exit 0
 
-# Superficies de fondo de awww, agrupadas por monitor con awk. Se guardan como
-# "X,Y WxH ALFA" para comparar.
-#
-# El campo "a: ALFA" se busco siempre, y Hyprland 0.56 dejo de emitirlo: ahora
-# la linea es "xywh: X Y W H, namespace: awww-daemon, pid: N" y nada mas. Con
-# el patron viejo el match no se producia nunca, la lista de capas salia
-# vacia, todos los monitores se daban por rotos y el watcher reiniciaba
-# awww-daemon en bucle -- cada reinicio aborta con SIGABRT, asi que eso fueron
-# cientos de coredumps. El alfa pasa a ser opcional: si la linea no lo trae se
-# asume 1, que es lo que significa una superficie de fondo visible.
-awk '
-  /^Monitor /            { mon = $2; sub(/:$/, "", mon) }
-  /namespace: awww-daemon/ {
-      if (match($0, /xywh: [0-9]+ [0-9]+ [0-9]+ [0-9]+/)) {
-          head = substr($0, RSTART, RLENGTH)
-          # "xywh: X Y W H" partido por ":" y "," deja las cuatro medidas
-          # juntas en un unico campo separadas por espacios, asi que ese
-          # campo se parte otra vez. Sin este segundo split, w y h salian a 0.
-          split(head, f, /[:,]/)
-          split(f[2], g, " ")
-          x = g[1] + 0; y = g[2] + 0; w = g[3] + 0; h = g[4] + 0
-          a = 1
-          if (match($0, /, a: [0-9]+/)) {
-              a = substr($0, RSTART + 4, RLENGTH - 4) + 0
-          }
-          printf "%s\t%d,%d %dx%d %d\n", mon, x, y, w, h, a
-      }
-  }
-' <<< "$layers" > /tmp/.bg-layers.$$ 2>/dev/null || { rm -f /tmp/.bg-layers.$$; exit 0; }
+python3 -c '
+import sys, subprocess, json
 
-jq -r '.[] | select(.active == true or .dpmsStatus == true) | [.name, (.x|tostring), (.y|tostring), (.width|tostring), (.height|tostring)] | @tsv' \
-    <<< "$mons" 2>/dev/null | while IFS=$'\t' read -r name x y w h; do
-        [ -n "$name" ] || continue
-        # Superficie de fondo de awww en ESTE monitor con alfa a 1.
-        # Las -v van ANTES del programa: despues las tomaba como nombres de
-        # fichero, asi que x/y/w/h nunca existian, la comparacion nunca se
-        # cumplia y todos los monitores salian como rotos siempre.
-        good=$(awk -F'\t' -v m="$name" -v x="$x" -v y="$y" -v w="$w" -v h="$h" '$1 == m {
-                        split($2, p, " "); split(p[1], c, ",")
-                        # p[1]=posicion p[2]=tamano p[3]=alfa. El alfa va dentro de
-                        # $2 separado por un espacio, no en $3: con -F tab solo hay
-                        # dos campos, asi que se comparaba contra un $3 vacio y por
-                        # eso ningun monitor pasaba nunca la comprobacion.
-                        if (c[1] == x && c[2] == y && p[2] == w "x" h && p[3] == 1) found = 1
-                    }
-                    END { print found + 0 }' "/tmp/.bg-layers.$$" 2>/dev/null)
-        [ "${good:-0}" = "1" ] || echo "$name"
-    done
+try:
+    mons = json.loads(sys.argv[1])
+    layers = sys.argv[2]
+except Exception:
+    sys.exit(0)
 
-rm -f "/tmp/.bg-layers.$$"
+active_mons = {m["name"] for m in mons if m.get("active", True) and m.get("dpmsStatus", True)}
+painted = set()
+
+current_mon = None
+in_bg = False
+
+for line in layers.splitlines():
+    line_s = line.strip()
+    if line.startswith("Monitor "):
+        parts = line.split()
+        if len(parts) >= 2:
+            current_mon = parts[1].rstrip(":")
+        in_bg = False
+    elif "Layer level 0 (background):" in line:
+        in_bg = True
+    elif "Layer level " in line:
+        in_bg = False
+    elif in_bg and current_mon:
+        if "namespace:" in line_s or line_s.startswith("Layer "):
+            alpha = 1
+            if ", a: " in line_s:
+                try:
+                    alpha = float(line_s.split(", a: ")[1].split(",")[0].strip())
+                except Exception:
+                    alpha = 1
+            if alpha > 0:
+                painted.add(current_mon)
+
+unpainted = active_mons - painted
+for m in sorted(unpainted):
+    print(m)
+' "$mons" "$layers"

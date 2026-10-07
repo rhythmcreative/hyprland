@@ -110,6 +110,20 @@ in
     # rhythm-battery-limit.service puedan aplicar cambios sin bloquearse.
     security.sudo.wheelNeedsPassword = lib.mkDefault false;
 
+    # Permisos de escritura para los umbrales de carga de bateria
+    # para que la Dynamic Island y rhythm-battery-limit puedan cambiar el limite.
+    systemd.tmpfiles.rules = [
+      "z /sys/class/power_supply/BAT*/charge_control_end_threshold 0666 - - -"
+      "z /sys/class/power_supply/BAT*/charge_control_start_threshold 0666 - - -"
+      "z /sys/class/power_supply/BAT*/charge_control_limit_max 0666 - - -"
+    ];
+
+    services.udev.extraRules = ''
+      ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_end_threshold}!="", RUN+="${pkgs.coreutils}/bin/chmod 0666 /sys%p/charge_control_end_threshold"
+      ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_start_threshold}!="", RUN+="${pkgs.coreutils}/bin/chmod 0666 /sys%p/charge_control_start_threshold"
+      ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_limit_max}!="", RUN+="${pkgs.coreutils}/bin/chmod 0666 /sys%p/charge_control_limit_max"
+    '';
+
     # Agente de autenticacion grafica de Polkit (Plasma 6).
     # Sin esto, cualquier aplicacion grafica que pida privilegios de root
     # (GParted, configuraciones de red, virt-manager o herramientas de disco)

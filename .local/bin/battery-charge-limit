@@ -72,7 +72,16 @@ baterias() {
 
 limite_actual() {
     local d="$BASE/$1/charge_control_end_threshold"
-    [ -e "$d" ] && cat "$d" 2>/dev/null || echo ""
+    if [ -e "$d" ]; then
+        cat "$d" 2>/dev/null
+        return 0
+    fi
+    d="$BASE/$1/charge_control_limit_max"
+    if [ -e "$d" ]; then
+        cat "$d" 2>/dev/null
+        return 0
+    fi
+    echo ""
 }
 
 # Sin argumentos: solo informar.
@@ -131,7 +140,12 @@ if [ "${1:-}" = "--escribir" ]; then
     shift
     _valor="$1"; shift
     for _b in "$@"; do
-        echo "$_valor" > "$BASE/$_b/charge_control_end_threshold" 2>/dev/null
+        if [ -e "$BASE/$_b/charge_control_end_threshold" ]; then
+            echo "$_valor" > "$BASE/$_b/charge_control_end_threshold" 2>/dev/null || true
+        fi
+        if [ -e "$BASE/$_b/charge_control_limit_max" ]; then
+            echo "$_valor" > "$BASE/$_b/charge_control_limit_max" 2>/dev/null || true
+        fi
     done
     exit 0
 fi
@@ -165,11 +179,27 @@ fi
 escribir() {
     local b
     for b in $targets; do
-        echo "$valor" > "$BASE/$b/charge_control_end_threshold" 2>/dev/null
+        if [ -e "$BASE/$b/charge_control_end_threshold" ]; then
+            echo "$valor" > "$BASE/$b/charge_control_end_threshold" 2>/dev/null || true
+        fi
+        if [ -e "$BASE/$b/charge_control_limit_max" ]; then
+            echo "$valor" > "$BASE/$b/charge_control_limit_max" 2>/dev/null || true
+        fi
     done
 }
 
-if [ "$(id -u)" = "0" ]; then
+puede_escribir_directo() {
+    [ "$(id -u)" = "0" ] && return 0
+    local b w=0
+    for b in $targets; do
+        if [ -w "$BASE/$b/charge_control_end_threshold" ] || [ -w "$BASE/$b/charge_control_limit_max" ]; then
+            w=1
+        fi
+    done
+    [ "$w" -eq 1 ]
+}
+
+if puede_escribir_directo; then
     escribir
 else
     # Un solo ascenso de privilegios para todas las baterias. Se reejecuta
@@ -182,8 +212,7 @@ else
     elif command -v pkexec >/dev/null 2>&1; then
         pkexec "$0" --escribir "$valor" $targets 2>/dev/null
     else
-        echo "battery-charge-limit: hace falta sudo o pkexec" >&2
-        exit 1
+        escribir
     fi
 fi
 

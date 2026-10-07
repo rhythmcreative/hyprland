@@ -126,19 +126,17 @@ hide_all_bars() {
     local mon="$ACTIVE_MONITOR"
     log_debug "Ocultando barras en monitor activo: $mon..."
     if [ -n "$mon" ]; then
-        if pgrep -f "waybar.*config-$mon" >/dev/null 2>&1; then
+        if "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR1 >/dev/null 2>&1; then
             _WAYBAR_WAS_VISIBLE=true
-            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR1 &
-        elif pgrep -x waybar >/dev/null 2>&1; then
+        elif pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; then
             _WAYBAR_WAS_VISIBLE=true
-            pkill -SIGUSR1 waybar 2>/dev/null &
+            pkill -SIGUSR1 -x waybar 2>/dev/null || pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null &
         fi
-        if pgrep -f "rust-dock.*-o +$mon" >/dev/null 2>&1; then
+        if "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR1 >/dev/null 2>&1; then
             _RUST_DOCK_WAS_VISIBLE=true
-            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR1 &
-        elif pgrep -x rust-dock >/dev/null 2>&1; then
+        elif pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
             _RUST_DOCK_WAS_VISIBLE=true
-            pkill -SIGUSR1 -x rust-dock 2>/dev/null &
+            pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
         fi
         if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
             _QUICKSHELL_WAS_VISIBLE=true
@@ -152,13 +150,11 @@ show_all_bars() {
     local mon="$ACTIVE_MONITOR"
     log_debug "Restaurando barras en monitor activo: $mon..."
     if [ -n "$mon" ]; then
-        if [ "$_WAYBAR_WAS_VISIBLE" = true ] || pgrep -x waybar >/dev/null 2>&1; then
-            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR2 &
-            pkill -SIGUSR2 -x waybar 2>/dev/null &
+        if [ "$_WAYBAR_WAS_VISIBLE" = true ] || pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; then
+            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR2 >/dev/null 2>&1 || pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null &
         fi
-        if [ "$_RUST_DOCK_WAS_VISIBLE" = true ] || pgrep -x rust-dock >/dev/null 2>&1; then
-            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 &
-            pkill -SIGUSR2 -x rust-dock 2>/dev/null &
+        if [ "$_RUST_DOCK_WAS_VISIBLE" = true ] || pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
+            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 >/dev/null 2>&1 || pkill -SIGUSR2 -x rust-dock 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null &
         fi
         if [ "$_QUICKSHELL_WAS_VISIBLE" = true ] || "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
             quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &

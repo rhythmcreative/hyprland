@@ -36,13 +36,13 @@ _RUST_DOCK_WAS_VISIBLE=false
 _QUICKSHELL_WAS_VISIBLE=false
 _WAYBAR_WAS_VISIBLE=false
 
-if pgrep -x waybar >/dev/null 2>&1; then
+if pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; then
     _WAYBAR_WAS_VISIBLE=true
-    pkill -SIGUSR1 waybar 2>/dev/null &
+    pkill -SIGUSR1 -x waybar 2>/dev/null || pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null &
 fi
-if pgrep -x rust-dock >/dev/null 2>&1; then
+if pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
     _RUST_DOCK_WAS_VISIBLE=true
-    pkill -SIGUSR1 -x rust-dock 2>/dev/null &
+    pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
 fi
 if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
     _QUICKSHELL_WAS_VISIBLE=true
@@ -110,8 +110,8 @@ EOF
 selected=$(printf "%s\n" "$HOTKEYS_DATA" | rofi-themed -dmenu -i -p "Hotkeys" -theme "$THEME_FILE")
 
 # Restore bars simultaneously in parallel
-[ "$_WAYBAR_WAS_VISIBLE" = true ] && pkill -SIGUSR2 waybar 2>/dev/null &
-[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && pkill -SIGUSR2 -x rust-dock 2>/dev/null &
+[ "$_WAYBAR_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null) &
+[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x rust-dock 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null) &
 [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal all >/dev/null 2>&1 &
 wait
 

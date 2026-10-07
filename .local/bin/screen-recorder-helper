@@ -135,13 +135,35 @@ start_recording() {
 
     echo "Starting screen recording to $output_file..."
 
+    local audio_arg="-a"
     if [ -n "$geometry" ]; then
-        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -g "$geometry" -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -g "$geometry" $audio_arg -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
     else
-        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -a -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+        nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y $audio_arg -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
     fi
 
     local rec_pid=$!
+    sleep 0.3
+    if ! kill -0 "$rec_pid" 2>/dev/null; then
+        # If wf-recorder exited immediately, retry without audio
+        if grep -qi "audio" /tmp/wf-recorder.log 2>/dev/null || [ ! -s "$output_file" ]; then
+            echo "wf-recorder failed with audio, retrying without audio..."
+            audio_arg=""
+            if [ -n "$geometry" ]; then
+                nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -g "$geometry" -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+            else
+                nohup env WAYLAND_DISPLAY="$WAYLAND_DISPLAY" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" wf-recorder $rec_output -y -f "$output_file" >/tmp/wf-recorder.log 2>&1 &
+            fi
+            rec_pid=$!
+            sleep 0.2
+        fi
+    fi
+
+    if ! kill -0 "$rec_pid" 2>/dev/null; then
+        send_notif "Recording Error" "wf-recorder failed to start. Check /tmp/wf-recorder.log" "dialog-error"
+        return 1
+    fi
+
     disown "$rec_pid" 2>/dev/null || true
     echo "$rec_pid" > "$PID_FILE"
 
@@ -154,7 +176,9 @@ start_recording() {
 }
 EOF
 
-    send_notif "Recording Started" "Recording screen with audio. Tap notch to stop." "media-record"
+    local notif_msg="Recording screen. Tap notch to stop."
+    [ -n "$audio_arg" ] && notif_msg="Recording screen with audio. Tap notch to stop."
+    send_notif "Recording Started" "$notif_msg" "media-record"
 }
 
 stop_recording() {

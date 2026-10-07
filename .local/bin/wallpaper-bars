@@ -33,7 +33,7 @@ waybar_pids_for_monitor() {
                 echo "$pid"
                 ;;
         esac
-    done < <(pgrep -x waybar 2>/dev/null || true)
+    done < <(pgrep -x waybar 2>/dev/null; pgrep -x .waybar-wrapped 2>/dev/null || true)
 }
 
 dock_pids_for_monitor() {
@@ -44,7 +44,7 @@ dock_pids_for_monitor() {
         case "$cmd" in
             *" -o $monitor"|*" -o $monitor "*) echo "$pid" ;;
         esac
-    done < <(pgrep -x rust-dock 2>/dev/null || true)
+    done < <(pgrep -x rust-dock 2>/dev/null; pgrep -x .rust-dock-wrap 2>/dev/null; pgrep -x .rust-dock-wrapped 2>/dev/null || true)
 }
 
 case "${1:-}" in
@@ -54,19 +54,51 @@ case "${1:-}" in
             --any-display call island hide "$monitor" >/dev/null 2>&1 || true
         if [ "$monitor" = "all" ]; then
             pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || true
+            pkill -SIGUSR1 -x .waybar-wrapped >/dev/null 2>&1 || true
             pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
+            pkill -SIGUSR1 -x .rust-dock-wrap >/dev/null 2>&1 || true
+            pkill -SIGUSR1 -x .rust-dock-wrapped >/dev/null 2>&1 || true
         else
-            while read -r pid; do [ -n "$pid" ] && kill -USR1 "$pid" 2>/dev/null || true; done < <(waybar_pids_for_monitor)
-            while read -r pid; do [ -n "$pid" ] && kill -USR1 "$pid" 2>/dev/null || true; done < <(dock_pids_for_monitor)
+            matched=0
+            while read -r pid; do [ -n "$pid" ] && { kill -USR1 "$pid" 2>/dev/null || true; matched=1; }; done < <(waybar_pids_for_monitor)
+            if [ "$matched" -eq 0 ]; then
+                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR1 2>/dev/null || \
+                pkill -SIGUSR1 -x waybar 2>/dev/null || \
+                pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null || true
+            fi
+            matched_d=0
+            while read -r pid; do [ -n "$pid" ] && { kill -USR1 "$pid" 2>/dev/null || true; matched_d=1; }; done < <(dock_pids_for_monitor)
+            if [ "$matched_d" -eq 0 ]; then
+                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR1 2>/dev/null || \
+                pkill -SIGUSR1 -x rust-dock 2>/dev/null || \
+                pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || \
+                pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null || true
+            fi
         fi
         ;;
     show)
         if [ "$monitor" = "all" ]; then
             pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+            pkill -SIGUSR2 -x .waybar-wrapped >/dev/null 2>&1 || true
             pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true
+            pkill -SIGUSR2 -x .rust-dock-wrap >/dev/null 2>&1 || true
+            pkill -SIGUSR2 -x .rust-dock-wrapped >/dev/null 2>&1 || true
         else
-            while read -r pid; do [ -n "$pid" ] && kill -USR2 "$pid" 2>/dev/null || true; done < <(waybar_pids_for_monitor)
-            while read -r pid; do [ -n "$pid" ] && kill -USR2 "$pid" 2>/dev/null || true; done < <(dock_pids_for_monitor)
+            matched=0
+            while read -r pid; do [ -n "$pid" ] && { kill -USR2 "$pid" 2>/dev/null || true; matched=1; }; done < <(waybar_pids_for_monitor)
+            if [ "$matched" -eq 0 ]; then
+                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR2 2>/dev/null || \
+                pkill -SIGUSR2 -x waybar 2>/dev/null || \
+                pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
+            fi
+            matched_d=0
+            while read -r pid; do [ -n "$pid" ] && { kill -USR2 "$pid" 2>/dev/null || true; matched_d=1; }; done < <(dock_pids_for_monitor)
+            if [ "$matched_d" -eq 0 ]; then
+                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR2 2>/dev/null || \
+                pkill -SIGUSR2 -x rust-dock 2>/dev/null || \
+                pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || \
+                pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null || true
+            fi
         fi
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
             --any-display call island reveal "$monitor" >/dev/null 2>&1 || true

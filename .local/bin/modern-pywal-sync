@@ -297,6 +297,8 @@ echo "  • rust-dock..."
 setsid bash -c '
     sleep 0.8
     pkill -x rust-dock >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
     sleep 0.15
     "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
 ' >/dev/null 2>&1 </dev/null &
@@ -304,6 +306,7 @@ setsid bash -c '
 # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
 pkill -x waybar_auto_hi 2>/dev/null || true
 pkill -SIGUSR2 -x waybar 2>/dev/null || true
+pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
 
 # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
 echo "  • Dynamic Island (Quickshell)..."

@@ -16,8 +16,8 @@ quotes=(
     "\"Hazlo simple, pero no más simple.\" - Albert Einstein"
 )
 
-# Obtener el día del año para consistencia diaria
-day_of_year=$(date +%j)
+# Obtener el día del año para consistencia diaria (base 10 para evitar error octal con ceros a la izquierda)
+day_of_year=$((10#$(date +%j)))
 # Usar el día para seleccionar una cita consistente
 quote_index=$((day_of_year % ${#quotes[@]}))
 

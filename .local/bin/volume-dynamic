@@ -20,4 +20,6 @@ case "$1" in
 esac
 
 # Send Dynamic Island notification via EWW
-~/.local/bin/eww-volume
+if [ -x "$HOME/.local/bin/eww-volume" ]; then
+    "$HOME/.local/bin/eww-volume"
+fi

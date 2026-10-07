@@ -7,12 +7,21 @@ LOW_BATTERY_THRESHOLD=20
 STATE_FILE="/tmp/auto_power_save_state"
 
 while true; do
-    # Get combined capacity
-    BAT0_CAP=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo 0)
-    BAT1_CAP=$(cat /sys/class/power_supply/BAT1/capacity 2>/dev/null || echo 0)
-    
-    # Simple average for the trigger
-    AVG_CAP=$(( (BAT0_CAP + BAT1_CAP) / 2 ))
+    total=0
+    count=0
+    for f in /sys/class/power_supply/BAT*/capacity; do
+        if [ -f "$f" ]; then
+            cap=$(cat "$f" 2>/dev/null || echo 0)
+            total=$((total + cap))
+            count=$((count + 1))
+        fi
+    done
+    if [ "$count" -eq 0 ]; then
+        # No batteries present (e.g. desktop), skip
+        sleep 300
+        continue
+    fi
+    AVG_CAP=$((total / count))
     
     # Check if any battery is charging
     IS_CHARGING=0

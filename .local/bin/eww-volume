@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# Get current volume
-VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -Po '\d+(?=%)' | head -1)
+# Get current volume safely
+VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -Po '\d+(?=%)' | head -1)
+[ -z "$VOLUME" ] && VOLUME=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '{print int($2 * 100)}')
 
-# Update EWW
-eww update volume-percent=$VOLUME
-eww update island-mode="volume"
-
-# Reset to idle after 2 seconds
-(sleep 2 && eww update island-mode="idle") &
+# Update EWW if installed
+if [ -n "$VOLUME" ] && command -v eww >/dev/null 2>&1; then
+    eww update volume-percent="$VOLUME" 2>/dev/null || true
+    eww update island-mode="volume" 2>/dev/null || true
+    (sleep 2 && eww update island-mode="idle" 2>/dev/null) &
+fi

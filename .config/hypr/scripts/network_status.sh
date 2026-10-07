@@ -21,10 +21,10 @@ for iface in /sys/class/net/*; do
         if [[ "$name" =~ ^wl ]]; then
             echo "WiFi"
         else
-            echo "Conectado"
+            echo "Connected"
         fi
         exit 0
     fi
 done
 
-echo "Sin conexion"
+echo "Disconnected"

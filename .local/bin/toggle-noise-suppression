@@ -15,8 +15,12 @@ install_hint() {
         printf '%s' "nix profile install nixpkgs#noise-suppression-for-voice"
     elif command -v apt-get >/dev/null 2>&1; then
         printf '%s' "sudo apt install pipewire-filter-chain"
+    elif command -v zypper >/dev/null 2>&1; then
+        printf '%s' "sudo zypper in ladspa-rnnoise"
+    elif command -v apk >/dev/null 2>&1; then
+        printf '%s' "sudo apk add rnnoise"
     else
-        printf '%s' "instala el plugin LADSPA de RNNoise para tu distribucion"
+        printf '%s' "install the RNNoise LADSPA plugin for your distribution"
     fi
 }
 #

@@ -16,19 +16,22 @@ cont_hypridle() {
 enable() {
     touch "$STATE_FILE"
     stop_hypridle
-    if ! systemctl --user start "$SERVICE"; then
-        rm -f "$STATE_FILE"
-        cont_hypridle
-        notify-send "Awake Mode" "Could not start the idle inhibitor service." 2>/dev/null || true
-        echo "error"
-        return 1
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files "$SERVICE" 2>/dev/null | grep -q "$SERVICE"; then
+        if ! systemctl --user start "$SERVICE" 2>/dev/null; then
+            "$HOME/.local/bin/caffeine-keeper" &
+        fi
+    else
+        "$HOME/.local/bin/caffeine-keeper" &
     fi
     echo "on"
 }
 
 disable() {
     rm -f "$STATE_FILE"
-    systemctl --user stop "$SERVICE" 2>/dev/null || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user stop "$SERVICE" 2>/dev/null || true
+    fi
+    pkill -f "caffeine-keeper" 2>/dev/null || true
     cont_hypridle
     echo "off"
 }
@@ -37,7 +40,11 @@ case "$ACTION" in
     status)
         if [ -f "$STATE_FILE" ]; then
             # Recover the supervised inhibitor if it was interrupted.
-            systemctl --user is-active --quiet "$SERVICE" || systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
+            if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files "$SERVICE" 2>/dev/null | grep -q "$SERVICE"; then
+                systemctl --user is-active --quiet "$SERVICE" || systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
+            else
+                pgrep -f "caffeine-keeper" >/dev/null 2>&1 || "$HOME/.local/bin/caffeine-keeper" &
+            fi
             stop_hypridle
             echo "on"
         else

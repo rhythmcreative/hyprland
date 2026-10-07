@@ -46,29 +46,33 @@ generate_safe_config() {
 EOF
 
     # Generar configuración para cada monitor conectado
-    local monitor_index=0
-    for monitor in "${connected_monitors[@]}"; do
-        log "Configurando monitor: $monitor"
-        
-        # Obtener información detallada del monitor
-        local monitor_info=$(hyprctl monitors | awk "/^Monitor $monitor/,/^$/" | head -20)
-        
-        # Extraer resolución y refresh rate
-        local resolution_line=$(echo "$monitor_info" | grep -E "^\s+[0-9]+x[0-9]+@[0-9]+\.[0-9]+" | head -1 | xargs)
-        
-        if [[ -n "$resolution_line" ]]; then
-            # Usar la información actual del monitor
-            local position_x=$((monitor_index * 1920))  # Posicionamiento simple lado a lado
-            echo "monitor=$monitor,$resolution_line,${position_x}x0,1.0" >> "$temp_conf"
-            log "$monitor configurado: $resolution_line en ${position_x}x0"
-        else
-            # Configuración de fallback
-            log "No se pudo detectar resolución para $monitor, usando auto"
-            echo "monitor=$monitor,preferred,auto,1.0" >> "$temp_conf"
-        fi
-        
-        ((monitor_index++))
-    done
+    if command -v jq >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then
+        hyprctl monitors -j | jq -r '.[] | "monitor=\(.name),\(.width)x\(.height)@\(.refreshRate),\(.x)x\(.y),\(.scale)"' >> "$temp_conf"
+    else
+        local monitor_index=0
+        for monitor in "${connected_monitors[@]}"; do
+            log "Configurando monitor: $monitor"
+            
+            # Obtener información detallada del monitor
+            local monitor_info=$(hyprctl monitors | awk "/^Monitor $monitor/,/^$/" | head -20)
+            
+            # Extraer resolución y refresh rate
+            local resolution_line=$(echo "$monitor_info" | grep -E "^\s+[0-9]+x[0-9]+@[0-9]+\.[0-9]+" | head -1 | awk '{print $1}')
+            
+            if [[ -n "$resolution_line" ]]; then
+                # Usar la información actual del monitor
+                local position_x=$((monitor_index * 1920))  # Posicionamiento simple lado a lado
+                echo "monitor=$monitor,$resolution_line,${position_x}x0,1.0" >> "$temp_conf"
+                log "$monitor configurado: $resolution_line en ${position_x}x0"
+            else
+                # Configuración de fallback
+                log "No se pudo detectar resolución para $monitor, usando auto"
+                echo "monitor=$monitor,preferred,auto,1.0" >> "$temp_conf"
+            fi
+            
+            ((monitor_index++))
+        done
+    fi
     
     # Verificar que se generó contenido
     if [[ -s "$temp_conf" ]]; then

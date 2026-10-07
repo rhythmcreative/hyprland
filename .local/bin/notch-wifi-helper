@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import json
+import re
 
 def get_saved_wifi_profiles():
 # Return saved Wi-Fi SSID -> UUID mappings from NetworkManager.
@@ -41,18 +42,18 @@ def get_wifi_list(rescan=False):
         for line in out.strip().split('\n'):
             if not line:
                 continue
-            parts = line.split(':')
+            parts = re.split(r'(?<!\\):', line)
             if len(parts) < 5:
                 continue
             in_use = parts[0].strip() == '*'
-            ssid = parts[1].strip()
+            ssid = parts[1].replace(r'\:', ':').strip()
             if not ssid:
                 continue
             # Deduplicate by SSID, preferring connected or strongest signal
             if ssid in seen:
                 continue
             seen.add(ssid)
-            sec = parts[2].strip() or 'Open'
+            sec = parts[2].replace(r'\:', ':').strip() or 'Open'
             bars = parts[3].strip()
             try:
                 signal = int(parts[4].strip())
@@ -120,9 +121,9 @@ def main():
             # Find active wifi interface
             out = subprocess.check_output(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'dev'], text=True)
             for line in out.strip().split('\n'):
-                parts = line.split(':')
-                if len(parts) >= 3 and parts[1] == 'wifi' and parts[2] == 'connected':
-                    subprocess.run(['nmcli', 'device', 'disconnect', parts[0]], check=True)
+                parts = re.split(r'(?<!\\):', line)
+                if len(parts) >= 3 and parts[1].replace(r'\:', ':') == 'wifi' and parts[2].replace(r'\:', ':') == 'connected':
+                    subprocess.run(['nmcli', 'device', 'disconnect', parts[0].replace(r'\:', ':')], check=True)
                     break
             print(json.dumps({'status': 'ok'}))
         except Exception as e:

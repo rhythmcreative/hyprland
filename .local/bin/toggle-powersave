@@ -36,8 +36,16 @@ enable_powersave() {
 
     # 3. Disable heavy Hyprland blur/shadows but PRESERVE animations (animations = true)
     if command -v hyprctl >/dev/null 2>&1; then
-        hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = true } })' >/dev/null 2>&1 || true
-        hyprctl eval 'hl.window_rule({ name = "powersave-opaque", match = { class = ".*" }, opaque = true })' >/dev/null 2>&1 || true
+        if ! hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = true } })' >/dev/null 2>&1; then
+            hyprctl keyword decoration:active_opacity 1.0 >/dev/null 2>&1 || true
+            hyprctl keyword decoration:inactive_opacity 0.98 >/dev/null 2>&1 || true
+            hyprctl keyword decoration:blur:enabled 0 >/dev/null 2>&1 || true
+            hyprctl keyword decoration:shadow:enabled 0 >/dev/null 2>&1 || true
+            hyprctl keyword decoration:drop_shadow 0 >/dev/null 2>&1 || true
+            hyprctl keyword animations:enabled 1 >/dev/null 2>&1 || true
+        fi
+        hyprctl eval 'hl.window_rule({ name = "powersave-opaque", match = { class = ".*" }, opaque = true })' >/dev/null 2>&1 || \
+            hyprctl keyword windowrulev2 "opaque,class:.*" >/dev/null 2>&1 || true
     fi
 
     # 4. Set kitty background opacity to 1.0 for solid dark terminal (no background bleed)

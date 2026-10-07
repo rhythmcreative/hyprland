@@ -13,7 +13,9 @@ MODE="${1:-terminal}"
 WS="scratchpad"
 
 toggle_ws() {
-    hyprctl eval "hl.dsp.workspace.toggle_special(\"${WS}\")" >/dev/null 2>&1
+    if ! hyprctl eval "hl.dsp.workspace.toggle_special(\"${WS}\")" >/dev/null 2>&1; then
+        hyprctl dispatch togglespecialworkspace "${WS}" >/dev/null 2>&1 || true
+    fi
 }
 
 clients_json() {

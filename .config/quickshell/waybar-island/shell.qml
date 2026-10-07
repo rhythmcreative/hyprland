@@ -748,7 +748,7 @@ ShellRoot {
 
     Process {
         id: briProc
-        command: ["bash", "-c", "brightnessctl -m | awk -F, '{print $4}' | tr -d '%'"]
+        command: ["bash", "-c", "out=$(brightnessctl -c backlight -m 2>/dev/null | head -n1); [ -z \"$out\" ] && out=$(brightnessctl -m 2>/dev/null | head -n1); echo \"$out\" | awk -F, '{print $4}' | tr -d '%'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const val = parseFloat(text.trim())

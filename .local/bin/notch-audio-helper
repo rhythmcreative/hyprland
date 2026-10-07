@@ -23,12 +23,13 @@ def get_sinks():
                 break
             if not line.strip() or '─' in line:
                 continue
-            m = re.search(r'([*]?)\s*(\d+)\.\s+(.*?)\s*\[vol:\s*([\d.]+)\]', line)
+            m = re.search(r'([*]?)\s*(\d+)\.\s+(.*?)\s*\[vol:\s*([\d.]+).*?\]', line)
             if m:
                 is_active = m.group(1) == '*'
                 sink_id = int(m.group(2))
                 name = m.group(3).strip()
                 vol = float(m.group(4))
+                is_muted = 'MUTED' in line
 
                 icon = "󰓃"
                 name_l = name.lower()
@@ -46,6 +47,7 @@ def get_sinks():
                     'name': name,
                     'active': is_active,
                     'volume': int(round(vol * 100)),
+                    'muted': is_muted,
                     'icon': icon
                 })
     return sinks

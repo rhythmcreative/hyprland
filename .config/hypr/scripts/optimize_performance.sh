@@ -9,6 +9,7 @@ optimize() {
         keyword decoration:active_opacity 1.0;\
         keyword decoration:inactive_opacity 1.0;\
         keyword decoration:blur:enabled 0;\
+        keyword decoration:shadow:enabled 0;\
         keyword decoration:drop_shadow 0;\
         keyword misc:vfr 1;\
         keyword misc:vrr 1;\

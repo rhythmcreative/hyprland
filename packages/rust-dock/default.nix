@@ -57,6 +57,36 @@ rustPlatform.buildRustPackage {
             let p = PathBuf::from(p_def);
             if p.exists() && !paths.contains(&p) { paths.push(p); }
         }'
+
+    substituteInPlace src/style.rs \
+      --replace '    if let Some(mut pywal_path) = dirs::cache_dir() {
+        pywal_path.push("wal/colors-waybar.css");
+        if pywal_path.exists()
+            && let Ok(pywal_css) = std::fs::read_to_string(pywal_path) {
+                css_data.push_str(&pywal_css);
+            }
+    }' '    let mut pywal_loaded = false;
+    if let Some(mut pywal_path) = dirs::cache_dir() {
+        pywal_path.push("wal/colors-waybar.css");
+        if pywal_path.exists()
+            && let Ok(pywal_css) = std::fs::read_to_string(pywal_path) {
+                css_data.push_str(&pywal_css);
+                pywal_loaded = true;
+            }
+    }
+    if !pywal_loaded {
+        if let Some(mut waybar_path) = dirs::config_dir() {
+            waybar_path.push("waybar/colors-pywal.css");
+            if waybar_path.exists()
+                && let Ok(waybar_css) = std::fs::read_to_string(waybar_path) {
+                    css_data.push_str(&waybar_css);
+                }
+        }
+    }'
+
+    substituteInPlace src/dock.rs \
+      --replace '&& m.connector().map(|c| c.to_string()).as_deref() == Some(monitor_name) {' \
+                '&& (m.connector().map(|c| c.to_string()).as_deref() == Some(monitor_name) || m.description().map(|d| d.to_string()).as_deref().map(|s| s.contains(monitor_name)).unwrap_or(false)) {'
   '';
 
   # Upstream must commit Cargo.lock for reproducible vendoring; without it

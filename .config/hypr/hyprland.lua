@@ -344,6 +344,9 @@ hl.layer_rule({
 
 -- General
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
+hl.bind(mainMod .. " + space", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
+hl.bind(mainMod .. " + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
+hl.bind("SUPER + space", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("~/.local/bin/rust-dock-toggle-all"))
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/toggle-island"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("~/.local/bin/show-hotkeys"))

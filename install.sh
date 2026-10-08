@@ -2353,7 +2353,7 @@ install_rust_dock() {
         return 0
     fi
 
-    if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
+    if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
         step_warn "gtk4-layer-shell not found. Skipping rust-dock build (falling back to Waybar dock)."
         return 0
     fi
@@ -2578,7 +2578,7 @@ if [ -x "/usr/local/lib/quickshell/squashfs-root/AppRun" ]; then
 fi
 QS_BIN="/usr/local/lib/quickshell/quickshell.AppImage"
 if [ -x "$QS_BIN" ]; then
-    if [ -e /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
+    if [ -r /dev/fuse ] && [ -w /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
         exec "$QS_BIN" "$@"
     else
         exec "$QS_BIN" --appimage-extract-and-run "$@"
@@ -2785,9 +2785,7 @@ step_software() {
             xdg-desktop-portal-hyprland
             xdg-desktop-portal-gtk
             waybar
-            quickshell
             rofi-wayland
-            rofi
             kitty
             zsh
             zsh-autosuggestions
@@ -2917,7 +2915,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick; do
+        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -3617,7 +3615,15 @@ first_run_choices() {
         PACMAN_INSTALL=("brave-bin" "vesktop" "visual-studio-code-bin")
         FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
         [ -z "$WALLPAPER_MODE" ] && WALLPAPER_MODE="random"
-        [ -z "$ENABLE_SDDM" ] && ENABLE_SDDM=true
+        if [ -z "$ENABLE_SDDM" ]; then
+            local DETECTED_DM=""
+            DETECTED_DM=$(detect_existing_display_manager || true)
+            if [ -n "$DETECTED_DM" ] && [ "$DETECTED_DM" != "sddm" ]; then
+                ENABLE_SDDM=false
+            else
+                ENABLE_SDDM=true
+            fi
+        fi
         SET_ZSH=true
         return 0
     fi
@@ -5030,6 +5036,22 @@ DESK_EOF
         sudo chmod 644 /usr/share/wayland-sessions/hyprland.desktop 2>/dev/null || true
     fi
 
+    # Ensure binary capitalization compatibility for Hyprland desktop entry
+    if [ -x /usr/bin/hyprland ] && [ ! -x /usr/bin/Hyprland ]; then
+        sudo ln -sf /usr/bin/hyprland /usr/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+    elif [ -x /usr/bin/Hyprland ] && [ ! -x /usr/bin/hyprland ]; then
+        sudo ln -sf /usr/bin/Hyprland /usr/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Ensure user has access to fuse group if present
+    if getent group fuse >/dev/null 2>&1; then
+        if command -v usermod >/dev/null 2>&1; then
+            sudo usermod -aG fuse "$USER" >> "$LOG_FILE" 2>&1 || true
+        elif command -v adduser >/dev/null 2>&1; then
+            sudo adduser "$USER" fuse >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
     if [ "${ENABLE_SDDM:-true}" = true ]; then
         local other_dm
         other_dm=$(detect_existing_display_manager || true)
@@ -5131,14 +5153,15 @@ DESK_EOF
 
         step_item "Enabling SDDM display manager..."
         if command -v systemctl >/dev/null 2>&1; then
-            if systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat sddm >/dev/null 2>&1; then
+            if [ "$DISTRO" = "opensuse" ]; then
+                sudo systemctl enable --force sddm.service >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl enable display-manager.service >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
+                step_ok "SDDM enabled via openSUSE display-manager / sddm service."
+            elif systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat sddm >/dev/null 2>&1; then
                 sudo systemctl enable --force sddm.service >> "$LOG_FILE" 2>&1 || sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
                 sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
                 step_ok "SDDM enabled as default display manager."
-            elif [ "$DISTRO" = "opensuse" ]; then
-                sudo systemctl enable display-manager.service >> "$LOG_FILE" 2>&1 || true
-                sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
-                step_ok "SDDM enabled via openSUSE display-manager.service."
             else
                 step_warn "SDDM service unit not found on system."
             fi

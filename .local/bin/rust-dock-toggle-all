@@ -30,20 +30,39 @@ save_dock_state() {
     mv -f "$CONFIG_FILE.tmp.$$" "$CONFIG_FILE"
 }
 
+dock_pids() {
+    local entry pid exe
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+        case "$exe" in
+            *rust-dock*) ;;
+            *) continue ;;
+        esac
+        echo "$pid"
+    done
+}
+
 dock_on() {
     save_dock_state "on"
     printf 'visible\n' > "$STATE_FILE" 2>/dev/null || true
+    printf 'visible\n' > "/tmp/rust-dock-visible" 2>/dev/null || true
     "$LAUNCHER" >/dev/null 2>&1 &
 }
 
 dock_off() {
     save_dock_state "off"
-    # Sin SIGHUP: SIGHUP solo ocultaba la ventana y los procesos se quedaban
-    # vivos, reclaimando capas al cambiar de tema o al reconectar monitores.
+    # Matar instancias reales buscando por ejecutable para funcionar en NixOS (.rust-dock-wrapped)
+    # y distros estándar.
+    for pid in $(dock_pids); do
+        kill "$pid" 2>/dev/null || true
+    done
     pkill -x rust-dock >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+    pkill -f "rust-dock" >/dev/null 2>&1 || true
     printf 'hidden\n' > "$STATE_FILE" 2>/dev/null || true
+    printf 'hidden\n' > "/tmp/rust-dock-visible" 2>/dev/null || true
 }
 
 set_dock() {

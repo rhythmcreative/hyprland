@@ -121,7 +121,7 @@ if [ -n "$selected" ]; then
         *"SUPER + Return"*)
             kitty &
             ;;
-        *"SUPER + SPACE"*)
+        *"SUPER + SPACE"*|*"SUPER + space"*|*"SUPER + Space"*)
             "$HOME/.local/bin/rust-dock-toggle-all" &
             ;;
         *"SUPER + I"*)

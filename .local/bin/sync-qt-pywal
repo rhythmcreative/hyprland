@@ -4,7 +4,11 @@
 # Este script actualiza automáticamente los colores de Qt/KDE cuando cambian los colores de PyWal
 
 # Cargar colores de PyWal
-source ~/.cache/wal/colors.sh
+if [ -f "$HOME/.cache/wal/colors.sh" ]; then
+    source "$HOME/.cache/wal/colors.sh"
+else
+    exit 0
+fi
 
 # Función para convertir hex a RGB
 hex_to_rgb() {

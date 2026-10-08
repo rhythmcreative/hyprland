@@ -94,7 +94,7 @@ resolver_wallpaper_paleta() {
 # .gitignore porque los genera pywal, asi que en una maquina donde wal nunca ha
 # corrido no existen y el @import falla siempre.
 escribir_colores_waybar_fallback() {
-    mkdir -p "$HOME/.config/waybar"
+    mkdir -p "$HOME/.config/waybar" "$HOME/.cache/wal"
     cat > "$HOME/.config/waybar/colors-pywal.css" <<EOF
 /* Paleta de reserva. La escribe modern-pywal-sync cuando pywal no ha podido
    generar la suya; se regenera sola en cuanto wal corre. */
@@ -117,6 +117,7 @@ escribir_colores_waybar_fallback() {
 @define-color color14 ${PALETA_FALLBACK_COLOR14};
 @define-color color15 ${PALETA_FALLBACK_COLOR15};
 EOF
+    cp -f "$HOME/.config/waybar/colors-pywal.css" "$HOME/.cache/wal/colors-waybar.css" 2>/dev/null || true
 }
 
 escribir_colores_rofi_fallback() {
@@ -528,6 +529,9 @@ fi
 echo "  • Waybar..."
 if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
     ln -sf "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
+elif [ -f "$HOME/.config/waybar/colors-pywal.css" ]; then
+    mkdir -p "$HOME/.cache/wal"
+    cp -f "$HOME/.config/waybar/colors-pywal.css" "$HOME/.cache/wal/colors-waybar.css" 2>/dev/null || true
 fi
 
 COMPOSITOR_RUNNING=0
@@ -553,14 +557,18 @@ elif [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     ) &
 fi
 
-if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
+if [ "$COMPOSITOR_RUNNING" -eq 1 ] || [ "$STARTUP" -eq 1 ]; then
     # 6b. rust-dock: relanzar para que recoja la paleta nueva
     echo "  • rust-dock..."
     setsid bash -c '
         sleep 0.2
+        for pid in $(for entry in /proc/[0-9]*; do [ -e "$entry/exe" ] && readlink "$entry/exe" 2>/dev/null | grep -q "rust-dock" && echo "${entry#/proc/}"; done); do
+            kill "$pid" 2>/dev/null || true
+        done
         pkill -x rust-dock >/dev/null 2>&1 || true
         pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
         pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+        pkill -f "rust-dock" >/dev/null 2>&1 || true
         sleep 0.15
         "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
     ' >/dev/null 2>&1 </dev/null &
@@ -573,7 +581,7 @@ if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
     echo "  • Dynamic Island (Quickshell)..."
     if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
+        timeout 2 quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
     else
         "$HOME/.local/bin/quickshell-island" &
     fi
@@ -648,7 +656,7 @@ EOF
 # 10. Recargar Hyprland (Bordes y colores de ventana)
 if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     echo "  • Hyprland..."
-    hyprctl reload >/dev/null 2>&1 || true
+    timeout 3 hyprctl reload >/dev/null 2>&1 || true
 fi
 
 # 11. Sincronización completada silenciosamente

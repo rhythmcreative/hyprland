@@ -16,11 +16,36 @@ if [ -z "$WAYLAND_DISPLAY" ]; then
         export WAYLAND_DISPLAY="wayland-1"
     fi
 fi
+buscar_hypr_firma() {
+    local d s dir
+    for dir in "$XDG_RUNTIME_DIR/hypr" "/tmp/hypr"; do
+        [ -d "$dir" ] || continue
+        for d in $(ls -t "$dir" 2>/dev/null); do
+            [ -d "$dir/$d" ] || continue
+            s="$d"
+            [ -n "$s" ] || continue
+            if [ -S "$dir/$d/.socket2.sock" ] ||
+               [ -S "$dir/$d.socket2.sock" ] ||
+               [ -S "$dir/$d/.socket.sock" ]; then
+                printf '%s\n' "$s"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
 if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
-    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
-    if [ -n "$HYPR_SIG" ]; then
+    if HYPR_SIG="$(buscar_hypr_firma)"; then
         export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    elif [ -d "$XDG_RUNTIME_DIR/hypr" ]; then
+        HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+        [ -n "$HYPR_SIG" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
     fi
+fi
+
+if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] && [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+    "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 || true
 fi
 
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
@@ -120,11 +145,13 @@ show_all_bars
 
 # 5. Generar thumbnails faltantes (mantenimiento en background)
 (
+    conv="magick"
+    command -v magick >/dev/null 2>&1 || conv="convert"
     for img in "${images[@]}"; do
         basename_img="${img##*/}"
         preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
         if [[ ! -f "$preview_path" ]]; then
-            magick "$img" -resize 300x200^ -gravity center -extent 300x200 "$preview_path" 2>/dev/null
+            "$conv" "$img" -resize 300x200^ -gravity center -extent 300x200 "$preview_path" 2>/dev/null || true
         fi
     done
 ) &

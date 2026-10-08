@@ -2,19 +2,41 @@
 # Lanza una instancia de rust-dock por cada monitor conectado
 
 RUST_DOCK="$HOME/.local/bin/rust-dock"
-STATE_FILE="/tmp/rust-dock-visible"
+if [ ! -x "$RUST_DOCK" ] && command -v rust-dock >/dev/null 2>&1; then
+    RUST_DOCK=$(command -v rust-dock)
+fi
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+STATE_FILE="$RUNTIME/rust-dock-visible"
 DOCK_CONF="$HOME/.config/rhythm/dock.conf"
+
+dock_pids() {
+    local entry pid exe
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
+        case "$exe" in
+            *rust-dock*) ;;
+            *) continue ;;
+        esac
+        echo "$pid"
+    done
+}
 
 # Estado persistente: si el usuario apago el dock, aqui no se relanza nunca.
 # 'on' cuando no hay fichero, para que una instalacion nueva muestre el dock.
 if [ -f "$DOCK_CONF" ] && [ "$(awk -F= '$1 == "enabled" {print $2; exit}' "$DOCK_CONF")" = "off" ]; then
+    for pid in $(dock_pids); do kill "$pid" 2>/dev/null || true; done
     pkill -x rust-dock >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+    pkill -f "rust-dock" >/dev/null 2>&1 || true
     echo "hidden" > "$STATE_FILE" 2>/dev/null || true
+    echo "hidden" > "/tmp/rust-dock-visible" 2>/dev/null || true
     exit 0
 fi
 
 if [ -z "$XDG_RUNTIME_DIR" ]; then
-    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    export XDG_RUNTIME_DIR="$RUNTIME"
 fi
 
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
@@ -30,10 +52,31 @@ if [ -z "$WAYLAND_DISPLAY" ]; then
     fi
 fi
 
+buscar_hypr_firma() {
+    local d s dir
+    for dir in "$XDG_RUNTIME_DIR/hypr" "/tmp/hypr"; do
+        [ -d "$dir" ] || continue
+        for d in $(ls -t "$dir" 2>/dev/null); do
+            [ -d "$dir/$d" ] || continue
+            s="$d"
+            [ -n "$s" ] || continue
+            if [ -S "$dir/$d/.socket2.sock" ] ||
+               [ -S "$dir/$d.socket2.sock" ] ||
+               [ -S "$dir/$d/.socket.sock" ]; then
+                printf '%s\n' "$s"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
 if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
-    HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
-    if [ -n "$HYPR_SIG" ]; then
+    if HYPR_SIG="$(buscar_hypr_firma)"; then
         export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+    elif [ -d "$XDG_RUNTIME_DIR/hypr" ]; then
+        HYPR_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+        [ -n "$HYPR_SIG" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
     fi
 fi
 
@@ -51,40 +94,17 @@ for _ in {1..6}; do
 done
 
 if [ -z "$monitors" ] || [ "$monitors" = "null" ]; then
-    if ! pgrep -x rust-dock >/dev/null 2>&1; then
+    if ! pgrep -x rust-dock >/dev/null 2>&1 && ! dock_pids | grep -q .; then
         "$RUST_DOCK" >/dev/null 2>&1 &
     fi
     echo "visible" > "$STATE_FILE" 2>/dev/null || true
+    echo "visible" > "/tmp/rust-dock-visible" 2>/dev/null || true
     exit 0
 fi
 
-# PIDs de las INSTANCIAS REALES de rust-dock, y nada mas.
-#
-# Antes se buscaban con `pgrep -f "rust-dock.*-o"`, que compara la LINEA DE
-# COMANDOS completa: no distingue un dock de una terminal, un editor o un script
-# que simplemente mencionen esas dos palabras. Y como despues se hacía `kill`
-# sobre lo que salia, cualquier proceso asi se llevaba por delante. Se ha visto
-# matar shells y scripts que solo tenían "rust-dock" y "-o" en un comando.
-#
-# Aquí se compara el EJECUTABLE, y el `-o` se lee de la linea de comandos de ese
-# proceso concreto. Es el mismo criterio que el lanzador de Waybar, por el mismo
-# motivo escrito allí.
-dock_pids() {
-    local entry pid exe
-    for entry in /proc/[0-9]*; do
-        pid="${entry#/proc/}"
-        exe=$(readlink "$entry/exe" 2>/dev/null) || continue
-        case "$exe" in
-            *rust-dock*) ;;
-            *) continue ;;
-        esac
-        echo "$pid"
-    done
-}
-
 # Monitor (-o) en el que está un dock concreto.
 dock_output() {
-    tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -oP -- '-o\s+\K\S+' || true
+    tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="-o") {print $(i+1); exit}}'
 }
 
 dock_on_monitor() {
@@ -117,3 +137,4 @@ while IFS= read -r monitor; do
 done <<< "$monitors"
 
 echo "visible" > "$STATE_FILE" 2>/dev/null || true
+echo "visible" > "/tmp/rust-dock-visible" 2>/dev/null || true

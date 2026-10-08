@@ -1489,9 +1489,9 @@ configure_debian_repos() {
     # Disable stale or blocking cdrom/dvd entries
     sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
 
-    # Check if active repository entries exist for current debian_codename
+    # Check if active network repository entries exist for current debian_codename
     local has_main=false
-    if grep -v '^[[:space:]]*#' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -E "(deb|Suites:).*(\b${debian_codename}\b|\btesting\b|\bunstable\b|\bsid\b)" >/dev/null 2>&1; then
+    if grep -v '^[[:space:]]*#' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -v 'cdrom:' | grep -E "(deb[[:space:]]+(http|https)|URIs:[[:space:]]*(http|https)).*(\b${debian_codename}\b|\btesting\b|\bunstable\b|\bsid\b)" >/dev/null 2>&1; then
         has_main=true
     fi
 
@@ -1501,6 +1501,9 @@ deb http://deb.debian.org/debian ${debian_codename} main contrib non-free non-fr
 deb http://deb.debian.org/debian ${debian_codename}-updates main contrib non-free non-free-firmware
 deb http://security.debian.org/debian-security ${debian_codename}-security main contrib non-free non-free-firmware
 DEB_EOF
+    else
+        sudo sed -i -E 's/^[[:space:]]*deb[[:space:]]+(http|https):\/\/([^ ]+)[[:space:]]+([^ ]+)[[:space:]]+main([[:space:]]*$)/deb \1:\/\/\2 \3 main contrib non-free non-free-firmware/' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        sudo sed -i -E '/^Components:/ { /contrib/! s/$/ contrib non-free non-free-firmware/ }' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
     fi
 
     # Ensure backports repository is configured
@@ -1508,15 +1511,27 @@ DEB_EOF
         echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
     fi
 
-    # Configure APT pinning for backports so backports packages and dependencies are prioritized
+    # Configure APT pinning specifically for Hyprland ecosystem and required libraries from backports
     sudo mkdir -p /etc/apt/preferences.d
     cat << PREF_EOF | sudo tee /etc/apt/preferences.d/99backports.pref >/dev/null
-Package: *
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
 Pin: release n=${debian_codename}-backports
 Pin-Priority: 500
 
-Package: *
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Pin: release a=${debian_codename}-backports
+Pin-Priority: 500
+
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
 Pin: release a=*-backports
+Pin-Priority: 500
+
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Pin: release a=stable-backports
+Pin-Priority: 500
+
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Pin: release o=Debian Backports
 Pin-Priority: 500
 PREF_EOF
 }
@@ -2982,14 +2997,19 @@ step_software() {
         fi
         if [ "$DISTRO" = "debian" ]; then
             configure_debian_repos
+            step_item "Updating package indices..."
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
-            for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland; do
-                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" "$hpkg" >> "$LOG_FILE" 2>&1 || \
-                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$hpkg" >> "$LOG_FILE" 2>&1 || true
-            done
+            step_item "Installing Hyprland desktop environment..."
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends \
+                hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland >> "$LOG_FILE" 2>&1 || {
+                for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland; do
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends "$hpkg" >> "$LOG_FILE" 2>&1 || \
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$hpkg" >> "$LOG_FILE" 2>&1 || true
+                done
+            }
         elif [ "$DISTRO" = "ubuntu" ]; then
             for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker xdg-desktop-portal-hyprland; do
-                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$hpkg" >> "$LOG_FILE" 2>&1 || true
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$hpkg" >> "$LOG_FILE" 2>&1 || true
             done
         fi
         if ! rhythm_install_with_progress "${#DEBIAN_CORE_PKGS[@]}" "Installing core packages via apt-get..." \
@@ -3014,7 +3034,7 @@ step_software() {
 
         # Extra utilities if available in repos
         for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi libfuse2 fuse3; do
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
         if [ "$DISTRO" = "debian" ] && ! command -v Hyprland >/dev/null 2>&1 && ! command -v hyprland >/dev/null 2>&1; then

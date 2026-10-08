@@ -5,9 +5,11 @@
 # sobre el tema base de GTK para asegurar que NADA se quede "estancado".
 
 STARTUP=0
+INSTALL_MODE=0
 for arg in "$@"; do
     case "$arg" in
         --startup) STARTUP=1 ;;
+        --install) INSTALL_MODE=1 ;;
     esac
 done
 
@@ -168,7 +170,7 @@ if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
     if WALLPAPER_PALETA=$(resolver_wallpaper_paleta) \
         && command -v wal >/dev/null 2>&1; then
         echo "Pywal no habia corrido; se genera la paleta desde $(basename "$WALLPAPER_PALETA")..."
-        wal -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || true
+        timeout 15 wal -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || true
     fi
 fi
 
@@ -263,8 +265,8 @@ fi
 
 # 4. Forzar Recarga de GTK (Reset de tema)
 if command -v gsettings &>/dev/null; then
-    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono"
-    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+    timeout 2 gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
+    timeout 2 gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
 fi
 
 # 5. Sincronizar Qt / KDE (Dolphin, etc.)
@@ -279,11 +281,16 @@ if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
     ln -sf "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
 fi
 
+COMPOSITOR_RUNNING=0
+if [ "$INSTALL_MODE" -ne 1 ] && [ "$STARTUP" -ne 1 ] && command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
+    COMPOSITOR_RUNNING=1
+fi
+
 if [ "$STARTUP" -eq 1 ]; then
     # En arranque de sesión, Waybar ya arranca desde el autostart de Hyprland.
     # Se invoca launch.sh sin --force para asegurar idempotencia sin matar nada.
     "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1 &
-else
+elif [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     # Reinicio rapido en segundo plano (SIGHUP mata a waybar: no usar)
     # --force: la paleta cambio y Waybar no relee el CSS en caliente, asi que aqui
     # si toca reconstruir aunque las barras ya esten donde deben.
@@ -297,15 +304,8 @@ else
     ) &
 fi
 
-# 6b. rust-dock: relanzar para que recoja la paleta nueva
-# El panel del dock lo pinta el gtk.css global (window_bg_color) y GTK4 solo lee
-# ese fichero al arrancar la aplicacion, nunca en caliente: sin relanzarlo, el
-# dock se queda con la paleta anterior. Se hace en segundo plano y con retardo
-# para no cortar la animacion del cambio de wallpaper.
-if [ "$STARTUP" -eq 1 ]; then
-    # En arranque de sesión, rust-dock ya arranca en su autostart.
-    :
-else
+if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
+    # 6b. rust-dock: relanzar para que recoja la paleta nueva
     echo "  • rust-dock..."
     setsid bash -c '
         sleep 0.8
@@ -315,19 +315,19 @@ else
         sleep 0.15
         "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
     ' >/dev/null 2>&1 </dev/null &
-fi
 
-# 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
-pkill -x waybar_auto_hi 2>/dev/null || true
-pkill -SIGUSR2 -x waybar 2>/dev/null || true
-pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
+    # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
+    pkill -x waybar_auto_hi 2>/dev/null || true
+    pkill -SIGUSR2 -x waybar 2>/dev/null || true
+    pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
 
-# 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
-echo "  • Dynamic Island (Quickshell)..."
-if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
-else
-    "$HOME/.local/bin/quickshell-island" &
+    # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
+    echo "  • Dynamic Island (Quickshell)..."
+    if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
+    else
+        "$HOME/.local/bin/quickshell-island" &
+    fi
 fi
 
 # 7. Sincronizar Rofi
@@ -396,7 +396,7 @@ cat > "$HOME/.cache/wal/colors-hyprland-enhanced.conf" <<EOF
 EOF
 
 # 10. Recargar Hyprland (Bordes y colores de ventana)
-if [ "$STARTUP" -ne 1 ]; then
+if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     echo "  • Hyprland..."
     hyprctl reload >/dev/null 2>&1 || true
 fi

@@ -5440,7 +5440,7 @@ mark_step "finished"
 # Calibrate colors
 if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
     rhythm_spin "Calibrating Pywal color scheme..." -- \
-        bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1 || true"
+        bash -c "$HOME/.local/bin/modern-pywal-sync --install >> '$LOG_FILE' 2>&1 || true"
 fi
 
 # --- COMPLETION & REBOOT SCREEN ---

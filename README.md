@@ -7,7 +7,7 @@
 <div align="center">
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793d1?style=for-the-badge&logo=archlinux&logoColor=white "Arch Linux")](https://archlinux.org/)
-[![CachyOS](https://img.shields.io/badge/CachyOS-008080?style=for-the-badge&logo=archlinux&logoColor=white "CachyOS")](https://cachyos.org/)
+[![CachyOS](https://img.shields.io/badge/CachyOS-00A887?style=for-the-badge&logo=cachyos&logoColor=white "CachyOS")](https://cachyos.org/)
 [![Fedora](https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white "Fedora")](https://fedoraproject.org/)
 [![Debian](https://img.shields.io/badge/Debian-A81D33?style=for-the-badge&logo=debian&logoColor=white "Debian")](https://www.debian.org/)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white "Ubuntu")](https://ubuntu.com/)

@@ -215,13 +215,13 @@ rhythm_spin() {
     local msg="$1"; shift
     [ "${1:-}" = "--" ] && shift
     if command -v gum >/dev/null 2>&1 && [ -t 1 ]; then
-        gum spin --spinner dot --title "$msg" -- "$@"
+        gum spin --spinner dot --title "$msg" -- "$@" || return $?
     else
         # The hint goes on its own line: appended to the message it ran past
         # the terminal width and wrapped back to column 0.
         step_item "$msg"
         step_item "This can take several minutes. Live log: ${LOG_FILE:-/tmp/hyprland-install.log}"
-        "$@"
+        "$@" || return $?
     fi
 }
 nixos_spin() {

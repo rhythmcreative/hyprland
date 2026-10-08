@@ -41,11 +41,7 @@ set -uo pipefail
 # El repo puede llegar como argumento, no solo por el entorno. Tiene que ser un
 # argumento porque al re-ejecutarse con sudo se pierde el entorno y el HOME pasa
 # a ser /root: con RHYTHM_DOTFILES_DIR en el entorno, sudo lo borra y el script
-# iba a buscar las plantillas en /root/hyprland, que no existe. Se vio:
-# desplegaba los conf y decia que faltaban el envoltorio y la plantilla.
-#
-#   rhythm-sddm-deploy [repo]            aplica
-#   rhythm-sddm-deploy [repo] --check    solo compara (sin sudo)
+# iba a buscar las plantillas en /root/hyprland, que no existe.
 REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
 modo_check=0
 for arg in "$@"; do
@@ -55,7 +51,25 @@ for arg in "$@"; do
         *) REPO_DIR="$arg" ;;
     esac
 done
-[ -d "$REPO_DIR/sddm" ] || REPO_DIR="$HOME/hyprland"
+
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
+if [ ! -d "$REPO_DIR/sddm" ]; then
+    if [ -n "$_script_dir" ] && [ -d "$_script_dir/sddm" ]; then
+        REPO_DIR="$_script_dir"
+    elif [ -n "${DOTFILES_DIR:-}" ] && [ -d "$DOTFILES_DIR/sddm" ]; then
+        REPO_DIR="$DOTFILES_DIR"
+    elif [ -d "$PWD/sddm" ]; then
+        REPO_DIR="$PWD"
+    elif [ -n "${SUDO_USER:-}" ] && [ -d "/home/$SUDO_USER/hyprland/sddm" ]; then
+        REPO_DIR="/home/$SUDO_USER/hyprland"
+    elif [ -n "${SUDO_USER:-}" ] && [ -d "/home/$SUDO_USER/dotfiles/sddm" ]; then
+        REPO_DIR="/home/$SUDO_USER/dotfiles"
+    elif [ -d "$HOME/hyprland/sddm" ]; then
+        REPO_DIR="$HOME/hyprland"
+    elif [ -d "$HOME/dotfiles/sddm" ]; then
+        REPO_DIR="$HOME/dotfiles"
+    fi
+fi
 
 # El log tiene que quedarse en el home del usuario, no en el de root, que es
 # donde cae si el script se re-ejecuta con sudo.

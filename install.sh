@@ -2482,7 +2482,7 @@ QSEOF
     fi
     rm -f "$tmp_qs"
     step_warn "Quickshell installation was skipped or encountered issues."
-    return 1
+    return 0
 }
 
 install_starship() {
@@ -2490,12 +2490,35 @@ install_starship() {
         return 0
     fi
     step_item "Installing Starship shell prompt..."
-    if curl -sS https://starship.rs/install.sh | sh -s -- -y >> "$LOG_FILE" 2>&1; then
+    if [ "$DISTRO" = "opensuse" ]; then
+        sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm starship >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "fedora" ]; then
+        sudo dnf install -y starship >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "alpine" ]; then
+        sudo apk add --no-cache starship >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
+        sudo pacman -S --needed --noconfirm starship >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    if command -v starship >/dev/null 2>&1; then
+        step_ok "Starship installed."
+        return 0
+    fi
+
+    local tmp_starship
+    tmp_starship=$(mktemp "${TMPDIR:-/tmp}/starship-install.XXXXXX.sh")
+    if curl -fsSL --connect-timeout 10 https://starship.rs/install.sh -o "$tmp_starship" >> "$LOG_FILE" 2>&1; then
+        sudo sh "$tmp_starship" -y -b /usr/local/bin >> "$LOG_FILE" 2>&1 || \
+            sh "$tmp_starship" -y -b "$HOME/.local/bin" >> "$LOG_FILE" 2>&1 || true
+    fi
+    rm -f "$tmp_starship"
+
+    if command -v starship >/dev/null 2>&1 || [ -x "$HOME/.local/bin/starship" ]; then
         step_ok "Starship installed."
         return 0
     else
         step_warn "Starship installation skipped or failed."
-        return 1
+        return 0
     fi
 }
 
@@ -2622,11 +2645,11 @@ step_software() {
         done
         step_ok "Core packages installed."
 
-        install_themes_and_fonts
-        install_quickshell
-        install_starship
-        install_rust_dock
-        auto_detect_drivers
+        install_themes_and_fonts || true
+        install_quickshell || true
+        install_starship || true
+        install_rust_dock || true
+        auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         sudo -v
@@ -2779,11 +2802,11 @@ step_software() {
         done
         step_ok "Core packages installed."
 
-        install_themes_and_fonts
-        install_quickshell
-        install_starship
-        install_rust_dock
-        auto_detect_drivers
+        install_themes_and_fonts || true
+        install_quickshell || true
+        install_starship || true
+        install_rust_dock || true
+        auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "alpine" ]; then
         sudo -v
@@ -2915,11 +2938,11 @@ step_software() {
         done
         step_ok "Core packages installed."
 
-        install_themes_and_fonts
-        install_quickshell
-        install_starship
-        install_rust_dock
-        auto_detect_drivers
+        install_themes_and_fonts || true
+        install_quickshell || true
+        install_starship || true
+        install_rust_dock || true
+        auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "opensuse" ]; then
         sudo -v
@@ -3045,11 +3068,11 @@ step_software() {
         done
         step_ok "Core packages installed."
 
-        install_themes_and_fonts
-        install_quickshell
-        install_starship
-        install_rust_dock
-        auto_detect_drivers
+        install_themes_and_fonts || true
+        install_quickshell || true
+        install_starship || true
+        install_rust_dock || true
+        auto_detect_drivers || true
         return 0
     fi
 

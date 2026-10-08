@@ -368,6 +368,9 @@ rhythm_install_with_progress() {
         fi
     done
     local ret="${PIPESTATUS[0]}"
+    if [[ "${cmd[*]}" =~ zypper ]] && { [ "$ret" -eq 106 ] || [ "$ret" -eq 100 ] || [ "$ret" -eq 102 ] || [ "$ret" -eq 103 ] || [ "$ret" -eq 104 ]; }; then
+        ret=0
+    fi
     render_progress_bar "$total" "$total" "Installation complete."
     [ -t 1 ] && printf "\n"
     return "$ret"
@@ -1334,7 +1337,15 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --non-interactive install git
+            for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' '$NF ~ /^[[:space:]]*(cd|dvd|iso):\// {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}'); do
+                [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" 2>/dev/null || true
+            done
+            sudo zypper --no-cd --non-interactive install --no-confirm git || {
+                _rc=$?
+                if [ "$_rc" -ne 106 ] && [ "$_rc" -ne 100 ] && [ "$_rc" -ne 102 ] && [ "$_rc" -ne 103 ] && [ "$_rc" -ne 104 ]; then
+                    exit "$_rc"
+                fi
+            }
         else
             sudo pacman -S --needed --noconfirm git
         fi
@@ -1736,12 +1747,15 @@ CHARM_EOF
             rm -f "$tmp_gum"
         fi
     elif [ "$DISTRO" = "opensuse" ]; then
-        # Ensure Packman repository is enabled for multimedia codecs and tools if possible
-        sudo zypper --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
+        # Disable installation media repositories (CD/DVD) so zypper does not prompt or skip
+        for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' '$NF ~ /^[[:space:]]*(cd|dvd|iso):\// {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}'); do
+            [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" >> "$LOG_FILE" 2>&1 || true
+        done
+        sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
         local suse_bootstrap=(git curl zsh fzf stow tar xz which gzip shadow python3 python3-pipx)
-        sudo zypper --non-interactive install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then
@@ -1939,15 +1953,15 @@ EOF
     elif [ "$DISTRO" = "opensuse" ]; then
         if [ "$IS_NVIDIA" = true ]; then
             step_item "Preparing openSUSE NVIDIA drivers..."
-            sudo zypper --non-interactive install --no-confirm kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
-            sudo zypper --non-interactive install --no-confirm Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Intel"* ]]; then
             step_item "Intel GPU detected. Adding hardware acceleration drivers..."
-            sudo zypper --non-interactive install --no-confirm intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
 
         if [ "$IS_NVIDIA" = true ]; then
@@ -2158,7 +2172,7 @@ install_rust_dock() {
     elif [ "$DISTRO" = "alpine" ]; then
         sudo apk add --no-cache rust cargo pkgconf gtk4.0-dev gtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "opensuse" ]; then
-        sudo zypper --non-interactive install --no-confirm rust cargo pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive install --no-confirm rust cargo pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
     fi
@@ -2181,7 +2195,7 @@ install_rust_dock() {
             sudo apk add --no-cache cargo rust >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
             step_item "Installing Cargo & Rust on openSUSE..."
-            sudo zypper --non-interactive install --no-confirm cargo rust >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm cargo rust >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -2865,7 +2879,7 @@ step_software() {
                 suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
             fi
             sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/X11:Wayland/${suse_type}/X11:Wayland.repo" >> "$LOG_FILE" 2>&1 || true
-            sudo zypper --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
         fi
 
         local OPENSUSE_CORE_PKGS=(
@@ -2966,20 +2980,20 @@ step_software() {
         )
 
         if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
-            sudo zypper --non-interactive install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
+            sudo zypper --no-cd --non-interactive install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
             local total_s=${#OPENSUSE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
-                sudo zypper --non-interactive install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo zypper --no-cd --non-interactive install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             [ "$total_s" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
 
         # Extra utilities if available in repos
         for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick; do
-            sudo zypper --non-interactive install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
 
@@ -3914,8 +3928,8 @@ step_applications() {
                     *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
                     *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
-                    *steam*) sudo zypper --non-interactive install --no-confirm steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
-                    *) sudo zypper --non-interactive install --no-confirm "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo zypper --no-cd --non-interactive install --no-confirm steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo zypper --no-cd --non-interactive install --no-confirm "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
             [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
@@ -4549,7 +4563,7 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --non-interactive install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi

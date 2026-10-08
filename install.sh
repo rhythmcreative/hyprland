@@ -50,6 +50,11 @@ fi
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
 
+IS_NIXOS=0
+if [ -f /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }; then
+    IS_NIXOS=1
+fi
+
 # Robust reboot helper that ignores systemd inhibitors (such as active APT or SSH sessions)
 rhythm_reboot() {
     sudo systemctl reboot -i 2>/dev/null || sudo reboot -f 2>/dev/null || sudo reboot 2>/dev/null || true
@@ -4404,6 +4409,14 @@ MONCONF
     done
     chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
     [ -f "$HOME/.local/bin/system-ota" ] && ln -sf "$HOME/.local/bin/system-ota" "$HOME/.local/bin/ota-updater" 2>/dev/null || true
+
+    # Persist repository checkout for rhythm-doctor and system-ota updates
+    if [ ! -d "$HOME/hyprland/.git" ] && [ -d "$DOTFILES_DIR/.git" ]; then
+        step_item "Setting up local repository checkout at $HOME/hyprland..."
+        mkdir -p "$HOME/hyprland"
+        cp -a "$DOTFILES_DIR/." "$HOME/hyprland/" 2>/dev/null || true
+    fi
+
     step_ok "Executables deployed."
 
     # Shell and GTK dotfiles
@@ -5109,7 +5122,7 @@ DESK_EOF
     done
 
     # Backlight permissions: configure udev rule with uaccess and ensure brightnessctl works immediately
-    if [ "$IS_NIXOS" -eq 0 ] && [ -d /etc/udev/rules.d ]; then
+    if [ "${IS_NIXOS:-0}" -eq 0 ] && [ -d /etc/udev/rules.d ]; then
         step_item "Configuring backlight hardware permissions..."
         cat << 'EOF' | sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null 2>&1 || true
 # Give logged-in seat user read/write access to backlight and keyboard LEDs
@@ -5129,7 +5142,7 @@ EOF
     fi
 
     # Battery charge limit permissions for Dynamic Island and laptops
-    if [ "$IS_NIXOS" -eq 0 ]; then
+    if [ "${IS_NIXOS:-0}" -eq 0 ]; then
         step_item "Configuring battery charge limit permissions..."
         sudo mkdir -p /etc/sudoers.d /usr/local/lib/rhythm
         local bat_limit_bin="$DOTFILES_DIR/.local/bin/battery-charge-limit"
@@ -5165,7 +5178,9 @@ EOF
     # fallo aqui no revierte una instalacion que por lo demas esta bien.
     if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
         step_item "Verifying the installation..."
-        "$HOME/.local/bin/rhythm-doctor" --verify >> "$LOG_FILE" 2>&1 \
+        local _doc_repo="$HOME/hyprland"
+        [ -d "$DOTFILES_DIR/.git" ] && _doc_repo="$DOTFILES_DIR"
+        RHYTHM_DOTFILES_DIR="$_doc_repo" "$HOME/.local/bin/rhythm-doctor" --verify >> "$LOG_FILE" 2>&1 \
             && step_ok "Installation verified." \
             || step_warn "Doctor found issues. Check $LOG_FILE or run rhythm-doctor."
     fi

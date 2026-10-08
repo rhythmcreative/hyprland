@@ -3570,24 +3570,32 @@ unified_app_search() {
 # --- DISPLAY MANAGER DETECTION ---
 detect_existing_display_manager() {
     local dm
-    for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
+    for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim lemurs emptty nodm; do
         if command -v systemctl >/dev/null 2>&1; then
-            if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1; then
+            if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-active "$dm.service" >/dev/null 2>&1 || systemctl is-enabled "$dm" >/dev/null 2>&1 || systemctl is-active "$dm" >/dev/null 2>&1; then
                 echo "$dm"
                 return 0
             fi
-        elif command -v rc-status >/dev/null 2>&1; then
-            if rc-status default 2>/dev/null | grep -q "$dm" || [ -f "/etc/runlevels/default/$dm" ]; then
+        elif command -v rc-status >/dev/null 2>&1 || command -v rc-service >/dev/null 2>&1; then
+            if (command -v rc-status >/dev/null 2>&1 && rc-status default 2>/dev/null | grep -q "$dm") || [ -f "/etc/runlevels/default/$dm" ] || [ -f "/etc/runlevels/boot/$dm" ]; then
                 echo "$dm"
                 return 0
             fi
         fi
     done
-    if [ -e /etc/systemd/system/display-manager.service ]; then
+    if [ -e /etc/systemd/system/display-manager.service ] || [ -L /etc/systemd/system/display-manager.service ]; then
         local target
         target=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
         if [ -n "$target" ] && [[ "$target" != *"sddm"* ]]; then
             basename "$target" .service
+            return 0
+        fi
+    fi
+    if [ -f /etc/sysconfig/displaymanager ]; then
+        local suse_dm
+        suse_dm=$(grep -E '^DISPLAYMANAGER=' /etc/sysconfig/displaymanager 2>/dev/null | tr -d '"' | cut -d= -f2 | tr -d ' ' || true)
+        if [ -n "$suse_dm" ] && [ "$suse_dm" != "sddm" ]; then
+            echo "$suse_dm"
             return 0
         fi
     fi
@@ -5008,36 +5016,79 @@ step_system() {
         done
     fi
 
+    # Ensure Hyprland desktop entry exists in wayland-sessions for ALL display managers
+    sudo mkdir -p /usr/share/wayland-sessions
+    if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+        cat << 'DESK_EOF' | sudo tee /usr/share/wayland-sessions/hyprland.desktop > /dev/null
+[Desktop Entry]
+Name=Hyprland
+Comment=An intelligent dynamic tiling Wayland compositor
+Exec=Hyprland
+Type=Application
+DesktopNames=Hyprland
+DESK_EOF
+        sudo chmod 644 /usr/share/wayland-sessions/hyprland.desktop 2>/dev/null || true
+    fi
+
     if [ "${ENABLE_SDDM:-true}" = true ]; then
         local other_dm
         other_dm=$(detect_existing_display_manager || true)
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
             step_item "Disabling $other_dm in favor of SDDM..."
             if command -v systemctl >/dev/null 2>&1; then
+                if [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ]; then
+                    sudo systemctl stop "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+                    sudo systemctl stop "$other_dm" >> "$LOG_FILE" 2>&1 || true
+                fi
                 sudo systemctl disable "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
                 sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
-            elif command -v rc-service >/dev/null 2>&1; then
+            elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
                 sudo rc-update del "$other_dm" default >> "$LOG_FILE" 2>&1 || true
+                sudo rc-update del "$other_dm" boot >> "$LOG_FILE" 2>&1 || true
             fi
         fi
 
         # Disable all other common display managers to avoid conflicts with display-manager.service alias
-        for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim; do
+        for dm in gdm gdm3 lightdm lxdm greetd ly cosmic-greeter slim lemurs emptty nodm; do
             if [ "$dm" != "sddm" ]; then
                 if command -v systemctl >/dev/null 2>&1; then
-                    sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
-                elif command -v rc-service >/dev/null 2>&1; then
+                    if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-enabled "$dm" >/dev/null 2>&1; then
+                        if [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ]; then
+                            sudo systemctl stop "$dm.service" >> "$LOG_FILE" 2>&1 || true
+                            sudo systemctl stop "$dm" >> "$LOG_FILE" 2>&1 || true
+                        fi
+                        sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
+                        sudo systemctl disable "$dm" >> "$LOG_FILE" 2>&1 || true
+                    fi
+                elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
                     sudo rc-update del "$dm" default >> "$LOG_FILE" 2>&1 || true
+                    sudo rc-update del "$dm" boot >> "$LOG_FILE" 2>&1 || true
                 fi
             fi
         done
 
         # If display-manager.service symlink already exists and points to something else, remove or force it
-        if [ -e /etc/systemd/system/display-manager.service ]; then
+        if [ -e /etc/systemd/system/display-manager.service ] || [ -L /etc/systemd/system/display-manager.service ]; then
             local current_target
             current_target=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
-            if [ -n "$current_target" ] && [[ "$current_target" != *"sddm"* ]]; then
+            if [ -z "$current_target" ] || [[ "$current_target" != *"sddm"* ]]; then
                 sudo rm -f /etc/systemd/system/display-manager.service >> "$LOG_FILE" 2>&1 || true
+            fi
+        fi
+
+        # openSUSE display-manager handling via /etc/sysconfig/displaymanager and update-alternatives
+        if [ "$DISTRO" = "opensuse" ] || [ -f /etc/sysconfig/displaymanager ]; then
+            if [ -f /etc/sysconfig/displaymanager ]; then
+                if grep -q "^DISPLAYMANAGER=" /etc/sysconfig/displaymanager; then
+                    sudo sed -i 's/^DISPLAYMANAGER=.*/DISPLAYMANAGER="sddm"/' /etc/sysconfig/displaymanager 2>/dev/null || true
+                else
+                    echo 'DISPLAYMANAGER="sddm"' | sudo tee -a /etc/sysconfig/displaymanager >/dev/null 2>&1 || true
+                fi
+            fi
+            if command -v update-alternatives >/dev/null 2>&1; then
+                if [ -e /usr/lib/X11/displaymanagers/sddm ]; then
+                    sudo update-alternatives --set default-displaymanager /usr/lib/X11/displaymanagers/sddm >> "$LOG_FILE" 2>&1 || true
+                fi
             fi
         fi
 
@@ -5045,9 +5096,14 @@ step_system() {
         if command -v debconf-set-selections >/dev/null 2>&1; then
             echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+            echo "gdm3 shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+            echo "lightdm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
         if [ -d /etc/X11 ] || [ -f /etc/X11/default-display-manager ]; then
             echo "/usr/bin/sddm" | sudo tee /etc/X11/default-display-manager >/dev/null 2>&1 || true
+        fi
+        if command -v dpkg-reconfigure >/dev/null 2>&1 && dpkg -l sddm >/dev/null 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -fnoninteractive sddm >> "$LOG_FILE" 2>&1 || true
         fi
 
         # Ensure sddm user has access to video/render devices for Wayland greeter
@@ -5066,41 +5122,38 @@ step_system() {
             [ -d /var/lib/sddm ] && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
 
-        # Ensure Hyprland desktop entry exists in wayland-sessions
-        sudo mkdir -p /usr/share/wayland-sessions
-        if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
-            cat << 'DESK_EOF' | sudo tee /usr/share/wayland-sessions/hyprland.desktop > /dev/null
-[Desktop Entry]
-Name=Hyprland
-Comment=An intelligent dynamic tiling Wayland compositor
-Exec=Hyprland
-Type=Application
-DesktopNames=Hyprland
-DESK_EOF
-        fi
-
         # Preconfigure SDDM default session to Hyprland
         sudo mkdir -p /var/lib/sddm
         if [ ! -f /var/lib/sddm/state.conf ]; then
             printf "[Last]\nSession=hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
-            sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
+            id -u sddm >/dev/null 2>&1 && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
         fi
 
         step_item "Enabling SDDM display manager..."
         if command -v systemctl >/dev/null 2>&1; then
-            if systemctl cat sddm.service >/dev/null 2>&1; then
-                sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
+            if systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat sddm >/dev/null 2>&1; then
+                sudo systemctl enable --force sddm.service >> "$LOG_FILE" 2>&1 || sudo systemctl enable --force sddm >> "$LOG_FILE" 2>&1 || sudo systemctl enable sddm >> "$LOG_FILE" 2>&1 || true
                 sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
                 step_ok "SDDM enabled as default display manager."
+            elif [ "$DISTRO" = "opensuse" ]; then
+                sudo systemctl enable display-manager.service >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl set-default graphical.target >> "$LOG_FILE" 2>&1 || true
+                step_ok "SDDM enabled via openSUSE display-manager.service."
             else
                 step_warn "SDDM service unit not found on system."
             fi
-        elif command -v rc-service >/dev/null 2>&1; then
+        elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
             sudo rc-update add sddm default >> "$LOG_FILE" 2>&1 || true
             step_ok "SDDM enabled as default display manager via OpenRC."
         fi
     else
-        step_ok "SDDM service activation skipped (existing display manager retained)."
+        local kept_dm
+        kept_dm=$(detect_existing_display_manager || true)
+        if [ -n "$kept_dm" ]; then
+            step_ok "SDDM service activation skipped (retaining '$kept_dm' as display manager)."
+        else
+            step_ok "SDDM service activation skipped (existing display manager retained)."
+        fi
     fi
 
     # PAM gnome-keyring unlock
@@ -5490,9 +5543,9 @@ elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
         rhythm_reboot
-    elif [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && systemctl cat sddm.service >/dev/null 2>&1 || [ -x /etc/init.d/sddm ]; }; then
+    elif [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl start sddm || rhythm_reboot
+            sudo systemctl start sddm || sudo systemctl start display-manager || rhythm_reboot
         else
             sudo rc-service sddm start || rhythm_reboot
         fi
@@ -5506,10 +5559,10 @@ elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         rhythm_reboot
     fi
 else
-    if [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && systemctl cat sddm.service >/dev/null 2>&1 || [ -x /etc/init.d/sddm ]; }; then
+    if [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if confirm_prompt "Start SDDM login manager now?"; then
             if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl start sddm || {
+                sudo systemctl start sddm || sudo systemctl start display-manager || {
                     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
                     rhythm_reboot
                 }

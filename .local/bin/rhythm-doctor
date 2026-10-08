@@ -227,7 +227,18 @@ check_greeter() {
         return
     fi
     if command -v systemctl >/dev/null 2>&1; then
-        if ! systemctl is-enabled --quiet sddm 2>/dev/null && { systemctl is-enabled --quiet gdm 2>/dev/null || systemctl is-enabled --quiet lightdm 2>/dev/null; }; then
+        if ! systemctl is-enabled --quiet sddm 2>/dev/null && { \
+            systemctl is-enabled --quiet gdm 2>/dev/null || \
+            systemctl is-enabled --quiet gdm3 2>/dev/null || \
+            systemctl is-enabled --quiet lightdm 2>/dev/null || \
+            systemctl is-enabled --quiet greetd 2>/dev/null || \
+            systemctl is-enabled --quiet ly 2>/dev/null || \
+            systemctl is-enabled --quiet lxdm 2>/dev/null || \
+            systemctl is-enabled --quiet cosmic-greeter 2>/dev/null || \
+            systemctl is-enabled --quiet lemurs 2>/dev/null || \
+            systemctl is-enabled --quiet slim 2>/dev/null || \
+            systemctl is-enabled --quiet emptty 2>/dev/null || \
+            systemctl is-enabled --quiet nodm 2>/dev/null; }; then
             note "another display manager is active; skipping SDDM greeter check"
             return
         fi
@@ -297,10 +308,18 @@ check_runtime() {
     if systemctl is-enabled --quiet sddm 2>/dev/null \
         || systemctl is-enabled --quiet display-manager 2>/dev/null \
         || systemctl is-enabled --quiet gdm 2>/dev/null \
+        || systemctl is-enabled --quiet gdm3 2>/dev/null \
         || systemctl is-enabled --quiet lightdm 2>/dev/null \
-        || systemctl is-enabled --quiet greetd 2>/dev/null; then
+        || systemctl is-enabled --quiet greetd 2>/dev/null \
+        || systemctl is-enabled --quiet ly 2>/dev/null \
+        || systemctl is-enabled --quiet lxdm 2>/dev/null \
+        || systemctl is-enabled --quiet cosmic-greeter 2>/dev/null \
+        || systemctl is-enabled --quiet lemurs 2>/dev/null \
+        || systemctl is-enabled --quiet slim 2>/dev/null \
+        || systemctl is-enabled --quiet emptty 2>/dev/null \
+        || systemctl is-enabled --quiet nodm 2>/dev/null; then
         ok "display manager starts at boot"
-    elif [ -x /sbin/openrc ] && (rc-status default 2>/dev/null | grep -qE "sddm|display-manager|lightdm|greetd"); then
+    elif [ -x /sbin/openrc ] && (rc-status default 2>/dev/null | grep -qE "sddm|display-manager|lightdm|greetd|ly|lxdm|lemurs|slim|emptty|nodm"); then
         ok "display manager starts at boot"
     else
         bad "no display manager is enabled (no login screen after reboot)"

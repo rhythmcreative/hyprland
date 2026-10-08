@@ -280,6 +280,33 @@ EOF
     cp -f "$HOME/.cache/wal/colors-rofi-dark.rasi" "$HOME/.config/rofi/colors-rofi-dark.rasi" 2>/dev/null || true
 }
 
+escribir_colores_hyprland_fallback() {
+    mkdir -p "$HOME/.cache/wal"
+    cat > "$HOME/.cache/wal/colors-hyprland.conf" <<EOF
+\$color0 = rgb(${PALETA_FALLBACK_COLOR0#'#'})
+\$color1 = rgb(${PALETA_FALLBACK_COLOR1#'#'})
+\$color2 = rgb(${PALETA_FALLBACK_COLOR2#'#'})
+\$color3 = rgb(${PALETA_FALLBACK_COLOR3#'#'})
+\$color4 = rgb(${PALETA_FALLBACK_COLOR4#'#'})
+\$color5 = rgb(${PALETA_FALLBACK_COLOR5#'#'})
+\$color6 = rgb(${PALETA_FALLBACK_COLOR6#'#'})
+\$color7 = rgb(${PALETA_FALLBACK_COLOR7#'#'})
+\$color8 = rgb(${PALETA_FALLBACK_COLOR8#'#'})
+\$color9 = rgb(${PALETA_FALLBACK_COLOR9#'#'})
+\$color10 = rgb(${PALETA_FALLBACK_COLOR10#'#'})
+\$color11 = rgb(${PALETA_FALLBACK_COLOR11#'#'})
+\$color12 = rgb(${PALETA_FALLBACK_COLOR12#'#'})
+\$color13 = rgb(${PALETA_FALLBACK_COLOR13#'#'})
+\$color14 = rgb(${PALETA_FALLBACK_COLOR14#'#'})
+\$color15 = rgb(${PALETA_FALLBACK_COLOR15#'#'})
+\$background = rgb(${PALETA_FALLBACK_BACKGROUND#'#'})
+\$foreground = rgb(${PALETA_FALLBACK_FOREGROUND#'#'})
+\$cursor = rgb(${PALETA_FALLBACK_FOREGROUND#'#'})
+\$wallpaper = default.jpg
+EOF
+    cp -f "$HOME/.cache/wal/colors-hyprland.conf" "$HOME/.cache/wal/colors-hyprland-enhanced.conf" 2>/dev/null || true
+}
+
 escribir_colores_rofi_dark() {
     mkdir -p "$HOME/.cache/wal"
     cat > "$HOME/.cache/wal/colors-rofi-dark.rasi" <<EOF
@@ -461,6 +488,7 @@ source "$HOME/.cache/wal/colors.sh"
 # sobreescriban si pywal ha dejado los suyos.
 [ -e "$HOME/.config/waybar/colors-pywal.css" ] || escribir_colores_waybar_fallback
 [ -e "$HOME/.config/rofi/colors-pywal.rasi" ] || escribir_colores_rofi_fallback
+[ -e "$HOME/.cache/wal/colors-hyprland.conf" ] || escribir_colores_hyprland_fallback
 
 echo "Iniciando Sincronización Maestra..."
 
@@ -654,6 +682,7 @@ cat > "$HOME/.cache/wal/colors-hyprland-enhanced.conf" <<EOF
 \$bg_dark = \$color0
 \$bg_medium = \$color8
 EOF
+cp -f "$HOME/.cache/wal/colors-hyprland-enhanced.conf" "$HOME/.cache/wal/colors-hyprland.conf" 2>/dev/null || true
 
 # 10. Recargar Hyprland (Bordes y colores de ventana)
 if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then

@@ -2983,7 +2983,7 @@ step_software() {
         if [ "$DISTRO" = "debian" ]; then
             configure_debian_repos
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
-            for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker xdg-desktop-portal-hyprland; do
+            for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland; do
                 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" "$hpkg" >> "$LOG_FILE" 2>&1 || \
                 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$hpkg" >> "$LOG_FILE" 2>&1 || true
             done
@@ -3000,8 +3000,8 @@ step_software() {
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
                 if [ "$DISTRO" = "debian" ]; then
-                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || \
-                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || \
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
                 else
                     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
                 fi
@@ -3016,6 +3016,13 @@ step_software() {
         for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi libfuse2 fuse3; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
+
+        if [ "$DISTRO" = "debian" ] && ! command -v Hyprland >/dev/null 2>&1 && ! command -v hyprland >/dev/null 2>&1; then
+            step_warn "Hyprland binary not found in PATH."
+            if [ "$debian_codename" = "bookworm" ]; then
+                step_warn "Debian 12 Bookworm does not include native Hyprland. Upgrade to Debian 13 (Trixie) is strongly recommended."
+            fi
+        fi
         step_ok "Core packages installed."
 
         install_themes_and_fonts || true
@@ -4209,7 +4216,6 @@ step_applications() {
                 render_progress_bar "$app_idx" "$total_app" "Installing $app..."
                 case "$app" in
                     *brave*)
-                        # Setup official Brave browser repo for Debian/Ubuntu if requested
                         if ! command -v brave-browser >/dev/null 2>&1; then
                             sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg >> "$LOG_FILE" 2>&1 || true
                             sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources >> "$LOG_FILE" 2>&1 || true
@@ -4217,12 +4223,64 @@ step_applications() {
                             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y brave-browser >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.brave.Browser >> "$LOG_FILE" 2>&1 || true
                         fi
                         ;;
+                    *google-chrome*)
+                        if ! command -v google-chrome >/dev/null 2>&1; then
+                            sudo curl -fsSLo /usr/share/keyrings/google-chrome.gpg https://dl.google.com/linux/linux_signing_key.pub >> "$LOG_FILE" 2>&1 || true
+                            echo "deb [signed-by=/usr/share/keyrings/google-chrome.gpg arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null 2>&1 || true
+                            sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+                            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y google-chrome-stable >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.google.Chrome >> "$LOG_FILE" 2>&1 || true
+                        fi
+                        ;;
+                    *microsoft-edge*) sudo flatpak install -y --system flathub com.microsoft.Edge >> "$LOG_FILE" 2>&1 || true ;;
+                    *zen-browser*)    sudo flatpak install -y --system flathub app.zen_browser.zen >> "$LOG_FILE" 2>&1 || true ;;
+                    *firefox*)        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox-esr firefox >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.mozilla.firefox >> "$LOG_FILE" 2>&1 || true ;;
+                    *chromium*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y chromium >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.chromium.Chromium >> "$LOG_FILE" 2>&1 || true ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
-                    *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
-                    *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
-                    *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
-                    *steam*) sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam >> "$LOG_FILE" 2>&1 || true ;;
-                    *) sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                    *telegram*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y telegram-desktop >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.telegram.desktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *slack*)          sudo flatpak install -y --system flathub com.slack.Slack >> "$LOG_FILE" 2>&1 || true ;;
+                    *zapzap*)         sudo flatpak install -y --system flathub com.rtosta.zapzap >> "$LOG_FILE" 2>&1 || true ;;
+                    *spotify*)        sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
+                    *code*|*visual-studio-code*)
+                        if ! command -v code >/dev/null 2>&1; then
+                            sudo curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg >> "$LOG_FILE" 2>&1 || true
+                            echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null 2>&1 || true
+                            sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+                            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y code >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true
+                        fi
+                        ;;
+                    *neovim*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y neovim >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub io.neovim.nvim >> "$LOG_FILE" 2>&1 || true ;;
+                    *obsidian*)       sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *libreoffice*)    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libreoffice >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.libreoffice.LibreOffice >> "$LOG_FILE" 2>&1 || true ;;
+                    *localsend*)      sudo flatpak install -y --system flathub org.localsend.localsend_app >> "$LOG_FILE" 2>&1 || true ;;
+                    *docker*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose docker-compose-v2 >> "$LOG_FILE" 2>&1 || true ;;
+                    *node*)           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs npm >> "$LOG_FILE" 2>&1 || true ;;
+                    *python*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv black python3-black ruff >> "$LOG_FILE" 2>&1 || true ;;
+                    *gitkraken*)      sudo flatpak install -y --system flathub com.axosoft.GitKraken >> "$LOG_FILE" 2>&1 || true ;;
+                    *ollama*)         curl -fsSL https://ollama.com/install.sh | sh >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*)
+                        sudo dpkg --add-architecture i386 >> "$LOG_FILE" 2>&1 || true
+                        sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
+                        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam-installer >> "$LOG_FILE" 2>&1 || \
+                        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y steam >> "$LOG_FILE" 2>&1 || \
+                        sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true
+                        ;;
+                    *lutris*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y lutris >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub net.lutris.Lutris >> "$LOG_FILE" 2>&1 || true ;;
+                    *heroic*)         sudo flatpak install -y --system flathub com.heroicgameslauncher.hgl >> "$LOG_FILE" 2>&1 || true ;;
+                    *obs-studio*)     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y obs-studio >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.obsproject.Studio >> "$LOG_FILE" 2>&1 || true ;;
+                    *vlc*)            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y vlc >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.videolan.VLC >> "$LOG_FILE" 2>&1 || true ;;
+                    *mpv*)            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mpv >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub io.mpv.Mpv >> "$LOG_FILE" 2>&1 || true ;;
+                    *gimp*)           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gimp >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.gimp.GIMP >> "$LOG_FILE" 2>&1 || true ;;
+                    *inkscape*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y inkscape >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.inkscape.Inkscape >> "$LOG_FILE" 2>&1 || true ;;
+                    *kdenlive*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y kdenlive >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.kde.kdenlive >> "$LOG_FILE" 2>&1 || true ;;
+                    *blender*)        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.blender.Blender >> "$LOG_FILE" 2>&1 || true ;;
+                    *audacity*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y audacity >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.audacityteam.Audacity >> "$LOG_FILE" 2>&1 || true ;;
+                    *virtualbox*)     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y virtualbox virtualbox-qt >> "$LOG_FILE" 2>&1 || true ;;
+                    *timeshift*)      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y timeshift >> "$LOG_FILE" 2>&1 || true ;;
+                    *thunar*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y thunar thunar-archive-plugin thunar-volman >> "$LOG_FILE" 2>&1 || true ;;
+                    *dolphin*)        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dolphin ark >> "$LOG_FILE" 2>&1 || true ;;
+                    *btop*)           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y btop >> "$LOG_FILE" 2>&1 || true ;;
+                    *fastfetch*)      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y fastfetch >> "$LOG_FILE" 2>&1 || true ;;
+                    *)                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
             [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
@@ -4948,6 +5006,10 @@ step_system() {
         sudo mkdir -p /usr/share/sddm/themes
         sudo rm -rf /usr/share/sddm/themes/sddm-astronaut-theme
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+        if [ -f /usr/share/sddm/themes/sddm-astronaut-theme/theme.conf ]; then
+            sudo mkdir -p /usr/share/sddm/themes/sddm-astronaut-theme/Themes
+            sudo cp -f /usr/share/sddm/themes/sddm-astronaut-theme/theme.conf /usr/share/sddm/themes/sddm-astronaut-theme/Themes/theme1.conf 2>/dev/null || true
+        fi
         sudo chmod -R a+rX /usr/share/sddm/themes/sddm-astronaut-theme
 
         # Deploy theme fonts to system font library
@@ -4975,7 +5037,11 @@ step_system() {
                 else
                     sudo sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
                 fi
+            else
+                printf "\n[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee -a /etc/sddm.conf >/dev/null || true
             fi
+        else
+            printf "[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee /etc/sddm.conf >/dev/null || true
         fi
 
         # El greeter corre en WAYLAND, no en X11, y esto no es estetico.

@@ -97,7 +97,26 @@ SDDM_CURSOR_THEME="Bibata-Modern-Ice"
 # ── contenido generado ──────────────────────────────────────────────────────
 
 conf_sddm() {
-    cat <<EOF
+    local sddm_ver=""
+    if command -v sddm >/dev/null 2>&1; then
+        sddm_ver=$(sddm --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
+    fi
+    local major=0 minor=0
+    if [ -n "$sddm_ver" ]; then
+        major=$(echo "$sddm_ver" | cut -d. -f1)
+        minor=$(echo "$sddm_ver" | cut -d. -f2)
+    fi
+    if [ "$major" -eq 0 ] && [ "$minor" -lt 20 ]; then
+        # SDDM < 0.20 (e.g. Debian 12 Bookworm) does not support DisplayServer=wayland
+        cat <<EOF
+[General]
+DisplayServer=x11
+
+[X11]
+DisplayCommand=/etc/sddm/Xsetup
+EOF
+    else
+        cat <<EOF
 [General]
 DisplayServer=wayland
 GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
@@ -105,6 +124,7 @@ GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 [Wayland]
 CompositorCommand=/usr/local/lib/rhythm/sddm-greeter-monitor
 EOF
+    fi
 }
 
 conf_cursor() {
@@ -256,7 +276,12 @@ if [ -f /etc/sddm.conf ]; then
         else
             sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
         fi
+    else
+        printf "\n[Theme]\nCurrent=sddm-astronaut-theme\n" >> /etc/sddm.conf 2>/dev/null || true
     fi
+else
+    mkdir -p /etc
+    printf "[Theme]\nCurrent=sddm-astronaut-theme\n" > /etc/sddm.conf 2>/dev/null || true
 fi
 
 # Xsetup es la red de seguridad por si hay que volver a X11. Vive en /etc, asi
@@ -275,6 +300,11 @@ if [ -d "$REPO_DIR/sddm/sddm-astronaut-theme" ]; then
     if [ ! -d /usr/share/sddm/themes/sddm-astronaut-theme ] || [ ! -f /usr/share/sddm/themes/sddm-astronaut-theme/Main.qml ]; then
         rm -rf /usr/share/sddm/themes/sddm-astronaut-theme
         cp -r "$REPO_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+    fi
+    # Garantizar que Themes/theme1.conf exista y coincida con theme.conf
+    if [ -f /usr/share/sddm/themes/sddm-astronaut-theme/theme.conf ]; then
+        mkdir -p /usr/share/sddm/themes/sddm-astronaut-theme/Themes
+        cp -f /usr/share/sddm/themes/sddm-astronaut-theme/theme.conf /usr/share/sddm/themes/sddm-astronaut-theme/Themes/theme1.conf 2>/dev/null || true
     fi
     chmod -R a+rX /usr/share/sddm/themes/sddm-astronaut-theme 2>/dev/null || true
 fi

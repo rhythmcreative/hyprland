@@ -227,12 +227,21 @@ render_progress_bar() {
     local curr="$1"
     local total="$2"
     local label="${3:-Installing packages...}"
+    local override_pct="${4:-}"
     [ "$total" -le 0 ] && total=1
     [ "$curr" -gt "$total" ] && curr="$total"
-    local pct=$(( curr * 100 / total ))
+    local pct
+    if [ -n "$override_pct" ]; then
+        pct="$override_pct"
+    else
+        pct=$(( curr * 100 / total ))
+    fi
+    [ "$pct" -gt 100 ] && pct=100
+    [ "$pct" -lt 0 ] && pct=0
     local bar_width=24
-    local filled=$(( curr * bar_width / total ))
+    local filled=$(( pct * bar_width / 100 ))
     local empty=$(( bar_width - filled ))
+    [ "$empty" -lt 0 ] && empty=0
 
     local bar_fill=""
     local bar_empty=""
@@ -278,6 +287,8 @@ rhythm_install_with_progress() {
     fi
 
     local curr=0
+    local has_downloaded=false
+    local last_ret_pkg=""
     local re_pacman_numbered="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(installing|upgrading|reinstalling|downloading|instalando|actualizando|reinstalando|descargando)[[:space:]]+([^.[:space:]]+)"
     local re_pacman_item="^(installing|reinstalling|upgrading|downloading|instalando|reinstalando|actualizando|descargando)[[:space:]]+([^.[:space:]]+)"
     local re_pacman_hook="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(.+)"
@@ -291,9 +302,8 @@ rhythm_install_with_progress() {
     local re_zypper_ret_num="^[[:space:]]*\([[:space:]]*([0-9]+)/([0-9]+)\)"
     local re_zypper_step="^(Checking for file conflicts|Resolving package dependencies|Loading repository data|Reading installed packages|Verificando conflictos|Resolviendo dependencias)"
     local re_step="^::[[:space:]]+(.+)"
-    local last_ret_pkg=""
 
-    render_progress_bar 0 "$total" "Starting package installation..."
+    render_progress_bar 0 "$total" "Starting package installation..." 0
 
     local cmd=("$@")
     if [[ "${cmd[0]:-}" == "yay" ]]; then
@@ -322,45 +332,97 @@ rhythm_install_with_progress() {
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
-            local action_label="Installing"
+            local is_dl=false
             case "$action" in
-                downloading|descargando) action_label="Downloading" ;;
-                upgrading|actualizando) action_label="Upgrading" ;;
-                reinstalling|reinstalando) action_label="Reinstalling" ;;
+                downloading|descargando) is_dl=true; has_downloaded=true ;;
             esac
-            render_progress_bar "$curr" "$total" "$action_label $pkg..."
+            if [ "$is_dl" = true ]; then
+                local dl_pct=$(( curr * 35 / total ))
+                render_progress_bar "$curr" "$total" "Downloading $pkg..." "$dl_pct"
+            else
+                local action_label="Installing"
+                case "$action" in
+                    upgrading|actualizando) action_label="Upgrading" ;;
+                    reinstalling|reinstalando) action_label="Reinstalling" ;;
+                esac
+                local inst_pct
+                if [ "$has_downloaded" = true ]; then
+                    inst_pct=$(( 35 + curr * 65 / total ))
+                else
+                    inst_pct=$(( curr * 100 / total ))
+                fi
+                render_progress_bar "$curr" "$total" "$action_label $pkg..." "$inst_pct"
+            fi
         elif [[ "$clean_line" =~ $re_pacman_item ]]; then
             curr=$((curr + 1))
             local action="${BASH_REMATCH[1]}"
             local pkg="${BASH_REMATCH[2]}"
             [ "$curr" -gt "$total" ] && total="$curr"
-            local action_label="Installing"
+            local is_dl=false
             case "$action" in
-                downloading|descargando) action_label="Downloading" ;;
-                upgrading|actualizando) action_label="Upgrading" ;;
-                reinstalling|reinstalando) action_label="Reinstalling" ;;
+                downloading|descargando) is_dl=true; has_downloaded=true ;;
             esac
-            render_progress_bar "$curr" "$total" "$action_label $pkg..."
+            if [ "$is_dl" = true ]; then
+                local dl_pct=$(( curr * 35 / total ))
+                render_progress_bar "$curr" "$total" "Downloading $pkg..." "$dl_pct"
+            else
+                local action_label="Installing"
+                case "$action" in
+                    upgrading|actualizando) action_label="Upgrading" ;;
+                    reinstalling|reinstalando) action_label="Reinstalling" ;;
+                esac
+                local inst_pct
+                if [ "$has_downloaded" = true ]; then
+                    inst_pct=$(( 35 + curr * 65 / total ))
+                else
+                    inst_pct=$(( curr * 100 / total ))
+                fi
+                render_progress_bar "$curr" "$total" "$action_label $pkg..." "$inst_pct"
+            fi
         elif [[ "$clean_line" =~ $re_pacman_hook ]]; then
             local h_curr="${BASH_REMATCH[1]}"
             local h_tot="${BASH_REMATCH[2]}"
             local h_desc="${BASH_REMATCH[3]}"
             [ "$curr" -lt "$total" ] && curr="$total"
-            render_progress_bar "$total" "$total" "Hooks ($h_curr/$h_tot): $h_desc"
+            render_progress_bar "$total" "$total" "Hooks ($h_curr/$h_tot): $h_desc" 100
         elif [[ "$clean_line" =~ $re_dnf ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
-            render_progress_bar "$curr" "$total" "$action $pkg..."
+            if [[ "$action" =~ ^[Dd]ownload ]]; then
+                has_downloaded=true
+                local dl_pct=$(( curr * 35 / total ))
+                render_progress_bar "$curr" "$total" "Downloading $pkg..." "$dl_pct"
+            else
+                local inst_pct
+                if [ "$has_downloaded" = true ]; then
+                    inst_pct=$(( 35 + curr * 65 / total ))
+                else
+                    inst_pct=$(( curr * 100 / total ))
+                fi
+                render_progress_bar "$curr" "$total" "$action $pkg..." "$inst_pct"
+            fi
         elif [[ "$clean_line" =~ $re_apk ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
-            render_progress_bar "$curr" "$total" "$action $pkg..."
+            if [[ "$action" =~ ^[Dd]ownload ]]; then
+                has_downloaded=true
+                local dl_pct=$(( curr * 35 / total ))
+                render_progress_bar "$curr" "$total" "Downloading $pkg..." "$dl_pct"
+            else
+                local inst_pct
+                if [ "$has_downloaded" = true ]; then
+                    inst_pct=$(( 35 + curr * 65 / total ))
+                else
+                    inst_pct=$(( curr * 100 / total ))
+                fi
+                render_progress_bar "$curr" "$total" "$action $pkg..." "$inst_pct"
+            fi
         elif [[ "$clean_line" =~ $re_zypper_install ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
@@ -368,25 +430,37 @@ rhythm_install_with_progress() {
             local pkg="${BASH_REMATCH[4]}"
             pkg="${pkg%%-[0-9]*}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
-            render_progress_bar "$curr" "$total" "$action $pkg..."
+            local inst_pct
+            if [ "$has_downloaded" = true ]; then
+                inst_pct=$(( 35 + curr * 65 / total ))
+            else
+                inst_pct=$(( curr * 100 / total ))
+            fi
+            render_progress_bar "$curr" "$total" "$action $pkg..." "$inst_pct"
         elif [[ "$clean_line" =~ $re_zypper_retrieve ]]; then
+            has_downloaded=true
             local pkg="${BASH_REMATCH[2]}"
             pkg="${pkg%%-[0-9]*}"
             curr="${BASH_REMATCH[3]}"
             local dyn_tot="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
-            render_progress_bar "$curr" "$total" "Downloading $pkg..."
+            local dl_pct=$(( curr * 35 / total ))
+            render_progress_bar "$curr" "$total" "Downloading $pkg..." "$dl_pct"
         elif [[ "$clean_line" =~ $re_zypper_ret_pkg ]]; then
+            has_downloaded=true
             last_ret_pkg="${BASH_REMATCH[1]}"
             last_ret_pkg="${last_ret_pkg%%-[0-9]*}"
-            render_progress_bar "$curr" "$total" "Downloading $last_ret_pkg..."
+            local dl_pct=$(( curr * 35 / total ))
+            render_progress_bar "$curr" "$total" "Downloading $last_ret_pkg..." "$dl_pct"
         elif [[ "$clean_line" =~ $re_zypper_ret_num ]]; then
+            has_downloaded=true
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             local label_ret="Downloading packages"
             [ -n "$last_ret_pkg" ] && label_ret="Downloading $last_ret_pkg"
-            render_progress_bar "$curr" "$total" "$label_ret..."
+            local dl_pct=$(( curr * 35 / total ))
+            render_progress_bar "$curr" "$total" "$label_ret..." "$dl_pct"
         elif [[ "$clean_line" =~ $re_zypper_step ]]; then
             local step_label="${BASH_REMATCH[1]}"
             case "$step_label" in
@@ -395,14 +469,23 @@ rhythm_install_with_progress() {
                 *"repositor"*) step_label="Loading repository data..." ;;
                 *"installed"*) step_label="Reading installed packages..." ;;
             esac
-            render_progress_bar "$curr" "$total" "$step_label"
+            local step_pct=$(( curr * 100 / total ))
+            [ "$has_downloaded" = true ] && step_pct=$(( 35 + curr * 65 / total ))
+            render_progress_bar "$curr" "$total" "$step_label" "$step_pct"
         elif [[ "$clean_line" =~ $re_apt_setup ]]; then
             curr=$((curr + 1))
             local pkg="${BASH_REMATCH[1]}"
             [ "$curr" -gt "$total" ] && total="$curr"
-            render_progress_bar "$curr" "$total" "Configuring $pkg..."
+            local inst_pct
+            if [ "$has_downloaded" = true ]; then
+                inst_pct=$(( 35 + curr * 65 / total ))
+            else
+                inst_pct=$(( curr * 100 / total ))
+            fi
+            render_progress_bar "$curr" "$total" "Configuring $pkg..." "$inst_pct"
         elif [[ "$clean_line" =~ $re_apt_get ]]; then
-            render_progress_bar "$curr" "$total" "Downloading packages..."
+            has_downloaded=true
+            render_progress_bar "$curr" "$total" "Downloading packages..." 15
         elif [[ "$clean_line" =~ $re_step ]]; then
             local step_name="${BASH_REMATCH[1]}"
             case "$step_name" in
@@ -418,11 +501,15 @@ rhythm_install_with_progress() {
     if [[ "${cmd[*]}" =~ zypper ]] && { [ "$ret" -eq 106 ] || [ "$ret" -eq 100 ] || [ "$ret" -eq 102 ] || [ "$ret" -eq 103 ]; }; then
         ret=0
     fi
-    render_progress_bar "$total" "$total" "Installation complete."
-    if [ -t 1 ]; then
-        printf "\n"
-    elif [ -w /dev/tty ]; then
-        printf "\n" > /dev/tty
+    if [ "$ret" -eq 0 ]; then
+        render_progress_bar "$total" "$total" "Installation complete." 100
+        if [ -t 1 ]; then
+            printf "\n"
+        elif [ -w /dev/tty ]; then
+            printf "\n" > /dev/tty
+        fi
+    else
+        clear_progress_bar
     fi
     return "$ret"
 }
@@ -1806,8 +1893,7 @@ CHARM_EOF
 
         # Ensure bootstrap tools exist
         local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow)
-        rhythm_install_with_progress "${#suse_bootstrap[@]}" "Installing bootstrap tools via zypper..." \
-            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${suse_bootstrap[@]}" || true
+        sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then
@@ -2637,7 +2723,10 @@ step_software() {
                 render_progress_bar "$idx" "$total_f" "Installing $pkg (fallback)..."
                 sudo dnf install -y --skip-broken --allowerasing "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
-            [ "$total_f" -gt 0 ] && [ -t 1 ] && printf "\n"
+            if [ "$total_f" -gt 0 ]; then
+                render_progress_bar "$total_f" "$total_f" "Installation complete." 100
+                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+            fi
         fi
 
         for extra in awww swww mpvpaper hyprland-guiutils hyprland-qtutils ImageMagick; do
@@ -2793,7 +2882,10 @@ step_software() {
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
                 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
-            [ "$total_d" -gt 0 ] && [ -t 1 ] && printf "\n"
+            if [ "$total_d" -gt 0 ]; then
+                render_progress_bar "$total_d" "$total_d" "Installation complete." 100
+                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+            fi
         fi
 
         # Extra utilities if available in repos
@@ -2929,7 +3021,10 @@ step_software() {
                 render_progress_bar "$idx" "$total_a" "Installing $pkg (fallback)..."
                 sudo apk add --no-cache "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
-            [ "$total_a" -gt 0 ] && [ -t 1 ] && printf "\n"
+            if [ "$total_a" -gt 0 ]; then
+                render_progress_bar "$total_a" "$total_a" "Installation complete." 100
+                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+            fi
         fi
 
         # Extra utilities if available
@@ -3059,7 +3154,10 @@ step_software() {
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
                 sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
-            [ "$total_s" -gt 0 ] && [ -t 1 ] && printf "\n"
+            if [ "$total_s" -gt 0 ]; then
+                render_progress_bar "$total_s" "$total_s" "Installation complete." 100
+                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+            fi
         fi
 
         # Extra utilities if available in repos

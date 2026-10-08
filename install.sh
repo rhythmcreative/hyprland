@@ -251,12 +251,17 @@ render_progress_bar() {
     if [ -t 1 ]; then
         printf "\r  [\033[38;5;39m%s\033[38;5;238m%s\033[0m] \033[1;37m%3d%%\033[0m \033[38;5;245m(%d/%d)\033[0m \033[38;5;252m%s\033[0m\033[K" \
             "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label"
+    elif [ -w /dev/tty ]; then
+        printf "\r  [\033[38;5;39m%s\033[38;5;238m%s\033[0m] \033[1;37m%3d%%\033[0m \033[38;5;245m(%d/%d)\033[0m \033[38;5;252m%s\033[0m\033[K" \
+            "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label" > /dev/tty
     fi
 }
 
 clear_progress_bar() {
     if [ -t 1 ]; then
         printf "\r\033[K"
+    elif [ -w /dev/tty ]; then
+        printf "\r\033[K" > /dev/tty
     fi
 }
 
@@ -267,7 +272,7 @@ rhythm_install_with_progress() {
 
     step_item "$title"
 
-    if [ ! -t 1 ] || [ "${DRY_RUN:-false}" = true ]; then
+    if { [ ! -t 1 ] && [ ! -w /dev/tty ]; } || [ "${DRY_RUN:-false}" = true ]; then
         "$@" >> "$LOG_FILE" 2>&1
         return $?
     fi
@@ -282,8 +287,11 @@ rhythm_install_with_progress() {
     local re_apk="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(Installing|Upgrading|Downloading)[[:space:]]+([^.[:space:]]+)"
     local re_zypper_install="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(Installing|Instalando|Upgrading|Actualizando|Removing|Eliminando):[[:space:]]+([^[:space:]]+)"
     local re_zypper_retrieve="^(Retrieving package|Retrieving)[[:space:]]+([^[:space:]]+).*\([[:space:]]*([0-9]+)/([0-9]+)\)"
+    local re_zypper_ret_pkg="^Retrieving package[[:space:]]+([^[:space:]]+)"
+    local re_zypper_ret_num="^[[:space:]]*\([[:space:]]*([0-9]+)/([0-9]+)\)"
     local re_zypper_step="^(Checking for file conflicts|Resolving package dependencies|Loading repository data|Reading installed packages|Verificando conflictos|Resolviendo dependencias)"
     local re_step="^::[[:space:]]+(.+)"
+    local last_ret_pkg=""
 
     render_progress_bar 0 "$total" "Starting package installation..."
 
@@ -292,10 +300,19 @@ rhythm_install_with_progress() {
         cmd=("yay" "--sudoflags" "-E" "${cmd[@]:1}")
     fi
     if command -v stdbuf >/dev/null 2>&1; then
-        cmd=(stdbuf -oL -eL "${cmd[@]}")
+        if [[ "${cmd[0]:-}" == "sudo" ]]; then
+            cmd=("sudo" "stdbuf" "-oL" "-eL" "${cmd[@]:1}")
+        else
+            cmd=(stdbuf -oL -eL "${cmd[@]}")
+        fi
     fi
 
-    env LC_ALL=C.UTF-8 LANG=C.UTF-8 "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
+    local tr_cmd=("tr" "\r" "\n")
+    if command -v stdbuf >/dev/null 2>&1; then
+        tr_cmd=(stdbuf -oL -eL "tr" "\r" "\n")
+    fi
+
+    env LC_ALL=C.UTF-8 LANG=C.UTF-8 "${cmd[@]}" 2>&1 | "${tr_cmd[@]}" | while IFS= read -r line || [ -n "$line" ]; do
         echo "$line" >> "$LOG_FILE"
         local clean_line
         clean_line=$(printf "%s\n" "$line" | sed -E "s/\x1B\[[0-9;]*[a-zA-Z]//g")
@@ -359,6 +376,17 @@ rhythm_install_with_progress() {
             local dyn_tot="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "Downloading $pkg..."
+        elif [[ "$clean_line" =~ $re_zypper_ret_pkg ]]; then
+            last_ret_pkg="${BASH_REMATCH[1]}"
+            last_ret_pkg="${last_ret_pkg%%-[0-9]*}"
+            render_progress_bar "$curr" "$total" "Downloading $last_ret_pkg..."
+        elif [[ "$clean_line" =~ $re_zypper_ret_num ]]; then
+            curr="${BASH_REMATCH[1]}"
+            local dyn_tot="${BASH_REMATCH[2]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            local label_ret="Downloading packages"
+            [ -n "$last_ret_pkg" ] && label_ret="Downloading $last_ret_pkg"
+            render_progress_bar "$curr" "$total" "$label_ret..."
         elif [[ "$clean_line" =~ $re_zypper_step ]]; then
             local step_label="${BASH_REMATCH[1]}"
             case "$step_label" in
@@ -387,11 +415,15 @@ rhythm_install_with_progress() {
         fi
     done
     local ret="${PIPESTATUS[0]}"
-    if [[ "${cmd[*]}" =~ zypper ]] && { [ "$ret" -eq 106 ] || [ "$ret" -eq 100 ] || [ "$ret" -eq 102 ] || [ "$ret" -eq 103 ] || [ "$ret" -eq 104 ]; }; then
+    if [[ "${cmd[*]}" =~ zypper ]] && { [ "$ret" -eq 106 ] || [ "$ret" -eq 100 ] || [ "$ret" -eq 102 ] || [ "$ret" -eq 103 ]; }; then
         ret=0
     fi
     render_progress_bar "$total" "$total" "Installation complete."
-    [ -t 1 ] && printf "\n"
+    if [ -t 1 ]; then
+        printf "\n"
+    elif [ -w /dev/tty ]; then
+        printf "\n" > /dev/tty
+    fi
     return "$ret"
 }
 
@@ -1356,12 +1388,12 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
         elif [ "$DISTRO" = "opensuse" ]; then
-            for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' '$NF ~ /^[[:space:]]*(cd|dvd|iso):\// {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}'); do
+            for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' 'NR>2 && ($NF ~ /^[[:space:]]*(cd|dvd|iso|hd|dir):\// || $2 ~ /[Mm]edia/ || $3 ~ /[Mm]edia/ || $2 ~ /[Dd][Vv][Dd]/ || $3 ~ /[Dd][Vv][Dd]/) {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2}'); do
                 [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" 2>/dev/null || true
             done
-            sudo zypper --no-cd --non-interactive install --no-confirm git || {
+            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm git || {
                 _rc=$?
-                if [ "$_rc" -ne 106 ] && [ "$_rc" -ne 100 ] && [ "$_rc" -ne 102 ] && [ "$_rc" -ne 103 ] && [ "$_rc" -ne 104 ]; then
+                if [ "$_rc" -ne 106 ] && [ "$_rc" -ne 100 ] && [ "$_rc" -ne 102 ] && [ "$_rc" -ne 103 ]; then
                     exit "$_rc"
                 fi
             }
@@ -1766,15 +1798,16 @@ CHARM_EOF
             rm -f "$tmp_gum"
         fi
     elif [ "$DISTRO" = "opensuse" ]; then
-        # Disable installation media repositories (CD/DVD) so zypper does not prompt or skip
-        for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' '$NF ~ /^[[:space:]]*(cd|dvd|iso):\// {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}'); do
+        # Disable installation media repositories (CD/DVD/USB) so zypper does not prompt or skip
+        for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' 'NR>2 && ($NF ~ /^[[:space:]]*(cd|dvd|iso|hd|dir):\// || $2 ~ /[Mm]edia/ || $3 ~ /[Mm]edia/ || $2 ~ /[Dd][Vv][Dd]/ || $3 ~ /[Dd][Vv][Dd]/) {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2}'); do
             [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" >> "$LOG_FILE" 2>&1 || true
         done
         sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
+        local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow)
         rhythm_install_with_progress "${#suse_bootstrap[@]}" "Installing bootstrap tools via zypper..." \
-            sudo zypper --no-cd --non-interactive install --no-confirm "${suse_bootstrap[@]}" || true
+            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${suse_bootstrap[@]}" || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then
@@ -2914,7 +2947,6 @@ step_software() {
 
             # Bars, Launchers & Shell
             waybar
-            rofi-wayland
             rofi
             kitty
             zsh
@@ -2924,7 +2956,7 @@ step_software() {
 
             # File Management & Media
             thunar
-            thunar-plugin-archive
+            thunar-archive-plugin
             thunar-volman
             file-roller
             gvfs
@@ -2961,11 +2993,10 @@ step_software() {
             # Qt & SDDM
             qt5-wayland
             qt6-wayland
-            qt6-declarative-imports
-            qt6-qt5compat-imports
-            qt6-virtualkeyboard-imports
+            qt6-declarative
+            qt6-qt5compat
+            qt6-virtualkeyboard
             qt6-svg
-            gtk4-layer-shell
             swaybg
             hyprpaper
             qt5ct
@@ -2974,12 +3005,10 @@ step_software() {
 
             # Theming, Fonts & Utilities
             jetbrains-mono-fonts
-            symbols-only-nerd-fonts
             noto-sans-fonts
             noto-coloremoji-fonts
             fontawesome-fonts
             python3-Pillow
-            cava
             flatpak
             stow
             curl
@@ -2999,20 +3028,20 @@ step_software() {
         )
 
         if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
-            sudo zypper --no-cd --non-interactive install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
+            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
             local total_s=${#OPENSUSE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
-                sudo zypper --no-cd --non-interactive install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             [ "$total_s" -gt 0 ] && [ -t 1 ] && printf "\n"
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick; do
-            sudo zypper --no-cd --non-interactive install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
+        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts; do
+            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
 

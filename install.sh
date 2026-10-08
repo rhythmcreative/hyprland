@@ -1776,10 +1776,15 @@ preflight_checks() {
         exit 1
     fi
 
-    # Autenticar una vez aqui para que las ~45 llamadas a sudo que hay mas abajo
-    # no pidan la contrasena una por una. El timestamp de sudo dura 15 minutos y
-    # algunos bloques tardan mas (compilar kernel headers, instalar paquetes AUR),
-    # asi que ademas se refresca antes de cada paso largo.
+    if ! command -v sudo >/dev/null 2>&1; then
+        echo "ERROR: 'sudo' is not installed."
+        if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            echo "Please run as root to install sudo and grant user privileges:"
+            echo "  su - -c 'apt-get update && apt-get install -y sudo && usermod -aG sudo $USER'"
+        fi
+        exit 1
+    fi
+
     if ! sudo -v; then
         echo "ERROR: Sudo authentication is required to install packages."
         exit 1

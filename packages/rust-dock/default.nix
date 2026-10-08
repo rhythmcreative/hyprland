@@ -31,6 +31,34 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [ pkg-config wrapGAppsHook4 ];
   buildInputs = [ gtk4 gtk4-layer-shell ];
 
+  # In NixOS, desktop entries and icons are located in paths pointed to by XDG_DATA_DIRS
+  # (e.g. /run/current-system/sw/share, ~/.nix-profile/share, /etc/profiles/per-user/...)
+  # rather than hardcoded /usr/share. We patch get_search_paths() in src/app_info.rs.
+  postPatch = ''
+    substituteInPlace src/app_info.rs \
+      --replace '    fn get_search_paths() -> Vec<PathBuf> {
+        let mut paths = vec![
+            PathBuf::from("/usr/share/applications"),
+            PathBuf::from("/usr/local/share/applications"),
+            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        ];' '    fn get_search_paths() -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
+            for dir in xdg_data_dirs.split(":") {
+                let p = PathBuf::from(dir).join("applications");
+                if p.exists() && !paths.contains(&p) { paths.push(p); }
+            }
+        }
+        for extra in &["/run/current-system/sw/share/applications", "/etc/profiles/per-user"] {
+            let p = PathBuf::from(extra);
+            if p.exists() && !paths.contains(&p) { paths.push(p); }
+        }
+        for p_def in &["/usr/share/applications", "/usr/local/share/applications", "/var/lib/flatpak/exports/share/applications"] {
+            let p = PathBuf::from(p_def);
+            if p.exists() && !paths.contains(&p) { paths.push(p); }
+        }'
+  '';
+
   # Upstream must commit Cargo.lock for reproducible vendoring; without it
   # every build resolves fresh dependency versions.
   meta = {

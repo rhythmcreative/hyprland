@@ -1484,7 +1484,7 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
             for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' 'NR>2 && ($NF ~ /^[[:space:]]*(cd|dvd|iso|hd|dir):\// || $2 ~ /[Mm]edia/ || $3 ~ /[Mm]edia/ || $2 ~ /[Dd][Vv][Dd]/ || $3 ~ /[Dd][Vv][Dd]/) {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2}'); do
                 [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" 2>/dev/null || true
             done
-            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm git || {
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses git || {
                 _rc=$?
                 if [ "$_rc" -ne 106 ] && [ "$_rc" -ne 100 ] && [ "$_rc" -ne 102 ] && [ "$_rc" -ne 103 ]; then
                     exit "$_rc"
@@ -1899,7 +1899,7 @@ CHARM_EOF
 
         # Ensure bootstrap tools exist
         local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow)
-        sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then
@@ -2097,15 +2097,15 @@ EOF
     elif [ "$DISTRO" = "opensuse" ]; then
         if [ "$IS_NVIDIA" = true ]; then
             step_item "Preparing openSUSE NVIDIA drivers..."
-            sudo zypper --no-cd --non-interactive install --no-confirm kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
-            sudo zypper --no-cd --non-interactive install --no-confirm Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Intel"* ]]; then
             step_item "Intel GPU detected. Adding hardware acceleration drivers..."
-            sudo zypper --no-cd --non-interactive install --no-confirm intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
 
         if [ "$IS_NVIDIA" = true ]; then
@@ -2316,7 +2316,7 @@ install_rust_dock() {
     elif [ "$DISTRO" = "alpine" ]; then
         sudo apk add --no-cache rust cargo pkgconf gtk4.0-dev gtk4-layer-shell-dev grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "opensuse" ]; then
-        sudo zypper --no-cd --non-interactive install --no-confirm rust cargo pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses rust cargo pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     else
         yay -S --needed --noconfirm rust pkgconf gtk4 gtk4-layer-shell grim >> "$LOG_FILE" 2>&1 || true
     fi
@@ -2339,7 +2339,7 @@ install_rust_dock() {
             sudo apk add --no-cache cargo rust >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
             step_item "Installing Cargo & Rust on openSUSE..."
-            sudo zypper --no-cd --non-interactive install --no-confirm cargo rust >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses cargo rust >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -2498,7 +2498,7 @@ install_themes_and_fonts() {
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --non-interactive install --no-confirm python3-pipx >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses python3-pipx >> "$LOG_FILE" 2>&1 || true
         fi
         export PATH="$HOME/.local/bin:$PATH"
         if ! command -v wal >/dev/null 2>&1; then
@@ -2583,7 +2583,7 @@ install_starship() {
     fi
     step_item "Installing Starship shell prompt..."
     if [ "$DISTRO" = "opensuse" ]; then
-        sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm starship >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses starship >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y starship >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "alpine" ]; then
@@ -3161,13 +3161,13 @@ step_software() {
         )
 
         if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
-            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "${OPENSUSE_CORE_PKGS[@]}"; then
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "${OPENSUSE_CORE_PKGS[@]}"; then
             local total_s=${#OPENSUSE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
-                sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             if [ "$total_s" -gt 0 ]; then
                 render_progress_bar "$total_s" "$total_s" "Installation complete." 100
@@ -3177,14 +3177,14 @@ step_software() {
 
         # Extra utilities if available in repos
         for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts; do
-            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
         # Ensure ffmpeg command is present (openSUSE may version ffmpeg as ffmpeg-7, ffmpeg-8, etc.)
         if ! command -v ffmpeg >/dev/null 2>&1; then
             for ffpkg in ffmpeg-7 ffmpeg-8 ffmpeg-6 ffmpeg-4; do
                 if zypper search -s "$ffpkg" >/dev/null 2>&1; then
-                    sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$ffpkg" >> "$LOG_FILE" 2>&1 || true
+                    sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$ffpkg" >> "$LOG_FILE" 2>&1 || true
                     command -v ffmpeg >/dev/null 2>&1 && break
                 fi
             done
@@ -4122,8 +4122,8 @@ step_applications() {
                     *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
                     *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
-                    *steam*) sudo zypper --no-cd --non-interactive install --no-confirm steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
-                    *) sudo zypper --no-cd --non-interactive install --no-confirm "$app" >> "$LOG_FILE" 2>&1 || true ;;
+                    *steam*) sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
+                    *) sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
             done
             [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
@@ -4757,7 +4757,7 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi

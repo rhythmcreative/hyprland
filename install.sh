@@ -185,7 +185,13 @@ confirm_prompt() {
     if [ "${AUTO_YES:-false}" = true ]; then
         return 0
     fi
-    gum confirm "$prompt_msg"
+    if [ -c /dev/tty ] && [ -r /dev/tty ]; then
+        gum confirm "$prompt_msg" </dev/tty
+    elif [ -t 0 ]; then
+        gum confirm "$prompt_msg"
+    else
+        return 0
+    fi
 }
 
 # nixos_spin <message> -- <command...>: a long step with something to look at.
@@ -4541,7 +4547,7 @@ step_wallpapers() {
     elif [ "$AUTO_YES" = true ]; then
         step_ok "Wallpaper downloads skipped in unattended mode (use --wallpapers all|random to enable)."
         return 0
-    elif gum confirm "Download additional wallpaper packs?"; then
+    elif confirm_prompt "Download additional wallpaper packs?"; then
         SHOULD_DOWNLOAD=true
     fi
 
@@ -4732,7 +4738,7 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -4804,7 +4810,7 @@ step_system() {
         local deploy_bin="$HOME/.local/bin/rhythm-sddm-deploy"
         [ ! -x "$deploy_bin" ] && [ -x "$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy" ] && deploy_bin="$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy"
         if [ -x "$deploy_bin" ]; then
-            if "$deploy_bin" "$DOTFILES_DIR"; then
+            if sudo "$deploy_bin" "$DOTFILES_DIR"; then
                 step_ok "SDDM greeter deployed (login on the internal panel only, cursor set)."
             else
                 step_warn "SDDM greeter deployment was incomplete. Check ~/.cache/rhythm-sddm-deploy.log"
@@ -4953,10 +4959,9 @@ step_system() {
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
             step_item "Disabling $other_dm in favor of SDDM..."
             if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl disable --now "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
+                sudo systemctl disable "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
                 sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
             elif command -v rc-service >/dev/null 2>&1; then
-                sudo rc-service "$other_dm" stop >> "$LOG_FILE" 2>&1 || true
                 sudo rc-update del "$other_dm" default >> "$LOG_FILE" 2>&1 || true
             fi
         fi
@@ -5423,12 +5428,12 @@ elif [ "$AUTO_YES" = true ]; then
 elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "You are running inside an active graphical session."
     gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Please reboot to apply all group permissions and start your desktop cleanly."
-    if gum confirm "Reboot into Hyprland now?"; then
+    if confirm_prompt "Reboot into Hyprland now?"; then
         rhythm_reboot
     fi
 else
     if [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && systemctl cat sddm.service >/dev/null 2>&1 || [ -x /etc/init.d/sddm ]; }; then
-        if gum confirm "Start SDDM login manager now?"; then
+        if confirm_prompt "Start SDDM login manager now?"; then
             if command -v systemctl >/dev/null 2>&1; then
                 sudo systemctl start sddm || {
                     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
@@ -5440,11 +5445,11 @@ else
                     rhythm_reboot
                 }
             fi
-        elif gum confirm "Reboot into Hyprland now?"; then
+        elif confirm_prompt "Reboot into Hyprland now?"; then
             rhythm_reboot
         fi
     else
-        if gum confirm "Reboot into Hyprland now?"; then
+        if confirm_prompt "Reboot into Hyprland now?"; then
             rhythm_reboot
         fi
     fi

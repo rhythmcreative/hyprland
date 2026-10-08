@@ -44,7 +44,7 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     fi
 fi
 
-if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] && [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+if { [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] || [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ]; } && [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
     "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 || true
 fi
 
@@ -79,13 +79,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Verificar si el directorio existe
-if [[ ! -d "$WALLPAPER_DIR" ]]; then
-    rofi-themed -e "Directory $WALLPAPER_DIR not found"
-    exit 1
+# Verificar si el directorio existe o sembrar default si está vacío
+mkdir -p "$WALLPAPER_DIR" "$PREVIEW_DIR"
+if ! compgen -G "$WALLPAPER_DIR/*" >/dev/null 2>&1; then
+    for def in "$HOME/.config/hypr/wallpapers/default.jpg" "/usr/share/hypr/wall0.png"; do
+        if [ -f "$def" ]; then
+            cp -f "$def" "$WALLPAPER_DIR/default.jpg" 2>/dev/null || true
+            break
+        fi
+    done
 fi
-
-mkdir -p "$PREVIEW_DIR"
 
 # 1. Obtener lista de imágenes (cacheada en variable para velocidad)
 mapfile -t images < <(find "$WALLPAPER_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" -o -iname "*.bmp" \) | sort)

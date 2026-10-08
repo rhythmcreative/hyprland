@@ -38,6 +38,7 @@ user_edits/
 .config/gtk-4.0/nm-applet-waybar.css
 .config/gtk-4.0/settings.ini
 .config/rofi/colors-pywal.rasi
+.config/rofi/colors-rofi-dark.rasi
 .config/rofi/style-3-pywal.rasi
 .config/mako/config
 .config/waybar/colors-pywal.css

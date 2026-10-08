@@ -61,6 +61,10 @@ dock_off() {
     pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
     pkill -f "rust-dock" >/dev/null 2>&1 || true
+    sleep 0.1
+    for pid in $(dock_pids); do
+        kill -9 "$pid" 2>/dev/null || true
+    done
     printf 'hidden\n' > "$STATE_FILE" 2>/dev/null || true
     printf 'hidden\n' > "/tmp/rust-dock-visible" 2>/dev/null || true
 }

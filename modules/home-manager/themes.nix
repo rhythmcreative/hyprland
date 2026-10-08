@@ -317,6 +317,10 @@ EOF
     }
     EOF
           fi
+
+          if [ -f "$wal_cache/colors-rofi-dark.rasi" ] && [ ! -f "$home/.config/rofi/colors-rofi-dark.rasi" ]; then
+            cp -f "$wal_cache/colors-rofi-dark.rasi" "$home/.config/rofi/colors-rofi-dark.rasi"
+          fi
         '';
 
     home.packages = with pkgs; [

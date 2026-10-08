@@ -2,10 +2,19 @@
 # Universal Quickshell launcher with auto-detection for native packages,
 # AppImages, extracted directories and NixOS wrappers.
 
-# 1. Prefer native package in standard system paths (Arch, Fedora COPR, openSUSE native)
-for bin in /usr/bin/quickshell /bin/quickshell; do
+# 1. Prefer native package in standard system paths (Arch, Fedora COPR, openSUSE native, NixOS)
+for bin in /usr/bin/quickshell /bin/quickshell /run/current-system/sw/bin/quickshell "$HOME/.nix-profile/bin/quickshell"; do
     if [ -x "$bin" ]; then
         exec "$bin" "$@"
+    fi
+done
+
+# Check other PATH entries (excluding ourselves)
+for bin in $(which -a quickshell 2>/dev/null); do
+    _real_candidate="$(realpath "$bin" 2>/dev/null || true)"
+    _real_self="$(realpath "$0" 2>/dev/null || true)"
+    if [ -n "$_real_candidate" ] && [ "$_real_candidate" != "$_real_self" ] && [ -x "$_real_candidate" ]; then
+        exec "$_real_candidate" "$@"
     fi
 done
 
@@ -33,8 +42,8 @@ for ai in \
 done
 
 if [ -n "$QS_APPIMAGE" ]; then
-    # Test if FUSE is available and operational
-    if [ -e /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
+    # Test if FUSE is available and operational (requires read AND write permissions)
+    if [ -r /dev/fuse ] && [ -w /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
         exec "$QS_APPIMAGE" "$@"
     fi
     # Fallback to --appimage-extract-and-run without FUSE

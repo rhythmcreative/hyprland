@@ -64,13 +64,29 @@ MONITORS=()
 # cae en wayland-0. Aqui el compositor toma wayland-1, asi que sin esto el
 # `awww img` de mas abajo no llegaba al daemon y no pintaba ninguna pantalla,
 # aunque la lista de MONITORS fuera correcta y no hubiera ni un error visible.
+buscar_hypr_firma() {
+    local d s dir
+    for dir in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr" "/tmp/hypr"; do
+        [ -d "$dir" ] || continue
+        for d in $(ls -t "$dir" 2>/dev/null); do
+            [ -d "$dir/$d" ] || continue
+            s="$d"
+            [ -n "$s" ] || continue
+            if [ -S "$dir/$d/.socket2.sock" ] ||
+               [ -S "$dir/$d.socket2.sock" ] ||
+               [ -S "$dir/$d/.socket.sock" ]; then
+                printf '%s\n' "$s"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
 if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-    _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    if [ -d "$_runtime/hypr" ]; then
-        _sig=$(ls -t "$_runtime/hypr/" 2>/dev/null | head -n1)
-        [ -n "$_sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+    if _sig="$(buscar_hypr_firma)"; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
     fi
-    unset _runtime _sig
 fi
 
 _runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -203,7 +219,7 @@ fi
 
 WAL_SUCCESS=false
 if [[ -n "$WAL_CMD" && -f "$WALLPAPER_IMAGE" ]]; then
-    if "$WAL_CMD" -i "$WALLPAPER_IMAGE" -n -q 2>/dev/null; then
+    if timeout 10 "$WAL_CMD" -i "$WALLPAPER_IMAGE" -n -q -s 2>/dev/null; then
         WAL_SUCCESS=true
     fi
 fi
@@ -211,8 +227,12 @@ fi
 if [[ "$WAL_SUCCESS" == false && -n "$HASH" && -n "$THUMB_FOLDER" ]]; then
     cached_thumb="$THUMB_FOLDER/$HASH.jpg"
     if [[ -f "$cached_thumb" ]]; then
-        "$WAL_CMD" -i "$cached_thumb" -n -q 2>/dev/null || true
+        timeout 10 "$WAL_CMD" -i "$cached_thumb" -n -q -s 2>/dev/null && WAL_SUCCESS=true || true
     fi
+fi
+
+if [[ "$WAL_SUCCESS" == true && -x "$HOME/.local/bin/modern-pywal-sync" ]]; then
+    ("$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 &)
 fi
 
 for i in "${!MONITORS[@]}"; do

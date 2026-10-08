@@ -715,8 +715,12 @@ force_raster_widgets=1
 ignored_applications=@Invalid()
 EOF
 
-# Aplicar el tema a Dolphin
-kwriteconfig5 --file dolphinrc --group General --key ColorScheme PywalColors
+# Aplicar el tema a Dolphin (KDE 5 y KDE 6)
+if command -v kwriteconfig6 >/dev/null 2>&1; then
+    timeout 2 kwriteconfig6 --file dolphinrc --group General --key ColorScheme PywalColors 2>/dev/null || true
+elif command -v kwriteconfig5 >/dev/null 2>&1; then
+    timeout 2 kwriteconfig5 --file dolphinrc --group General --key ColorScheme PywalColors 2>/dev/null || true
+fi
 
 echo "Sincronización completa! Los colores de Qt/KDE ahora coinciden con PyWal."
 echo "Nota: Es posible que necesites reiniciar Dolphin para ver los cambios:"

@@ -218,11 +218,12 @@ margin_v=$(echo "120 * $scale_factor" | bc | cut -d. -f1)
 log_debug "Escalas calculadas - Font prompt: $font_prompt, Font element: $font_element"
 
 # Asegurar que colors-rofi-dark.rasi existe
-if [ ! -f "$HOME/.cache/wal/colors-rofi-dark.rasi" ]; then
+if [ ! -f "$HOME/.cache/wal/colors-rofi-dark.rasi" ] || [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ]; then
     if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
         "$HOME/.local/bin/modern-pywal-sync" --install >/dev/null 2>&1 || true
     fi
 fi
+[ -f "$HOME/.cache/wal/colors-rofi-dark.rasi" ] && [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ] && cp -f "$HOME/.cache/wal/colors-rofi-dark.rasi" "$HOME/.config/rofi/colors-rofi-dark.rasi" 2>/dev/null || true
 
 # Crear tema dinámico específico para el monitor
 cat > "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" << EOF

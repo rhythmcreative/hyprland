@@ -115,19 +115,19 @@ dock_on_monitor() {
     return 1
 }
 
-# Si hay alguna instancia genérica sin -o, terminarla para usar instancias por monitor
-if (pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1) && ! dock_pids | grep -q .; then
-    pkill -x rust-dock 2>/dev/null || true
-    pkill -x .rust-dock-wrap 2>/dev/null || true
-    pkill -x .rust-dock-wrapped 2>/dev/null || true
-    sleep 0.2
-fi
+# Si hay alguna instancia genérica sin -o o huérfana, terminarla para usar instancias por monitor
+for pid in $(dock_pids); do
+    out=$(dock_output "$pid")
+    if [ -z "$out" ]; then
+        kill "$pid" 2>/dev/null || true
+    fi
+done
 
 # Cerrar instancias asociadas a monitores desconectados
 for pid in $(dock_pids); do
     out=$(dock_output "$pid")
     if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
-        kill "$pid" 2>/dev/null
+        kill "$pid" 2>/dev/null || true
     fi
 done
 

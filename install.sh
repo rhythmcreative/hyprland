@@ -2301,7 +2301,7 @@ install_rust_dock() {
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
 
         # Build gtk4-layer-shell from source if not available in repos (e.g. Debian 12 Bookworm)
-        if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null; then
+        if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
             step_item "Building gtk4-layer-shell from source for $DISTRO..."
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
             if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
@@ -2503,7 +2503,7 @@ install_themes_and_fonts() {
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses python3-pipx >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses python3-pywal python3-pipx python3-pip >> "$LOG_FILE" 2>&1 || true
         fi
         export PATH="$HOME/.local/bin:$PATH"
         if ! command -v wal >/dev/null 2>&1; then
@@ -2885,7 +2885,7 @@ step_software() {
         )
 
         export DEBIAN_FRONTEND=noninteractive
-        if [ "${ENABLE_SDDM:-true}" = true ] && command -v debconf-set-selections >/dev/null 2>&1; then
+        if [ "$ENABLE_SDDM" = true ] && command -v debconf-set-selections >/dev/null 2>&1; then
             echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
@@ -2915,7 +2915,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi; do
+        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi libfuse2 fuse3; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -2948,6 +2948,9 @@ step_software() {
             seatd-openrc
 
             # Bars, Launchers & Shell
+            bash
+            gawk
+            grep
             waybar
             rofi-wayland
             kitty
@@ -3054,7 +3057,7 @@ step_software() {
         fi
 
         # Extra utilities if available
-        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils imagemagick; do
+        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils imagemagick fuse fuse3; do
             sudo apk add --no-cache "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -3070,7 +3073,9 @@ step_software() {
 
         # Add X11:Wayland repository if Hyprland is not already found
         local suse_type="openSUSE_Tumbleweed"
-        if grep -qi "leap" /etc/os-release 2>/dev/null; then
+        if grep -qi "slowroll" /etc/os-release 2>/dev/null; then
+            suse_type="openSUSE_Slowroll"
+        elif grep -qi "leap" /etc/os-release 2>/dev/null; then
             suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
         fi
         if ! zypper lr -u 2>/dev/null | grep -qi "X11:Wayland"; then
@@ -3080,7 +3085,9 @@ step_software() {
         # Ensure Packman repository is available for multimedia codecs (ffmpeg)
         if ! zypper lr -u 2>/dev/null | grep -qi "packman"; then
             local packman_url="https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/Essentials/"
-            if grep -qi "leap" /etc/os-release 2>/dev/null; then
+            if grep -qi "slowroll" /etc/os-release 2>/dev/null; then
+                packman_url="https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Slowroll/Essentials/"
+            elif grep -qi "leap" /etc/os-release 2>/dev/null; then
                 packman_url="https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)/Essentials/"
             fi
             sudo zypper addrepo --check --refresh -cfp 90 "$packman_url" packman-essentials >> "$LOG_FILE" 2>&1 || true
@@ -3162,6 +3169,8 @@ step_software() {
             noto-coloremoji-fonts
             fontawesome-fonts
             python3-Pillow
+            python3-pywal
+            python3-pipx
             flatpak
             stow
             curl
@@ -3196,7 +3205,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts libfuse2 fuse; do
+        for extra in rofi-wayland swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts libfuse2 fuse; do
             sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
@@ -4796,8 +4805,19 @@ step_system() {
         fi
     fi
 
+    # Resolve ENABLE_SDDM if not explicitly set
+    if [ -z "$ENABLE_SDDM" ]; then
+        local detected_dm_system
+        detected_dm_system=$(detect_existing_display_manager || true)
+        if [ -n "$detected_dm_system" ] && [ "$detected_dm_system" != "sddm" ]; then
+            ENABLE_SDDM=false
+        else
+            ENABLE_SDDM=true
+        fi
+    fi
+
     # Ensure SDDM package is installed if enabled
-    if [ "${ENABLE_SDDM:-true}" = true ] && ! command -v sddm >/dev/null 2>&1; then
+    if [ "$ENABLE_SDDM" = true ] && ! command -v sddm >/dev/null 2>&1; then
         step_item "Installing SDDM display manager..."
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
@@ -4814,7 +4834,7 @@ step_system() {
     fi
 
     # SDDM Astronaut Theme
-    if [ "${ENABLE_SDDM:-true}" = true ] && [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
+    if [ "$ENABLE_SDDM" = true ] && [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
         step_item "Deploying SDDM Astronaut theme..."
         sudo mkdir -p /usr/share/sddm/themes
         # `rm -rf` antes del `cp -r`, y no confiado en que el destino no exista.
@@ -5037,10 +5057,23 @@ DESK_EOF
     fi
 
     # Ensure binary capitalization compatibility for Hyprland desktop entry
-    if [ -x /usr/bin/hyprland ] && [ ! -x /usr/bin/Hyprland ]; then
-        sudo ln -sf /usr/bin/hyprland /usr/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
-    elif [ -x /usr/bin/Hyprland ] && [ ! -x /usr/bin/hyprland ]; then
-        sudo ln -sf /usr/bin/Hyprland /usr/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+    if command -v Hyprland >/dev/null 2>&1 && ! command -v hyprland >/dev/null 2>&1; then
+        local hyp_bin
+        hyp_bin="$(command -v Hyprland)"
+        sudo ln -sf "$hyp_bin" /usr/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+        [ -d /usr/local/bin ] && sudo ln -sf "$hyp_bin" /usr/local/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+    elif command -v hyprland >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then
+        local hyp_bin
+        hyp_bin="$(command -v hyprland)"
+        sudo ln -sf "$hyp_bin" /usr/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+        [ -d /usr/local/bin ] && sudo ln -sf "$hyp_bin" /usr/local/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Ensure desktop entry exists with both case conventions in wayland-sessions
+    if [ -f /usr/share/wayland-sessions/hyprland.desktop ] && [ ! -f /usr/share/wayland-sessions/Hyprland.desktop ]; then
+        sudo ln -sf hyprland.desktop /usr/share/wayland-sessions/Hyprland.desktop >> "$LOG_FILE" 2>&1 || true
+    elif [ -f /usr/share/wayland-sessions/Hyprland.desktop ] && [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+        sudo ln -sf Hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop >> "$LOG_FILE" 2>&1 || true
     fi
 
     # Ensure user has access to fuse group if present
@@ -5052,7 +5085,7 @@ DESK_EOF
         fi
     fi
 
-    if [ "${ENABLE_SDDM:-true}" = true ]; then
+    if [ "$ENABLE_SDDM" = true ]; then
         local other_dm
         other_dm=$(detect_existing_display_manager || true)
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
@@ -5110,6 +5143,8 @@ DESK_EOF
             if command -v update-alternatives >/dev/null 2>&1; then
                 if [ -e /usr/lib/X11/displaymanagers/sddm ]; then
                     sudo update-alternatives --set default-displaymanager /usr/lib/X11/displaymanagers/sddm >> "$LOG_FILE" 2>&1 || true
+                elif [ -e /usr/lib/displaymanager/sddm ]; then
+                    sudo update-alternatives --set default-displaymanager /usr/lib/displaymanager/sddm >> "$LOG_FILE" 2>&1 || true
                 fi
             fi
         fi
@@ -5180,7 +5215,7 @@ DESK_EOF
     fi
 
     # PAM gnome-keyring unlock
-    for pam_file in /etc/pam.d/login /etc/pam.d/sddm; do
+    for pam_file in /etc/pam.d/login /etc/pam.d/sddm /etc/pam.d/gdm-password /etc/pam.d/lightdm; do
         if [ -f "$pam_file" ] && ! grep -q "pam_gnome_keyring.so" "$pam_file"; then
             if grep -q "^auth.*pam_unix" "$pam_file"; then
                 sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' "$pam_file"
@@ -5566,7 +5601,7 @@ elif [ "$AUTO_YES" = true ]; then
     if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "Rebooting into Hyprland..."
         rhythm_reboot
-    elif [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
+    elif [ "$ENABLE_SDDM" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if command -v systemctl >/dev/null 2>&1; then
             sudo systemctl start sddm || sudo systemctl start display-manager || rhythm_reboot
         else
@@ -5582,7 +5617,7 @@ elif [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
         rhythm_reboot
     fi
 else
-    if [ "${ENABLE_SDDM:-true}" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
+    if [ "$ENABLE_SDDM" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if confirm_prompt "Start SDDM login manager now?"; then
             if command -v systemctl >/dev/null 2>&1; then
                 sudo systemctl start sddm || sudo systemctl start display-manager || {

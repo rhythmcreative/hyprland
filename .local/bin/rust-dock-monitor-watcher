@@ -111,7 +111,7 @@ reconcile_docks() {
     if [ "$needs" = "0" ]; then
         for pid in $(dock_pids); do
             out=$(dock_output "$pid")
-            if [ -n "$out" ] && ! echo "$monitors" | grep -qw "$out"; then
+            if [ -z "$out" ] || ! echo "$monitors" | grep -qw "$out"; then
                 kill "$pid" 2>/dev/null || true
             fi
         done

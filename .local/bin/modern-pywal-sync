@@ -277,6 +277,7 @@ EOF
     text-color: @alternate-active-foreground;
 }
 EOF
+    cp -f "$HOME/.cache/wal/colors-rofi-dark.rasi" "$HOME/.config/rofi/colors-rofi-dark.rasi" 2>/dev/null || true
 }
 
 escribir_colores_rofi_dark() {
@@ -402,6 +403,7 @@ escribir_colores_rofi_dark() {
     text-color: @alternate-active-foreground;
 }
 EOF
+    cp -f "$HOME/.cache/wal/colors-rofi-dark.rasi" "$HOME/.config/rofi/colors-rofi-dark.rasi" 2>/dev/null || true
 }
 
 # 1. Cargar colores de Pywal
@@ -510,7 +512,7 @@ fi
 # 3. Sincronizar Iconos (Tela Circle)
 echo "  • Iconos (Tela-Circle)..."
 if [ -x "$HOME/.local/bin/pywal-tela-sync" ]; then
-    "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1
+    "$HOME/.local/bin/pywal-tela-sync" >/dev/null 2>&1 &
 fi
 
 # 4. Forzar Recarga de GTK (Reset de tema)
@@ -522,7 +524,7 @@ fi
 # 5. Sincronizar Qt / KDE (Dolphin, etc.)
 echo "  • Qt/KDE..."
 if [ -x "$HOME/.local/bin/sync-qt-pywal" ]; then
-    "$HOME/.local/bin/sync-qt-pywal" >/dev/null 2>&1 || true
+    "$HOME/.local/bin/sync-qt-pywal" >/dev/null 2>&1 &
 fi
 
 # 6. Sincronizar Waybar — reinicio completo para sincronizar todos los colores

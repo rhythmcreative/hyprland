@@ -3049,12 +3049,21 @@ step_software() {
         sudo -v
 
         # Add X11:Wayland repository if Hyprland is not already found
+        local suse_type="openSUSE_Tumbleweed"
+        if grep -qi "leap" /etc/os-release 2>/dev/null; then
+            suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
+        fi
         if ! zypper search -s hyprland >/dev/null 2>&1; then
-            local suse_type="openSUSE_Tumbleweed"
-            if grep -qi "leap" /etc/os-release 2>/dev/null; then
-                suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
-            fi
             sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/X11:Wayland/${suse_type}/X11:Wayland.repo" >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
+        fi
+        # Ensure Packman repository is available for multimedia codecs (ffmpeg)
+        if ! zypper lr -u 2>/dev/null | grep -qi "packman"; then
+            local packman_url="https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/Essentials/"
+            if grep -qi "leap" /etc/os-release 2>/dev/null; then
+                packman_url="https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)/Essentials/"
+            fi
+            sudo zypper addrepo --check --refresh -cfp 90 "$packman_url" packman-essentials >> "$LOG_FILE" 2>&1 || true
             sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
         fi
 
@@ -3170,6 +3179,16 @@ step_software() {
         for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts; do
             sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$extra" >> "$LOG_FILE" 2>&1 || true
         done
+
+        # Ensure ffmpeg command is present (openSUSE may version ffmpeg as ffmpeg-7, ffmpeg-8, etc.)
+        if ! command -v ffmpeg >/dev/null 2>&1; then
+            for ffpkg in ffmpeg-7 ffmpeg-8 ffmpeg-6 ffmpeg-4; do
+                if zypper search -s "$ffpkg" >/dev/null 2>&1; then
+                    sudo zypper --no-cd --non-interactive --auto-agree-with-licenses install --no-confirm "$ffpkg" >> "$LOG_FILE" 2>&1 || true
+                    command -v ffmpeg >/dev/null 2>&1 && break
+                fi
+            done
+        fi
         step_ok "Core packages installed."
 
         install_themes_and_fonts || true
@@ -5000,9 +5019,11 @@ step_system() {
             for grp in video render input seat; do
                 if getent group "$grp" >/dev/null 2>&1; then
                     if command -v usermod >/dev/null 2>&1; then
-                        sudo usermod -aG "$grp" sddm 2>/dev/null || true
-                    elif command -v adduser >/dev/null 2>&1; then
-                        sudo adduser sddm "$grp" 2>/dev/null || true
+                        sudo usermod -aG "$grp" sddm >> "$LOG_FILE" 2>&1 || true
+                    elif command -v gpasswd >/dev/null 2>&1; then
+                        sudo gpasswd -a sddm "$grp" >> "$LOG_FILE" 2>&1 || true
+                    elif command -v adduser >/dev/null 2>&1 && adduser --help 2>&1 | grep -q "USER GROUP"; then
+                        sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
                     fi
                 fi
             done
@@ -5079,7 +5100,9 @@ DESK_EOF
         if getent group "$grp" >/dev/null 2>&1; then
             if command -v usermod >/dev/null 2>&1; then
                 sudo usermod -aG "$grp" "$USER" >> "$LOG_FILE" 2>&1 || true
-            elif command -v adduser >/dev/null 2>&1; then
+            elif command -v gpasswd >/dev/null 2>&1; then
+                sudo gpasswd -a "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+            elif command -v adduser >/dev/null 2>&1 && adduser --help 2>&1 | grep -q "USER GROUP"; then
                 sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
             fi
         fi
@@ -5101,8 +5124,8 @@ EOF
 
     # Set SUID on brightnessctl as fail-safe across distros (Ubuntu, Debian, Alpine, openSUSE)
     _bctl="$(command -v brightnessctl 2>/dev/null || true)"
-    if [ -n "$_bctl" ]; then
-        sudo chmod u+s "$_bctl" >> "$LOG_FILE" 2>&1 || true
+    if [ -n "$_bctl" ] && [ -f "$_bctl" ]; then
+        sudo chmod u+s "$_bctl" 2>/dev/null >> "$LOG_FILE" || true
     fi
 
     # Battery charge limit permissions for Dynamic Island and laptops

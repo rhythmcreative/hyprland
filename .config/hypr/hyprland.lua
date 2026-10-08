@@ -130,7 +130,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("~/.config/waybar/launch.sh &")
     hl.exec_cmd("~/.local/bin/rust-dock-launcher &")
     hl.exec_cmd("~/.local/bin/quickshell-island &")
-    hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync")
+    hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync --startup")
     -- Pinned compositor plugins on NixOS. The flake exports one env var per
     -- plugin with the store path of its .so; hyprctl loads them here. Unset
     -- on Arch (hyprpm owns plugin loading there), so this stays a no-op.

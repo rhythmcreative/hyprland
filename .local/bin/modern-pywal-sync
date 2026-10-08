@@ -4,6 +4,13 @@
 # Este script ignora temas externos y aplica los colores directamente
 # sobre el tema base de GTK para asegurar que NADA se quede "estancado".
 
+STARTUP=0
+for arg in "$@"; do
+    case "$arg" in
+        --startup) STARTUP=1 ;;
+    esac
+done
+
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -e "/run/user/$(id -u)/bus" ]; then
     export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 fi
@@ -272,36 +279,43 @@ if [ -f "$HOME/.cache/wal/colors-waybar.css" ]; then
     ln -sf "$HOME/.cache/wal/colors-waybar.css" "$HOME/.config/waybar/colors-pywal.css"
 fi
 
-# Reinicio rapido en segundo plano (SIGHUP mata a waybar: no usar)
-# --force: la paleta cambio y Waybar no relee el CSS en caliente, asi que aqui
-# si toca reconstruir aunque las barras ya esten donde deben. Sin esto el
-# sincronizador se saltaria el reinicio en el arranque y la barra saldria con
-# los colores viejos.
-(
-    pkill -x waybar 2>/dev/null || true
-    sleep 0.3
-    "$HOME/.config/waybar/launch.sh" --force >/dev/null 2>&1
-    sleep 1
-    pkill -x nm-applet 2>/dev/null || true
-    nm-applet --indicator >/dev/null 2>&1 &
-) &
+if [ "$STARTUP" -eq 1 ]; then
+    # En arranque de sesión, Waybar ya arranca desde el autostart de Hyprland.
+    # Se invoca launch.sh sin --force para asegurar idempotencia sin matar nada.
+    "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1 &
+else
+    # Reinicio rapido en segundo plano (SIGHUP mata a waybar: no usar)
+    # --force: la paleta cambio y Waybar no relee el CSS en caliente, asi que aqui
+    # si toca reconstruir aunque las barras ya esten donde deben.
+    (
+        pkill -x waybar 2>/dev/null || true
+        sleep 0.3
+        "$HOME/.config/waybar/launch.sh" --force >/dev/null 2>&1
+        sleep 1
+        pkill -x nm-applet 2>/dev/null || true
+        nm-applet --indicator >/dev/null 2>&1 &
+    ) &
+fi
 
 # 6b. rust-dock: relanzar para que recoja la paleta nueva
 # El panel del dock lo pinta el gtk.css global (window_bg_color) y GTK4 solo lee
 # ese fichero al arrancar la aplicacion, nunca en caliente: sin relanzarlo, el
 # dock se queda con la paleta anterior. Se hace en segundo plano y con retardo
 # para no cortar la animacion del cambio de wallpaper.
-echo "  • rust-dock..."
-# setsid: el reinicio no debe bloquear a quien llama a este script (el flujo de
-# wallpaper espera a que termine para volver a mostrar las barras).
-setsid bash -c '
-    sleep 0.8
-    pkill -x rust-dock >/dev/null 2>&1 || true
-    pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
-    pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
-    sleep 0.15
-    "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
-' >/dev/null 2>&1 </dev/null &
+if [ "$STARTUP" -eq 1 ]; then
+    # En arranque de sesión, rust-dock ya arranca en su autostart.
+    :
+else
+    echo "  • rust-dock..."
+    setsid bash -c '
+        sleep 0.8
+        pkill -x rust-dock >/dev/null 2>&1 || true
+        pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+        pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+        sleep 0.15
+        "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
+    ' >/dev/null 2>&1 </dev/null &
+fi
 
 # 6c. Auto-hide disabled: waybar stays always visible (SIGUSR2 = show)
 pkill -x waybar_auto_hi 2>/dev/null || true
@@ -382,8 +396,10 @@ cat > "$HOME/.cache/wal/colors-hyprland-enhanced.conf" <<EOF
 EOF
 
 # 10. Recargar Hyprland (Bordes y colores de ventana)
-echo "  • Hyprland..."
-hyprctl reload >/dev/null 2>&1 || true
+if [ "$STARTUP" -ne 1 ]; then
+    echo "  • Hyprland..."
+    hyprctl reload >/dev/null 2>&1 || true
+fi
 
 # 11. Sincronización completada silenciosamente
 echo "¡Hecho! El sistema ahora debería reflejar los nuevos colores."

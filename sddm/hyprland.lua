@@ -44,12 +44,14 @@
 hl.config({
     cursor = {
         enable_hyprcursor = false,
+        no_hardware_cursors = true,
     },
 
     misc = {
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         force_default_wallpaper = 0,
+        background_color = 0x111319,
         disable_hyprland_guiutils_check = true,
         disable_watchdog_warning = true,
     },
@@ -57,4 +59,13 @@ hl.config({
     animations = {
         enabled = false,
     },
+
+    xwayland = {
+        enabled = false,
+    },
+
+    ecosystem = {
+        no_update_news = true,
+    },
 })
+

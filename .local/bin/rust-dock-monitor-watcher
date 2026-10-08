@@ -195,17 +195,12 @@ reconcile_waybar() {
 handle_monitor_event() {
     sleep 0.8
 
-    # 1. Sincronizar Wallpaper en la nueva pantalla
-    if [ -x "$HOME/.local/bin/load-last-wallpaper-fast" ]; then
-        "$HOME/.local/bin/load-last-wallpaper-fast" >/dev/null 2>&1 &
-    fi
-
-    # 2. Reiniciar Waybar para que se adapte y cree barra en todos los monitores
+    # 1. Asegurar Waybar en todos los monitores de forma idempotente
     if [ -x "$HOME/.config/waybar/launch.sh" ]; then
         "$HOME/.config/waybar/launch.sh" >/dev/null 2>&1 &
     fi
 
-    # 3. Relanzar Rust-Dock en todas las pantallas
+    # 2. Relanzar Rust-Dock en todas las pantallas
     restart_dock
 }
 

@@ -39,6 +39,38 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     unset _sig
 fi
 
+# ── Exclusión mutua y debounce ───────────────────────────────────────────────
+LOCK_DIR="$XDG_RUNTIME_DIR/load-wallpaper-fast.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+        exit 0
+    fi
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+    mkdir "$LOCK_DIR" 2>/dev/null || exit 0
+fi
+printf '%s\n' "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+release_fast_lock() {
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+}
+trap release_fast_lock EXIT
+
+COOLDOWN_FILE="$XDG_RUNTIME_DIR/last-wallpaper-applied-timestamp"
+NOW=$(date +%s)
+LAST_APPLIED=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+case "$LAST_APPLIED" in
+    ''|*[!0-9]*) LAST_APPLIED=0 ;;
+esac
+
+if [ $((NOW - LAST_APPLIED)) -lt 4 ]; then
+    if [ -x "$HOME/.local/bin/background-health" ]; then
+        roto=$("$HOME/.local/bin/background-health" 2>/dev/null || true)
+        if [ -z "$roto" ]; then
+            exit 0
+        fi
+    fi
+fi
+
 # Verificación de daemon (soporta awww, swww, hyprpaper, swaybg)
 DAEMON_RUNNING=false
 if command -v awww > /dev/null 2>&1; then
@@ -118,6 +150,40 @@ fi
 # default del repo, que siempre esta.
 DEFAULT_WP="$HOME/.config/hypr/wallpapers/default.jpg"
 
+is_already_displayed() {
+    local target="$1"
+    [ -n "$target" ] || return 1
+    [ -f "$target" ] || return 1
+
+    # Si background-health indica que algún monitor no tiene fondo, toca pintar
+    if [ -x "$HOME/.local/bin/background-health" ]; then
+        local roto
+        roto=$("$HOME/.local/bin/background-health" 2>/dev/null || true)
+        [ -n "$roto" ] && return 1
+    fi
+
+    if command -v awww >/dev/null 2>&1 && pgrep -x awww-daemon >/dev/null 2>&1; then
+        local q total matching
+        q=$(awww query 2>/dev/null || true)
+        [ -n "$q" ] || return 1
+        total=$(echo "$q" | grep -c "displaying:" || true)
+        matching=$(echo "$q" | grep -F "image: $target" | grep -c "displaying:" || true)
+        if [ "$total" -gt 0 ] && [ "$total" -eq "$matching" ]; then
+            return 0
+        fi
+    elif command -v swww >/dev/null 2>&1 && pgrep -x swww-daemon >/dev/null 2>&1; then
+        local q total matching
+        q=$(swww query 2>/dev/null || true)
+        [ -n "$q" ] || return 1
+        total=$(echo "$q" | grep -c "displaying:" || true)
+        matching=$(echo "$q" | grep -F "image: $target" | grep -c "displaying:" || true)
+        if [ "$total" -gt 0 ] && [ "$total" -eq "$matching" ]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Un intento: si la imagen existe, se pinta y se elige. Devuelve 0 si se pudo.
 intentar_wallpaper() {
     local ruta="$1" motivo="$2"
@@ -126,6 +192,14 @@ intentar_wallpaper() {
         log "$motivo no existe: $ruta"
         return 1
     fi
+
+    if is_already_displayed "$ruta"; then
+        log "$motivo ya activo en todas las pantallas: $(basename "$ruta") (sin transicion redundante)"
+        echo "$ruta" > "$CACHE_FILE"
+        echo "$(date +%s)" > "$COOLDOWN_FILE" 2>/dev/null || true
+        return 0
+    fi
+
     log "Cargando ($motivo): $(basename "$ruta")"
     if "$HOME/.local/bin/wallpaper-backend" apply "$ruta" --login > /dev/null 2>&1; then
         # Solo se registra como actual si el pintado ha funcionado. Al reves,
@@ -133,6 +207,7 @@ intentar_wallpaper() {
         # dejaba constancia de un fondo que no se estaba viendo y se repetia en
         # cada arranque.
         echo "$ruta" > "$CACHE_FILE"
+        echo "$(date +%s)" > "$COOLDOWN_FILE" 2>/dev/null || true
         return 0
     fi
     log "wallpaper-backend no pudo pintar $ruta"

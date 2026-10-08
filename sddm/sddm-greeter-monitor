@@ -36,12 +36,35 @@ set -eu
 
 PLANTILLA="${RHYTHM_SDDM_PLANTILLA:-}"
 if [ -z "$PLANTILLA" ]; then
-    if [ -f /usr/share/sddm/hyprland.conf ]; then
+    hypr_bin="${HYPRLAND_CMD:-}"
+    if [ -z "$hypr_bin" ] || [ ! -x "$hypr_bin" ]; then
+        hypr_bin="$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || true)"
+    fi
+    use_lua=0
+    if [ -n "$hypr_bin" ]; then
+        v=$("$hypr_bin" --version 2>/dev/null | head -n1 | sed -n 's/.*Hyprland \([0-9]*\.[0-9]*\).*/\1/p' || true)
+        if [ -n "$v" ]; then
+            maj="${v%%.*}"
+            min="${v##*.}"
+            if [ "$maj" -gt 0 ] 2>/dev/null || [ "$min" -ge 55 ] 2>/dev/null; then
+                use_lua=1
+            fi
+        fi
+        if [ "$use_lua" -eq 0 ] && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+            use_lua=1
+        fi
+    else
+        use_lua=1
+    fi
+
+    if [ "$use_lua" -eq 1 ] && [ -f /usr/share/sddm/hyprland.lua ]; then
+        PLANTILLA="/usr/share/sddm/hyprland.lua"
+    elif [ -f /usr/share/sddm/hyprland.conf ]; then
         PLANTILLA="/usr/share/sddm/hyprland.conf"
     elif [ -f /usr/share/sddm/hyprland.lua ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     else
-        PLANTILLA="/usr/share/sddm/hyprland.conf"
+        PLANTILLA="/usr/share/sddm/hyprland.lua"
     fi
 fi
 

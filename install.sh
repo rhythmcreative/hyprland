@@ -4028,6 +4028,53 @@ step_dotfiles() {
     done
     step_ok "Config files synchronized ($synced deployed, $skipped already in place, $backed backed up)."
 
+    # ── Hyprland configuration format: Lua (>= 0.55) vs Conf (< 0.55) ──────
+    local hypr_bin
+    hypr_bin=$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || true)
+    local supports_lua=false
+
+    if [ -n "$hypr_bin" ]; then
+        local v major minor
+        v=$("$hypr_bin" --version 2>/dev/null | head -n1 | sed -n 's/.*Hyprland \([0-9]*\.[0-9]*\).*/\1/p' || true)
+        if [ -n "$v" ]; then
+            major="${v%%.*}"
+            minor="${v##*.}"
+            if [ "$major" -gt 0 ] 2>/dev/null || [ "$minor" -ge 55 ] 2>/dev/null; then
+                supports_lua=true
+            fi
+        fi
+        if [ "$supports_lua" = false ] && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+            supports_lua=true
+        fi
+    else
+        case "${DISTRO_ID:-}" in
+            arch|cachyos|endeavouros|manjaro|fedora|nixos)
+                supports_lua=true
+                ;;
+            ubuntu|debian)
+                supports_lua=false
+                ;;
+            *)
+                supports_lua=true
+                ;;
+        esac
+    fi
+
+    if [ "$supports_lua" = true ]; then
+        # Modern Hyprland uses hyprland.lua.
+        # Remove legacy hyprland.conf to prevent deprecation warnings and configuration mismatch.
+        if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
+            rm -f "$HOME/.config/hypr/hyprland.conf"
+        fi
+        step_ok "Modern Hyprland detected (>= 0.55): hyprland.lua activated (legacy hyprland.conf removed)."
+    else
+        # Legacy Hyprland (< 0.55) does not support Lua.
+        if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
+            rm -f "$HOME/.config/hypr/hyprland.lua"
+        fi
+        step_ok "Legacy Hyprland detected (< 0.55): hyprland.conf compatibility configuration activated."
+    fi
+
     # Sembrar el fondo por defecto.
     #
     # El repo trae .config/hypr/wallpapers/default.jpg y el bucle de arriba ya

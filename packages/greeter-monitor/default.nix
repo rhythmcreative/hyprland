@@ -35,7 +35,7 @@ stdenv.mkDerivation {
     wrapProgram "$out/bin/sddm-greeter-monitor" \
       --prefix PATH : '${lib.makeBinPath [ hyprland coreutils procps gawk gnugrep gnused jq ]}' \
       --set HYPRLAND_CMD "${hyprland}/bin/Hyprland" \
-      --set RHYTHM_SDDM_PLANTILLA "$out/share/rhythm/hyprland.conf"
+      --set RHYTHM_SDDM_PLANTILLA "$out/share/rhythm/hyprland.lua"
   '';
 
   meta = {

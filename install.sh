@@ -1265,7 +1265,9 @@ fi
 
 # Detect operating system
 DISTRO="unknown"
-if [ -f /etc/arch-release ] || grep -qi 'ID=.*arch' /etc/os-release 2>/dev/null; then
+if [ -f /etc/cachyos-release ] || grep -qiE '^(ID|ID_LIKE)=.*cachyos' /etc/os-release 2>/dev/null; then
+    DISTRO="cachyos"
+elif [ -f /etc/arch-release ] || grep -qiE '^(ID|ID_LIKE)=.*arch' /etc/os-release 2>/dev/null; then
     DISTRO="arch"
 elif [ -f /etc/fedora-release ] || grep -qi 'ID=.*fedora' /etc/os-release 2>/dev/null; then
     DISTRO="fedora"
@@ -1376,7 +1378,7 @@ run_step() {
 
 show_help() {
     cat << 'EOF'
-Rhythm Hyprland Installer (Omarchy Style) - Arch Linux & Fedora
+Rhythm Hyprland Installer (Omarchy Style) - Arch Linux, CachyOS & Fedora
 
 Usage:
   ./install.sh [OPTIONS]
@@ -1517,11 +1519,11 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "alpine" ] && [ "$DISTRO" != "opensuse" ]; then
+    if [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "cachyos" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "debian" ] && [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "alpine" ] && [ "$DISTRO" != "opensuse" ]; then
         # NixOS exits at the top of this script with directions to the flake.
         # Anything else landing here is a distro this installer knows nothing
         # about: no pacman, no dnf, no apt, no apk, no zypper, no supported layout.
-        echo "ERROR: This installer is only compatible with Arch Linux, Fedora, Debian, Ubuntu, Alpine, and openSUSE."
+        echo "ERROR: This installer is only compatible with Arch Linux, CachyOS, Fedora, Debian, Ubuntu, Alpine, and openSUSE."
         exit 1
     fi
 
@@ -1531,7 +1533,7 @@ preflight_checks() {
         exit 1
     fi
 
-    if [ "$DISTRO" = "arch" ]; then
+    if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
         # Pacman optimizations (ParallelDownloads and Color)
         if grep -q "^#ParallelDownloads" /etc/pacman.conf 2>/dev/null; then
             sudo sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
@@ -1727,6 +1729,13 @@ install_yay() {
     fi
     if ! command -v yay > /dev/null 2>&1; then
         section "AUR Helper (yay)"
+        step_item "Checking package repositories for yay..."
+        # If running on CachyOS or repo with yay (e.g. cachyos repos), install binary package directly
+        if sudo pacman -S --needed --noconfirm yay >> "$LOG_FILE" 2>&1 && command -v yay > /dev/null 2>&1; then
+            step_ok "AUR helper (yay) installed from repository."
+            return 0
+        fi
+
         step_item "Building yay from AUR..."
         sudo pacman -S --needed --noconfirm base-devel git >> "$LOG_FILE" 2>&1
         # Directorio privado para el build de yay. Con /tmp/yay fijo, otro usuario
@@ -1927,7 +1936,7 @@ EOF
     if [ "$IS_NVIDIA" = true ]; then
         # 1. Detect installed kernels and install matching kernel headers
         local KERNEL_HEADERS=()
-        for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-lts|-zen|-hardened)?$'); do
+        for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-cachyos.*|-lts|-zen|-hardened)?$'); do
             KERNEL_HEADERS+=("${k}-headers")
         done
         if [ ${#KERNEL_HEADERS[@]} -gt 0 ]; then
@@ -1943,7 +1952,7 @@ EOF
         fi
 
         local IS_CUSTOM_KERNEL=false
-        if pacman -Qq 2>/dev/null | grep -E '^linux-(lts|zen|hardened)$' >/dev/null 2>&1; then
+        if pacman -Qq 2>/dev/null | grep -E '^linux-(cachyos.*|lts|zen|hardened)$' >/dev/null 2>&1; then
             IS_CUSTOM_KERNEL=true
         fi
 
@@ -2023,7 +2032,7 @@ EOF
         step_item "Enabling NVIDIA power management & suspend services..."
         sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service >> "$LOG_FILE" 2>&1 || true
 
-        # Early KMS in mkinitcpio
+        # Early KMS in mkinitcpio or dracut
         if [ -f /etc/mkinitcpio.conf ]; then
             if ! grep -q "nvidia_drm" /etc/mkinitcpio.conf; then
                 step_item "Adding NVIDIA modules to /etc/mkinitcpio.conf for early KMS..."
@@ -2032,10 +2041,11 @@ EOF
             fi
         fi
 
-        # Automatic pacman hook for initramfs rebuilding
-        step_item "Configuring automatic NVIDIA pacman hook for kernel updates..."
-        sudo mkdir -p /etc/pacman.d/hooks
-        cat << 'EOF' | sudo tee /etc/pacman.d/hooks/nvidia.hook > /dev/null
+        if command -v mkinitcpio >/dev/null 2>&1; then
+            # Automatic pacman hook for initramfs rebuilding
+            step_item "Configuring automatic NVIDIA pacman hook for kernel updates..."
+            sudo mkdir -p /etc/pacman.d/hooks
+            cat << 'EOF' | sudo tee /etc/pacman.d/hooks/nvidia.hook > /dev/null
 [Trigger]
 Operation=Install
 Operation=Upgrade
@@ -2047,6 +2057,9 @@ Target=nvidia-dkms
 Target=nvidia-open-dkms
 Target=nvidia-open-lts
 Target=linux
+Target=linux-cachyos
+Target=linux-cachyos-bore
+Target=linux-cachyos-lto
 Target=linux-lts
 Target=linux-zen
 Target=linux-hardened
@@ -2058,9 +2071,18 @@ When=PostTransaction
 Exec=/usr/bin/mkinitcpio -P
 EOF
 
-        # Build initramfs images
-        step_item "Generating initramfs images with mkinitcpio..."
-        sudo mkinitcpio -P >> "$LOG_FILE" 2>&1 || step_warn "mkinitcpio image generation encountered warnings."
+            # Build initramfs images
+            step_item "Generating initramfs images with mkinitcpio..."
+            sudo mkinitcpio -P >> "$LOG_FILE" 2>&1 || step_warn "mkinitcpio image generation encountered warnings."
+        elif command -v dracut >/dev/null 2>&1; then
+            step_item "Configuring dracut for early NVIDIA KMS..."
+            sudo mkdir -p /etc/dracut.conf.d
+            cat << 'EOF' | sudo tee /etc/dracut.conf.d/nvidia.conf > /dev/null
+add_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "
+EOF
+            step_item "Rebuilding initramfs with dracut..."
+            sudo dracut --force >> "$LOG_FILE" 2>&1 || step_warn "dracut rebuild had warnings."
+        fi
         step_ok "NVIDIA system optimization complete."
     fi
 }
@@ -3073,7 +3095,6 @@ step_software() {
         # Snapshots and filesystem rollback (pre-OTA safety nets)
         btrfs-progs
         snapper
-        timeshift
     )
 
     rhythm_install_with_progress "${#CORE_PKGS[@]}" "Installing core packages and dependencies via yay..." \
@@ -3473,7 +3494,7 @@ first_run_choices() {
             echo ""
             gum style --foreground 6 --bold --padding "0 0 1 $PADDING_LEFT" ":: System Utilities & Flatpaks (5/5)"
             local vbox_label="VirtualBox (virtualbox virtualbox-host-modules-arch virtualbox-guest-iso) $repo_tag"
-            [ "$DISTRO" != "arch" ] && vbox_label="VirtualBox (virtualbox) $repo_tag"
+            [ "$DISTRO" != "arch" ] && [ "$DISTRO" != "cachyos" ] && vbox_label="VirtualBox (virtualbox) $repo_tag"
             local UTILS_LIST=(
                 "$vbox_label"
                 "Timeshift (timeshift) $repo_tag"
@@ -3532,7 +3553,7 @@ first_run_choices() {
                     *"(blender)"*)                      PACMAN_INSTALL+=("blender") ;;
                     *"(audacity)"*)                     PACMAN_INSTALL+=("audacity") ;;
                     *"(virtualbox"*|*"(virtualbox "*|*"(virtualbox)"*)
-                        if [ "$DISTRO" = "arch" ]; then
+                        if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
                             PACMAN_INSTALL+=("virtualbox" "virtualbox-host-modules-arch" "virtualbox-guest-iso")
                         else
                             PACMAN_INSTALL+=("virtualbox")
@@ -3563,7 +3584,7 @@ first_run_choices() {
                 fzf_prompt="Would you like to search and add extra packages from Alpine APK with fzf?"
             elif [ "$DISTRO" = "opensuse" ]; then
                 fzf_prompt="Would you like to search and add extra packages from openSUSE with fzf?"
-            elif [ "$DISTRO" = "arch" ]; then
+            elif [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
                 fzf_prompt="Would you like to search and add extra packages from Pacman/AUR with fzf?"
             fi
             if confirm_prompt "$fzf_prompt"; then
@@ -3866,6 +3887,22 @@ step_applications() {
         else
             local unique_pkgs=($(printf "%s\n" "${PACMAN_INSTALL[@]}" | sort -u))
             PACMAN_INSTALL=("${unique_pkgs[@]}")
+            # Prevent conflict if user selected timeshift on a system with cachyos-snapper-support
+            if pacman -Q cachyos-snapper-support >/dev/null 2>&1; then
+                local filtered_pkgs=()
+                local skipped_timeshift=false
+                for p in "${PACMAN_INSTALL[@]}"; do
+                    if [ "$p" = "timeshift" ]; then
+                        skipped_timeshift=true
+                    else
+                        filtered_pkgs+=("$p")
+                    fi
+                done
+                if [ "$skipped_timeshift" = true ]; then
+                    step_warn "Timeshift omitted: conflicts with cachyos-snapper-support (Snapper is managing snapshots)."
+                    PACMAN_INSTALL=("${filtered_pkgs[@]}")
+                fi
+            fi
             rhythm_install_with_progress "${#PACMAN_INSTALL[@]}" "Installing selected applications via yay (${#PACMAN_INSTALL[@]} items)..." \
                 yay -S --needed --noconfirm "${PACMAN_INSTALL[@]}" || step_warn "Some native packages could not be installed."
         fi
@@ -4978,7 +5015,12 @@ if [ "$DRY_RUN" = true ]; then
     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
     step_item "Verifying preflight environment..."
     sleep 0.4
-    if [ "$DISTRO" = "fedora" ]; then
+    if [ "$DISTRO" = "cachyos" ]; then
+        step_ok "CachyOS x86_64 verified."
+        step_ok "CachyOS performance-optimized repositories active."
+        section "AUR Helper & Build Toolchain"
+        step_ok "yay / paru AUR helper ready."
+    elif [ "$DISTRO" = "fedora" ]; then
         step_ok "Fedora Linux x86_64 verified."
         step_ok "DNF package manager & RPM Fusion repositories active."
         section "Package Toolchain & Repositories"
@@ -5014,7 +5056,9 @@ if [ "$DRY_RUN" = true ]; then
     section "Hardware Drivers & GPU Optimization"
     step_item "Simulating hardware auto-detection (NVIDIA/AMD/Intel)..."
     sleep 0.5
-    if [ "$DISTRO" = "fedora" ]; then
+    if [ "$DISTRO" = "cachyos" ]; then
+        step_ok "CachyOS optimized kernel & NVIDIA Open/DKMS drivers, DRM modesetting verified."
+    elif [ "$DISTRO" = "fedora" ]; then
         step_ok "NVIDIA Akmod, kernel-devel, DRM modesetting & dracut initramfs verified."
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         step_ok "NVIDIA DKMS, kernel headers, DRM modesetting & initramfs verified."

@@ -120,7 +120,7 @@ EOF
 }
 
 escribir_colores_rofi_fallback() {
-    mkdir -p "$HOME/.config/rofi"
+    mkdir -p "$HOME/.config/rofi" "$HOME/.cache/wal"
     cat > "$HOME/.config/rofi/colors-pywal.rasi" <<EOF
 /* Paleta de reserva. La escribe modern-pywal-sync cuando pywal no ha podido
    generar la suya; se regenera sola en cuanto wal corre. */
@@ -151,6 +151,254 @@ escribir_colores_rofi_fallback() {
     background-trans:     ${PALETA_FALLBACK_BACKGROUND}CC;
     background-alt-trans: ${PALETA_FALLBACK_COLOR0}AA;
     selected-trans:       ${PALETA_FALLBACK_COLOR1}DD;
+}
+EOF
+    cp -f "$HOME/.config/rofi/colors-pywal.rasi" "$HOME/.cache/wal/colors-rofi.rasi" 2>/dev/null || true
+
+    cat > "$HOME/.cache/wal/colors-rofi-dark.rasi" <<EOF
+* {
+    active-background: ${PALETA_FALLBACK_COLOR2};
+    active-foreground: @foreground;
+    normal-background: @background;
+    normal-foreground: @foreground;
+    urgent-background: ${PALETA_FALLBACK_COLOR1};
+    urgent-foreground: @foreground;
+
+    alternate-active-background: @background;
+    alternate-active-foreground: @foreground;
+    alternate-normal-background: @background;
+    alternate-normal-foreground: @foreground;
+    alternate-urgent-background: @background;
+    alternate-urgent-foreground: @foreground;
+
+    selected-active-background: ${PALETA_FALLBACK_COLOR1};
+    selected-active-foreground: @foreground;
+    selected-normal-background: ${PALETA_FALLBACK_COLOR6};
+    selected-normal-foreground: @foreground;
+    selected-urgent-background: ${PALETA_FALLBACK_COLOR3};
+    selected-urgent-foreground: @foreground;
+
+    background-color: @background;
+    background: ${PALETA_FALLBACK_BACKGROUND};
+    foreground: ${PALETA_FALLBACK_FOREGROUND};
+    border-color: @background;
+    spacing: 2;
+}
+
+#window {
+    background-color: @background;
+    border: 0;
+    padding: 2.5ch;
+}
+
+#mainbox {
+    border: 0;
+    padding: 0;
+}
+
+#message {
+    border: 2px 0px 0px;
+    border-color: @border-color;
+    padding: 1px;
+}
+
+#textbox {
+    text-color: @foreground;
+}
+
+#inputbar {
+    children: [ prompt,textbox-prompt-colon,entry,case-indicator ];
+}
+
+#textbox-prompt-colon {
+    expand: false;
+    str: ":";
+    margin: 0px 0.3em 0em 0em;
+    text-color: @normal-foreground;
+}
+
+#listview {
+    fixed-height: 0;
+    border: 2px 0px 0px;
+    border-color: @border-color;
+    spacing: 2px;
+    scrollbar: true;
+    padding: 2px 0px 0px;
+}
+
+#element {
+    border: 0;
+    padding: 1px;
+}
+
+#element.normal.normal {
+    background-color: @normal-background;
+    text-color: @normal-foreground;
+}
+
+#element.normal.urgent {
+    background-color: @urgent-background;
+    text-color: @urgent-foreground;
+}
+
+#element.normal.active {
+    background-color: @active-background;
+    text-color: @active-foreground;
+}
+
+#element.selected.normal {
+    background-color: @selected-normal-background;
+    text-color: @selected-normal-foreground;
+}
+
+#element.selected.urgent {
+    background-color: @selected-urgent-background;
+    text-color: @selected-urgent-foreground;
+}
+
+#element.selected.active {
+    background-color: @selected-active-background;
+    text-color: @selected-active-foreground;
+}
+
+#element.alternate.normal {
+    background-color: @alternate-normal-background;
+    text-color: @alternate-normal-foreground;
+}
+
+#element.alternate.urgent {
+    background-color: @alternate-urgent-background;
+    text-color: @alternate-urgent-foreground;
+}
+
+#element.alternate.active {
+    background-color: @alternate-active-background;
+    text-color: @alternate-active-foreground;
+}
+EOF
+}
+
+escribir_colores_rofi_dark() {
+    mkdir -p "$HOME/.cache/wal"
+    cat > "$HOME/.cache/wal/colors-rofi-dark.rasi" <<EOF
+* {
+    active-background: ${color2};
+    active-foreground: @foreground;
+    normal-background: @background;
+    normal-foreground: @foreground;
+    urgent-background: ${color1};
+    urgent-foreground: @foreground;
+
+    alternate-active-background: @background;
+    alternate-active-foreground: @foreground;
+    alternate-normal-background: @background;
+    alternate-normal-foreground: @foreground;
+    alternate-urgent-background: @background;
+    alternate-urgent-foreground: @foreground;
+
+    selected-active-background: ${color1};
+    selected-active-foreground: @foreground;
+    selected-normal-background: ${color6};
+    selected-normal-foreground: @foreground;
+    selected-urgent-background: ${color3};
+    selected-urgent-foreground: @foreground;
+
+    background-color: @background;
+    background: ${background};
+    foreground: ${foreground};
+    border-color: @background;
+    spacing: 2;
+}
+
+#window {
+    background-color: @background;
+    border: 0;
+    padding: 2.5ch;
+}
+
+#mainbox {
+    border: 0;
+    padding: 0;
+}
+
+#message {
+    border: 2px 0px 0px;
+    border-color: @border-color;
+    padding: 1px;
+}
+
+#textbox {
+    text-color: @foreground;
+}
+
+#inputbar {
+    children: [ prompt,textbox-prompt-colon,entry,case-indicator ];
+}
+
+#textbox-prompt-colon {
+    expand: false;
+    str: ":";
+    margin: 0px 0.3em 0em 0em;
+    text-color: @normal-foreground;
+}
+
+#listview {
+    fixed-height: 0;
+    border: 2px 0px 0px;
+    border-color: @border-color;
+    spacing: 2px;
+    scrollbar: true;
+    padding: 2px 0px 0px;
+}
+
+#element {
+    border: 0;
+    padding: 1px;
+}
+
+#element.normal.normal {
+    background-color: @normal-background;
+    text-color: @normal-foreground;
+}
+
+#element.normal.urgent {
+    background-color: @urgent-background;
+    text-color: @urgent-foreground;
+}
+
+#element.normal.active {
+    background-color: @active-background;
+    text-color: @active-foreground;
+}
+
+#element.selected.normal {
+    background-color: @selected-normal-background;
+    text-color: @selected-normal-foreground;
+}
+
+#element.selected.urgent {
+    background-color: @selected-urgent-background;
+    text-color: @selected-urgent-foreground;
+}
+
+#element.selected.active {
+    background-color: @selected-active-background;
+    text-color: @selected-active-foreground;
+}
+
+#element.alternate.normal {
+    background-color: @alternate-normal-background;
+    text-color: @alternate-normal-foreground;
+}
+
+#element.alternate.urgent {
+    background-color: @alternate-urgent-background;
+    text-color: @alternate-urgent-foreground;
+}
+
+#element.alternate.active {
+    background-color: @alternate-active-background;
+    text-color: @alternate-active-foreground;
 }
 EOF
 }
@@ -334,18 +582,19 @@ fi
 # 7. Sincronizar Rofi
 echo "  • Rofi..."
 # sync-rofi-pywal se prefiere: genera colors-pywal.rasi Y style-3-pywal.rasi, y
-# este ultimo es el que usa el lanzador de aplicaciones (SUPER+A). Antes solo se
-# generaba al abrir ese menu, y el menu lo exigia para poder abrirse.
+# este ultimo es el que usa el lanzador de aplicaciones (SUPER+A).
 if [ -x "$HOME/.local/bin/sync-rofi-pywal" ]; then
     "$HOME/.local/bin/sync-rofi-pywal" >/dev/null 2>&1 || true
 fi
-# Y si no, al menos el fichero de colores, desde la plantilla de pywal.
-if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] && [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then
-    cp -f "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi"
+# Escribir colors-rofi-dark.rasi en ~/.cache/wal para powermenu y confirm dialogs
+escribir_colores_rofi_dark
+if [ -f "$HOME/.config/rofi/colors-pywal.rasi" ]; then
+    cp -f "$HOME/.config/rofi/colors-pywal.rasi" "$HOME/.cache/wal/colors-rofi.rasi" 2>/dev/null || true
+elif [ -f "$HOME/.cache/wal/colors-rofi.rasi" ]; then
+    cp -f "$HOME/.cache/wal/colors-rofi.rasi" "$HOME/.config/rofi/colors-pywal.rasi" 2>/dev/null || true
+else
+    escribir_colores_rofi_fallback
 fi
-# Si aun asi no existe (sync-rofi-pywal ha fallado), se escribe la reserva para
-# que el @import de los .rasi no se quede sin resolver.
-[ -e "$HOME/.config/rofi/colors-pywal.rasi" ] || escribir_colores_rofi_fallback
 
 # 8. Sincronizar SDDM (Wallpaper y Colores)
 echo "  • SDDM (Login Screen)..."

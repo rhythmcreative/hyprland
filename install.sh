@@ -2532,6 +2532,8 @@ install_quickshell() {
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y quickshell >> "$LOG_FILE" 2>&1 || true
         fi
+    elif [ "$DISTRO" = "opensuse" ]; then
+        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses quickshell >> "$LOG_FILE" 2>&1 || true
     fi
 
     if command -v quickshell >/dev/null 2>&1; then
@@ -2566,6 +2568,7 @@ install_quickshell() {
                 cd /usr/local/lib/quickshell
                 sudo rm -rf squashfs-root
                 sudo ./quickshell.AppImage --appimage-extract >/dev/null 2>&1 || true
+                sudo chmod -R a+rX /usr/local/lib/quickshell
             ) >> "$LOG_FILE" 2>&1 || true
 
             cat << 'QSEOF' | sudo tee /usr/local/bin/quickshell > /dev/null 2>&1 || true

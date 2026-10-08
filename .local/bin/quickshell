@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Universal Quickshell launcher with auto-detection for native packages,
+# AppImages, extracted directories and NixOS wrappers.
+
+# 1. Prefer native package in standard system paths (Arch, Fedora COPR, openSUSE native)
+for bin in /usr/bin/quickshell /bin/quickshell; do
+    if [ -x "$bin" ]; then
+        exec "$bin" "$@"
+    fi
+done
+
+# 2. Check for extracted AppImage directory (fastest, no FUSE required)
+for apprun in \
+    "/usr/local/lib/quickshell/squashfs-root/AppRun" \
+    "$HOME/.local/lib/quickshell/squashfs-root/AppRun" \
+    "/usr/local/lib/quickshell/AppRun" \
+    "$HOME/.local/lib/quickshell/AppRun"; do
+    if [ -x "$apprun" ]; then
+        exec "$apprun" "$@"
+    fi
+done
+
+# 3. Locate AppImage binary
+QS_APPIMAGE=""
+for ai in \
+    "/usr/local/lib/quickshell/quickshell.AppImage" \
+    "$HOME/.local/lib/quickshell/quickshell.AppImage" \
+    "/usr/local/bin/quickshell.AppImage"; do
+    if [ -x "$ai" ]; then
+        QS_APPIMAGE="$ai"
+        break
+    fi
+done
+
+if [ -n "$QS_APPIMAGE" ]; then
+    # Test if FUSE is available and operational
+    if [ -e /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
+        exec "$QS_APPIMAGE" "$@"
+    fi
+    # Fallback to --appimage-extract-and-run without FUSE
+    exec "$QS_APPIMAGE" --appimage-extract-and-run "$@"
+fi
+
+# 4. Fallback to /usr/local/bin if present and not ourselves
+if [ -x "/usr/local/bin/quickshell" ]; then
+    _real_local="$(realpath /usr/local/bin/quickshell 2>/dev/null || true)"
+    _real_self="$(realpath "$0" 2>/dev/null || true)"
+    if [ -n "$_real_local" ] && [ "$_real_local" != "$_real_self" ]; then
+        exec "/usr/local/bin/quickshell" "$@"
+    fi
+fi
+
+echo "quickshell: executable not found in system or /usr/local/lib/quickshell" >&2
+exit 127

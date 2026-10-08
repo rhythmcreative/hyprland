@@ -265,6 +265,10 @@ check_runtime() {
     for u in waybar-island.service wallpaper-monitor-watcher.service; do
         if systemctl --user is-active --quiet "$u" 2>/dev/null; then
             ok "$u is running"
+        elif [ "$u" = "waybar-island.service" ] && "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+            ok "$u is running (process active)"
+        elif [ "$u" = "wallpaper-monitor-watcher.service" ] && pgrep -f "wallpaper-monitor-watcher" >/dev/null 2>&1; then
+            ok "$u is running (process active)"
         else
             bad "$u is not running"
         fi

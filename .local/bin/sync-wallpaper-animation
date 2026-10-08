@@ -51,8 +51,16 @@ fi
     # Generar colores con Pywal (usa primer frame en animados)
     if command -v wal &>/dev/null; then
         PYWAL_SRC="$WALLPAPER_PATH"
-        [ -x "$HOME/.local/bin/wallpaper-backend" ] && PYWAL_SRC=$("$HOME/.local/bin/wallpaper-backend" pywal-src 2>/dev/null || echo "$WALLPAPER_PATH")
-        [ -f "$PYWAL_SRC" ] || PYWAL_SRC="$WALLPAPER_PATH"
+        case "${WALLPAPER_PATH##*.}" in
+            gif|mp4|webm|mkv|mov)
+                if command -v magick >/dev/null 2>&1; then
+                    magick "${WALLPAPER_PATH}[0]" "/tmp/wallpaper-frame.png" 2>/dev/null && PYWAL_SRC="/tmp/wallpaper-frame.png"
+                elif command -v convert >/dev/null 2>&1; then
+                    convert "${WALLPAPER_PATH}[0]" "/tmp/wallpaper-frame.png" 2>/dev/null && PYWAL_SRC="/tmp/wallpaper-frame.png"
+                fi
+                ;;
+        esac
+        echo "$PYWAL_SRC" > "$HOME/.cache/wallpaper-pywal-src"
         wal -i "$PYWAL_SRC" -n -q
     fi
 

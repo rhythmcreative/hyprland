@@ -77,39 +77,20 @@ export QT_QPA_PLATFORM="wayland"
 # Hyprland no aparece se arranca igualmente: la isla tiene que salir aunque el
 # compositor no este, porque si no no habria forma de recuperarlo desde ella.
 buscar_firma() {
-    local d s
-    # Se recorre en orden de mas reciente a mas antiguo (ls -t), no con el glob:
-    # la firma tiene forma hash_pid_arranque, asi que el glob las ordenaria por
-    # una firma vieja sin borrar, el orden no garantiza nada. En un login nuevo
-    # puede haber una firma vieja sin borrar y hay que quedarse con la ultima.
-    for d in $(ls -t "$XDG_RUNTIME_DIR"/hypr/ 2>/dev/null); do
-        [ -d "$XDG_RUNTIME_DIR/hypr/$d" ] || continue
-        s="$d"
-        [ -n "$s" ] || continue
-        # Hyprland crea el directorio antes de tener los sockets, asi que
-        # fijarse solo en el nombre daria una firma que todavia no existe.
-        #
-        # El socket NO esta al lado del directorio, esta DENTRO y con un punto
-        # delante: hypr/<firma>/.socket2.sock. Antes se miraba
-        # hypr/<firma>.socket2.sock, que no existe, y por eso buscar_firma nunca
-        # encontraba la firma: la isla arrancaba con HYPRLAND_INSTANCE_SIGNATURE
-        # vacia y todo lo que lanza desde dentro (island-fullscreens,
-        # wallpaper-apply, background-health) se caia con
-        # "HYPRLAND_INSTANCE_SIGNATURE not set!". Medido en esta maquina:
-        #
-        #   hypr/<firma>/.socket2.sock   -> si es socket
-        #   hypr/<firma>.socket2.sock    -> no existe
-        #
-        # Se miran las dos formas porque Hyprland las ha cambiado entre
-        # versiones, y si no se encuentra ninguna no es motivo para no arrancar.
-        if [ -S "$XDG_RUNTIME_DIR/hypr/$d/.socket2.sock" ] ||
-           [ -S "$XDG_RUNTIME_DIR/hypr/$d.socket2.sock" ]; then
-            :
-        else
-            continue
-        fi
-        printf '%s\n' "$s"
-        return 0
+    local d s dir
+    for dir in "$XDG_RUNTIME_DIR/hypr" "/tmp/hypr"; do
+        [ -d "$dir" ] || continue
+        for d in $(ls -t "$dir" 2>/dev/null); do
+            [ -d "$dir/$d" ] || continue
+            s="$d"
+            [ -n "$s" ] || continue
+            if [ -S "$dir/$d/.socket2.sock" ] ||
+               [ -S "$dir/$d.socket2.sock" ] ||
+               [ -S "$dir/$d/.socket.sock" ]; then
+                printf '%s\n' "$s"
+                return 0
+            fi
+        done
     done
     return 1
 }

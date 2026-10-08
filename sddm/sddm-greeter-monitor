@@ -38,23 +38,16 @@ PLANTILLA="${RHYTHM_SDDM_PLANTILLA:-}"
 if [ -z "$PLANTILLA" ]; then
     hypr_bin="${HYPRLAND_CMD:-}"
     if [ -z "$hypr_bin" ] || [ ! -x "$hypr_bin" ]; then
-        hypr_bin="$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || true)"
+        hypr_bin="$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || command -v hyprland 2>/dev/null || command -v /usr/bin/hyprland 2>/dev/null || command -v /usr/local/bin/hyprland 2>/dev/null || command -v start-hyprland 2>/dev/null || command -v /usr/bin/start-hyprland 2>/dev/null || true)"
     fi
     use_lua=0
-    if [ -n "$hypr_bin" ]; then
-        v=$("$hypr_bin" --version 2>/dev/null | head -n1 | sed -n 's/.*Hyprland \([0-9]*\.[0-9]*\).*/\1/p' || true)
-        if [ -n "$v" ]; then
-            maj="${v%%.*}"
-            min="${v##*.}"
-            if [ "$maj" -gt 0 ] 2>/dev/null || [ "$min" -ge 55 ] 2>/dev/null; then
-                use_lua=1
-            fi
-        fi
-        if [ "$use_lua" -eq 0 ] && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+    if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
+        # Standard upstream and distribution Hyprland builds (Debian, Arch, Fedora)
+        # use hyprland.conf (hyprlang). Only custom builds embedding Lua manager
+        # accept hyprland.lua directly as a compositor config.
+        if strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
             use_lua=1
         fi
-    else
-        use_lua=1
     fi
 
     if [ "$use_lua" -eq 1 ] && [ -f /usr/share/sddm/hyprland.lua ]; then
@@ -64,7 +57,7 @@ if [ -z "$PLANTILLA" ]; then
     elif [ -f /usr/share/sddm/hyprland.lua ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     else
-        PLANTILLA="/usr/share/sddm/hyprland.lua"
+        PLANTILLA="/usr/share/sddm/hyprland.conf"
     fi
 fi
 
@@ -302,6 +295,12 @@ elif [ -x /usr/bin/Hyprland ]; then
     exec /usr/bin/Hyprland $extra_flags --config "$GENERADO"
 elif [ -x /usr/local/bin/Hyprland ]; then
     exec /usr/local/bin/Hyprland $extra_flags --config "$GENERADO"
+elif command -v hyprland >/dev/null 2>&1; then
+    exec hyprland $extra_flags --config "$GENERADO"
+elif [ -x /usr/bin/hyprland ]; then
+    exec /usr/bin/hyprland $extra_flags --config "$GENERADO"
+elif [ -x /usr/local/bin/hyprland ]; then
+    exec /usr/local/bin/hyprland $extra_flags --config "$GENERADO"
 elif command -v start-hyprland >/dev/null 2>&1; then
     exec start-hyprland -- $extra_flags --config "$GENERADO"
 elif [ -x /usr/bin/start-hyprland ]; then

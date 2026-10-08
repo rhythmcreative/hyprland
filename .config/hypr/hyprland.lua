@@ -162,8 +162,10 @@ hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 if not os.getenv("QT_STYLE_OVERRIDE") then
     hl.env("QT_STYLE_OVERRIDE", "kvantum")
 end
-hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
-hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
+if os.getenv("LIBVA_DRIVER_NAME") == "nvidia" or (os.execute("lspci 2>/dev/null | grep -qi nvidia") == 0) then
+    hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+    hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
+end
 
 -- General
 hl.config({

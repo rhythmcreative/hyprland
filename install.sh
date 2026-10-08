@@ -1482,6 +1482,9 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y git
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            if [ "$DISTRO" = "debian" ]; then
+                sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+            fi
             sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache git
@@ -1811,6 +1814,10 @@ CHARM_EOF
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+        # Disable stale or blocking cdrom/dvd entries in sources.list (common after Debian DVD ISO installation)
+        if [ "$DISTRO" = "debian" ]; then
+            sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        fi
         # Handle background unattended-upgrades / apt-daily lock
         if systemctl is-active --quiet apt-daily.service 2>/dev/null || systemctl is-active --quiet apt-daily-upgrade.service 2>/dev/null || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
             step_item "Waiting for background package updates (apt-daily) to release lock..."
@@ -2771,9 +2778,19 @@ step_software() {
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         sudo -v
 
-        # Ensure Debian backports is available if Debian 13 (Trixie)
+        # Ensure Debian backports is available if Debian 13 (Trixie) or 12 (Bookworm)
         local debian_codename
-        debian_codename=$(grep "VERSION_CODENAME" /etc/os-release 2>/dev/null | cut -d= -f2 || echo "trixie")
+        debian_codename=$(grep "VERSION_CODENAME" /etc/os-release 2>/dev/null | cut -d= -f2 || true)
+        debian_codename=$(echo "$debian_codename" | tr -d '"'\'' ' || true)
+        if [ -z "$debian_codename" ] && [ -f /etc/debian_version ]; then
+            local dv
+            dv=$(cat /etc/debian_version 2>/dev/null || true)
+            case "$dv" in
+                13*|trixie*) debian_codename="trixie" ;;
+                12*|bookworm*) debian_codename="bookworm" ;;
+                *) debian_codename="trixie" ;;
+            esac
+        fi
         [ -z "$debian_codename" ] && debian_codename="trixie"
 
         local DEBIAN_CORE_PKGS=(
@@ -2827,12 +2844,22 @@ step_software() {
             libnotify-bin
             socat
             x11-xserver-utils
+            sddm
+            libxcb-cursor0
+            libxcb-xinerama0
+            libxkbcommon-x11-0
+            libx11-xcb1
             qml-module-qtgraphicaleffects
             qml-module-qtquick-controls2
             qml-module-qtsvg
             qml-module-qtquick-shapes
+            qml-module-qtquick-layouts
+            qml-module-qtquick-window2
+            qml-module-qtquick-virtualkeyboard
+            qtwayland5
             qml6-module-qtquick
             qml6-module-qtquick-controls
+            qml6-module-qtquick-effects
             qml6-module-qtquick-shapes
             qml6-module-qtquick-layouts
             qml6-module-qtquick-templates
@@ -2841,6 +2868,9 @@ step_software() {
             qml6-module-qt5compat
             qml6-module-qtmultimedia
             qml6-module-qtvirtualkeyboard
+            qt6-virtualkeyboard-plugin
+            libqt6multimedia6
+            qt6-wayland
             libgtk4-layer-shell0
             libqt6svg6
             hyprpaper
@@ -2890,14 +2920,25 @@ step_software() {
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
         if [ "$DISTRO" = "debian" ]; then
+            sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
             if ! grep -rq "${debian_codename}-backports" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
-                echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
-                sudo apt-get update >> "$LOG_FILE" 2>&1 || true
+                echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
             fi
-            # Try batch install with backports priority for Hyprland ecosystem
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t ${debian_codename}-backports hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+            sudo mkdir -p /etc/apt/preferences.d
+            cat << PREF_EOF | sudo tee /etc/apt/preferences.d/99backports.pref >/dev/null
+Package: *
+Pin: release a=${debian_codename}-backports
+Pin-Priority: 500
+PREF_EOF
+            sudo apt-get update >> "$LOG_FILE" 2>&1 || true
+            for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker xdg-desktop-portal-hyprland; do
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" "$hpkg" >> "$LOG_FILE" 2>&1 || \
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$hpkg" >> "$LOG_FILE" 2>&1 || true
+            done
         elif [ "$DISTRO" = "ubuntu" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y hyprland hypridle hyprlock hyprsunset hyprpicker >> "$LOG_FILE" 2>&1 || true
+            for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker xdg-desktop-portal-hyprland; do
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$hpkg" >> "$LOG_FILE" 2>&1 || true
+            done
         fi
         if ! rhythm_install_with_progress "${#DEBIAN_CORE_PKGS[@]}" "Installing core packages via apt-get..." \
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEBIAN_CORE_PKGS[@]}"; then
@@ -2906,7 +2947,12 @@ step_software() {
             for pkg in "${DEBIAN_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_d" "Installing $pkg (fallback)..."
-                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
+                if [ "$DISTRO" = "debian" ]; then
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || \
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
+                else
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$pkg" >> "$LOG_FILE" 2>&1 || true
+                fi
             done
             if [ "$total_d" -gt 0 ]; then
                 render_progress_bar "$total_d" "$total_d" "Installation complete." 100
@@ -4286,51 +4332,63 @@ step_dotfiles() {
     done
     step_ok "Config files synchronized ($synced deployed, $skipped already in place, $backed backed up)."
 
-    # ── Hyprland configuration format: Lua (>= 0.55) vs Conf (< 0.55) ──────
+    # ── Hyprland configuration format: Lua vs Conf ──────
     local hypr_bin
-    hypr_bin=$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || true)
+    hypr_bin=$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || command -v hyprland 2>/dev/null || command -v /usr/bin/hyprland 2>/dev/null || command -v /usr/local/bin/hyprland 2>/dev/null || command -v start-hyprland 2>/dev/null || command -v /usr/bin/start-hyprland 2>/dev/null || true)
     local supports_lua=false
 
-    if [ -n "$hypr_bin" ]; then
-        local v major minor
-        v=$("$hypr_bin" --version 2>/dev/null | head -n1 | sed -n 's/.*Hyprland \([0-9]*\.[0-9]*\).*/\1/p' || true)
-        if [ -n "$v" ]; then
-            major="${v%%.*}"
-            minor="${v##*.}"
-            if [ "$major" -gt 0 ] 2>/dev/null || [ "$minor" -ge 55 ] 2>/dev/null; then
-                supports_lua=true
-            fi
-        fi
-        if [ "$supports_lua" = false ] && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+    if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
+        if strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
             supports_lua=true
         fi
-    else
-        case "${DISTRO_ID:-}" in
-            arch|cachyos|endeavouros|manjaro|fedora|nixos)
-                supports_lua=true
-                ;;
-            ubuntu|debian)
-                supports_lua=false
-                ;;
-            *)
-                supports_lua=true
-                ;;
-        esac
+    fi
+
+    # Debian and Ubuntu package Hyprland with standard hyprlang (hyprland.conf)
+    if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+        supports_lua=false
     fi
 
     if [ "$supports_lua" = true ]; then
-        # Modern Hyprland uses hyprland.lua.
-        # Remove legacy hyprland.conf to prevent deprecation warnings and configuration mismatch.
+        # Hyprland with Lua manager uses hyprland.lua.
         if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
             rm -f "$HOME/.config/hypr/hyprland.conf"
         fi
-        step_ok "Modern Hyprland detected (>= 0.55): hyprland.lua activated (legacy hyprland.conf removed)."
+        step_ok "Modern Hyprland with Lua manager detected: hyprland.lua activated."
     else
-        # Legacy Hyprland (< 0.55) does not support Lua.
+        # Standard distribution Hyprland uses hyprland.conf.
         if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
             rm -f "$HOME/.config/hypr/hyprland.lua"
         fi
-        step_ok "Legacy Hyprland detected (< 0.55): hyprland.conf compatibility configuration activated."
+        step_ok "Standard Hyprland detected: hyprland.conf activated."
+    fi
+
+    # Adjust NVIDIA-specific environment variables based on detected hardware
+    local is_nv=false
+    if [ "$GPU_OVERRIDE" = "nvidia" ]; then
+        is_nv=true
+    elif [ "$GPU_OVERRIDE" = "none" ] || [ "$GPU_OVERRIDE" = "amd" ] || [ "$GPU_OVERRIDE" = "intel" ]; then
+        is_nv=false
+    elif lspci 2>/dev/null | grep -i -E "vga|3d|display" | grep -qi "nvidia"; then
+        is_nv=true
+    fi
+
+    if [ "$is_nv" = true ]; then
+        if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
+            if ! grep -q "__GLX_VENDOR_LIBRARY_NAME" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+                cat << 'NV_ENV' >> "$HOME/.config/hypr/hyprland.conf"
+env = __GLX_VENDOR_LIBRARY_NAME,nvidia
+env = __NV_PRIME_RENDER_OFFLOAD,1
+NV_ENV
+            else
+                sed -i 's/^#[[:space:]]*env = __GLX_VENDOR_LIBRARY_NAME,nvidia/env = __GLX_VENDOR_LIBRARY_NAME,nvidia/' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+                sed -i 's/^#[[:space:]]*env = __NV_PRIME_RENDER_OFFLOAD,1/env = __NV_PRIME_RENDER_OFFLOAD,1/' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+            fi
+        fi
+    else
+        if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
+            sed -i '/^env = __GLX_VENDOR_LIBRARY_NAME,nvidia/d' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+            sed -i '/^env = __NV_PRIME_RENDER_OFFLOAD,1/d' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+        fi
     fi
 
     # Sembrar el fondo por defecto.
@@ -4822,7 +4880,8 @@ step_system() {
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sddm >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 libqt6svg6 qt6-virtualkeyboard-plugin libqt6multimedia6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtcore qml6-module-qt5compat qml6-module-qtmultimedia qml6-module-qtvirtualkeyboard qt6-wayland qml-module-qtgraphicaleffects qml-module-qtquick-controls2 qml-module-qtsvg qml-module-qtquick-shapes qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick-virtualkeyboard qtwayland5 >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
@@ -4837,26 +4896,18 @@ step_system() {
     if [ "$ENABLE_SDDM" = true ] && [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme" ]; then
         step_item "Deploying SDDM Astronaut theme..."
         sudo mkdir -p /usr/share/sddm/themes
-        # `rm -rf` antes del `cp -r`, y no confiado en que el destino no exista.
-        #
-        # cp -r sobre un directorio YA existente no lo sustituye: copia el
-        # origen DENTRO. En una reinstalacion, o tras haber instalado el tema a
-        # mano, /usr/share/sddm/themes/sddm-astronaut-theme ya estaba, y el
-        # resultado era
-        #     /usr/share/sddm/themes/sddm-astronaut-theme/sddm-astronaut-theme/
-        # con los Main.qml, metadata.desktop y Components/ de la version
-        # VIEJA arriba y la nueva enterada dentro. El greeter sigue arrancando,
-        # asi que no se ve como error: se ve como un tema que no cambia con las
-        # actualizaciones. Medido aqui: el `cp -r` no fallaba nunca, solo
-        # anidaba en silencio.
-        #
-        # Se borra solo lo del tema, nunca todo /usr/share/sddm/themes, que
-        # puede tener otros greeters instalados.
         sudo rm -rf /usr/share/sddm/themes/sddm-astronaut-theme
         sudo cp -r "$DOTFILES_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
-        # Comprobacion: si el `cp` volvio a anidar, el theme.conf que se escribe
-        # abajo apuntaria a un directorio sin Main.qml de verdad y el login
-        # caeria al tema por defecto de SDDM sin decir nada.
+        sudo chmod -R a+rX /usr/share/sddm/themes/sddm-astronaut-theme
+
+        # Deploy theme fonts to system font library
+        if [ -d "$DOTFILES_DIR/sddm/sddm-astronaut-theme/Fonts" ]; then
+            sudo mkdir -p /usr/share/fonts/truetype/sddm-astronaut
+            sudo cp -n "$DOTFILES_DIR/sddm/sddm-astronaut-theme/Fonts"/*.ttf /usr/share/fonts/truetype/sddm-astronaut/ 2>/dev/null || true
+            sudo chmod 644 /usr/share/fonts/truetype/sddm-astronaut/*.ttf 2>/dev/null || true
+            command -v fc-cache >/dev/null 2>&1 && sudo fc-cache -f /usr/share/fonts/truetype/sddm-astronaut >/dev/null 2>&1 || true
+        fi
+
         if [ ! -f /usr/share/sddm/themes/sddm-astronaut-theme/Main.qml ]; then
             step_warn "SDDM theme deployment failed (missing Main.qml); check /usr/share/sddm/themes."
         else
@@ -4865,6 +4916,17 @@ step_system() {
         
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
         printf "[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+
+        # Ensure /etc/sddm.conf does not override theme if it exists
+        if [ -f /etc/sddm.conf ]; then
+            if grep -q "^\[Theme\]" /etc/sddm.conf 2>/dev/null; then
+                if grep -q "^Current=" /etc/sddm.conf 2>/dev/null; then
+                    sudo sed -i 's/^Current=.*/Current=sddm-astronaut-theme/' /etc/sddm.conf 2>/dev/null || true
+                else
+                    sudo sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
+                fi
+            fi
+        fi
 
         # El greeter corre en WAYLAND, no en X11, y esto no es estetico.
         #
@@ -4929,6 +4991,7 @@ step_system() {
         # usuario antes de tocar el tema (colores y ficheros), asi que el
         # NOPASSWD no le da a root nada que el usuario no pueda ya hacer.
         sudo mkdir -p /etc/sudoers.d /usr/local/lib/rhythm
+        sudo chmod 755 /usr/local/lib/rhythm /usr/local/lib 2>/dev/null || true
         if [ -f "$DOTFILES_DIR/.local/bin/sddm-auto-sync-local" ]; then
             sudo install -m 755 -o root -g root \
                 "$DOTFILES_DIR/.local/bin/sddm-auto-sync-local" \
@@ -5044,6 +5107,7 @@ step_system() {
 
     # Ensure Hyprland desktop entry exists in wayland-sessions for ALL display managers
     sudo mkdir -p /usr/share/wayland-sessions
+    sudo chmod 755 /usr/share/wayland-sessions 2>/dev/null || true
     if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
         cat << 'DESK_EOF' | sudo tee /usr/share/wayland-sessions/hyprland.desktop > /dev/null
 [Desktop Entry]
@@ -5053,20 +5117,19 @@ Exec=Hyprland
 Type=Application
 DesktopNames=Hyprland
 DESK_EOF
-        sudo chmod 644 /usr/share/wayland-sessions/hyprland.desktop 2>/dev/null || true
     fi
+    sudo chmod 644 /usr/share/wayland-sessions/hyprland.desktop 2>/dev/null || true
 
-    # Ensure binary capitalization compatibility for Hyprland desktop entry
-    if command -v Hyprland >/dev/null 2>&1 && ! command -v hyprland >/dev/null 2>&1; then
-        local hyp_bin
-        hyp_bin="$(command -v Hyprland)"
-        sudo ln -sf "$hyp_bin" /usr/bin/hyprland >> "$LOG_FILE" 2>&1 || true
-        [ -d /usr/local/bin ] && sudo ln -sf "$hyp_bin" /usr/local/bin/hyprland >> "$LOG_FILE" 2>&1 || true
-    elif command -v hyprland >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then
-        local hyp_bin
-        hyp_bin="$(command -v hyprland)"
-        sudo ln -sf "$hyp_bin" /usr/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
-        [ -d /usr/local/bin ] && sudo ln -sf "$hyp_bin" /usr/local/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+    # Ensure binary capitalization and wrapper compatibility for Hyprland desktop entry
+    local real_hyp=""
+    real_hyp=$(command -v Hyprland 2>/dev/null || command -v hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/bin/hyprland 2>/dev/null || command -v start-hyprland 2>/dev/null || command -v /usr/bin/start-hyprland 2>/dev/null || true)
+    if [ -n "$real_hyp" ]; then
+        [ ! -e /usr/bin/Hyprland ] && sudo ln -sf "$real_hyp" /usr/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+        [ ! -e /usr/bin/hyprland ] && sudo ln -sf "$real_hyp" /usr/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+        if [ -d /usr/local/bin ]; then
+            [ ! -e /usr/local/bin/Hyprland ] && sudo ln -sf "$real_hyp" /usr/local/bin/Hyprland >> "$LOG_FILE" 2>&1 || true
+            [ ! -e /usr/local/bin/hyprland ] && sudo ln -sf "$real_hyp" /usr/local/bin/hyprland >> "$LOG_FILE" 2>&1 || true
+        fi
     fi
 
     # Ensure desktop entry exists with both case conventions in wayland-sessions
@@ -5075,6 +5138,7 @@ DESK_EOF
     elif [ -f /usr/share/wayland-sessions/Hyprland.desktop ] && [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
         sudo ln -sf Hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop >> "$LOG_FILE" 2>&1 || true
     fi
+    [ -f /usr/share/wayland-sessions/Hyprland.desktop ] && sudo chmod 644 /usr/share/wayland-sessions/Hyprland.desktop 2>/dev/null || true
 
     # Ensure user has access to fuse group if present
     if getent group fuse >/dev/null 2>&1; then
@@ -5165,15 +5229,13 @@ DESK_EOF
 
         # Ensure sddm user has access to video/render devices for Wayland greeter
         if id -u sddm >/dev/null 2>&1; then
-            for grp in video render input seat; do
+            for grp in video render input seat kvm tty; do
                 if getent group "$grp" >/dev/null 2>&1; then
-                    if command -v usermod >/dev/null 2>&1; then
-                        sudo usermod -aG "$grp" sddm >> "$LOG_FILE" 2>&1 || true
-                    elif command -v gpasswd >/dev/null 2>&1; then
-                        sudo gpasswd -a sddm "$grp" >> "$LOG_FILE" 2>&1 || true
-                    elif command -v adduser >/dev/null 2>&1 && adduser --help 2>&1 | grep -q "USER GROUP"; then
-                        sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
-                    fi
+                    sudo usermod -aG "$grp" sddm 2>/dev/null || \
+                    sudo /usr/sbin/usermod -aG "$grp" sddm 2>/dev/null || \
+                    sudo gpasswd -a sddm "$grp" 2>/dev/null || \
+                    sudo adduser sddm "$grp" 2>/dev/null || \
+                    sudo /usr/sbin/adduser sddm "$grp" 2>/dev/null || true
                 fi
             done
             [ -d /var/lib/sddm ] && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
@@ -5181,10 +5243,8 @@ DESK_EOF
 
         # Preconfigure SDDM default session to Hyprland
         sudo mkdir -p /var/lib/sddm
-        if [ ! -f /var/lib/sddm/state.conf ]; then
-            printf "[Last]\nSession=hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
-            id -u sddm >/dev/null 2>&1 && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
-        fi
+        printf "[Last]\nSession=hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
+        id -u sddm >/dev/null 2>&1 && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
 
         step_item "Enabling SDDM display manager..."
         if command -v systemctl >/dev/null 2>&1; then

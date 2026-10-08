@@ -100,6 +100,7 @@ conf_sddm() {
     cat <<EOF
 [General]
 DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 
 [Wayland]
 CompositorCommand=/usr/local/lib/rhythm/sddm-greeter-monitor
@@ -208,7 +209,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 [ -d /usr/local/lib/rhythm ] || mkdir -p /usr/local/lib/rhythm
+chmod 755 /usr/local/lib/rhythm /usr/local/lib 2>/dev/null || true
 [ -d /usr/share/sddm ] || mkdir -p /usr/share/sddm
+chmod 755 /usr/share/sddm 2>/dev/null || true
 [ -d /etc/sddm ] || mkdir -p /etc/sddm
 [ -d /etc/sddm.conf.d ] || mkdir -p /etc/sddm.conf.d
 [ -d /etc/systemd/system/sddm.service.d ] || mkdir -p /etc/systemd/system/sddm.service.d
@@ -222,6 +225,7 @@ if [ -f "$REPO_DIR/sddm/sddm-greeter-monitor" ]; then
     install -T -m 755 "$REPO_DIR/sddm/sddm-greeter-monitor" \
         /usr/local/lib/rhythm/sddm-greeter-monitor || fallo=1
     chown root:root /usr/local/lib/rhythm/sddm-greeter-monitor 2>/dev/null
+    chmod 755 /usr/local/lib/rhythm/sddm-greeter-monitor 2>/dev/null
 else
     log "missing $REPO_DIR/sddm/sddm-greeter-monitor"; fallo=1
 fi
@@ -229,11 +233,13 @@ fi
 if [ -f "$REPO_DIR/sddm/hyprland.conf" ]; then
     install -T -m 644 "$REPO_DIR/sddm/hyprland.conf" /usr/share/sddm/hyprland.conf || fallo=1
     chown root:root /usr/share/sddm/hyprland.conf 2>/dev/null
+    chmod 644 /usr/share/sddm/hyprland.conf 2>/dev/null
 fi
 
 if [ -f "$REPO_DIR/sddm/hyprland.lua" ]; then
     install -T -m 644 "$REPO_DIR/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua || fallo=1
     chown root:root /usr/share/sddm/hyprland.lua 2>/dev/null
+    chmod 644 /usr/share/sddm/hyprland.lua 2>/dev/null
 fi
 
 conf_sddm > /etc/sddm.conf.d/10-wayland.conf || fallo=1
@@ -242,24 +248,44 @@ chmod 644 /etc/sddm.conf.d/10-wayland.conf 2>/dev/null
 conf_tema > /etc/sddm.conf.d/theme.conf || fallo=1
 chmod 644 /etc/sddm.conf.d/theme.conf 2>/dev/null
 
+# Sincronizar o ajustar /etc/sddm.conf si existe para no anular el tema
+if [ -f /etc/sddm.conf ]; then
+    if grep -q "^\[Theme\]" /etc/sddm.conf 2>/dev/null; then
+        if grep -q "^Current=" /etc/sddm.conf 2>/dev/null; then
+            sed -i 's/^Current=.*/Current=sddm-astronaut-theme/' /etc/sddm.conf 2>/dev/null || true
+        else
+            sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
+        fi
+    fi
+fi
+
 # Xsetup es la red de seguridad por si hay que volver a X11. Vive en /etc, asi
 # que sin esto tampoco lo actualizaba el OTA.
 if [ -f "$REPO_DIR/sddm/Xsetup" ]; then
     install -T -m 755 "$REPO_DIR/sddm/Xsetup" /etc/sddm/Xsetup || fallo=1
     chown root:root /etc/sddm/Xsetup 2>/dev/null
+    chmod 755 /etc/sddm/Xsetup 2>/dev/null
 else
     log "missing $REPO_DIR/sddm/Xsetup"; fallo=1
 fi
 
-# LO QUE ESTE SCRIPT NO DESPLIEGA, A PROPOSITO
-#
-# /usr/share/sddm/themes/sddm-astronaut-theme/ queda fuera. No es un descuido: el
-# tema lo modifica pywal en caliente (los colores van ahi dentro) y la
-# integracion de pywal escribe ficheros dentro. Si cada actualizacion copiara el
-# tema del repo, cada update borraria los colores que pywal acaba de generar, y
-# el login y el escritorio se verian con colores distintos hasta el siguiente
-# resync. El tema se instala una vez y se deja que las herramientas lo
-# actualicen.
+# Despliegue inicial o reparacion del tema si no existe
+if [ -d "$REPO_DIR/sddm/sddm-astronaut-theme" ]; then
+    mkdir -p /usr/share/sddm/themes
+    if [ ! -d /usr/share/sddm/themes/sddm-astronaut-theme ] || [ ! -f /usr/share/sddm/themes/sddm-astronaut-theme/Main.qml ]; then
+        rm -rf /usr/share/sddm/themes/sddm-astronaut-theme
+        cp -r "$REPO_DIR/sddm/sddm-astronaut-theme" /usr/share/sddm/themes/
+    fi
+    chmod -R a+rX /usr/share/sddm/themes/sddm-astronaut-theme 2>/dev/null || true
+fi
+
+# Instalar fuentes del tema si estan disponibles
+if [ -d "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts" ]; then
+    mkdir -p /usr/share/fonts/truetype/sddm-astronaut
+    cp -n "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts"/*.ttf /usr/share/fonts/truetype/sddm-astronaut/ 2>/dev/null || true
+    chmod 644 /usr/share/fonts/truetype/sddm-astronaut/*.ttf 2>/dev/null || true
+    command -v fc-cache >/dev/null 2>&1 && fc-cache -f /usr/share/fonts/truetype/sddm-astronaut >/dev/null 2>&1 || true
+fi
 
 if [ -n "$SDDM_CURSOR_THEME" ]; then
     conf_cursor > /etc/systemd/system/sddm.service.d/cursor.conf || fallo=1

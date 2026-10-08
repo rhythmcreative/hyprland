@@ -288,7 +288,7 @@ rhythm_install_with_progress() {
         cmd=(stdbuf -oL -eL "$@")
     fi
 
-    "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
+    LC_ALL=C.UTF-8 "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
         echo "$line" >> "$LOG_FILE"
         if [[ "$line" =~ $re_pacman ]]; then
             curr="${BASH_REMATCH[1]}"
@@ -1515,7 +1515,7 @@ preflight_checks() {
     # algunos bloques tardan mas (compilar kernel headers, instalar paquetes AUR),
     # asi que ademas se refresca antes de cada paso largo.
     if ! sudo -v; then
-        echo "ERROR: Se necesita autenticacion de sudo para instalar paquetes."
+        echo "ERROR: Sudo authentication is required to install packages."
         exit 1
     fi
 
@@ -4170,19 +4170,19 @@ MONCONF
             if [ -f "$SETTINGS_QML" ]; then
                 jq --arg f "$ffmpeg_real" '. + {ffmpegPath: $f}' "$SETTINGS_QML" > "$tmp_qml" 2>/dev/null \
                     && mv -f "$tmp_qml" "$SETTINGS_QML" \
-                    || { rm -f "$tmp_qml"; step_warn "No se pudo escribir ffmpegPath en settings.json."; }
+                    || { rm -f "$tmp_qml"; step_warn "Could not write ffmpegPath to settings.json."; }
             else
                 printf '{"ffmpegPath":"%s"}\n' "$ffmpeg_real" > "$tmp_qml" \
                     && mv -f "$tmp_qml" "$SETTINGS_QML" \
-                    || { rm -f "$tmp_qml"; step_warn "No se pudo escribir ffmpegPath en settings.json."; }
+                    || { rm -f "$tmp_qml"; step_warn "Could not write ffmpegPath to settings.json."; }
             fi
             [ -f "$SETTINGS_QML" ] && grep -q "$ffmpeg_real" "$SETTINGS_QML" \
                 && step_ok "ffmpegPath resolved to $ffmpeg_real."
         else
-            step_warn "jq no disponible; ffmpegPath se quedaria en /usr/bin/ffmpeg."
+            step_warn "jq is not available; ffmpegPath defaults to /usr/bin/ffmpeg."
         fi
     elif ! command -v ffmpeg >/dev/null 2>&1; then
-        step_warn "ffmpeg no esta instalado; la Isla no podra previsualizar .gif."
+        step_warn "ffmpeg is not installed; dynamic island will not be able to preview .gif files."
     fi
 
     step_item "Stamping the installed version..."
@@ -4353,12 +4353,12 @@ step_wallpapers() {
             if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                 && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
                 if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
-                    find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
+                    find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "Could not copy wallpapers."
                 else
-                    step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
+                    step_warn "Collection cloned but no files found in Desktop/Wallpapers."
                 fi
             else
-                step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
+                step_warn "Could not clone wallpaper collection, skipping optional step."
             fi
         elif [[ "$CHOICE" == *"Random"* || "$CHOICE" == "random" ]]; then
             step_item "Downloading 50 random wallpapers (root + Best-Collection)..."
@@ -4426,17 +4426,17 @@ step_wallpapers() {
                     fi
                 ' _ {} || true
             else
-                step_warn "Could not fetch wallpaper list (API vacia/rate-limit), cloning full collection instead."
+                step_warn "Could not fetch wallpaper list (empty API / rate limit), cloning full collection instead."
                 rm -rf "$FW_DIR" || true
                 if git clone --depth 1 --filter=blob:none --sparse "$FW_REPO" "$FW_DIR" >> "$LOG_FILE" 2>&1 \
                     && (cd "$FW_DIR" && git sparse-checkout set Desktop/Wallpapers >> "$LOG_FILE" 2>&1); then
                     if find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -print -quit 2>/dev/null | grep -q .; then
-                        find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "No se pudieron copiar wallpapers."
+                        find "$FW_DIR/Desktop/Wallpapers" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \) -exec cp {} "$WALL_DIR/" \; >> "$LOG_FILE" 2>&1 || step_warn "Could not copy wallpapers."
                     else
-                        step_warn "Coleccion clonada pero sin ficheros en Desktop/Wallpapers."
+                        step_warn "Collection cloned but no files found in Desktop/Wallpapers."
                     fi
                 else
-                    step_warn "No se pudo clonar la coleccion de wallpapers, se omite paso opcional."
+                    step_warn "Could not clone wallpaper collection, skipping optional step."
                 fi
             fi
         fi
@@ -4498,7 +4498,7 @@ step_system() {
         # abajo apuntaria a un directorio sin Main.qml de verdad y el login
         # caeria al tema por defecto de SDDM sin decir nada.
         if [ ! -f /usr/share/sddm/themes/sddm-astronaut-theme/Main.qml ]; then
-            step_warn "El tema de SDDM ha quedado mal desplegado (falta Main.qml); revisa /usr/share/sddm/themes."
+            step_warn "SDDM theme deployment failed (missing Main.qml); check /usr/share/sddm/themes."
         else
             step_ok "SDDM theme files in place."
         fi
@@ -4542,10 +4542,10 @@ step_system() {
             if "$deploy_bin" "$DOTFILES_DIR"; then
                 step_ok "SDDM greeter deployed (login on the internal panel only, cursor set)."
             else
-                step_warn "El greeter de SDDM quedo a medias. Mira ~/.cache/rhythm-sddm-deploy.log"
+                step_warn "SDDM greeter deployment was incomplete. Check ~/.cache/rhythm-sddm-deploy.log"
             fi
         else
-            step_warn "rhythm-sddm-deploy no esta disponible; el login se quedaria como este."
+            step_warn "rhythm-sddm-deploy is not available; login screen left unchanged."
         fi
 
         # Red de seguridad: si algun dia hay que volver a X11, se renombra este
@@ -4930,16 +4930,16 @@ step_update() {
     if command -v wal >/dev/null 2>&1 && [ -n "$WAL_SRC" ]; then
         wal -i "$WAL_SRC" -n -q >> "$LOG_FILE" 2>&1 \
             && step_ok "Pywal palette generated from $(basename "$WAL_SRC")." \
-            || step_warn "wal fallo; se usara la paleta de reserva."
+            || step_warn "wal failed; using fallback palette."
     else
-        step_warn "Ni wal ni una imagen de la que sacar paleta; el sincronizador usara la reserva."
+        step_warn "Neither wal nor wallpaper image found; using fallback palette."
     fi
 
     if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
         step_item "Syncing the palette to Waybar, Rofi, Mako and SDDM..."
         bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1" \
             && step_ok "Colours synchronised." \
-            || step_warn "modern-pywal-sync fallo; mira $LOG_FILE"
+            || step_warn "modern-pywal-sync failed; check $LOG_FILE"
     fi
 
     # Reload systemd and re-enable all services after update

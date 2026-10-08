@@ -207,6 +207,14 @@ for c in $salidas; do
         fi
     fi
 done
+
+if [ -z "$salidas" ]; then
+    if [ "$is_lua" -eq 1 ]; then
+        echo "hl.monitor({ output = \"\", mode = \"preferred\", position = \"auto\", scale = \"1\" })" >>"$reglas"
+    else
+        echo "monitor = , preferred, auto, 1" >>"$reglas"
+    fi
+fi
 modo="activo"
 
 if [ ! -r "$PLANTILLA" ]; then
@@ -259,6 +267,8 @@ extra_flags=""
 if [ "$(id -u)" -eq 0 ]; then
     extra_flags="--i-am-really-stupid"
 fi
+
+export WLR_NO_HARDWARE_CURSORS=1
 
 # Arrancar Hyprland directamente como compositor de SDDM
 if [ -n "${HYPRLAND_CMD:-}" ] && [ -x "$HYPRLAND_CMD" ]; then

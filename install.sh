@@ -273,7 +273,9 @@ rhythm_install_with_progress() {
     fi
 
     local curr=0
-    local re_pacman="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(installing|upgrading|reinstalling|downloading)[[:space:]]+([^.[:space:]]+)"
+    local re_pacman_numbered="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(installing|upgrading|reinstalling|downloading|instalando|actualizando|reinstalando|descargando)[[:space:]]+([^.[:space:]]+)"
+    local re_pacman_item="^(installing|reinstalling|upgrading|downloading|instalando|reinstalando|actualizando|descargando)[[:space:]]+([^.[:space:]]+)"
+    local re_pacman_hook="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(.+)"
     local re_apt_setup="^Setting up[[:space:]]+([^[:space:]:(]+)"
     local re_apt_get="^Get:[0-9]+[[:space:]]+"
     local re_dnf="^\[[[:space:]]*([0-9]+)/([0-9]+)\][[:space:]]+(Installing|Upgrading|Downloading):[[:space:]]+([^.[:space:]]+)"
@@ -284,51 +286,84 @@ rhythm_install_with_progress() {
     render_progress_bar 0 "$total" "Starting package installation..."
 
     local cmd=("$@")
+    if [[ "${cmd[0]:-}" == "yay" ]]; then
+        cmd=("yay" "--sudoflags" "-E" "${cmd[@]:1}")
+    fi
     if command -v stdbuf >/dev/null 2>&1; then
-        cmd=(stdbuf -oL -eL "$@")
+        cmd=(stdbuf -oL -eL "${cmd[@]}")
     fi
 
-    LC_ALL=C.UTF-8 "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
+    env LC_ALL=C.UTF-8 LANG=C.UTF-8 "${cmd[@]}" 2>&1 | tr "\r" "\n" | while IFS= read -r line || [ -n "$line" ]; do
         echo "$line" >> "$LOG_FILE"
-        if [[ "$line" =~ $re_pacman ]]; then
+        local clean_line
+        clean_line=$(printf "%s\n" "$line" | sed -E "s/\x1B\[[0-9;]*[a-zA-Z]//g")
+        if [[ "$clean_line" =~ $re_pacman_numbered ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             local action_label="Installing"
-            [ "$action" = "downloading" ] && action_label="Downloading"
+            case "$action" in
+                downloading|descargando) action_label="Downloading" ;;
+                upgrading|actualizando) action_label="Upgrading" ;;
+                reinstalling|reinstalando) action_label="Reinstalling" ;;
+            esac
             render_progress_bar "$curr" "$total" "$action_label $pkg..."
-        elif [[ "$line" =~ $re_dnf ]]; then
+        elif [[ "$clean_line" =~ $re_pacman_item ]]; then
+            curr=$((curr + 1))
+            local action="${BASH_REMATCH[1]}"
+            local pkg="${BASH_REMATCH[2]}"
+            [ "$curr" -gt "$total" ] && total="$curr"
+            local action_label="Installing"
+            case "$action" in
+                downloading|descargando) action_label="Downloading" ;;
+                upgrading|actualizando) action_label="Upgrading" ;;
+                reinstalling|reinstalando) action_label="Reinstalling" ;;
+            esac
+            render_progress_bar "$curr" "$total" "$action_label $pkg..."
+        elif [[ "$clean_line" =~ $re_pacman_hook ]]; then
+            local h_curr="${BASH_REMATCH[1]}"
+            local h_tot="${BASH_REMATCH[2]}"
+            local h_desc="${BASH_REMATCH[3]}"
+            [ "$curr" -lt "$total" ] && curr="$total"
+            render_progress_bar "$total" "$total" "Hooks ($h_curr/$h_tot): $h_desc"
+        elif [[ "$clean_line" =~ $re_dnf ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
-        elif [[ "$line" =~ $re_apk ]]; then
+        elif [[ "$clean_line" =~ $re_apk ]]; then
             curr="${BASH_REMATCH[1]}"
             local dyn_tot="${BASH_REMATCH[2]}"
             local action="${BASH_REMATCH[3]}"
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
-        elif [[ "$line" =~ $re_zypper ]]; then
+        elif [[ "$clean_line" =~ $re_zypper ]]; then
             curr="${BASH_REMATCH[3]}"
             local dyn_tot="${BASH_REMATCH[4]}"
             local action="${BASH_REMATCH[1]}"
             local pkg="${BASH_REMATCH[2]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
-        elif [[ "$line" =~ $re_apt_setup ]]; then
+        elif [[ "$clean_line" =~ $re_apt_setup ]]; then
             curr=$((curr + 1))
             local pkg="${BASH_REMATCH[1]}"
-            [ "$curr" -gt "$total" ] && curr="$total"
+            [ "$curr" -gt "$total" ] && total="$curr"
             render_progress_bar "$curr" "$total" "Configuring $pkg..."
-        elif [[ "$line" =~ $re_apt_get ]]; then
+        elif [[ "$clean_line" =~ $re_apt_get ]]; then
             render_progress_bar "$curr" "$total" "Downloading packages..."
-        elif [[ "$line" =~ $re_step ]]; then
+        elif [[ "$clean_line" =~ $re_step ]]; then
             local step_name="${BASH_REMATCH[1]}"
+            case "$step_name" in
+                *"hooks"*|*"Ejecutando"*) step_name="Running transaction hooks..." ;;
+                *"Procesando"*|*"cambios de paquetes"*) step_name="Processing package changes..." ;;
+                *"Recuperando paquetes"*|*"Descargando"*) step_name="Retrieving packages..." ;;
+                *"Comprobando"*|*"verificando"*) step_name="Checking dependencies and keyring..." ;;
+            esac
             render_progress_bar "$curr" "$total" "$step_name"
         fi
     done

@@ -1469,6 +1469,59 @@ elif [ -f /etc/SuSE-release ] || grep -qiE 'ID=.*(opensuse|suse)' /etc/os-releas
 fi
 [ -n "${RHYTHM_DISTRO_OVERRIDE:-}" ] && DISTRO="$RHYTHM_DISTRO_OVERRIDE"
 
+configure_debian_repos() {
+    [ "$DISTRO" != "debian" ] && return 0
+    local debian_codename
+    debian_codename=$(grep "^VERSION_CODENAME=" /etc/os-release 2>/dev/null | cut -d= -f2 || true)
+    debian_codename=$(echo "$debian_codename" | tr -d '"'\'' ' || true)
+    if [ -z "$debian_codename" ] && [ -f /etc/debian_version ]; then
+        local dv
+        dv=$(cat /etc/debian_version 2>/dev/null || true)
+        case "$dv" in
+            14*|forky*) debian_codename="forky" ;;
+            13*|trixie*) debian_codename="trixie" ;;
+            12*|bookworm*) debian_codename="bookworm" ;;
+            *) debian_codename="trixie" ;;
+        esac
+    fi
+    [ -z "$debian_codename" ] && debian_codename="trixie"
+
+    # Disable stale or blocking cdrom/dvd entries
+    sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+
+    # Check if active repository entries exist for current debian_codename
+    local has_main=false
+    if grep -v '^[[:space:]]*#' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -E "(deb|Suites:).*(\b${debian_codename}\b|\btesting\b|\bunstable\b|\bsid\b)" >/dev/null 2>&1; then
+        has_main=true
+    fi
+
+    if [ "$has_main" = false ]; then
+        cat << DEB_EOF | sudo tee /etc/apt/sources.list >/dev/null
+deb http://deb.debian.org/debian ${debian_codename} main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian ${debian_codename}-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security ${debian_codename}-security main contrib non-free non-free-firmware
+DEB_EOF
+    fi
+
+    # Ensure backports repository is configured
+    if ! grep -rq "${debian_codename}-backports" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+        echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
+    fi
+
+    # Configure APT pinning for backports so backports packages and dependencies are prioritized
+    sudo mkdir -p /etc/apt/preferences.d
+    cat << PREF_EOF | sudo tee /etc/apt/preferences.d/99backports.pref >/dev/null
+Package: *
+Pin: release n=${debian_codename}-backports
+Pin-Priority: 500
+
+Package: *
+Pin: release a=*-backports
+Pin-Priority: 500
+PREF_EOF
+}
+
+
 # If running outside the cloned repository (e.g. standalone curl pipe), clone first
 if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFILES_DIR/.config" ]; then
     # mktemp -d y no una ruta fija en /tmp. Con "/tmp/rhythm-hyprland" cualquier
@@ -1483,7 +1536,7 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -f "$DOTFILES_DIR/logo.txt" ] || [ ! -d "$DOTFI
             sudo dnf install -y git
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             if [ "$DISTRO" = "debian" ]; then
-                sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+                configure_debian_repos
             fi
             sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
         elif [ "$DISTRO" = "alpine" ]; then
@@ -1814,9 +1867,8 @@ CHARM_EOF
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-        # Disable stale or blocking cdrom/dvd entries in sources.list (common after Debian DVD ISO installation)
         if [ "$DISTRO" = "debian" ]; then
-            sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+            configure_debian_repos
         fi
         # Handle background unattended-upgrades / apt-daily lock
         if systemctl is-active --quiet apt-daily.service 2>/dev/null || systemctl is-active --quiet apt-daily-upgrade.service 2>/dev/null || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
@@ -2304,8 +2356,8 @@ install_rust_dock() {
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev >> "$LOG_FILE" 2>&1 || \
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim >> "$LOG_FILE" 2>&1 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev build-essential >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim build-essential >> "$LOG_FILE" 2>&1 || true
 
         # Build gtk4-layer-shell from source if not available in repos (e.g. Debian 12 Bookworm)
         if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
@@ -2396,7 +2448,7 @@ install_rust_dock() {
 
     local build_ok=1
     rhythm_spin "Compiling rust-dock (release)..." -- \
-        bash -c "cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
+        bash -c "export PATH=\"\$HOME/.cargo/bin:\$PATH\"; cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
 
     if [ "$build_ok" -ne 1 ] || [ ! -f "$source_dir/target/release/rust-dock" ]; then
         step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
@@ -2802,7 +2854,7 @@ step_software() {
             xdg-desktop-portal-hyprland
             xdg-desktop-portal-gtk
             waybar
-            rofi-wayland
+            rofi
             kitty
             zsh
             zsh-autosuggestions
@@ -2823,7 +2875,7 @@ step_software() {
             network-manager
             network-manager-gnome
             bluez
-            bluez-obex
+            bluez-obexd
             blueman
             pipewire
             pipewire-pulse
@@ -2849,9 +2901,12 @@ step_software() {
             libxcb-xinerama0
             libxkbcommon-x11-0
             libx11-xcb1
+            layer-shell-qt
+            liblayershellqtinterface6
+            qml6-module-org-kde-layershell
             qml-module-qtgraphicaleffects
             qml-module-qtquick-controls2
-            qml-module-qtsvg
+            libqt5svg5
             qml-module-qtquick-shapes
             qml-module-qtquick-layouts
             qml-module-qtquick-window2
@@ -2865,14 +2920,18 @@ step_software() {
             qml6-module-qtquick-templates
             qml6-module-qtquick-window
             qml6-module-qtcore
-            qml6-module-qt5compat
+            qml6-module-qt5compat-graphicaleffects
+            libqt6core5compat6
             qml6-module-qtmultimedia
-            qml6-module-qtvirtualkeyboard
+            qml6-module-qtquick-virtualkeyboard
             qt6-virtualkeyboard-plugin
             libqt6multimedia6
             qt6-wayland
             libgtk4-layer-shell0
+            libgtk4-layer-shell-dev
+            libgtk-4-dev
             libqt6svg6
+            qt6-svg-plugins
             hyprpaper
             swaybg
             qt5ct
@@ -2912,6 +2971,8 @@ step_software() {
             xdg-user-dirs
             btrfs-progs
             timeshift
+            build-essential
+            pkg-config
         )
 
         export DEBIAN_FRONTEND=noninteractive
@@ -2920,16 +2981,7 @@ step_software() {
             echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
         fi
         if [ "$DISTRO" = "debian" ]; then
-            sudo sed -i 's/^[[:space:]]*deb[[:space:]]\+cdrom:/# deb cdrom:/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
-            if ! grep -rq "${debian_codename}-backports" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
-                echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list.d/backports.list >/dev/null || true
-            fi
-            sudo mkdir -p /etc/apt/preferences.d
-            cat << PREF_EOF | sudo tee /etc/apt/preferences.d/99backports.pref >/dev/null
-Package: *
-Pin: release a=${debian_codename}-backports
-Pin-Priority: 500
-PREF_EOF
+            configure_debian_repos
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
             for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker xdg-desktop-portal-hyprland; do
                 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" "$hpkg" >> "$LOG_FILE" 2>&1 || \
@@ -3671,13 +3723,7 @@ first_run_choices() {
         FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
         [ -z "$WALLPAPER_MODE" ] && WALLPAPER_MODE="random"
         if [ -z "$ENABLE_SDDM" ]; then
-            local DETECTED_DM=""
-            DETECTED_DM=$(detect_existing_display_manager || true)
-            if [ -n "$DETECTED_DM" ] && [ "$DETECTED_DM" != "sddm" ]; then
-                ENABLE_SDDM=false
-            else
-                ENABLE_SDDM=true
-            fi
+            ENABLE_SDDM=true
         fi
         SET_ZSH=true
         return 0
@@ -4362,6 +4408,16 @@ step_dotfiles() {
         step_ok "Standard Hyprland detected: hyprland.conf activated."
     fi
 
+    # Modernize gesture syntax in hyprland.conf if needed (Hyprland >= 0.51)
+    if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
+        if grep -q "workspace_swipe[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+            sed -i '/gestures[[:space:]]*{/,/^[[:space:]]*}/ { /workspace_swipe[[:space:]]*=/d }' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+            if ! grep -q "^[[:space:]]*gesture[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+                sed -i '/gestures[[:space:]]*{/i gesture = 3, horizontal, workspace\n' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+            fi
+        fi
+    fi
+
     # Adjust NVIDIA-specific environment variables based on detected hardware
     local is_nv=false
     if [ "$GPU_OVERRIDE" = "nvidia" ]; then
@@ -4865,13 +4921,7 @@ step_system() {
 
     # Resolve ENABLE_SDDM if not explicitly set
     if [ -z "$ENABLE_SDDM" ]; then
-        local detected_dm_system
-        detected_dm_system=$(detect_existing_display_manager || true)
-        if [ -n "$detected_dm_system" ] && [ "$detected_dm_system" != "sddm" ]; then
-            ENABLE_SDDM=false
-        else
-            ENABLE_SDDM=true
-        fi
+        ENABLE_SDDM=true
     fi
 
     # Ensure SDDM package is installed if enabled
@@ -4880,8 +4930,8 @@ step_system() {
         if [ "$DISTRO" = "fedora" ]; then
             sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 libqt6svg6 qt6-virtualkeyboard-plugin libqt6multimedia6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtcore qml6-module-qt5compat qml6-module-qtmultimedia qml6-module-qtvirtualkeyboard qt6-wayland qml-module-qtgraphicaleffects qml-module-qtquick-controls2 qml-module-qtsvg qml-module-qtquick-shapes qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick-virtualkeyboard qtwayland5 >> "$LOG_FILE" 2>&1 || \
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 libqt6svg6 qt6-virtualkeyboard-plugin libqt6multimedia6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtcore qml6-module-qt5compat-graphicaleffects libqt6core5compat6 qml6-module-qtmultimedia qml6-module-qtquick-virtualkeyboard layer-shell-qt liblayershellqtinterface6 qml6-module-org-kde-layershell qt6-wayland qml-module-qtgraphicaleffects qml-module-qtquick-controls2 libqt5svg5 qml-module-qtquick-shapes qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick-virtualkeyboard qtwayland5 >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 layer-shell-qt >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then

@@ -569,7 +569,7 @@ cmd_update() {
         elif command -v zypper >/dev/null 2>&1; then
             echo "[3/4] Updating system packages with zypper..."
             if command -v sudo >/dev/null 2>&1; then
-                (sudo zypper --non-interactive refresh >> "$LOG_FILE" 2>&1 && sudo zypper --non-interactive dist-upgrade --no-confirm >> "$LOG_FILE" 2>&1) || echo "Warning: zypper update had warnings or errors."
+                (sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 && sudo zypper --no-cd --non-interactive dist-upgrade --auto-agree-with-licenses >> "$LOG_FILE" 2>&1) || echo "Warning: zypper update had warnings or errors."
             else
                 echo "Sudo not available, skipping zypper system packages."
             fi
@@ -737,7 +737,7 @@ cmd_gui() {
                     elif [ "$pkg_mgr" = "apk" ]; then
                         sudo apk update && sudo apk upgrade
                     elif [ "$pkg_mgr" = "zypper" ]; then
-                        sudo zypper --non-interactive refresh && sudo zypper --non-interactive dist-upgrade --no-confirm
+                        sudo zypper --no-cd --non-interactive refresh && sudo zypper --no-cd --non-interactive dist-upgrade --auto-agree-with-licenses
                     else
                         sudo pacman -Syu
                     fi

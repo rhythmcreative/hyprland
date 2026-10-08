@@ -2561,11 +2561,25 @@ install_quickshell() {
             sudo chmod +x "$tmp_qs"
             sudo mkdir -p /usr/local/lib/quickshell
             sudo install -m 755 "$tmp_qs" /usr/local/lib/quickshell/quickshell.AppImage >> "$LOG_FILE" 2>&1 || true
+            # Extract AppImage so it executes natively without requiring FUSE
+            (
+                cd /usr/local/lib/quickshell
+                sudo rm -rf squashfs-root
+                sudo ./quickshell.AppImage --appimage-extract >/dev/null 2>&1 || true
+            ) >> "$LOG_FILE" 2>&1 || true
+
             cat << 'QSEOF' | sudo tee /usr/local/bin/quickshell > /dev/null 2>&1 || true
 #!/bin/sh
+if [ -x "/usr/local/lib/quickshell/squashfs-root/AppRun" ]; then
+    exec "/usr/local/lib/quickshell/squashfs-root/AppRun" "$@"
+fi
 QS_BIN="/usr/local/lib/quickshell/quickshell.AppImage"
 if [ -x "$QS_BIN" ]; then
-    exec "$QS_BIN" "$@" 2>/dev/null || exec "$QS_BIN" --appimage-extract-and-run "$@"
+    if [ -e /dev/fuse ] && (ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" || [ -f /usr/lib64/libfuse.so.2 ] || [ -f /usr/lib/libfuse.so.2 ]); then
+        exec "$QS_BIN" "$@"
+    else
+        exec "$QS_BIN" --appimage-extract-and-run "$@"
+    fi
 fi
 exit 127
 QSEOF
@@ -3058,7 +3072,7 @@ step_software() {
         if grep -qi "leap" /etc/os-release 2>/dev/null; then
             suse_type="openSUSE_Leap_$(grep '^VERSION_ID=' /etc/os-release | cut -d\" -f2)"
         fi
-        if ! zypper search -s hyprland >/dev/null 2>&1; then
+        if ! zypper lr -u 2>/dev/null | grep -qi "X11:Wayland"; then
             sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/X11:Wayland/${suse_type}/X11:Wayland.repo" >> "$LOG_FILE" 2>&1 || true
             sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
         fi
@@ -3181,7 +3195,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts; do
+        for extra in swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts libfuse2 fuse; do
             sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
@@ -4127,6 +4141,11 @@ step_applications() {
                     *code*) sudo flatpak install -y --system flathub com.visualstudio.code >> "$LOG_FILE" 2>&1 || true ;;
                     *spotify*) sudo flatpak install -y --system flathub com.spotify.Client >> "$LOG_FILE" 2>&1 || true ;;
                     *obsidian*) sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
+                    *heroic*) sudo flatpak install -y --system flathub com.heroicgameslauncher.hgl >> "$LOG_FILE" 2>&1 || true ;;
+                    *localsend*) sudo flatpak install -y --system flathub org.localsend.localsend_app >> "$LOG_FILE" 2>&1 || true ;;
+                    *gitkraken*) sudo flatpak install -y --system flathub com.axosoft.GitKraken >> "$LOG_FILE" 2>&1 || true ;;
+                    *telegram*) sudo flatpak install -y --system flathub org.telegram.desktop >> "$LOG_FILE" 2>&1 || true ;;
+                    *libreoffice*) sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses libreoffice >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.libreoffice.LibreOffice >> "$LOG_FILE" 2>&1 || true ;;
                     *steam*) sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses steam >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub com.valvesoftware.Steam >> "$LOG_FILE" 2>&1 || true ;;
                     *) sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$app" >> "$LOG_FILE" 2>&1 || true ;;
                 esac
@@ -4770,7 +4789,8 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm sddm-qt6 >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm-qt6 >> "$LOG_FILE" 2>&1 || true
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -5083,8 +5103,21 @@ DESK_EOF
     # PAM gnome-keyring unlock
     for pam_file in /etc/pam.d/login /etc/pam.d/sddm; do
         if [ -f "$pam_file" ] && ! grep -q "pam_gnome_keyring.so" "$pam_file"; then
-            sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' "$pam_file"
-            sudo sed -i '/^session.*pam_unix/a session    optional     pam_gnome_keyring.so auto_start' "$pam_file"
+            if grep -q "^auth.*pam_unix" "$pam_file"; then
+                sudo sed -i '/^auth.*pam_unix/a auth       optional     pam_gnome_keyring.so' "$pam_file"
+            elif grep -q "^auth.*common-auth" "$pam_file"; then
+                sudo sed -i '/^auth.*common-auth/a auth       optional     pam_gnome_keyring.so' "$pam_file"
+            elif grep -q "^auth.*system-auth" "$pam_file"; then
+                sudo sed -i '/^auth.*system-auth/a auth       optional     pam_gnome_keyring.so' "$pam_file"
+            fi
+
+            if grep -q "^session.*pam_unix" "$pam_file"; then
+                sudo sed -i '/^session.*pam_unix/a session    optional     pam_gnome_keyring.so auto_start' "$pam_file"
+            elif grep -q "^session.*common-session" "$pam_file"; then
+                sudo sed -i '/^session.*common-session/a session    optional     pam_gnome_keyring.so auto_start' "$pam_file"
+            elif grep -q "^session.*system-auth" "$pam_file"; then
+                sudo sed -i '/^session.*system-auth/a session    optional     pam_gnome_keyring.so auto_start' "$pam_file"
+            fi
         fi
     done
 
@@ -5245,7 +5278,7 @@ step_update() {
 
     if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
         step_item "Syncing the palette to Waybar, Rofi, Mako and SDDM..."
-        bash -c "$HOME/.local/bin/modern-pywal-sync >> '$LOG_FILE' 2>&1" \
+        bash -c "$HOME/.local/bin/modern-pywal-sync --install >> '$LOG_FILE' 2>&1" \
             && step_ok "Colours synchronised." \
             || step_warn "modern-pywal-sync failed; check $LOG_FILE"
     fi

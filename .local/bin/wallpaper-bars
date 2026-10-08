@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 # wallpaper-bars: hide or reveal the bars around a wallpaper change.
 #
 #   wallpaper-bars hide    before the wallpaper is swapped

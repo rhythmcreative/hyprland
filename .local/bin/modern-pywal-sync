@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
 # modern-pywal-sync: El script DEFINITIVO de sincronización
 # Este script ignora temas externos y aplica los colores directamente
@@ -308,7 +309,7 @@ if [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     # 6b. rust-dock: relanzar para que recoja la paleta nueva
     echo "  • rust-dock..."
     setsid bash -c '
-        sleep 0.8
+        sleep 0.2
         pkill -x rust-dock >/dev/null 2>&1 || true
         pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
         pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true

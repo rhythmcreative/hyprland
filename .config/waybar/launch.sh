@@ -216,10 +216,13 @@ fi
 #
 # Se busca el ejecutable real en la linea de comandos, que si lleva el nombre
 # bien, y se espera algo mas que un instante: Waybar tarda unos segundos en
-# levantar la capa.
-sleep 3
-if pgrep -f '[w]aybar.*config-' > /dev/null 2>&1; then
-    echo "Waybar instances running successfully." >> "$LOG_FILE"
-else
+for _w_try in {1..20}; do
+    if pgrep -f '[w]aybar.*config-' > /dev/null 2>&1; then
+        echo "Waybar instances running successfully." >> "$LOG_FILE"
+        exit 0
+    fi
+    sleep 0.1
+done
+if ! pgrep -f '[w]aybar.*config-' > /dev/null 2>&1; then
     echo "ERROR: Waybar failed to start. Check the logs above." >> "$LOG_FILE"
 fi

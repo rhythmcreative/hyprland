@@ -280,7 +280,9 @@ rhythm_install_with_progress() {
     local re_apt_get="^Get:[0-9]+[[:space:]]+"
     local re_dnf="^\[[[:space:]]*([0-9]+)/([0-9]+)\][[:space:]]+(Installing|Upgrading|Downloading):[[:space:]]+([^.[:space:]]+)"
     local re_apk="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(Installing|Upgrading|Downloading)[[:space:]]+([^.[:space:]]+)"
-    local re_zypper="^(Installing|Retrieving):[[:space:]]+([^.[:space:]]+)[[:space:]]+\[([0-9]+)/([0-9]+)\]"
+    local re_zypper_install="^\([[:space:]]*([0-9]+)/([0-9]+)\)[[:space:]]+(Installing|Instalando|Upgrading|Actualizando|Removing|Eliminando):[[:space:]]+([^[:space:]]+)"
+    local re_zypper_retrieve="^(Retrieving package|Retrieving)[[:space:]]+([^[:space:]]+).*\([[:space:]]*([0-9]+)/([0-9]+)\)"
+    local re_zypper_step="^(Checking for file conflicts|Resolving package dependencies|Loading repository data|Reading installed packages|Verificando conflictos|Resolviendo dependencias)"
     local re_step="^::[[:space:]]+(.+)"
 
     render_progress_bar 0 "$total" "Starting package installation..."
@@ -342,13 +344,30 @@ rhythm_install_with_progress() {
             local pkg="${BASH_REMATCH[4]}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
-        elif [[ "$clean_line" =~ $re_zypper ]]; then
-            curr="${BASH_REMATCH[3]}"
-            local dyn_tot="${BASH_REMATCH[4]}"
-            local action="${BASH_REMATCH[1]}"
-            local pkg="${BASH_REMATCH[2]}"
+        elif [[ "$clean_line" =~ $re_zypper_install ]]; then
+            curr="${BASH_REMATCH[1]}"
+            local dyn_tot="${BASH_REMATCH[2]}"
+            local action="${BASH_REMATCH[3]}"
+            local pkg="${BASH_REMATCH[4]}"
+            pkg="${pkg%%-[0-9]*}"
             [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
             render_progress_bar "$curr" "$total" "$action $pkg..."
+        elif [[ "$clean_line" =~ $re_zypper_retrieve ]]; then
+            local pkg="${BASH_REMATCH[2]}"
+            pkg="${pkg%%-[0-9]*}"
+            curr="${BASH_REMATCH[3]}"
+            local dyn_tot="${BASH_REMATCH[4]}"
+            [ "$dyn_tot" -gt 0 ] && total="$dyn_tot"
+            render_progress_bar "$curr" "$total" "Downloading $pkg..."
+        elif [[ "$clean_line" =~ $re_zypper_step ]]; then
+            local step_label="${BASH_REMATCH[1]}"
+            case "$step_label" in
+                *"conflict"*) step_label="Checking file conflicts..." ;;
+                *"dependenc"*) step_label="Resolving package dependencies..." ;;
+                *"repositor"*) step_label="Loading repository data..." ;;
+                *"installed"*) step_label="Reading installed packages..." ;;
+            esac
+            render_progress_bar "$curr" "$total" "$step_label"
         elif [[ "$clean_line" =~ $re_apt_setup ]]; then
             curr=$((curr + 1))
             local pkg="${BASH_REMATCH[1]}"
@@ -1754,8 +1773,8 @@ CHARM_EOF
         sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
-        local suse_bootstrap=(git curl zsh fzf stow tar xz which gzip shadow python3 python3-pipx)
-        sudo zypper --no-cd --non-interactive install --no-confirm "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+        rhythm_install_with_progress "${#suse_bootstrap[@]}" "Installing bootstrap tools via zypper..." \
+            sudo zypper --no-cd --non-interactive install --no-confirm "${suse_bootstrap[@]}" || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then

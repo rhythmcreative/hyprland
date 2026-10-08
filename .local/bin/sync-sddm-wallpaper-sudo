@@ -12,8 +12,16 @@ log() {
 
 log "Ejecutando sincronización de wallpaper de SDDM con sudo"
 
-# Ejecutar el script principal con sudo
-sudo "$HOME/.local/bin/sync-sddm-wallpaper"
+# Ejecutar el sincronizador preferido
+if [[ -x "$HOME/.local/bin/sddm-sync-wrapper" ]]; then
+    "$HOME/.local/bin/sddm-sync-wrapper"
+elif [[ -x /usr/local/lib/rhythm/sddm-auto-sync-local ]]; then
+    sudo -n /usr/local/lib/rhythm/sddm-auto-sync-local || sudo /usr/local/lib/rhythm/sddm-auto-sync-local
+elif [[ -x "$HOME/.local/bin/sddm-auto-sync-local" ]]; then
+    sudo "$HOME/.local/bin/sddm-auto-sync-local"
+else
+    sudo "$HOME/.local/bin/sync-sddm-wallpaper"
+fi
 
 if [[ $? -eq 0 ]]; then
     log "Sincronización completada exitosamente"

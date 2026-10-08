@@ -93,13 +93,14 @@ chmod 644 "$DEST_FILE"
 THEME_CONF="$SDDM_THEME_DIR/Themes/theme1.conf"
 PYWAL_CONF="$SDDM_THEME_DIR/configs/pywal.conf"
 
-# Copiar la configuración base de pywal
+# Copiar la configuración base de pywal si existe, o usar theme.conf existente
 if [[ -f "$PYWAL_CONF" ]]; then
     cp "$PYWAL_CONF" "$THEME_CONF" 2>/dev/null
     log "Configuración base pywal copiada a theme.conf"
-else
-    log "ERROR: No se encontró la configuración base pywal: $PYWAL_CONF"
-    exit 1
+elif [[ ! -f "$THEME_CONF" && -f "$SDDM_THEME_DIR/theme.conf" ]]; then
+    mkdir -p "$(dirname "$THEME_CONF")"
+    cp "$SDDM_THEME_DIR/theme.conf" "$THEME_CONF" 2>/dev/null
+    log "Configuración theme.conf copiada a theme1.conf"
 fi
 
 # Actualizar las rutas del background en la configuración
@@ -119,14 +120,24 @@ if [[ -f "$USER_PYWAL_COLORS" ]]; then
     COLOR7=$(sed -n '8p' "$USER_PYWAL_COLORS")  # color7 (blanco/foreground)
     
     # Actualizar colores en la configuración
-    sed -i "s|BackgroundColor = .*|BackgroundColor = \"$COLOR0\"|g" "$THEME_CONF"
-    sed -i "s|TextColor = .*|TextColor = \"$COLOR7\"|g" "$THEME_CONF"
-    sed -i "s|PlaceholderColor = .*|PlaceholderColor = \"$COLOR7\"|g" "$THEME_CONF"
-    sed -i "s|HighlightColor = .*|HighlightColor = \"$COLOR4\"|g" "$THEME_CONF"
+    for cfg_f in "$THEME_CONF" "$SDDM_THEME_DIR/theme.conf"; do
+        if [[ -f "$cfg_f" ]]; then
+            sed -i "s|^BackgroundColor[[:space:]]*=.*|BackgroundColor=\"$COLOR0\"|g" "$cfg_f"
+            sed -i "s|^TextColor[[:space:]]*=.*|TextColor=\"$COLOR7\"|g" "$cfg_f"
+            sed -i "s|^PlaceholderColor[[:space:]]*=.*|PlaceholderColor=\"$COLOR7\"|g" "$cfg_f"
+            sed -i "s|^HighlightColor[[:space:]]*=.*|HighlightColor=\"$COLOR4\"|g" "$cfg_f"
+            sed -i "s|^Background[[:space:]]*=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|g" "$cfg_f"
+        fi
+    done
     
     log "Colores de pywal aplicados a la configuración de SDDM"
 else
     log "WARNING: No se encontraron colores de pywal del usuario, usando colores por defecto"
+    for cfg_f in "$THEME_CONF" "$SDDM_THEME_DIR/theme.conf"; do
+        if [[ -f "$cfg_f" ]]; then
+            sed -i "s|^Background[[:space:]]*=.*|Background=\"Backgrounds/current_wallpaper.jpg\"|g" "$cfg_f"
+        fi
+    done
 fi
 
 log "Configuración del tema SDDM actualizada"

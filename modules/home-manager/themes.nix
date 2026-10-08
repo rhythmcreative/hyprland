@@ -134,6 +134,72 @@ EOF
       elif ! grep -q '^gtk-theme=' "$nwg_conf" 2>/dev/null; then
         printf 'gtk-theme=PywalSync-Mono\n' >> "$nwg_conf"
       fi
+
+      # Seed fallback pywal palette for Waybar, rust-dock, and Rofi if pywal has not run yet.
+      # Without this, rust-dock falls back to default hardcoded Catppuccin Mocha colors,
+      # and Rofi menus (such as SUPER+F hotkeys) fail to resolve @import "colors-pywal.rasi".
+      wal_cache="$home/.cache/wal"
+      mkdir -p "$wal_cache" "$home/.config/waybar" "$home/.config/rofi"
+      if [ ! -f "$wal_cache/colors-waybar.css" ]; then
+        cat <<'EOF' > "$wal_cache/colors-waybar.css"
+@define-color background #101012;
+@define-color foreground #c2c8c9;
+@define-color cursor     #c2c8c9;
+@define-color color0  #101012;
+@define-color color1  #546065;
+@define-color color2  #A45E4C;
+@define-color color3  #E59A78;
+@define-color color4  #5B7A84;
+@define-color color5  #6F8C94;
+@define-color color6  #9A9D9E;
+@define-color color7  #c2c8c9;
+@define-color color8  #878c8c;
+@define-color color9  #546065;
+@define-color color10 #A45E4C;
+@define-color color11 #E59A78;
+@define-color color12 #5B7A84;
+@define-color color13 #6F8C94;
+@define-color color14 #9A9D9E;
+@define-color color15 #c2c8c9;
+EOF
+      fi
+
+      if [ ! -e "$home/.config/waybar/colors-pywal.css" ]; then
+        ln -sf "$wal_cache/colors-waybar.css" "$home/.config/waybar/colors-pywal.css"
+      fi
+
+      if [ ! -f "$home/.config/rofi/colors-pywal.rasi" ]; then
+        cat <<'EOF' > "$home/.config/rofi/colors-pywal.rasi"
+* {
+    background:     #101012;
+    background-alt: #101012;
+    foreground:     #c2c8c9;
+    foreground-alt: #878c8c;
+    selected:       #546065;
+    active:         #A45E4C;
+    urgent:         #E59A78;
+    color0:         #101012;
+    color1:         #546065;
+    color2:         #A45E4C;
+    color3:         #E59A78;
+    color4:         #5B7A84;
+    color5:         #6F8C94;
+    color6:         #9A9D9E;
+    color7:         #c2c8c9;
+    color8:         #878c8c;
+    color9:         #546065;
+    color10:        #A45E4C;
+    color11:        #E59A78;
+    color12:        #5B7A84;
+    color13:        #6F8C94;
+    color14:        #9A9D9E;
+    color15:        #c2c8c9;
+    background-trans:     #101012CC;
+    background-alt-trans: #101012AA;
+    selected-trans:       #546065DD;
+}
+EOF
+      fi
     '';
 
     home.packages = with pkgs; [

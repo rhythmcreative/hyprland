@@ -167,10 +167,11 @@ in
           esac
 
           # The repo's theme.conf is the one that sets Background and the
-          # layout; upstream ships none.
+          # layout; upstream ships none. Copy to both theme.conf and the metadata ConfigFile target.
           if [ -f "${vendoredTheme}/theme.conf" ]; then
             mkdir -p "$(dirname "$confFile")"
             cp "${vendoredTheme}/theme.conf" "$confFile"
+            cp "${vendoredTheme}/theme.conf" "$themeDir/theme.conf"
           fi
 
           # Main.qml is the load-bearing one, and it is why this is not just a

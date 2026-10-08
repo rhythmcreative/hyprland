@@ -41,6 +41,8 @@ dock_off() {
     # Sin SIGHUP: SIGHUP solo ocultaba la ventana y los procesos se quedaban
     # vivos, reclaimando capas al cambiar de tema o al reconectar monitores.
     pkill -x rust-dock >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
     printf 'hidden\n' > "$STATE_FILE" 2>/dev/null || true
 }
 

@@ -43,6 +43,13 @@ in
           mkdir -p "$(dirname "$target")"
           printf '%s\n' ${lib.escapeShellArg cfg.monitors.seedText} > "$target"
         fi
+
+        # Seed ~/.config/rhythm/dock.conf to enabled=on if missing so rust-dock is enabled by default
+        dock_conf="${config.home.homeDirectory}/.config/rhythm/dock.conf"
+        if [ ! -e "$dock_conf" ]; then
+          mkdir -p "$(dirname "$dock_conf")"
+          printf 'enabled=on\n' > "$dock_conf"
+        fi
       ) || true
     '';
 

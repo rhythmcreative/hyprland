@@ -45,7 +45,7 @@ if [ -z "$PLANTILLA" ]; then
         # Standard upstream and distribution Hyprland builds (Debian, Arch, Fedora)
         # use hyprland.conf (hyprlang). Only custom builds embedding Lua manager
         # accept hyprland.lua directly as a compositor config.
-        if strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+        if command -v strings >/dev/null 2>&1 && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
             use_lua=1
         fi
     fi

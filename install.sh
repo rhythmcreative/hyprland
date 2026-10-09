@@ -271,17 +271,17 @@ render_progress_bar() {
     if [ -t 1 ]; then
         printf "\r  [\033[38;5;39m%s\033[38;5;238m%s\033[0m] \033[1;37m%3d%%\033[0m \033[38;5;245m(%d/%d)\033[0m \033[38;5;252m%s\033[0m\033[K" \
             "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label"
-    elif [ -w /dev/tty ]; then
+    elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then
         printf "\r  [\033[38;5;39m%s\033[38;5;238m%s\033[0m] \033[1;37m%3d%%\033[0m \033[38;5;245m(%d/%d)\033[0m \033[38;5;252m%s\033[0m\033[K" \
-            "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label" > /dev/tty
+            "$bar_fill" "$bar_empty" "$pct" "$curr" "$total" "$label" > /dev/tty 2>/dev/null || true
     fi
 }
 
 clear_progress_bar() {
     if [ -t 1 ]; then
         printf "\r\033[K"
-    elif [ -w /dev/tty ]; then
-        printf "\r\033[K" > /dev/tty
+    elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then
+        printf "\r\033[K" > /dev/tty 2>/dev/null || true
     fi
 }
 
@@ -516,8 +516,8 @@ rhythm_install_with_progress() {
         render_progress_bar "$total" "$total" "Installation complete." 100
         if [ -t 1 ]; then
             printf "\n"
-        elif [ -w /dev/tty ]; then
-            printf "\n" > /dev/tty
+        elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then
+            printf "\n" > /dev/tty 2>/dev/null || true
         fi
     else
         clear_progress_bar
@@ -1704,7 +1704,7 @@ run_step() {
 
 show_help() {
     cat << 'EOF'
-Rhythm Hyprland Installer (Omarchy Style) - Arch Linux, CachyOS & Fedora
+Rhythm Hyprland Installer (Omarchy Style) - Arch Linux, CachyOS, Fedora, Debian, Ubuntu, Alpine & openSUSE
 
 Usage:
   ./install.sh [OPTIONS]
@@ -1714,6 +1714,7 @@ Options:
   -y, --yes                  Assume yes to all prompts (unattended mode)
   --preview, --dry-run       Simulate installation workflow without system changes
   --no-reboot                Do not prompt or execute reboot upon completion
+  --minimal                  Minimal desktop core stack only (skip optional applications)
   --wallpapers <mode>        Wallpaper download mode: all, random, none
   --skip-wallpapers          Skip downloading wallpaper packs
   --gpu <type>               GPU driver stack: nvidia, amd, intel, auto, none
@@ -1799,6 +1800,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-apps)
             SKIP_APPS=true
+            shift
+            ;;
+        --minimal)
+            SKIP_APPS=true
+            INSTALL_MODE="minimal"
             shift
             ;;
         --sddm)
@@ -3002,7 +3008,7 @@ step_software() {
             done
             if [ "$total_f" -gt 0 ]; then
                 render_progress_bar "$total_f" "$total_f" "Installation complete." 100
-                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+                if [ -t 1 ]; then printf "\n"; elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then printf "\n" > /dev/tty 2>/dev/null || true; fi
             fi
         fi
 
@@ -3212,7 +3218,7 @@ step_software() {
             done
             if [ "$total_d" -gt 0 ]; then
                 render_progress_bar "$total_d" "$total_d" "Installation complete." 100
-                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+                if [ -t 1 ]; then printf "\n"; elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then printf "\n" > /dev/tty 2>/dev/null || true; fi
             fi
         fi
 
@@ -3240,10 +3246,20 @@ step_software() {
     elif [ "$DISTRO" = "alpine" ]; then
         sudo -v
 
-        # Ensure testing repo is available for packages like hypridle, hyprlock, cava if needed
-        if [ -f /etc/apk/repositories ] && ! grep -q '\/testing' /etc/apk/repositories; then
-            echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" | sudo tee -a /etc/apk/repositories >/dev/null || true
-            sudo apk update >> "$LOG_FILE" 2>&1 || true
+        # Ensure edge testing and edge community are available in /etc/apk/repositories
+        if [ -f /etc/apk/repositories ]; then
+            local repo_updated=false
+            if ! grep -q '\/testing' /etc/apk/repositories; then
+                echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" | sudo tee -a /etc/apk/repositories >/dev/null || true
+                repo_updated=true
+            fi
+            if ! grep -q 'edge\/community' /etc/apk/repositories; then
+                echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" | sudo tee -a /etc/apk/repositories >/dev/null || true
+                repo_updated=true
+            fi
+            if [ "$repo_updated" = true ]; then
+                sudo apk update >> "$LOG_FILE" 2>&1 || true
+            fi
         fi
 
         local ALPINE_CORE_PKGS=(
@@ -3257,6 +3273,8 @@ step_software() {
             xwayland
             seatd
             seatd-openrc
+            elogind
+            elogind-openrc
 
             # Bars, Launchers & Shell
             bash
@@ -3289,7 +3307,7 @@ step_software() {
             blueman
             openssh
             openssh-server
-            openssh-client
+            openssh-client-default
 
             # Audio Architecture
             pipewire
@@ -3312,8 +3330,19 @@ step_software() {
             socat
             upower
 
-            # Qt & SDDM
+            # Graphics, Display Server & SDDM
+            sddm
+            sddm-openrc
+            mesa
+            mesa-dri-gallium
+            mesa-egl
+            eudev
+            eudev-openrc
             qt5-qtwayland
+            qt5-qtdeclarative
+            qt5-qtgraphicaleffects
+            qt5-qtquickcontrols2
+            qt5-qtsvg
             qt6-qtwayland
             qt6-qtdeclarative
             qt6-qt5compat
@@ -3322,10 +3351,9 @@ step_software() {
             qt6-qtvirtualkeyboard
             gtk4-layer-shell
             swaybg
-            hyprpaper
-            qt5ct
             qt6ct
-            kvantum
+            kvantum-qt6
+            kvantum-qt5
             dbus
             dbus-openrc
 
@@ -3356,7 +3384,9 @@ step_software() {
             nwg-displays
             nwg-look
             polkit
+            hyprpolkitagent
             gnome-keyring
+            shadow
         )
 
         if ! rhythm_install_with_progress "${#ALPINE_CORE_PKGS[@]}" "Installing core packages via apk..." \
@@ -3370,7 +3400,7 @@ step_software() {
             done
             if [ "$total_a" -gt 0 ]; then
                 render_progress_bar "$total_a" "$total_a" "Installation complete." 100
-                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+                if [ -t 1 ]; then printf "\n"; elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then printf "\n" > /dev/tty 2>/dev/null || true; fi
             fi
         fi
 
@@ -3537,7 +3567,7 @@ step_software() {
             done
             if [ "$total_s" -gt 0 ]; then
                 render_progress_bar "$total_s" "$total_s" "Installation complete." 100
-                if [ -t 1 ]; then printf "\n"; elif [ -w /dev/tty ]; then printf "\n" > /dev/tty; fi
+                if [ -t 1 ]; then printf "\n"; elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then printf "\n" > /dev/tty 2>/dev/null || true; fi
             fi
         fi
 
@@ -3966,9 +3996,15 @@ detect_existing_display_manager() {
 # --- FIRST RUN SETUP CHOICES (OMARCHY TUI WIZARD) ---
 first_run_choices() {
     if [ "$AUTO_YES" = true ]; then
-        INSTALL_MODE="custom"
-        PACMAN_INSTALL=("brave-bin" "vesktop" "visual-studio-code-bin")
-        FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
+        if [ "$DISTRO" = "alpine" ]; then
+            INSTALL_MODE="minimal"
+            PACMAN_INSTALL=()
+            FLATPAK_INSTALL=()
+        else
+            INSTALL_MODE="custom"
+            PACMAN_INSTALL=("brave-bin" "vesktop" "visual-studio-code-bin")
+            FLATPAK_INSTALL=("io.missioncenter.MissionCenter")
+        fi
         [ -z "$WALLPAPER_MODE" ] && WALLPAPER_MODE="random"
         if [ -z "$ENABLE_SDDM" ]; then
             ENABLE_SDDM=true
@@ -4526,6 +4562,10 @@ step_applications() {
             done
             [ "$total_app" -gt 0 ] && [ -t 1 ] && printf "\n"
         elif [ "$DISTRO" = "alpine" ]; then
+            if [ "$INSTALL_MODE" = "minimal" ] || [ ${#PACMAN_INSTALL[@]} -eq 0 ]; then
+                step_ok "Optional applications skipped (minimal core stack)."
+                return 0
+            fi
             step_item "Deploying application selections for Alpine..."
             sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >> "$LOG_FILE" 2>&1 || true
             local total_app=${#PACMAN_INSTALL[@]}
@@ -5493,17 +5533,35 @@ step_system() {
         sudo rc-service bluetooth start >> "$LOG_FILE" 2>&1 || true
         sudo rc-update add dbus default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service dbus start >> "$LOG_FILE" 2>&1 || true
+        if rc-service -l 2>/dev/null | grep -q udev; then
+            sudo rc-update add udev boot >> "$LOG_FILE" 2>&1 || true
+            sudo rc-service udev start >> "$LOG_FILE" 2>&1 || true
+        elif rc-service -l 2>/dev/null | grep -q eudev; then
+            sudo rc-update add eudev boot >> "$LOG_FILE" 2>&1 || true
+            sudo rc-service eudev start >> "$LOG_FILE" 2>&1 || true
+        fi
+        if rc-service -l 2>/dev/null | grep -q elogind; then
+            sudo rc-update add elogind default >> "$LOG_FILE" 2>&1 || true
+            sudo rc-service elogind start >> "$LOG_FILE" 2>&1 || true
+        fi
         sudo rc-update add seatd default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service seatd start >> "$LOG_FILE" 2>&1 || true
         if rc-service -l 2>/dev/null | grep -q pipewire; then
             sudo rc-update add pipewire default >> "$LOG_FILE" 2>&1 || true
             sudo rc-service pipewire start >> "$LOG_FILE" 2>&1 || true
         fi
-        for grp in seat video input audio; do
+        for grp in seat video input audio render; do
             if getent group "$grp" >/dev/null 2>&1; then
                 sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
             fi
         done
+        if id -u sddm >/dev/null 2>&1; then
+            for grp in seat video input audio render; do
+                if getent group "$grp" >/dev/null 2>&1; then
+                    sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
+                fi
+            done
+        fi
     fi
 
     # SSH service (enabled and running by default across all distributions)
@@ -5965,7 +6023,11 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     clear_logo
-    gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Rhythm Hyprland Installer (Visual Preview Mode)"
+    else
+        echo ":: Rhythm Hyprland Installer (Visual Preview Mode)"
+    fi
     step_item "Verifying preflight environment..."
     sleep 0.4
     if [ "$DISTRO" = "cachyos" ]; then
@@ -5988,6 +6050,16 @@ if [ "$DRY_RUN" = true ]; then
         step_ok "APT package manager, Universe & Hyprland PPA repositories active."
         section "Package Toolchain & Repositories"
         step_ok "Official Ubuntu & Hyprland PPA repositories verified."
+    elif [ "$DISTRO" = "alpine" ]; then
+        step_ok "Alpine Linux x86_64 verified."
+        step_ok "APK package manager & Alpine community/testing repositories active."
+        section "Package Toolchain & Repositories"
+        step_ok "Alpine Main, Community & Testing repositories verified."
+    elif [ "$DISTRO" = "opensuse" ]; then
+        step_ok "openSUSE Linux x86_64 verified."
+        step_ok "Zypper package manager active."
+        section "Package Toolchain & Repositories"
+        step_ok "openSUSE official repositories verified."
     else
         step_ok "Arch Linux x86_64 verified."
         step_ok "Parallel downloads & multilib repository active."
@@ -6015,6 +6087,10 @@ if [ "$DRY_RUN" = true ]; then
         step_ok "NVIDIA Akmod, kernel-devel, DRM modesetting & dracut initramfs verified."
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         step_ok "NVIDIA DKMS, kernel headers, DRM modesetting & initramfs verified."
+    elif [ "$DISTRO" = "alpine" ]; then
+        step_ok "Alpine Linux kernel & Mesa Gallium drivers, seatd/elogind verified."
+    elif [ "$DISTRO" = "opensuse" ]; then
+        step_ok "openSUSE kernel & Mesa/NVIDIA drivers, DRM modesetting verified."
     else
         step_ok "Latest NVIDIA Open/DKMS drivers, kernel headers, DRM modesetting & pacman hook verified."
     fi
@@ -6044,8 +6120,13 @@ if [ "$DRY_RUN" = true ]; then
 
     clear_logo
     echo ""
-    gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished previewing (Simulation Complete)"
-    gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "All modules, styles, and configurations are ready for deployment."
+    if command -v gum >/dev/null 2>&1; then
+        gum style --foreground 2 --bold --padding "0 0 1 $PADDING_LEFT" "Finished previewing (Simulation Complete)"
+        gum style --foreground 7 --padding "0 0 1 $PADDING_LEFT" "All modules, styles, and configurations are ready for deployment."
+    else
+        echo ":: Finished previewing (Simulation Complete)"
+        echo "   All modules, styles, and configurations are ready for deployment."
+    fi
     exit 0
 fi
 

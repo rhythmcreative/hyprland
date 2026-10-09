@@ -351,8 +351,11 @@ elif grep -q "Session=hyprland.desktop" /var/lib/sddm/state.conf 2>/dev/null; th
 fi
 
 if [ -n "$SDDM_CURSOR_THEME" ]; then
-    conf_cursor > /etc/systemd/system/sddm.service.d/cursor.conf || fallo=1
-    chmod 644 /etc/systemd/system/sddm.service.d/cursor.conf 2>/dev/null
+    if [ -d /etc/systemd/system ] || command -v systemctl >/dev/null 2>&1; then
+        mkdir -p /etc/systemd/system/sddm.service.d 2>/dev/null || true
+        conf_cursor > /etc/systemd/system/sddm.service.d/cursor.conf 2>/dev/null || true
+        chmod 644 /etc/systemd/system/sddm.service.d/cursor.conf 2>/dev/null || true
+    fi
     if [ -d "/usr/share/icons/$SDDM_CURSOR_THEME/cursors" ]; then
         log "login cursor: $SDDM_CURSOR_THEME (applied on next boot)"
     else
@@ -363,7 +366,9 @@ fi
 # El drop-in del cursor es del servicio de SDDM, asi que la recarga es del
 # gestor de sistema, no del de usuario. Sin esto, el fichero esta pero systemd
 # no lo mira hasta el siguiente apagado.
-systemctl daemon-reload >/dev/null 2>&1 || log "warning: daemon-reload failed"
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || log "warning: daemon-reload failed"
+fi
 
 if [ "$fallo" -eq 0 ]; then
     log "SDDM greeter deployed"

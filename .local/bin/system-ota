@@ -822,7 +822,7 @@ cmd_update() {
 
     # Piezas de SISTEMA del greeter de SDDM.
     if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
-        if "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >/dev/null 2>&1; then
+        if timeout 30 "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >/dev/null 2>&1; then
             echo "  SDDM greeter deployed."
         else
             echo "  [!] el greeter de SDDM no se pudo desplegar (quiza falta sudo con contrasena)."
@@ -841,7 +841,7 @@ cmd_update() {
     # install.sh ya fazia deploy y luego sync; aqui faltaba ese segundo paso.
     if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
         echo "Resyncing pywal colours after deploy..."
-        if ! "$HOME/.local/bin/modern-pywal-sync" >> "$LOG_FILE" 2>&1; then
+        if ! timeout 20 "$HOME/.local/bin/modern-pywal-sync" >> "$LOG_FILE" 2>&1; then
             echo "  [!] modern-pywal-sync fallo; los colores pueden estar desfasados."
             OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
         fi
@@ -860,7 +860,7 @@ cmd_update() {
     # Step 2b: Run pending dotfiles migrations (idempotent)
     echo "Running pending migrations..."
     if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
-        if ! RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1; then
+        if ! timeout 20 env RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1; then
             OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
             echo "  [!] Algunas migraciones dand problemas. Detalle en $LOG_FILE"
         fi

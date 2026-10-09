@@ -5474,7 +5474,7 @@ step_system() {
         local deploy_bin="$HOME/.local/bin/rhythm-sddm-deploy"
         [ ! -x "$deploy_bin" ] && [ -x "$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy" ] && deploy_bin="$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy"
         if [ -x "$deploy_bin" ]; then
-            if sudo "$deploy_bin" "$DOTFILES_DIR"; then
+            if timeout 30 sudo "$deploy_bin" "$DOTFILES_DIR"; then
                 step_ok "SDDM greeter deployed (login on the internal panel only, cursor set)."
             else
                 step_warn "SDDM greeter deployment was incomplete. Check ~/.cache/rhythm-sddm-deploy.log"
@@ -5547,7 +5547,7 @@ step_system() {
         local CACHE_WP_NOW=""
         [ -f "$CACHE_WP_FILE" ] && CACHE_WP_NOW=$(cat "$CACHE_WP_FILE" 2>/dev/null || true)
         if [ -f "$SDDM_WALLPAPER" ]; then
-            wal -i "$SDDM_WALLPAPER" -n -q >> "$LOG_FILE" 2>&1 || true
+            timeout 10 wal -i "$SDDM_WALLPAPER" -n -q -s -t >> "$LOG_FILE" 2>&1 || true
         fi
         mkdir -p "$HOME/.cache"
         if [ -z "$CACHE_WP_NOW" ] || [ ! -f "$CACHE_WP_NOW" ]; then
@@ -5571,11 +5571,11 @@ step_system() {
             if [ -f "$def_wp" ]; then
                 local tmp_wall_png="/tmp/rhythm-hypr-default.png"
                 if command -v magick >/dev/null 2>&1; then
-                    magick "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                    timeout 10 magick "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
                 elif command -v convert >/dev/null 2>&1; then
-                    convert "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                    timeout 10 convert "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
                 elif command -v ffmpeg >/dev/null 2>&1; then
-                    ffmpeg -y -i "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
+                    timeout 10 ffmpeg -y -i "$def_wp" "$tmp_wall_png" >> "$LOG_FILE" 2>&1 || true
                 fi
                 if [ -f "$tmp_wall_png" ]; then
                     for w in wall0.png wall1.png wall2.png; do
@@ -5601,7 +5601,7 @@ step_system() {
     step_item "Enabling NetworkManager and Bluetooth..."
     if command -v systemctl >/dev/null 2>&1; then
         sudo systemctl enable NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
-        sudo systemctl start NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
+        timeout 5 sudo systemctl start --no-block NetworkManager bluetooth >> "$LOG_FILE" 2>&1 || true
     elif command -v rc-service >/dev/null 2>&1; then
         sudo rc-update add networkmanager default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service networkmanager start >> "$LOG_FILE" 2>&1 || true
@@ -5655,8 +5655,8 @@ step_system() {
         sudo systemctl enable ssh >> "$LOG_FILE" 2>&1 || \
         sudo systemctl enable sshd >> "$LOG_FILE" 2>&1 || true
 
-        sudo systemctl start ssh >> "$LOG_FILE" 2>&1 || \
-        sudo systemctl start sshd >> "$LOG_FILE" 2>&1 || true
+        timeout 5 sudo systemctl start --no-block ssh >> "$LOG_FILE" 2>&1 || \
+        timeout 5 sudo systemctl start --no-block sshd >> "$LOG_FILE" 2>&1 || true
     elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
         sudo rc-update add sshd default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service sshd start >> "$LOG_FILE" 2>&1 || true
@@ -5869,8 +5869,8 @@ DESK_EOF
     # Pipewire audio sockets
     if command -v systemctl >/dev/null 2>&1; then
         step_item "Enabling Pipewire user audio services..."
-        systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
-        systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
+        timeout 5 systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service >> "$LOG_FILE" 2>&1 || true
+        timeout 5 systemctl --user enable --now pipewire.service >> "$LOG_FILE" 2>&1 || true
     fi
 
     # Add user to required groups (network for nmcli, lp for printing, optical for disc, seat for seatd)
@@ -5895,8 +5895,8 @@ ACTION=="add", SUBSYSTEM=="backlight", TAG+="uaccess", MODE="0664", GROUP="video
 ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd_backlight*", TAG+="uaccess", MODE="0664", GROUP="input"
 EOF
         if command -v udevadm >/dev/null 2>&1; then
-            sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
-            sudo udevadm trigger --subsystem-match=backlight --subsystem-match=leds >> "$LOG_FILE" 2>&1 || true
+            timeout 5 sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
+            timeout 5 sudo udevadm trigger --subsystem-match=backlight --subsystem-match=leds >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -5929,8 +5929,8 @@ ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_start_thres
 ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{charge_control_limit_max}!="", RUN+="/bin/sh -c 'chmod 0666 /sys%p/charge_control_limit_max'"
 EOF
             if command -v udevadm >/dev/null 2>&1; then
-                sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
-                sudo udevadm trigger --subsystem-match=power_supply >> "$LOG_FILE" 2>&1 || true
+                timeout 5 sudo udevadm control --reload-rules >> "$LOG_FILE" 2>&1 || true
+                timeout 5 sudo udevadm trigger --subsystem-match=power_supply >> "$LOG_FILE" 2>&1 || true
             fi
         fi
     fi
@@ -5945,7 +5945,7 @@ EOF
         step_item "Verifying the installation..."
         local _doc_repo="$HOME/hyprland"
         [ -d "$DOTFILES_DIR/.git" ] && _doc_repo="$DOTFILES_DIR"
-        RHYTHM_DOTFILES_DIR="$_doc_repo" "$HOME/.local/bin/rhythm-doctor" --verify >> "$LOG_FILE" 2>&1 \
+        timeout 15 env RHYTHM_DOTFILES_DIR="$_doc_repo" "$HOME/.local/bin/rhythm-doctor" --verify >> "$LOG_FILE" 2>&1 \
             && step_ok "Installation verified." \
             || step_warn "Doctor found issues. Check $LOG_FILE or run rhythm-doctor."
     fi
@@ -6253,7 +6253,7 @@ elif [ "$AUTO_YES" = true ]; then
         rhythm_reboot
     elif [ "$ENABLE_SDDM" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl start sddm || sudo systemctl start display-manager || rhythm_reboot
+            sudo systemctl start --no-block sddm 2>/dev/null || sudo systemctl start --no-block display-manager 2>/dev/null || rhythm_reboot
         else
             sudo rc-service sddm start || rhythm_reboot
         fi

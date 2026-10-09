@@ -354,7 +354,7 @@ if [ -d "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts" ]; then
     mkdir -p /usr/share/fonts/truetype/sddm-astronaut
     cp -n "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts"/*.ttf /usr/share/fonts/truetype/sddm-astronaut/ 2>/dev/null || true
     chmod 644 /usr/share/fonts/truetype/sddm-astronaut/*.ttf 2>/dev/null || true
-    command -v fc-cache >/dev/null 2>&1 && fc-cache -f /usr/share/fonts/truetype/sddm-astronaut >/dev/null 2>&1 || true
+    command -v fc-cache >/dev/null 2>&1 && timeout 10 fc-cache -f /usr/share/fonts/truetype/sddm-astronaut >/dev/null 2>&1 || true
 fi
 
 # Preconfigurar sesion por defecto a Hyprland en state.conf para SDDM 0.20+ (Qt6)
@@ -383,7 +383,7 @@ fi
 # gestor de sistema, no del de usuario. Sin esto, el fichero esta pero systemd
 # no lo mira hasta el siguiente apagado.
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload >/dev/null 2>&1 || log "warning: daemon-reload failed"
+    timeout 5 systemctl daemon-reload >/dev/null 2>&1 || log "warning: daemon-reload failed"
 fi
 
 if [ "$fallo" -eq 0 ]; then

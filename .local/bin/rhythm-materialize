@@ -34,6 +34,9 @@ REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
 if [ ! -d "$REPO_DIR/.git" ]; then
     _self=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
     [ -n "$_self" ] && REPO_DIR="$_self"
+    if [ ! -d "$REPO_DIR/.git" ] && [ -d "$HOME/dotfiles/.git" ]; then
+        REPO_DIR="$HOME/dotfiles"
+    fi
 fi
 
 OVERLAY="$HOME/.local/state/rhythm/user_edits"
@@ -111,46 +114,31 @@ desplegar_config() {
     [ -d "$src" ] || return 0
     mkdir -p "$HOME/.config"
 
-    local item name rel target
-    for item in "$src"/*; do
-        [ -e "$item" ] || continue
-        name=$(basename "$item")
-        rel=".config/$name"
-        target="$HOME/.config/$name"
+    local f rel_path rel target
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        rel_path="${f#"$src"/}"
+        case "$rel_path" in
+            *__pycache__*|*.pyc|*.swp|*.bak*) continue ;;
+        esac
+        rel=".config/$rel_path"
+        target="$HOME/$rel"
 
-        if [ -d "$item" ]; then
-            # Directorio: Fusionar fichero a fichero, para no replaces lo que
-            # solo existe en el destino.
-            mkdir -p "$target"
-            local f
-            for f in "$item"/*; do
-                [ -f "$f" ] || continue
-                local relf="$rel/$(basename "$f")"
-                if [ -f "$target/$(basename "$f")" ]; then
-                    if cmp -s "$f" "$target/$(basename "$f")"; then
-                        SKIPPED=$((SKIPPED+1)); continue
-                    fi
-                    # Rescatar ANTES de sobrescribir: en cuanto se copia el
-                    # fichero del repo, la edicion del usuario ya no esta en
-                    # ningun sitio y no hay forma de compararla con el ledger.
-                    rescatar_edicion "$target/$(basename "$f")" "$f" "$relf"
-                fi
-                run cp -f "$f" "$target/$(basename "$f")"
-                registrar "$relf" "$target/$(basename "$f")"
-            done
-        else
-            if [ -f "$target" ]; then
-                if cmp -s "$item" "$target"; then
-                    SKIPPED=$((SKIPPED+1))
-                    continue
-                fi
-                rescatar_edicion "$target" "$item" "$rel"
+        if [ -f "$target" ]; then
+            if cmp -s "$f" "$target"; then
+                SKIPPED=$((SKIPPED+1))
+                continue
             fi
-            run cp -f "$item" "$target"
-            registrar "$rel" "$target"
+            # Rescatar ANTES de sobrescribir: en cuanto se copia el
+            # fichero del repo, la edicion del usuario ya no esta en
+            # ningun sitio y no hay forma de compararla con el ledger.
+            rescatar_edicion "$target" "$f" "$rel"
         fi
+        mkdir -p "$(dirname "$target")" 2>/dev/null
+        run cp -f "$f" "$target"
+        registrar "$rel" "$target"
         COPIED=$((COPIED+1))
-    done
+    done < <(find "$src" -type f 2>/dev/null)
 }
 
 # ── overlay ──────────────────────────────────────────────────────────────────
@@ -184,13 +172,29 @@ desplegar_bin() {
     local src="$REPO_DIR/.local/bin"
     [ -d "$src" ] || return 0
     mkdir -p "$HOME/.local/bin"
-    local f
-    for f in "$src"/*; do
+    local f rel_path rel target
+    while IFS= read -r f; do
         [ -f "$f" ] || continue
-        run cp -f "$f" "$HOME/.local/bin/$(basename "$f")"
-        run chmod 755 "$HOME/.local/bin/$(basename "$f")"
+        rel_path="${f#"$src"/}"
+        case "$rel_path" in
+            *__pycache__*|*.pyc|*.swp|*.bak*) continue ;;
+        esac
+        rel=".local/bin/$rel_path"
+        target="$HOME/$rel"
+
+        if [ -f "$target" ]; then
+            if cmp -s "$f" "$target"; then
+                SKIPPED=$((SKIPPED+1))
+                continue
+            fi
+            rescatar_edicion "$target" "$f" "$rel"
+        fi
+        mkdir -p "$(dirname "$target")" 2>/dev/null
+        run cp -f "$f" "$target"
+        run chmod 755 "$target"
+        registrar "$rel" "$target"
         COPIED=$((COPIED+1))
-    done
+    done < <(find "$src" -type f 2>/dev/null)
 }
 
 # ── informacion ──────────────────────────────────────────────────────────────
@@ -207,7 +211,7 @@ estado() {
 
     echo
     echo "ledger: $LEDGER"
-    if [ -f "$LEDGER" ]; then
+    if [ -d "$LEDGER" ]; then
         echo "  $(find "$LEDGER" -type f 2>/dev/null | wc -l) fichero(s) registrados"
     else
         echo "  (vacio: es la primera vez que se despliega)"

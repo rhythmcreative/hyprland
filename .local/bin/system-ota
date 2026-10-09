@@ -16,16 +16,18 @@ set -euo pipefail
 # acepta el override por entorno para quien lo clonee en otro sitio.
 REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
 if [ ! -d "$REPO_DIR/.git" ]; then
-    #Segunda opcion: si el usuario clonó el repo en otro nombre, se busca por
+    # Segunda opcion: si el usuario clonó el repo en otro nombre, se busca por
     # el remoto al que apunta este propio script, que es el unico repo de
     # dotfiles que puede ser.
     _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
     if [ -n "$_self_repo" ] && [ -d "$_self_repo/.git" ]; then
         REPO_DIR="$_self_repo"
+    elif [ -d "$HOME/dotfiles/.git" ]; then
+        REPO_DIR="$HOME/dotfiles"
     fi
 fi
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
-STATUS_FILE="/tmp/ota-status.json"
+STATUS_FILE="${XDG_RUNTIME_DIR:-/tmp}/ota-status.json"
 BACKUP_BASE="$HOME/.config.backup"
 LOG_FILE="/tmp/system-ota.log"
 
@@ -149,18 +151,28 @@ generate_status_json() {
     if command -v checkupdates >/dev/null 2>&1; then
         local raw_pacman
         raw_pacman=$(checkupdates 2>/dev/null || true)
+        if [ -n "$raw_pacman" ]; then
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $1}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
+            done <<< "$raw_pacman"
+            pacman_updates=${#pacman_pkgs[@]}
+        fi
     elif command -v pacman >/dev/null 2>&1; then
         local raw_pacman
         raw_pacman=$(pacman -Qu 2>/dev/null || true)
         if [ -n "$raw_pacman" ]; then
-            pacman_updates=$(echo "$raw_pacman" | wc -l)
             while IFS= read -r line; do
-                if [ -n "$line" ]; then
-                    local pkg
-                    pkg=$(echo "$line" | awk '{print $1}')
-                    pacman_pkgs+=("\"$pkg\"")
-                fi
+                [ -z "$line" ] && continue
+                local pkg
+                pkg=$(echo "$line" | awk '{print $1}')
+                [ -n "$pkg" ] || continue
+                pacman_pkgs+=("\"$pkg\"")
             done <<< "$raw_pacman"
+            pacman_updates=${#pacman_pkgs[@]}
         fi
     elif command -v dnf >/dev/null 2>&1; then
         local raw_dnf
@@ -168,6 +180,7 @@ generate_status_json() {
         if [ -n "$raw_dnf" ]; then
             while IFS= read -r line; do
                 [ -z "$line" ] && continue
+                [[ "$line" =~ ^(Last|Updating|Metadata|Security) ]] && continue
                 local pkg
                 pkg=$(echo "$line" | awk '{print $1}')
                 [ -n "$pkg" ] || continue
@@ -214,8 +227,14 @@ generate_status_json() {
     fi
 
     local kernel_ver
+    local distro_name="Linux"
+    if [ -f /etc/os-release ]; then
+        distro_name=$(grep -E '^PRETTY_NAME=' /etc/os-release | head -n1 | cut -d= -f2- | tr -d '"' || echo "Linux")
+    fi
     if is_nixos; then
         kernel_ver="$(uname -r 2>/dev/null || echo "Linux") (NixOS)"
+    elif [ -n "$distro_name" ] && [ "$distro_name" != "Linux" ]; then
+        kernel_ver="$distro_name ($(uname -r 2>/dev/null || echo "kernel"))"
     else
         kernel_ver=$(uname -r 2>/dev/null || echo "Linux")
     fi
@@ -235,6 +254,10 @@ generate_status_json() {
         has_updates=true
         status="update_available"
         status_text="$dotfiles_behind new system update(s) available"
+    elif [ "$pacman_updates" -gt 0 ]; then
+        has_updates=true
+        status="update_available"
+        status_text="$pacman_updates system package update(s) available"
     else
         has_updates=false
         status="up_to_date"
@@ -267,8 +290,11 @@ generate_status_json() {
 EOF
 )
 
-    echo "$json_output" > "$STATUS_FILE"
-    echo "$json_output" > "$CACHE_DIR/ota-status.json"
+    ( echo "$json_output" > "$STATUS_FILE" ) 2>/dev/null || true
+    ( echo "$json_output" > "$CACHE_DIR/ota-status.json" ) 2>/dev/null || true
+    if [ "$STATUS_FILE" != "/tmp/ota-status.json" ]; then
+        ( echo "$json_output" > "/tmp/ota-status.json" ) 2>/dev/null || true
+    fi
     echo "$json_output"
 }
 
@@ -326,12 +352,17 @@ cmd_status() {
         esac
     done
 
-    local data
+    local data=""
     if [ -f "$STATUS_FILE" ]; then
-        data=$(cat "$STATUS_FILE")
-    elif [ -f "$CACHE_DIR/ota-status.json" ]; then
-        data=$(cat "$CACHE_DIR/ota-status.json")
-    else
+        data=$(cat "$STATUS_FILE" 2>/dev/null || true)
+    fi
+    if [ -z "$data" ] && [ -f "$CACHE_DIR/ota-status.json" ]; then
+        data=$(cat "$CACHE_DIR/ota-status.json" 2>/dev/null || true)
+    fi
+    if [ -z "$data" ] && [ -f "/tmp/ota-status.json" ]; then
+        data=$(cat "/tmp/ota-status.json" 2>/dev/null || true)
+    fi
+    if [ -z "$data" ]; then
         data=$(generate_status_json "false")
     fi
 
@@ -437,6 +468,9 @@ cmd_backup() {
     if [ -d "$HOME/.config/hypr" ]; then cp -r "$HOME/.config/hypr" "$target/"; fi
     if [ -d "$HOME/.config/waybar" ]; then cp -r "$HOME/.config/waybar" "$target/"; fi
     if [ -d "$HOME/.config/quickshell" ]; then cp -r "$HOME/.config/quickshell" "$target/"; fi
+    if [ -d "$HOME/.config/rofi" ]; then cp -r "$HOME/.config/rofi" "$target/"; fi
+    if [ -d "$HOME/.config/kitty" ]; then cp -r "$HOME/.config/kitty" "$target/"; fi
+    if [ -d "$HOME/.config/mako" ]; then cp -r "$HOME/.config/mako" "$target/"; fi
     if [ -d "$HOME/.local/bin" ]; then cp -r "$HOME/.local/bin" "$target/"; fi
 
     cat <<EOF > "$target/checkpoint.json"
@@ -462,8 +496,12 @@ _ota_devolver_isla() {
     if [ "${OTA_ISLAND_WAS_ACTIVE:-false}" = "true" ] \
        && ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         echo "[!] El update termino de forma inesperada; devolviendo la isla..." >> "$LOG_FILE"
-        systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-        systemctl --user start waybar-island.service >/dev/null 2>&1 || true
+        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
+            systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+            systemctl --user start waybar-island.service >/dev/null 2>&1 || true
+        else
+            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null || true
+        fi
     fi
     return $rc
 }
@@ -683,60 +721,36 @@ cmd_update() {
     # step below overwrites: Quickshell hot-reloads on change and a half-written
     # shell.qml takes it down, leaving the unit dead after the start limit.
     island_was_active=false
-    if systemctl --user is-active --quiet waybar-island.service 2>/dev/null; then
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet waybar-island.service 2>/dev/null; then
         island_was_active=true
         # Esta es la que lee el trap de salida: si el guion muere despues de
         # aqui, la isla se queda apagada y el trap tiene que saber que estaba viva.
         OTA_ISLAND_WAS_ACTIVE=true
         systemctl --user stop waybar-island.service >/dev/null 2>&1 || true
+    elif "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        island_was_active=true
+        OTA_ISLAND_WAS_ACTIVE=true
+        pkill -f "quickshell.*waybar-island" 2>/dev/null || true
+        pkill -f "quickshell-island" 2>/dev/null || true
     fi
     if [ -f "$REPO_DIR/.version" ]; then
         cp -f "$REPO_DIR/.version" "$HOME/.version" 2>/dev/null || true
     fi
 
-    # Fichero a fichero y contando fallos. Un "cp -rf ... || true" a pelo tapaba
-    # cualquier error: si un destino no se podia escribir, el update Terminaba
-    # igual y no habia forma de saber que esos ficheros no se desplegaron.
-    #
-    # Solo .local/bin se copia aqui. La parte de .config la hace
-    # rhythm-materialize mas abajo, porque es la que sabe respectar el overlay
-    # de ediciones del usuario; si se copiase aqui primero, el overlay ya no
-    # tendria nada que rescatar.
-    local _src _base
-    if [ -d "$REPO_DIR/.local/bin" ]; then
+    # Bootstrap latest rhythm-materialize and ota wrappers before deployment
+    if [ -f "$REPO_DIR/.local/bin/rhythm-materialize" ]; then
         mkdir -p "$HOME/.local/bin"
-        for _src in "$REPO_DIR"/.local/bin/*; do
-            [ -e "$_src" ] || continue
-            _base=$(basename "$_src")
-            # __pycache__ no es un script: cp -f sobre un directorio falla y el
-            # conteo de fallos lo reportaba como problema del update. .gitignore
-            # lo esconde de git, pero este bucle recorre el disco, no el indice.
-            # install.sh ya lo filtraba.
-            case "$_base" in
-                __pycache__|*.pyc) continue ;;
-            esac
-            if ! cp -f "$_src" "$HOME/.local/bin/$_base" 2>/dev/null; then
-                OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
-                echo "  [!] no desplegado: .local/bin/$_base"
-            fi
-        done
-        chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
+        cp -f "$REPO_DIR/.local/bin/rhythm-materialize" "$HOME/.local/bin/rhythm-materialize" 2>/dev/null || true
+        chmod 755 "$HOME/.local/bin/rhythm-materialize" 2>/dev/null || true
+    fi
+    if [ -f "$REPO_DIR/.local/bin/ota-updater" ]; then
+        cp -f "$REPO_DIR/.local/bin/ota-updater" "$HOME/.local/bin/ota-updater" 2>/dev/null || true
+        chmod 755 "$HOME/.local/bin/ota-updater" 2>/dev/null || true
     fi
 
-    # .config NO se copia aqui: lo hace rhythm-materialize, mas abajo, para no
-    # pisar por dos vias el overlay de ediciones del usuario.
-
-    # El overlay de ediciones del usuario se aplica DESPUES de la base, que es
-    # justo lo que este bloque de cpRAW sustituye: antes, un fichero editado a
-    # mano se pisaba con el del repo y el unico rastro era un .bak al lado.
-    #
-    # rhythm-materialize hace lo mismo que este cp mas tres cosas: mantiene un
-    # ledger de lo que puso en la ultima pasada, y si un fichero en ~/.config
-    # tiene bytes que no son ni lo que puso ni lo que envia el repo, lo copia al
-    # overlay ~/.local/state/rhythm/user_edits antes de sobrescribirlo y avisa.
-    #
-    # No se usa `|| true`: si el despliegue falla hay que notarlo, que es lo
-    # que este mismo update yaLesson-aprendido.
+    # rhythm-materialize deploys both .config and .local/bin recursively,
+    # maintaining a ledger of tracked files and preserving user modifications
+    # into the user_edits overlay before updating.
     if [ -x "$HOME/.local/bin/rhythm-materialize" ]; then
         local mat_out mat_rc=0
         mat_out=$("$HOME/.local/bin/rhythm-materialize" 2>&1) || mat_rc=$?
@@ -746,23 +760,53 @@ cmd_update() {
             echo "  [!] el despliegue de configs reporto problemas (rc=$mat_rc)"
         fi
     else
-        echo "  [!] rhythm-materialize no esta instalado; nada desplegado."
-        OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+        echo "  [!] rhythm-materialize no esta instalado; desplegando directamente..."
+        local _src _base
+        if [ -d "$REPO_DIR/.local/bin" ]; then
+            mkdir -p "$HOME/.local/bin"
+            for _src in "$REPO_DIR"/.local/bin/*; do
+                [ -e "$_src" ] || continue
+                _base=$(basename "$_src")
+                case "$_base" in
+                    __pycache__|*.pyc) continue ;;
+                esac
+                if ! cp -f "$_src" "$HOME/.local/bin/$_base" 2>/dev/null; then
+                    OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
+                    echo "  [!] no desplegado: .local/bin/$_base"
+                fi
+            done
+            chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
+        fi
+        if [ -d "$REPO_DIR/.config" ]; then
+            cp -rf "$REPO_DIR/.config"/* "$HOME/.config/" 2>/dev/null || true
+        fi
+    fi
+
+    # Reconcile hyprland configuration syntax (Lua manager vs standard hyprlang)
+    local hypr_bin
+    hypr_bin=$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || command -v hyprland 2>/dev/null || command -v /usr/bin/hyprland 2>/dev/null || command -v /usr/local/bin/hyprland 2>/dev/null || command -v start-hyprland 2>/dev/null || command -v /usr/bin/start-hyprland 2>/dev/null || true)
+    local supports_lua=false
+    if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
+        if strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
+            supports_lua=true
+        fi
+    fi
+    local d_id=""
+    [ -f /etc/os-release ] && d_id=$(grep -E '^ID=' /etc/os-release | head -n1 | cut -d= -f2- | tr -d '"')
+    if [ "$d_id" = "debian" ] || [ "$d_id" = "ubuntu" ]; then
+        supports_lua=false
+    fi
+    if [ "$supports_lua" = true ]; then
+        if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
+            rm -f "$HOME/.config/hypr/hyprland.conf"
+        fi
+    else
+        if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
+            rm -f "$HOME/.config/hypr/hyprland.lua"
+        fi
     fi
 
     # Piezas de SISTEMA del greeter de SDDM.
-    #
-    # rhythm-materialize solo sincroniza ~/.config y ~/.local/bin, asi que lo
-    # que vive en /usr y /etc no lo tocaba nadie mas que install.sh. Con el
-    # greeter nuevo eso dejaba el sistema a medias: el sddm.conf del sistema
-    # seguia apuntando a start-hyprland, sin el envoltorio que decide que
-    # salida se enciende, y sin el drop-in del cursor. Y a medias es peor que
-    # sin cambios, porque el repo ya trae la plantilla nueva.
-    #
-    # rhythm-sddm-deploy es el unico sitio que escribe esos cuatro ficheros, y
-    # lo usan tambien el installer. Si el despliegue falla por falta de sudo, no
-    # se para la OTA: se avisa y se sigue, que un login feo no debe impedir
-    # actualizar todo lo demas.
     if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
         if "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >/dev/null 2>&1; then
             echo "  SDDM greeter deployed."
@@ -833,7 +877,7 @@ cmd_update() {
         elif command -v apt-get >/dev/null 2>&1; then
             echo "[3/4] Updating system packages with apt-get..."
             if command -v sudo >/dev/null 2>&1; then
-                if ! (sudo apt-get update -y >> "$LOG_FILE" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y >> "$LOG_FILE" 2>&1); then
+                if ! (sudo apt-get update -y >> "$LOG_FILE" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --no-install-recommends >> "$LOG_FILE" 2>&1); then
                     OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
                     echo "  [!] apt-get termino con errores. Detalle en $LOG_FILE"
                 fi
@@ -879,20 +923,27 @@ cmd_update() {
     # so the completion notification below needs it already running.
     if [ "$island_was_active" = true ] || "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         echo "Restarting Dynamic Island..."
-        systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-        systemctl --user restart waybar-island.service >/dev/null 2>&1 || true
+        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
+            systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+            systemctl --user restart waybar-island.service >/dev/null 2>&1 || true
+        else
+            pkill -f "quickshell.*waybar-island" 2>/dev/null || true
+            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null || true
+        fi
         for _ in 1 2 3 4 5 6 7 8 9 10; do
             "$HOME/.local/bin/island-running" >/dev/null 2>&1 && break
             sleep 1
         done
         if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
             echo "Island did not come back, launching it directly..."
-            systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+            if command -v systemctl >/dev/null 2>&1; then
+                systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+            fi
             setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null
             sleep 3
             if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
                 OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                echo "  [!] La isla no ha vuelto. Mira: journalctl --user -u waybar-island -n 30"
+                echo "  [!] La isla no ha vuelto. Revisa: journalctl --user -u waybar-island -n 30"
             fi
         fi
     fi
@@ -979,10 +1030,13 @@ cmd_rollback() {
         if [ -d "$src/hypr" ]; then cp -rf "$src/hypr" "$HOME/.config/"; fi
         if [ -d "$src/waybar" ]; then cp -rf "$src/waybar" "$HOME/.config/"; fi
         if [ -d "$src/quickshell" ]; then cp -rf "$src/quickshell" "$HOME/.config/"; fi
+        if [ -d "$src/rofi" ]; then cp -rf "$src/rofi" "$HOME/.config/"; fi
+        if [ -d "$src/kitty" ]; then cp -rf "$src/kitty" "$HOME/.config/"; fi
+        if [ -d "$src/mako" ]; then cp -rf "$src/mako" "$HOME/.config/"; fi
         if [ -d "$src/bin" ]; then cp -rf "$src/bin"/* "$HOME/.local/bin/"; fi
 
-        hyprctl reload >/dev/null 2>&1 || true
-        pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
+        command -v pkill >/dev/null 2>&1 && pkill -SIGUSR2 waybar >/dev/null 2>&1 || true
         send_notif "System Update" "Checkpoint $choice restored successfully." "normal"
         echo "Rollback completed."
     fi
@@ -1075,7 +1129,7 @@ cmd_gui() {
                     elif [ "$pkg_mgr" = "dnf" ]; then
                         sudo dnf upgrade -y
                     elif [ "$pkg_mgr" = "apt" ]; then
-                        sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
+                        sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --no-install-recommends
                     elif [ "$pkg_mgr" = "apk" ]; then
                         sudo apk update && sudo apk upgrade
                     elif [ "$pkg_mgr" = "zypper" ]; then

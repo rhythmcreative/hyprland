@@ -16,6 +16,8 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
     if [ -n "$_self_repo" ] && [ -d "$_self_repo/.git" ]; then
         REPO_DIR="$_self_repo"
+    elif [ -d "$HOME/dotfiles/.git" ]; then
+        REPO_DIR="$HOME/dotfiles"
     fi
 fi
 

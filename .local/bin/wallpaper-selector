@@ -44,8 +44,70 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     fi
 fi
 
-if { [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] || [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ]; } && [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-    "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 || true
+if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ] || [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ]; then
+    mkdir -p "$HOME/.config/rofi" "$HOME/.cache/wal"
+    if [ ! -f "$HOME/.config/rofi/colors-pywal.rasi" ]; then
+        cat > "$HOME/.config/rofi/colors-pywal.rasi" <<'ROFI_EOF'
+* {
+    background: #101012;
+    background-alt: #101012;
+    foreground: #c2c8c9;
+    foreground-alt: #878c8c;
+    selected: #546065;
+    active: #A45E4C;
+    urgent: #E59A78;
+    color0: #101012;
+    color1: #546065;
+    color2: #A45E4C;
+    color3: #E59A78;
+    color4: #5B7A84;
+    color5: #6F8C94;
+    color6: #9A9D9E;
+    color7: #c2c8c9;
+    color8: #878c8c;
+    color9: #546065;
+    color10: #A45E4C;
+    color11: #E59A78;
+    color12: #5B7A84;
+    color13: #6F8C94;
+    color14: #9A9D9E;
+    color15: #c2c8c9;
+    background-trans: #101012CC;
+    background-alt-trans: #101012AA;
+    selected-trans: #546065DD;
+}
+ROFI_EOF
+        cp -f "$HOME/.config/rofi/colors-pywal.rasi" "$HOME/.cache/wal/colors-rofi.rasi" 2>/dev/null || true
+    fi
+    if [ ! -f "$HOME/.config/rofi/colors-rofi-dark.rasi" ] && [ ! -f "$HOME/.cache/wal/colors-rofi-dark.rasi" ]; then
+        cat > "$HOME/.cache/wal/colors-rofi-dark.rasi" <<'ROFI_EOF'
+* {
+    active-background: #A45E4C;
+    active-foreground: @foreground;
+    normal-background: @background;
+    normal-foreground: @foreground;
+    urgent-background: #546065;
+    urgent-foreground: @foreground;
+    alternate-active-background: @background;
+    alternate-active-foreground: @foreground;
+    alternate-normal-background: @background;
+    alternate-normal-foreground: @foreground;
+    selected-active-background: #A45E4C;
+    selected-active-foreground: @foreground;
+    selected-normal-background: #546065;
+    selected-normal-foreground: @foreground;
+    selected-urgent-background: #546065;
+    selected-urgent-foreground: @foreground;
+    background-color: @background;
+    border-color: @background;
+    spacing: 2;
+}
+ROFI_EOF
+        cp -f "$HOME/.cache/wal/colors-rofi-dark.rasi" "$HOME/.config/rofi/colors-rofi-dark.rasi" 2>/dev/null || true
+    fi
+    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+        "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 &
+    fi
 fi
 
 WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
@@ -98,14 +160,35 @@ if [[ ${#images[@]} -eq 0 ]]; then
     exit 1
 fi
 
-# 2. Generar lista para rofi (Buscador oculto por CSS, filtrado por texto activo)
+# 2. Generar miniaturas que falten en paralelo antes de abrir Rofi
+missing_thumbs=()
+for img in "${images[@]}"; do
+    bname="${img##*/}"
+    pthumb="$PREVIEW_DIR/${bname%.*}_thumb.jpg"
+    [ ! -f "$pthumb" ] && missing_thumbs+=("$img")
+done
+
+if [ ${#missing_thumbs[@]} -gt 0 ]; then
+    conv="magick"
+    command -v magick >/dev/null 2>&1 || conv="convert"
+    if command -v "$conv" >/dev/null 2>&1; then
+        printf '%s\n' "${missing_thumbs[@]}" | xargs -P 4 -I {} sh -c '
+            img="$1"
+            base="$(basename "$img")"
+            thumb="'"$PREVIEW_DIR"'/${base%.*}_thumb.jpg"
+            "'"$conv"'" "$img" -thumbnail 300x200^ -gravity center -extent 300x200 "$thumb" 2>/dev/null || true
+        ' _ {} || true
+    fi
+fi
+
+# 3. Generar lista para rofi (Buscador oculto por CSS, filtrado por texto activo)
 TEMP_LIST=$(mktemp)
 for img in "${images[@]}"; do
     basename_img="${img##*/}"
     clean_name="${basename_img%.*}"
     preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
     
-    # Icono inteligente (usa el original si no hay thumb para no esperar)
+    # Icono inteligente (usa preview optimizado)
     if [[ -f "$preview_path" ]]; then
         icon_path="$preview_path"
     else
@@ -115,9 +198,8 @@ for img in "${images[@]}"; do
     echo -e "$basename_img\0icon\x1f$icon_path" >> "$TEMP_LIST"
 done
 
-# 3. Mostrar rofi (Carga instantánea)
+# 4. Mostrar rofi (Carga instantánea)
 hide_all_bars
-# El fondo lo pone rofi, no este script.
 selected=$(rofi-themed -dmenu -i \
     -p "Wallpapers" \
     -theme "$ROFI_THEME" \
@@ -140,21 +222,10 @@ if [[ ! -f "$selected_path" ]]; then
     exit 1
 fi
 
-# 4. APLICACIÓN CON ANIMACIÓN SINCRONIZADA
-# The selector hid this monitor while Rofi was open. Restore it first because
-# the transition helper uses SIGUSR1 (toggle) to start its own hide animation.
-show_all_bars
-"$HOME/.local/bin/sync-wallpaper-animation" "$selected_path"
+# 5. APLICACIÓN CON ANIMACIÓN SINCRONIZADA
+# Desarmar el trap de salida para evitar que show_all_bars parpadee antes de tiempo
+trap - EXIT INT TERM
+rm -f "$TEMP_LIST" 2>/dev/null || true
 
-# 5. Generar thumbnails faltantes (mantenimiento en background)
-(
-    conv="magick"
-    command -v magick >/dev/null 2>&1 || conv="convert"
-    for img in "${images[@]}"; do
-        basename_img="${img##*/}"
-        preview_path="$PREVIEW_DIR/${basename_img%.*}_thumb.jpg"
-        if [[ ! -f "$preview_path" ]]; then
-            "$conv" "$img" -resize 300x200^ -gravity center -extent 300x200 "$preview_path" 2>/dev/null || true
-        fi
-    done
-) &
+# Ejecutar transicion suave (las barras ya estan ocultas, sin parpadeos dobles)
+"$HOME/.local/bin/sync-wallpaper-animation" "$selected_path"

@@ -1514,23 +1514,23 @@ DEB_EOF
     # Configure APT pinning specifically for Hyprland ecosystem and required libraries from backports
     sudo mkdir -p /etc/apt/preferences.d
     cat << PREF_EOF | sudo tee /etc/apt/preferences.d/99backports.pref >/dev/null
-Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland quickshell
 Pin: release n=${debian_codename}-backports
 Pin-Priority: 500
 
-Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland quickshell
 Pin: release a=${debian_codename}-backports
 Pin-Priority: 500
 
-Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland quickshell
 Pin: release a=*-backports
 Pin-Priority: 500
 
-Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland quickshell
 Pin: release a=stable-backports
 Pin-Priority: 500
 
-Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland
+Package: hypr* libhypr* libaquamarine* qml6-module-org-hyprland* xdg-desktop-portal-hyprland quickshell
 Pin: release o=Debian Backports
 Pin-Priority: 500
 PREF_EOF
@@ -2606,10 +2606,17 @@ install_quickshell() {
         return 0
     fi
     step_item "Setting up Quickshell..."
-    if [ "$DISTRO" = "ubuntu" ]; then
+    if [ "$DISTRO" = "debian" ]; then
+        local debian_codename
+        debian_codename=$(grep "VERSION_CODENAME" /etc/os-release 2>/dev/null | cut -d= -f2 || true)
+        debian_codename=$(echo "$debian_codename" | tr -d '"'\'' ' || true)
+        [ -z "$debian_codename" ] && debian_codename="trixie"
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || \
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "ubuntu" ]; then
         if sudo add-apt-repository -y ppa:outfoxxed/quickshell >> "$LOG_FILE" 2>&1; then
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y quickshell >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
         fi
     elif [ "$DISTRO" = "opensuse" ]; then
         sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses quickshell >> "$LOG_FILE" 2>&1 || true
@@ -2617,6 +2624,10 @@ install_quickshell() {
 
     if command -v quickshell >/dev/null 2>&1; then
         step_ok "Quickshell installed via package manager."
+        if [ -x /usr/bin/quickshell ] && [ -f /usr/local/bin/quickshell ]; then
+            sudo rm -f /usr/local/bin/quickshell 2>/dev/null || true
+            sudo rm -rf /usr/local/lib/quickshell 2>/dev/null || true
+        fi
         return 0
     fi
 
@@ -2947,6 +2958,10 @@ step_software() {
             qt6-virtualkeyboard-plugin
             libqt6multimedia6
             qt6-wayland
+            quickshell
+            qml6-module-qt-labs-platform
+            qml6-module-qt-labs-folderlistmodel
+            qml6-module-qt-labs-settings
             libgtk4-layer-shell0
             libgtk4-layer-shell-dev
             libgtk-4-dev
@@ -4988,6 +5003,21 @@ step_wallpapers() {
         rm -rf "$TEMP_WALL" || true
         step_ok "Wallpapers installed."
     fi
+
+    # Pre-generate wallpaper previews for instant Rofi wallpaper selector loading
+    local PREVIEW_DIR="$HOME/.cache/wallpaper-previews"
+    mkdir -p "$PREVIEW_DIR"
+    local conv="magick"
+    command -v magick >/dev/null 2>&1 || conv="convert"
+    if command -v "$conv" >/dev/null 2>&1; then
+        find "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) 2>/dev/null | head -n 40 | xargs -P 4 -I {} sh -c '
+            img="$1"
+            base="$(basename "$img")"
+            thumb="'"$PREVIEW_DIR"'/${base%.*}_thumb.jpg"
+            [ ! -f "$thumb" ] && "'"$conv"'" "$img" -thumbnail 300x200^ -gravity center -extent 300x200 "$thumb" 2>/dev/null || true
+        ' _ {} || true
+    fi
+
     return 0
 }
 
@@ -5052,7 +5082,7 @@ step_system() {
         fi
         
         sudo mkdir -p /etc/sddm.conf.d /etc/sddm
-        printf "[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+        printf "[Theme]\nCurrent=sddm-astronaut-theme\nThemeDir=/usr/share/sddm/themes\n" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
 
         # Ensure /etc/sddm.conf does not override theme if it exists
         if [ -f /etc/sddm.conf ]; then
@@ -5062,11 +5092,16 @@ step_system() {
                 else
                     sudo sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
                 fi
+                if grep -q "^ThemeDir=" /etc/sddm.conf 2>/dev/null; then
+                    sudo sed -i 's|^ThemeDir=.*|ThemeDir=/usr/share/sddm/themes|' /etc/sddm.conf 2>/dev/null || true
+                else
+                    sudo sed -i '/^\[Theme\]/a ThemeDir=\/usr\/share\/sddm\/themes' /etc/sddm.conf 2>/dev/null || true
+                fi
             else
-                printf "\n[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee -a /etc/sddm.conf >/dev/null || true
+                printf "\n[Theme]\nCurrent=sddm-astronaut-theme\nThemeDir=/usr/share/sddm/themes\n" | sudo tee -a /etc/sddm.conf >/dev/null || true
             fi
         else
-            printf "[Theme]\nCurrent=sddm-astronaut-theme\n" | sudo tee /etc/sddm.conf >/dev/null || true
+            printf "[Theme]\nCurrent=sddm-astronaut-theme\nThemeDir=/usr/share/sddm/themes\n" | sudo tee /etc/sddm.conf >/dev/null || true
         fi
 
         # El greeter corre en WAYLAND, no en X11, y esto no es estetico.
@@ -5384,7 +5419,7 @@ DESK_EOF
 
         # Preconfigure SDDM default session to Hyprland
         sudo mkdir -p /var/lib/sddm
-        printf "[Last]\nSession=hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
+        printf "[Last]\nSession=/usr/share/wayland-sessions/hyprland.desktop\n" | sudo tee /var/lib/sddm/state.conf > /dev/null || true
         id -u sddm >/dev/null 2>&1 && sudo chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
 
         step_item "Enabling SDDM display manager..."

@@ -138,6 +138,7 @@ conf_tema() {
     cat <<EOF
 [Theme]
 Current=sddm-astronaut-theme
+ThemeDir=/usr/share/sddm/themes
 EOF
 }
 
@@ -276,12 +277,17 @@ if [ -f /etc/sddm.conf ]; then
         else
             sed -i '/^\[Theme\]/a Current=sddm-astronaut-theme' /etc/sddm.conf 2>/dev/null || true
         fi
+        if grep -q "^ThemeDir=" /etc/sddm.conf 2>/dev/null; then
+            sed -i 's|^ThemeDir=.*|ThemeDir=/usr/share/sddm/themes|' /etc/sddm.conf 2>/dev/null || true
+        else
+            sed -i '/^\[Theme\]/a ThemeDir=\/usr\/share\/sddm\/themes' /etc/sddm.conf 2>/dev/null || true
+        fi
     else
-        printf "\n[Theme]\nCurrent=sddm-astronaut-theme\n" >> /etc/sddm.conf 2>/dev/null || true
+        printf "\n[Theme]\nCurrent=sddm-astronaut-theme\nThemeDir=/usr/share/sddm/themes\n" >> /etc/sddm.conf 2>/dev/null || true
     fi
 else
     mkdir -p /etc
-    printf "[Theme]\nCurrent=sddm-astronaut-theme\n" > /etc/sddm.conf 2>/dev/null || true
+    printf "[Theme]\nCurrent=sddm-astronaut-theme\nThemeDir=/usr/share/sddm/themes\n" > /etc/sddm.conf 2>/dev/null || true
 fi
 
 # Xsetup es la red de seguridad por si hay que volver a X11. Vive en /etc, asi
@@ -315,6 +321,15 @@ if [ -d "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts" ]; then
     cp -n "$REPO_DIR/sddm/sddm-astronaut-theme/Fonts"/*.ttf /usr/share/fonts/truetype/sddm-astronaut/ 2>/dev/null || true
     chmod 644 /usr/share/fonts/truetype/sddm-astronaut/*.ttf 2>/dev/null || true
     command -v fc-cache >/dev/null 2>&1 && fc-cache -f /usr/share/fonts/truetype/sddm-astronaut >/dev/null 2>&1 || true
+fi
+
+# Preconfigurar sesion por defecto a Hyprland en state.conf para SDDM 0.20+ (Qt6)
+mkdir -p /var/lib/sddm 2>/dev/null || true
+if [ ! -f /var/lib/sddm/state.conf ] || ! grep -q "Session=" /var/lib/sddm/state.conf 2>/dev/null; then
+    printf "[Last]\nSession=/usr/share/wayland-sessions/hyprland.desktop\n" > /var/lib/sddm/state.conf 2>/dev/null || true
+    id -u sddm >/dev/null 2>&1 && chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
+elif grep -q "Session=hyprland.desktop" /var/lib/sddm/state.conf 2>/dev/null; then
+    sed -i 's|Session=hyprland.desktop|Session=/usr/share/wayland-sessions/hyprland.desktop|' /var/lib/sddm/state.conf 2>/dev/null || true
 fi
 
 if [ -n "$SDDM_CURSOR_THEME" ]; then

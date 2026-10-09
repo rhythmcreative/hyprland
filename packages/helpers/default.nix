@@ -60,7 +60,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "rhythm-helpers";
-  version = "0.24";
+  version = "0.25";
   src = ../../.local/bin;
 
   # patchShebangs resolves a shebang by looking the interpreter up with

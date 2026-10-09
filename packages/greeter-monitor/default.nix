@@ -19,7 +19,7 @@
 
 stdenv.mkDerivation {
   pname = "rhythm-greeter-monitor";
-  version = "0.24";
+  version = "0.25";
   src = ../../sddm;
 
   nativeBuildInputs = [ makeWrapper ];

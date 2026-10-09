@@ -525,6 +525,64 @@ rhythm_install_with_progress() {
     return "$ret"
 }
 
+# --- DEVELOPER TOOLS: ANTIGRAVITY CLI (AGY) ---
+install_antigravity_cli() {
+    section "Developer Tools (Antigravity CLI)"
+    step_item "Configuring Antigravity CLI (agy) for developer workflows..."
+
+    local target_user="${SUDO_USER:-$USER}"
+    local user_home
+    user_home=$(getent passwd "$target_user" 2>/dev/null | cut -d: -f6 || echo "$HOME")
+    [ -z "$user_home" ] && user_home="$HOME"
+
+    local user_bin="$user_home/.local/bin"
+    mkdir -p "$user_bin" 2>/dev/null || true
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+        chown "$target_user:$target_user" "$user_bin" 2>/dev/null || true
+    fi
+
+    local agy_found=false
+    if [ -x "$user_bin/agy" ] || [ -x "$HOME/.local/bin/agy" ] || [ -x "/usr/local/bin/agy" ] || command -v agy >/dev/null 2>&1; then
+        agy_found=true
+    fi
+
+    if [ "$agy_found" = false ]; then
+        step_item "Downloading and installing Antigravity CLI..."
+        # Google Frontend sends content-encoding: gzip; handle both --compressed and gunzip pipeline
+        local install_cmd='(curl -fsSL --compressed https://antigravity.google/cli/install.sh 2>/dev/null || curl -fsSL https://antigravity.google/cli/install.sh | gzip -dc) | bash'
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && command -v sudo >/dev/null 2>&1; then
+            sudo -u "$target_user" bash -c "$install_cmd" >> "$LOG_FILE" 2>&1 || true
+        else
+            bash -c "$install_cmd" >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
+    # Ensure system-wide symlink in /usr/local/bin/agy if available
+    local resolved_agy=""
+    if [ -x "$user_bin/agy" ]; then
+        resolved_agy="$user_bin/agy"
+    elif [ -x "$HOME/.local/bin/agy" ]; then
+        resolved_agy="$HOME/.local/bin/agy"
+    elif command -v agy >/dev/null 2>&1; then
+        resolved_agy="$(command -v agy)"
+    fi
+
+    if [ -n "$resolved_agy" ] && [ -x "$resolved_agy" ]; then
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+            chown "$target_user:$target_user" "$resolved_agy" 2>/dev/null || true
+        fi
+        if [ -w /usr/local/bin ] || [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
+            sudo mkdir -p /usr/local/bin 2>/dev/null || true
+            sudo ln -sf "$resolved_agy" /usr/local/bin/agy >> "$LOG_FILE" 2>&1 || true
+        fi
+        step_ok "Antigravity CLI (agy) installed and available in PATH."
+        return 0
+    else
+        step_warn "Antigravity CLI installation skipped or offline."
+        return 0
+    fi
+}
+
 # Same reason as nixos_tui_ok: a TUI on a dumb/limited terminal never draws and
 # never returns, so the run would hang on that step forever. Wrapping the
 # spinner in the timeout costs nothing (builds run far longer than the
@@ -1218,6 +1276,8 @@ EOF2
             rhythm_setup_system "$user" "$guess_gpu" "$wallpapers" "$flatpaks" "$enable_steam_system" "$is_asus" "$is_surface" \
                 && system_status="done" || system_status="failed"
         fi
+
+        install_antigravity_cli || true
 
         # Same closing screen as the Arch installer instead of dropping the
         # user at a bare prompt with no idea whether it worked.
@@ -2805,6 +2865,8 @@ step_software() {
             bluez
             bluez-obex
             blueman
+            openssh-server
+            openssh-clients
             pipewire
             pipewire-pulseaudio
             wireplumber
@@ -2896,6 +2958,7 @@ step_software() {
         install_quickshell || true
         install_starship || true
         install_rust_dock || true
+        install_antigravity_cli || true
         auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
@@ -2948,6 +3011,8 @@ step_software() {
             bluez
             bluez-obexd
             blueman
+            openssh-server
+            openssh-client
             pipewire
             pipewire-pulse
             pipewire-alsa
@@ -3110,6 +3175,7 @@ step_software() {
         install_quickshell || true
         install_starship || true
         install_rust_dock || true
+        install_antigravity_cli || true
         auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "alpine" ]; then
@@ -3162,6 +3228,9 @@ step_software() {
             bluez
             bluez-openrc
             blueman
+            openssh
+            openssh-server
+            openssh-client
 
             # Audio Architecture
             pipewire
@@ -3252,6 +3321,7 @@ step_software() {
         install_quickshell || true
         install_starship || true
         install_rust_dock || true
+        install_antigravity_cli || true
         auto_detect_drivers || true
         return 0
     elif [ "$DISTRO" = "opensuse" ]; then
@@ -3315,6 +3385,8 @@ step_software() {
             NetworkManager-applet
             bluez
             blueman
+            openssh
+            openssh-server
 
             # Audio Architecture
             pipewire
@@ -3410,6 +3482,7 @@ step_software() {
         install_quickshell || true
         install_starship || true
         install_rust_dock || true
+        install_antigravity_cli || true
         auto_detect_drivers || true
         return 0
     fi
@@ -3459,6 +3532,7 @@ step_software() {
         bluez-utils
         blueman
         bluez-obex
+        openssh
 
         # Audio Architecture
         pipewire
@@ -3561,6 +3635,9 @@ step_software() {
 
     # Build and deploy rust-dock
     install_rust_dock
+
+    # Deploy Antigravity CLI for developer workflows
+    install_antigravity_cli || true
 
     # Configure Hyprland plugins
     section "Hyprland Plugins"
@@ -5326,6 +5403,34 @@ step_system() {
         done
     fi
 
+    # SSH service (enabled and running by default across all distributions)
+    step_item "Enabling and starting SSH service by default..."
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        sudo ssh-keygen -A >> "$LOG_FILE" 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        # Debian/Ubuntu uses ssh.service; Arch, Fedora, openSUSE use sshd.service
+        sudo systemctl enable --now ssh >> "$LOG_FILE" 2>&1 || \
+        sudo systemctl enable --now sshd >> "$LOG_FILE" 2>&1 || \
+        sudo systemctl enable ssh >> "$LOG_FILE" 2>&1 || \
+        sudo systemctl enable sshd >> "$LOG_FILE" 2>&1 || true
+
+        sudo systemctl start ssh >> "$LOG_FILE" 2>&1 || \
+        sudo systemctl start sshd >> "$LOG_FILE" 2>&1 || true
+    elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
+        sudo rc-update add sshd default >> "$LOG_FILE" 2>&1 || true
+        sudo rc-service sshd start >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Allow SSH in firewall if firewalld or ufw are running
+    if command -v firewall-cmd >/dev/null 2>&1 && sudo firewall-cmd --state >/dev/null 2>&1; then
+        sudo firewall-cmd --permanent --add-service=ssh >> "$LOG_FILE" 2>&1 || true
+        sudo firewall-cmd --reload >> "$LOG_FILE" 2>&1 || true
+    fi
+    if command -v ufw >/dev/null 2>&1 && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+        sudo ufw allow ssh >> "$LOG_FILE" 2>&1 || true
+    fi
+
     # Ensure Hyprland desktop entry exists in wayland-sessions for ALL display managers
     sudo mkdir -p /usr/share/wayland-sessions
     sudo chmod 755 /usr/share/wayland-sessions 2>/dev/null || true
@@ -5697,6 +5802,15 @@ step_update() {
         systemctl --user enable --now rhythm-ota-check.timer >> "$LOG_FILE" 2>&1 || true
     fi
     sudo systemctl enable --now power-profiles-daemon >> "$LOG_FILE" 2>&1 || true
+
+    # Ensure SSH server is enabled and started on update
+    if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl enable --now ssh >> "$LOG_FILE" 2>&1 || \
+        sudo systemctl enable --now sshd >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Ensure Antigravity CLI is deployed for developer workflows
+    install_antigravity_cli || true
 
     # rust-dock: relanzar para que tome el binario recien desplegado
     if pgrep -x rust-dock >/dev/null 2>&1 || [ -x "$HOME/.local/bin/rust-dock-launcher" ]; then

@@ -103,6 +103,9 @@ in
     # overrides the whole thing with mkForce; nothing listens on it anyway.
     networking.firewall.allowedTCPPorts = lib.mkDefault [ 22 ];
 
+    # Soporte para binarios dinamicos no parcheados (Antigravity CLI / agy, herramientas de desarrollo)
+    programs.nix-ld.enable = lib.mkDefault true;
+
     services.flatpak.enable = cfg.features.flatpaks;
 
     # Sudo sin contraseña por defecto para el grupo wheel (igual que en Arch,

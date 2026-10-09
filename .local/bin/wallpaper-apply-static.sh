@@ -13,18 +13,15 @@ if [[ -z "$WALLPAPER_IMAGE" || ! -f "$WALLPAPER_IMAGE" ]]; then
 fi
 
 echo "$WALLPAPER_IMAGE" > ~/.cache/quickshell-last-wallpaper
+killall linux-wallpaperengine 2>/dev/null || true
 
-[[ -n "$WAL_CMD" ]] && "$WAL_CMD" -i "$WALLPAPER_IMAGE" -n -q 2>/dev/null || true
+# Sincronización completa con animación suave (awww grow / fade) y Pywal (Waybar, Quickshell, Dock)
+if [ -x "$HOME/.local/bin/sync-wallpaper-animation" ]; then
+    exec "$HOME/.local/bin/sync-wallpaper-animation" "$WALLPAPER_IMAGE"
+fi
 
-# La isla lanza este script desde systemd, que no hereda el entorno del
-# compositor: sin HYPRLAND_INSTANCE_SIGNATURE hyprctl falla, jq no parsea su
-# mensaje de error y MONITORS queda vacio. Con la lista vacia la imagen se pedia
-# solo para el "eDP-1" del fallback, que en otra maquina no existe. Se descubre
-# la firma aqui; el detalle esta en wallpaper-apply.sh.
-#
-# Wayland tambien, y por el mismo motivo: con la firma puesta pero sin
-# WAYLAND_DISPLAY el `awww img` de abajo busca el socket en wayland-0, que no es
-# el de este compositor, y no pinta nada en ninguna pantalla sin decir nada.
+# Fallback si sync-wallpaper-animation no estuviese presente
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
     if [ -d "$XDG_RUNTIME_DIR/hypr" ]; then
@@ -40,22 +37,15 @@ if [ -z "${WAYLAND_DISPLAY:-}" ]; then
     unset _wl
 fi
 
-MONITORS=()
-if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then
-    MONITORS=($(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null))
-elif command -v xrandr >/dev/null 2>&1; then
-    MONITORS=($(xrandr --query 2>/dev/null | grep " connected" | awk '{print $1}'))
+if [ -x "$HOME/.local/bin/wallpaper-backend" ]; then
+    "$HOME/.local/bin/wallpaper-backend" apply "$WALLPAPER_IMAGE"
+elif command -v awww >/dev/null 2>&1; then
+    awww img --transition-type grow --transition-pos center --transition-duration 1.5 --transition-fps 60 -- "$WALLPAPER_IMAGE"
 fi
 
-if [ "${#MONITORS[@]}" -gt 0 ]; then
-    AWWW_OUTPUTS=(--outputs "$(IFS=, ; echo "${MONITORS[*]}")")
-else
-    # Sin --outputs awww las aplica a todas, que es mejor que un nombre de
-    # monitor inventado.
-    AWWW_OUTPUTS=()
-    echo "wallpaper-apply-static: no se han podido detectar las salidas; se aplica a todas" >&2
+if command -v wal >/dev/null 2>&1; then
+    wal -i "$WALLPAPER_IMAGE" -n -q 2>/dev/null || true
 fi
-
-killall linux-wallpaperengine 2>/dev/null || true
-
-awww img "${AWWW_OUTPUTS[@]}" -- "$WALLPAPER_IMAGE"
+if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+    "$HOME/.local/bin/modern-pywal-sync" >/dev/null 2>&1 || true
+fi

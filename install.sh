@@ -5401,7 +5401,7 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc < /dev/null >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses -y sddm-qt6 sddm < /dev/null >> "$LOG_FILE" 2>&1 || \
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses -y sddm-qt6 sddm-greeter-qt6 sddm < /dev/null >> "$LOG_FILE" 2>&1 || \
             sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses -y sddm < /dev/null >> "$LOG_FILE" 2>&1 || true
         else
             sudo pacman -S --needed --noconfirm sddm < /dev/null >> "$LOG_FILE" 2>&1 || true

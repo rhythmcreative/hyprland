@@ -175,7 +175,9 @@ fi
 # entre awww y mpvpaper, escribe el cache que leen los watchers, y ya sabe
 # resolver el entorno del compositor.
 if [[ "$HAVE_ENGINE" == false ]]; then
-    if [[ -n "$WALLPAPER_IMAGE" && -x "$HOME/.local/bin/wallpaper-backend" ]]; then
+    if [[ -n "$WALLPAPER_IMAGE" && -x "$HOME/.local/bin/sync-wallpaper-animation" ]]; then
+        exec "$HOME/.local/bin/sync-wallpaper-animation" "$WALLPAPER_IMAGE"
+    elif [[ -n "$WALLPAPER_IMAGE" && -x "$HOME/.local/bin/wallpaper-backend" ]]; then
         echo "wallpaper-apply: linux-wallpaperengine no esta instalado; se pone la vista previa estatica." >&2
         "$HOME/.local/bin/wallpaper-backend" apply "$WALLPAPER_IMAGE" >/dev/null 2>&1 || true
     else

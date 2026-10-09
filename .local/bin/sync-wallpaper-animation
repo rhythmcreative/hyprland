@@ -43,6 +43,7 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
 fi
 
 echo "$WALLPAPER_PATH" > "$HOME/.cache/current-wallpaper"
+echo "$WALLPAPER_PATH" > "$HOME/.cache/quickshell-last-wallpaper"
 
 # Cuantas capas de cada barra hay ahora, para saber cuantas tienen que volver.
 #

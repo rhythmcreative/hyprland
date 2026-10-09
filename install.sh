@@ -1870,10 +1870,21 @@ preflight_checks() {
         exit 1
     fi
 
+    # openSUSE Leap compatibility check
+    if [ "$DISTRO" = "opensuse" ] && grep -qi "leap" /etc/os-release 2>/dev/null; then
+        echo "WARNING: openSUSE Leap provides outdated Wayland, Mesa, and compiler toolchains."
+        echo "Hyprland is officially targeted and supported on openSUSE Tumbleweed and Slowroll."
+        if [ "${AUTO_YES:-false}" != true ]; then
+            if ! confirm_prompt "Continue installation on openSUSE Leap anyway?"; then
+                exit 1
+            fi
+        fi
+    fi
+
     if [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
         # Pacman optimizations (ParallelDownloads and Color)
         if grep -q "^#ParallelDownloads" /etc/pacman.conf 2>/dev/null; then
-            sudo sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
+            sudo sed -i 's/^#ParallelDownloads.*/ParallelDownloads = 5/' /etc/pacman.conf
         fi
         if grep -q "^#Color" /etc/pacman.conf 2>/dev/null; then
             sudo sed -i 's/^#Color/Color/' /etc/pacman.conf
@@ -1885,7 +1896,7 @@ preflight_checks() {
 
         # Ensure bootstrap tools exist
         local bootstrap_pkgs=()
-        for pkg in gum fzf git base-devel stow zsh curl sudo; do
+        for pkg in gum fzf git base-devel stow zsh curl sudo pciutils; do
             if ! pacman -Q "$pkg" >/dev/null 2>&1; then
                 bootstrap_pkgs+=("$pkg")
             fi
@@ -1920,8 +1931,12 @@ CHARM_EOF
         fi
 
         # Ensure bootstrap tools exist (supporting both DNF 4 and DNF 5)
-        local dnf_bootstrap=(git curl sudo zsh fzf stow tar xz dnf-plugins-core)
-        sudo dnf install -y "${dnf_bootstrap[@]}" 'dnf5-command(copr)' 'dnf5-plugins' gum >> "$LOG_FILE" 2>&1 || true
+        local dnf_bootstrap=(git curl sudo zsh fzf stow tar xz pciutils)
+        if command -v dnf5 >/dev/null 2>&1; then
+            sudo dnf5 install -y "${dnf_bootstrap[@]}" dnf5-plugins gum >> "$LOG_FILE" 2>&1 || true
+        else
+            sudo dnf install -y "${dnf_bootstrap[@]}" dnf-plugins-core gum >> "$LOG_FILE" 2>&1 || true
+        fi
 
         # Standalone binary fallback for gum if repo install was bypassed
         if ! command -v gum >/dev/null 2>&1; then
@@ -1942,13 +1957,12 @@ CHARM_EOF
             "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${fedora_ver}.noarch.rpm" \
             "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${fedora_ver}.noarch.rpm" >> "$LOG_FILE" 2>&1 || true
 
-        # Enable essential Hyprland and ecosystem COPRs
+        # Enable essential Hyprland and ecosystem COPRs (nett00n is modern maintained build)
         sudo dnf copr enable -y nett00n/hyprland >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y errornointernet/quickshell >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y tofik/nwg-shell >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y alebastr/sway-extras >> "$LOG_FILE" 2>&1 || true
         sudo dnf copr enable -y scottames/awww >> "$LOG_FILE" 2>&1 || true
-        sudo dnf copr enable -y solopasha/hyprland >> "$LOG_FILE" 2>&1 || true
 
         # Refresh metadata cache
         sudo dnf makecache >> "$LOG_FILE" 2>&1 || true
@@ -1970,10 +1984,12 @@ CHARM_EOF
         echo 'DPkg::Lock::Timeout "60";' | sudo tee /etc/apt/apt.conf.d/99wait-for-lock >/dev/null 2>&1 || true
 
         if [ "$DISTRO" = "ubuntu" ]; then
-            # Ensure software-properties-common is available for PPAs and universe repo is enabled
+            # Ensure software-properties-common is available for PPAs and universe/multiverse repos are enabled
             sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common >> "$LOG_FILE" 2>&1 || true
             sudo add-apt-repository -y universe >> "$LOG_FILE" 2>&1 || true
+            sudo add-apt-repository -y multiverse >> "$LOG_FILE" 2>&1 || true
+            sudo add-apt-repository -y restricted >> "$LOG_FILE" 2>&1 || true
             # Enable community Hyprland & Quickshell PPAs for Ubuntu
             sudo add-apt-repository -y ppa:cppiber/hyprland >> "$LOG_FILE" 2>&1 || true
             sudo add-apt-repository -y ppa:avengemedia/danklinux >> "$LOG_FILE" 2>&1 || true
@@ -1989,7 +2005,7 @@ CHARM_EOF
         fi
 
         # Ensure bootstrap tools exist
-        local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg python3 python3-pip python3-venv pipx)
+        local debian_bootstrap=(git curl sudo zsh fzf stow tar xz-utils build-essential ca-certificates gnupg python3 python3-pip python3-venv pipx pciutils)
         sudo apt-get update -y >> "$LOG_FILE" 2>&1 || true
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${debian_bootstrap[@]}" gum >> "$LOG_FILE" 2>&1 || true
 
@@ -2023,7 +2039,7 @@ CHARM_EOF
         sudo apk update >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
-        local alpine_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils build-base bash py3-pip shadow ca-certificates)
+        local alpine_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils build-base bash py3-pip shadow ca-certificates pciutils)
         sudo apk add --no-cache "${alpine_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Try installing gum directly via apk (testing/edge or newer releases)
@@ -2045,11 +2061,11 @@ CHARM_EOF
         for repo_alias in $(zypper lr -u 2>/dev/null | awk -F'|' 'NR>2 && ($NF ~ /^[[:space:]]*(cd|dvd|iso|hd|dir):\// || $2 ~ /[Mm]edia/ || $3 ~ /[Mm]edia/ || $2 ~ /[Dd][Vv][Dd]/ || $3 ~ /[Dd][Vv][Dd]/) {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2}'); do
             [ -n "$repo_alias" ] && sudo zypper mr -d "$repo_alias" >> "$LOG_FILE" 2>&1 || true
         done
-        sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
-        local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow)
-        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
+        local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow pciutils)
+        sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum on openSUSE
         if ! command -v gum >/dev/null 2>&1; then
@@ -2123,6 +2139,24 @@ auto_detect_drivers() {
         GPU_INFO="Intel"
     else
         GPU_INFO=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
+        if [ -z "$GPU_INFO" ]; then
+            for dev in /sys/bus/pci/devices/*; do
+                [ -r "$dev/class" ] || continue
+                local pci_class
+                pci_class=$(cat "$dev/class" 2>/dev/null || true)
+                case "$pci_class" in
+                    0x03*)
+                        local vendor_id
+                        vendor_id=$(cat "$dev/vendor" 2>/dev/null || true)
+                        case "$vendor_id" in
+                            0x10de) GPU_INFO="$GPU_INFO NVIDIA Corporation " ;;
+                            0x1002) GPU_INFO="$GPU_INFO Advanced Micro Devices ATI " ;;
+                            0x8086) GPU_INFO="$GPU_INFO Intel Corporation " ;;
+                        esac
+                        ;;
+                esac
+            done
+        fi
     fi
 
     if [[ $GPU_INFO == *"NVIDIA"* ]]; then
@@ -2155,7 +2189,11 @@ auto_detect_drivers() {
         fi
         if [[ $PROD_NAME == *"Surface"* ]]; then
             step_item "Microsoft Surface detected. Adding surface kernel & utilities..."
-            sudo dnf config-manager --add-repo=https://pkg.surfacelinux.com/fedora/linux-surface.repo >> "$LOG_FILE" 2>&1 || true
+            if command -v dnf5 >/dev/null 2>&1; then
+                sudo dnf config-manager addrepo --from-repofile=https://pkg.surfacelinux.com/fedora/linux-surface.repo >> "$LOG_FILE" 2>&1 || true
+            else
+                sudo dnf config-manager --add-repo=https://pkg.surfacelinux.com/fedora/linux-surface.repo >> "$LOG_FILE" 2>&1 || true
+            fi
             sudo dnf install -y kernel-surface iptsd >> "$LOG_FILE" 2>&1 || true
         fi
 
@@ -2185,9 +2223,29 @@ EOF
         return 0
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         if [ "$IS_NVIDIA" = true ]; then
-            step_item "Preparing NVIDIA DKMS driver..."
-            local kernel_headers="linux-headers-$(uname -r)"
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$kernel_headers" linux-headers-generic linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd libva-nvidia-driver >> "$LOG_FILE" 2>&1 || step_warn "Could not install some NVIDIA Debian/Ubuntu packages."
+            step_item "Preparing NVIDIA DKMS driver for $DISTRO..."
+            local kver
+            kver=$(uname -r)
+            if [ "$DISTRO" = "debian" ]; then
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                    "linux-headers-$kver" linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd nvidia-vaapi-driver >> "$LOG_FILE" 2>&1 || {
+                    for npkg in "linux-headers-$kver" linux-headers-amd64 nvidia-driver nvidia-kernel-dkms nvidia-vulkan-icd nvidia-vaapi-driver; do
+                        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$npkg" >> "$LOG_FILE" 2>&1 || true
+                    done
+                }
+            else
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                    "linux-headers-$kver" linux-headers-generic nvidia-kernel-dkms nvidia-vaapi-driver >> "$LOG_FILE" 2>&1 || {
+                    for npkg in "linux-headers-$kver" linux-headers-generic nvidia-kernel-dkms nvidia-vaapi-driver; do
+                        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$npkg" >> "$LOG_FILE" 2>&1 || true
+                    done
+                }
+                if ! command -v nvidia-smi >/dev/null 2>&1; then
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-550 >> "$LOG_FILE" 2>&1 || \
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535 >> "$LOG_FILE" 2>&1 || \
+                    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver >> "$LOG_FILE" 2>&1 || true
+                fi
+            fi
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
@@ -2247,15 +2305,15 @@ EOF
     elif [ "$DISTRO" = "opensuse" ]; then
         if [ "$IS_NVIDIA" = true ]; then
             step_item "Preparing openSUSE NVIDIA drivers..."
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses kernel-devel kernel-default-devel >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Advanced Micro Devices"* ]] || [[ $GPU_INFO == *"ATI"* ]]; then
             step_item "AMD GPU detected. Adding Mesa and Vulkan drivers..."
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses Mesa-dri libvulkan_radeon vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
         if [[ $GPU_INFO == *"Intel"* ]]; then
             step_item "Intel GPU detected. Adding hardware acceleration drivers..."
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses intel-media-driver libva-intel-driver libvulkan_intel vulkan-tools >> "$LOG_FILE" 2>&1 || true
         fi
 
         if [ "$IS_NVIDIA" = true ]; then
@@ -2279,8 +2337,10 @@ EOF
     if [ "$IS_NVIDIA" = true ]; then
         # 1. Detect installed kernels and install matching kernel headers
         local KERNEL_HEADERS=()
-        for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-cachyos.*|-lts|-zen|-hardened)?$'); do
-            KERNEL_HEADERS+=("${k}-headers")
+        for k in $(pacman -Qq 2>/dev/null | grep -E '^linux(-cachyos.*|-lts|-zen|-hardened)?$' | grep -vE '-(headers|nvidia|settings|zfs|docs)$'); do
+            if ! pacman -Qq "${k}-headers" >/dev/null 2>&1; then
+                KERNEL_HEADERS+=("${k}-headers")
+            fi
         done
         if [ ${#KERNEL_HEADERS[@]} -gt 0 ]; then
             step_item "Installing matching kernel headers: ${KERNEL_HEADERS[*]}..."
@@ -2714,12 +2774,11 @@ install_quickshell() {
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || \
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "ubuntu" ]; then
-        if sudo add-apt-repository -y ppa:outfoxxed/quickshell >> "$LOG_FILE" 2>&1; then
-            sudo apt-get update >> "$LOG_FILE" 2>&1 || true
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
-        fi
+        sudo add-apt-repository -y ppa:avengemedia/danklinux >> "$LOG_FILE" 2>&1 || true
+        sudo apt-get update >> "$LOG_FILE" 2>&1 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "opensuse" ]; then
-        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses quickshell >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses quickshell >> "$LOG_FILE" 2>&1 || true
     fi
 
     if command -v quickshell >/dev/null 2>&1; then
@@ -2795,13 +2854,15 @@ install_starship() {
     fi
     step_item "Installing Starship shell prompt..."
     if [ "$DISTRO" = "opensuse" ]; then
-        sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses starship >> "$LOG_FILE" 2>&1 || true
+        sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses starship >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y starship >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "alpine" ]; then
         sudo apk add --no-cache starship >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
         sudo pacman -S --needed --noconfirm starship >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y starship >> "$LOG_FILE" 2>&1 || true
     fi
 
     if command -v starship >/dev/null 2>&1; then
@@ -2958,8 +3019,8 @@ step_software() {
             qt6ct
             kvantum
             polkit-kde
-            plasma-polkit-agent
             gnome-keyring
+            pciutils
             nwg-displays
             nwg-look
             cava
@@ -3057,7 +3118,6 @@ step_software() {
             zsh
             zsh-autosuggestions
             zsh-syntax-highlighting
-            starship
             thunar
             thunar-archive-plugin
             thunar-volman
@@ -3074,11 +3134,13 @@ step_software() {
             network-manager-gnome
             bluez
             bluez-obexd
+            libspa-0.2-bluetooth
             blueman
             openssh-server
             openssh-client
             pipewire
             pipewire-pulse
+            pulseaudio-utils
             pipewire-alsa
             wireplumber
             pavucontrol
@@ -3136,15 +3198,15 @@ step_software() {
             libgtk4-layer-shell-dev
             libgtk-4-dev
             libqt6svg6
-            qt6-svg-plugins
             hyprpaper
             swaybg
             qt5ct
             qt6ct
-            qt-style-kvantum
+            kvantum
             qt-style-kvantum-themes
             polkit-kde-agent-1
             gnome-keyring
+            pciutils
             nwg-displays
             nwg-look
             cava
@@ -3191,8 +3253,8 @@ step_software() {
             sudo apt-get update >> "$LOG_FILE" 2>&1 || true
             step_item "Installing Hyprland desktop environment..."
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends \
-                hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland >> "$LOG_FILE" 2>&1 || {
-                for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland; do
+                hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland hyprpolkitagent >> "$LOG_FILE" 2>&1 || {
+                for hpkg in hyprland hypridle hyprlock hyprsunset hyprpicker hyprpaper xdg-desktop-portal-hyprland hyprpolkitagent; do
                     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -t "${debian_codename}-backports" --no-install-recommends "$hpkg" >> "$LOG_FILE" 2>&1 || \
                     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$hpkg" >> "$LOG_FILE" 2>&1 || true
                 done
@@ -3313,7 +3375,6 @@ step_software() {
             pipewire
             pipewire-pulse
             pipewire-alsa
-            pipewire-openrc
             wireplumber
             pavucontrol
             playerctl
@@ -3382,6 +3443,14 @@ step_software() {
             psmisc
             xdg-user-dirs
             btrfs-progs
+            # Compatibility & Toolchains
+            gcompat
+            pciutils
+            build-base
+            rust
+            cargo
+            gtk4.0-dev
+            gtk4-layer-shell-dev
             nwg-displays
             nwg-look
             polkit
@@ -3546,10 +3615,9 @@ step_software() {
             snapper
             nwg-displays
             nwg-look
-            cava
             polkit-kde-agent-6
-            plasma6-polkit-agent
             gnome-keyring
+            pciutils
             power-profiles-daemon
             gtk4
             gtk4-devel
@@ -3558,13 +3626,13 @@ step_software() {
         )
 
         if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "${OPENSUSE_CORE_PKGS[@]}"; then
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses "${OPENSUSE_CORE_PKGS[@]}"; then
             local total_s=${#OPENSUSE_CORE_PKGS[@]}
             local idx=0
             for pkg in "${OPENSUSE_CORE_PKGS[@]}"; do
                 idx=$((idx + 1))
                 render_progress_bar "$idx" "$total_s" "Installing $pkg (fallback)..."
-                sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$pkg" >> "$LOG_FILE" 2>&1 || true
+                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses "$pkg" >> "$LOG_FILE" 2>&1 || true
             done
             if [ "$total_s" -gt 0 ]; then
                 render_progress_bar "$total_s" "$total_s" "Installation complete." 100
@@ -4511,7 +4579,7 @@ step_applications() {
                         ;;
                     *microsoft-edge*) sudo flatpak install -y --system flathub com.microsoft.Edge >> "$LOG_FILE" 2>&1 || true ;;
                     *zen-browser*)    sudo flatpak install -y --system flathub app.zen_browser.zen >> "$LOG_FILE" 2>&1 || true ;;
-                    *firefox*)        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox-esr firefox >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.mozilla.firefox >> "$LOG_FILE" 2>&1 || true ;;
+                    *firefox*)        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox-esr >> "$LOG_FILE" 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.mozilla.firefox >> "$LOG_FILE" 2>&1 || true ;;
                     *chromium*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y chromium >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.chromium.Chromium >> "$LOG_FILE" 2>&1 || true ;;
                     *vesktop*|*discord*) sudo flatpak install -y --system flathub dev.vencord.Vesktop >> "$LOG_FILE" 2>&1 || true ;;
                     *telegram*)       sudo DEBIAN_FRONTEND=noninteractive apt-get install -y telegram-desktop >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.telegram.desktop >> "$LOG_FILE" 2>&1 || true ;;
@@ -4530,9 +4598,9 @@ step_applications() {
                     *obsidian*)       sudo flatpak install -y --system flathub md.obsidian.Obsidian >> "$LOG_FILE" 2>&1 || true ;;
                     *libreoffice*)    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libreoffice >> "$LOG_FILE" 2>&1 || sudo flatpak install -y --system flathub org.libreoffice.LibreOffice >> "$LOG_FILE" 2>&1 || true ;;
                     *localsend*)      sudo flatpak install -y --system flathub org.localsend.localsend_app >> "$LOG_FILE" 2>&1 || true ;;
-                    *docker*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose docker-compose-v2 >> "$LOG_FILE" 2>&1 || true ;;
+                    *docker*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose >> "$LOG_FILE" 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io >> "$LOG_FILE" 2>&1 || true; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-v2 >> "$LOG_FILE" 2>&1 || true ;;
                     *node*)           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs npm >> "$LOG_FILE" 2>&1 || true ;;
-                    *python*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv black python3-black ruff >> "$LOG_FILE" 2>&1 || true ;;
+                    *python*)         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv >> "$LOG_FILE" 2>&1 || true; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-black >> "$LOG_FILE" 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y black >> "$LOG_FILE" 2>&1 || true; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ruff >> "$LOG_FILE" 2>&1 || pipx install ruff >> "$LOG_FILE" 2>&1 || true ;;
                     *gitkraken*)      sudo flatpak install -y --system flathub com.axosoft.GitKraken >> "$LOG_FILE" 2>&1 || true ;;
                     *ollama*)         curl -fsSL https://ollama.com/install.sh | sh >> "$LOG_FILE" 2>&1 || true ;;
                     *steam*)
@@ -4729,8 +4797,9 @@ step_dotfiles() {
         fi
     fi
 
-    # Debian and Ubuntu package Hyprland with standard hyprlang (hyprland.conf)
-    if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+    # Standard upstream packages for Debian and Ubuntu default to hyprlang,
+    # but if a modern build with Lua manager is present, supports_lua remains true.
+    if [ "$supports_lua" = false ]; then
         supports_lua=false
     fi
 
@@ -5310,8 +5379,12 @@ step_system() {
         elif [ "$DISTRO" = "alpine" ]; then
             sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses sddm-qt6 >> "$LOG_FILE" 2>&1 || true
+            if zypper search -s sddm-qt6 >/dev/null 2>&1; then
+                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm-qt6 >> "$LOG_FILE" 2>&1 || \
+                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
+            else
+                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
+            fi
         else
             yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
         fi
@@ -5409,9 +5482,9 @@ step_system() {
             fi
             for grp in video input seat audio render; do
                 if getent group "$grp" >/dev/null 2>&1; then
-                    sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+                    sudo addgroup "$USER" "$grp" 2>/dev/null || sudo usermod -aG "$grp" "$USER" 2>/dev/null || sudo adduser "$USER" "$grp" 2>/dev/null || true
                     if id -u sddm >/dev/null 2>&1; then
-                        sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
+                        sudo addgroup sddm "$grp" 2>/dev/null || sudo usermod -aG "$grp" sddm 2>/dev/null || sudo adduser sddm "$grp" 2>/dev/null || true
                     fi
                 fi
             done
@@ -5568,23 +5641,25 @@ step_system() {
         fi
         sudo rc-update add seatd default >> "$LOG_FILE" 2>&1 || true
         sudo rc-service seatd start >> "$LOG_FILE" 2>&1 || true
-        if rc-service -l 2>/dev/null | grep -q pipewire; then
-            sudo rc-update add pipewire default >> "$LOG_FILE" 2>&1 || true
-            sudo rc-service pipewire start >> "$LOG_FILE" 2>&1 || true
-        fi
         for grp in seat video input audio render; do
             if getent group "$grp" >/dev/null 2>&1; then
-                sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+                sudo addgroup "$USER" "$grp" 2>/dev/null || sudo usermod -aG "$grp" "$USER" 2>/dev/null || sudo adduser "$USER" "$grp" 2>/dev/null || true
+                if id -u sddm >/dev/null 2>&1; then
+                    sudo addgroup sddm "$grp" 2>/dev/null || sudo usermod -aG "$grp" sddm 2>/dev/null || sudo adduser sddm "$grp" 2>/dev/null || true
+                fi
             fi
         done
-        if id -u sddm >/dev/null 2>&1; then
-            for grp in seat video input audio render; do
-                if getent group "$grp" >/dev/null 2>&1; then
-                    sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
-                fi
-            done
-        fi
     fi
+
+    # Universal hardware & session user group membership across all distros
+    for grp in video input audio render; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            sudo usermod -aG "$grp" "$USER" 2>/dev/null || sudo addgroup "$USER" "$grp" 2>/dev/null || sudo adduser "$USER" "$grp" 2>/dev/null || true
+            if id -u sddm >/dev/null 2>&1; then
+                sudo usermod -aG "$grp" sddm 2>/dev/null || sudo addgroup sddm "$grp" 2>/dev/null || sudo adduser sddm "$grp" 2>/dev/null || true
+            fi
+        fi
+    done
 
     # SSH service (enabled and running by default across all distributions)
     step_item "Enabling and starting SSH service by default..."
@@ -5592,7 +5667,8 @@ step_system() {
         sudo ssh-keygen -A >> "$LOG_FILE" 2>&1 || true
     fi
     if command -v systemctl >/dev/null 2>&1; then
-        # Debian/Ubuntu uses ssh.service; Arch, Fedora, openSUSE use sshd.service
+        # Debian/Ubuntu uses ssh.service / ssh.socket; Arch, Fedora, openSUSE use sshd.service
+        sudo systemctl enable --now ssh.socket >> "$LOG_FILE" 2>&1 || true
         sudo systemctl enable --now ssh >> "$LOG_FILE" 2>&1 || \
         sudo systemctl enable --now sshd >> "$LOG_FILE" 2>&1 || \
         sudo systemctl enable ssh >> "$LOG_FILE" 2>&1 || \

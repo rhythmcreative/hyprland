@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Universal Polkit Authentication Agent Launcher
+# Detects and launches an appropriate polkit agent across:
+# Arch Linux, CachyOS, Fedora, openSUSE, Debian, Ubuntu, Alpine Linux
+# ==============================================================================
+
+# Exit early if an authentication agent is already running
+if pidof -s hyprpolkitagent >/dev/null 2>&1 || \
+   pidof -s polkit-kde-authentication-agent-1 >/dev/null 2>&1 || \
+   pidof -s polkit-gnome-authentication-agent-1 >/dev/null 2>&1 || \
+   pidof -s polkit-mate-authentication-agent-1 >/dev/null 2>&1 || \
+   pidof -s lxpolkit >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Candidate agents in order of desktop integration preference
+candidates=(
+    # Hyprpolkitagent (official Qt6 Hyprland agent)
+    "hyprpolkitagent"
+    "/usr/lib/hyprpolkitagent"
+    "/usr/libexec/hyprpolkitagent"
+    "/usr/lib/hyprland/hyprpolkitagent"
+
+    # KDE Polkit Agent (Qt6 / Qt5)
+    "/usr/lib/polkit-kde-authentication-agent-1"
+    "/usr/libexec/polkit-kde-authentication-agent-1"
+    "/usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1"
+    "/usr/lib/aarch64-linux-gnu/libexec/polkit-kde-authentication-agent-1"
+    "/usr/libexec/kf6/polkit-kde-authentication-agent-1"
+    "/usr/lib64/libexec/polkit-kde-authentication-agent-1"
+
+    # GNOME Polkit Agent (GTK)
+    "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
+    "/usr/lib/polkit-gnome-authentication-agent-1"
+    "/usr/libexec/polkit-gnome-authentication-agent-1"
+    "/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1"
+    "/usr/libexec/policykit-1-gnome/polkit-gnome-authentication-agent-1"
+
+    # MATE / LXQt / LXDE fallbacks
+    "/usr/libexec/polkit-mate-authentication-agent-1"
+    "/usr/lib/mate-polkit/polkit-mate-authentication-agent-1"
+    "lxpolkit"
+    "/usr/bin/lxpolkit"
+)
+
+for agent in "${candidates[@]}"; do
+    if [[ "$agent" != /* ]]; then
+        if command -v "$agent" >/dev/null 2>&1; then
+            exec "$agent" &
+            exit 0
+        fi
+    elif [[ -x "$agent" ]]; then
+        exec "$agent" &
+        exit 0
+    fi
+done
+
+exit 1

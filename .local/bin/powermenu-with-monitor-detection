@@ -486,13 +486,35 @@ run_cmd() {
     selected="$(confirm_exit)"
     if [[ "$selected" == "$yes" ]]; then
         if [[ $1 == '--shutdown' ]]; then
-            systemctl poweroff
+            if command -v systemctl >/dev/null 2>&1; then
+                systemctl poweroff
+            elif command -v loginctl >/dev/null 2>&1; then
+                loginctl poweroff
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo poweroff
+            else
+                poweroff
+            fi
         elif [[ $1 == '--reboot' ]]; then
-            systemctl reboot
+            if command -v systemctl >/dev/null 2>&1; then
+                systemctl reboot
+            elif command -v loginctl >/dev/null 2>&1; then
+                loginctl reboot
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo reboot
+            else
+                reboot
+            fi
         elif [[ $1 == '--suspend' ]]; then
             mpc -q pause 2>/dev/null || true
             amixer set Master mute 2>/dev/null || true
-            systemctl suspend
+            if command -v systemctl >/dev/null 2>&1; then
+                systemctl suspend
+            elif command -v loginctl >/dev/null 2>&1; then
+                loginctl suspend
+            elif command -v zzz >/dev/null 2>&1; then
+                zzz
+            fi
         elif [[ $1 == '--logout' ]]; then
             if command -v hyprctl >/dev/null 2>&1 && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
                 hyprctl dispatch exit

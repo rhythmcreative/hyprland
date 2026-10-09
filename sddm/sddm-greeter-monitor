@@ -54,7 +54,7 @@ if [ -z "$PLANTILLA" ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     elif [ -f /usr/share/sddm/hyprland.conf ]; then
         PLANTILLA="/usr/share/sddm/hyprland.conf"
-    elif [ -f /usr/share/sddm/hyprland.lua ]; then
+    elif [ "$use_lua" -eq 1 ] && [ -f /usr/share/sddm/hyprland.lua ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     else
         PLANTILLA="/usr/share/sddm/hyprland.conf"

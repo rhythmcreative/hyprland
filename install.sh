@@ -2408,23 +2408,45 @@ install_rust_dock() {
     [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
     export PATH="$HOME/.cargo/bin:$PATH"
 
-    if ! command -v cargo > /dev/null 2>&1; then
-        if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            step_item "Installing Cargo & Rust toolchain..."
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cargo rustc >> "$LOG_FILE" 2>&1 || true
-            if ! command -v cargo > /dev/null 2>&1; then
-                step_item "Installing Cargo via rustup fallback..."
-                curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal >> "$LOG_FILE" 2>&1 || true
-                [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
-                export PATH="$HOME/.cargo/bin:$PATH"
-            fi
-        elif [ "$DISTRO" = "alpine" ]; then
-            step_item "Installing Cargo & Rust on Alpine..."
-            sudo apk add --no-cache cargo rust >> "$LOG_FILE" 2>&1 || true
-        elif [ "$DISTRO" = "opensuse" ]; then
-            step_item "Installing Cargo & Rust on openSUSE..."
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses cargo rust >> "$LOG_FILE" 2>&1 || true
+    local rust_version_ok=false
+    if command -v rustc >/dev/null 2>&1; then
+        local rver
+        rver=$(rustc --version 2>/dev/null | awk '{print $2}' || true)
+        local rmajor rminor
+        rmajor=$(echo "$rver" | cut -d. -f1)
+        rminor=$(echo "$rver" | cut -d. -f2)
+        if [ "${rmajor:-0}" -gt 1 ] || { [ "${rmajor:-0}" -eq 1 ] && [ "${rminor:-0}" -ge 85 ]; }; then
+            rust_version_ok=true
         fi
+    fi
+
+    # rust-dock uses edition 2024 and let-chains, requiring rustc >= 1.85.0.
+    # Distros like Debian 12/13 package older rustc (< 1.85).
+    if [ "$rust_version_ok" = false ]; then
+        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+            step_item "System Rust is older than 1.85 (Rust 2024 edition required); deploying bundled rust-dock..."
+            mkdir -p "$HOME/.local/bin"
+            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+            chmod +x "$HOME/.local/bin/rust-dock"
+
+            mkdir -p "$HOME/.local/share/rust-dock"
+            if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
+                cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
+kitty
+chromium
+vesktop
+org.telegram.desktop
+PINNED
+            fi
+            step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
+            return 0
+        fi
+
+        # If no bundled binary, install modern Rust toolchain via rustup
+        step_item "Rust >= 1.85 required for rust-dock (edition 2024). Installing toolchain via rustup..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable >> "$LOG_FILE" 2>&1 || true
+        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
+        export PATH="$HOME/.cargo/bin:$PATH"
     fi
 
     if ! command -v cargo > /dev/null 2>&1; then

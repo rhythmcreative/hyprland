@@ -1,5 +1,4 @@
 .config/hypr/monitors.conf
-.local/bin/rust-dock
 __pycache__/
 *.pyc
 

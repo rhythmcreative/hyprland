@@ -135,7 +135,6 @@ EOF
         cat <<EOF
 [General]
 DisplayServer=wayland
-GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 
 [Wayland]
 CompositorCommand=/usr/local/lib/rhythm/sddm-greeter-monitor

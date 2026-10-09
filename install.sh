@@ -2493,9 +2493,13 @@ install_rust_dock() {
             if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
                 cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
 kitty
+thunar
+firefox
 chromium
+brave-origin-nightly
 vesktop
 org.telegram.desktop
+pavucontrol
 PINNED
             fi
             step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
@@ -2587,9 +2591,13 @@ PINNED
         if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
             cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
 kitty
+thunar
+firefox
 chromium
+brave-origin-nightly
 vesktop
 org.telegram.desktop
+pavucontrol
 PINNED
         fi
         step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
@@ -2826,6 +2834,69 @@ install_starship() {
     fi
 }
 
+install_nwg_tools() {
+    local need_displays=false
+    local need_look=false
+    if ! command -v nwg-displays >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/nwg-displays" ]; then
+        need_displays=true
+    fi
+    if ! command -v nwg-look >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/nwg-look" ]; then
+        need_look=true
+    fi
+
+    if [ "$need_displays" = false ] && [ "$need_look" = false ]; then
+        return 0
+    fi
+
+    step_item "Configuring NWG tools (nwg-displays, nwg-look)..."
+
+    if [ "$need_displays" = true ]; then
+        if [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses nwg-displays >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nwg-displays >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "fedora" ]; then
+            sudo dnf install -y nwg-displays >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache nwg-displays >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
+            sudo pacman -S --needed --noconfirm nwg-displays >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if ! command -v nwg-displays >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/nwg-displays" ]; then
+            step_item "Installing nwg-displays via pipx/pip fallback..."
+            pipx install --system-site-packages git+https://github.com/nwg-piotr/nwg-displays.git >> "$LOG_FILE" 2>&1 || \
+                pip3 install --break-system-packages --user git+https://github.com/nwg-piotr/nwg-displays.git >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if command -v nwg-displays >/dev/null 2>&1 || [ -x "$HOME/.local/bin/nwg-displays" ]; then
+            step_ok "nwg-displays installed."
+        else
+            step_warn "nwg-displays could not be installed."
+        fi
+    fi
+
+    if [ "$need_look" = true ]; then
+        if [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses nwg-look >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nwg-look >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "fedora" ]; then
+            sudo dnf install -y nwg-look >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache nwg-look >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ]; then
+            sudo pacman -S --needed --noconfirm nwg-look >> "$LOG_FILE" 2>&1 || true
+        fi
+
+        if command -v nwg-look >/dev/null 2>&1 || [ -x "$HOME/.local/bin/nwg-look" ]; then
+            step_ok "nwg-look installed."
+        else
+            step_warn "nwg-look could not be installed from repositories."
+        fi
+    fi
+}
+
 # --- SYSTEM PACKAGES DEPLOYMENT ---
 step_software() {
     section "Core Packages & System Libraries"
@@ -2957,6 +3028,7 @@ step_software() {
         install_themes_and_fonts || true
         install_quickshell || true
         install_starship || true
+        install_nwg_tools || true
         install_rust_dock || true
         install_antigravity_cli || true
         auto_detect_drivers || true
@@ -3174,6 +3246,7 @@ step_software() {
         install_themes_and_fonts || true
         install_quickshell || true
         install_starship || true
+        install_nwg_tools || true
         install_rust_dock || true
         install_antigravity_cli || true
         auto_detect_drivers || true
@@ -3294,6 +3367,10 @@ step_software() {
             psmisc
             xdg-user-dirs
             btrfs-progs
+            nwg-displays
+            nwg-look
+            polkit
+            gnome-keyring
         )
 
         if ! rhythm_install_with_progress "${#ALPINE_CORE_PKGS[@]}" "Installing core packages via apk..." \
@@ -3320,6 +3397,7 @@ step_software() {
         install_themes_and_fonts || true
         install_quickshell || true
         install_starship || true
+        install_nwg_tools || true
         install_rust_dock || true
         install_antigravity_cli || true
         auto_detect_drivers || true
@@ -3336,6 +3414,10 @@ step_software() {
         fi
         if ! zypper lr -u 2>/dev/null | grep -qi "X11:Wayland"; then
             sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/X11:Wayland/${suse_type}/X11:Wayland.repo" >> "$LOG_FILE" 2>&1 || true
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
+        fi
+        if ! zypper lr -u 2>/dev/null | grep -qi "Cic17.*nwg"; then
+            sudo zypper addrepo --check --refresh "https://download.opensuse.org/repositories/home:Cic17:External:nwg/${suse_type}/home:Cic17:External:nwg.repo" >> "$LOG_FILE" 2>&1 || true
             sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
         fi
         # Ensure Packman repository is available for multimedia codecs (ffmpeg)
@@ -3445,6 +3527,17 @@ step_software() {
             xdg-user-dirs
             btrfs-progs
             snapper
+            nwg-displays
+            nwg-look
+            cava
+            polkit-kde-agent-6
+            plasma6-polkit-agent
+            gnome-keyring
+            power-profiles-daemon
+            gtk4
+            gtk4-devel
+            gtk4-layer-shell
+            gtk4-layer-shell-devel
         )
 
         if ! rhythm_install_with_progress "${#OPENSUSE_CORE_PKGS[@]}" "Installing core packages via zypper..." \
@@ -3481,6 +3574,7 @@ step_software() {
         install_themes_and_fonts || true
         install_quickshell || true
         install_starship || true
+        install_nwg_tools || true
         install_rust_dock || true
         install_antigravity_cli || true
         auto_detect_drivers || true
@@ -3632,6 +3726,9 @@ step_software() {
     rhythm_install_with_progress "${#CORE_PKGS[@]}" "Installing core packages and dependencies via yay..." \
         yay -S --needed --noconfirm "${CORE_PKGS[@]}"
     step_ok "Core packages installed."
+
+    # Install and verify NWG tools
+    install_nwg_tools || true
 
     # Build and deploy rust-dock
     install_rust_dock
@@ -4931,9 +5028,29 @@ MONCONF
         "$HOME/.config/waybar/scripts/auto-battery-setup.sh" >> "$LOG_FILE" 2>&1 || true
     fi
 
-    # GTK defaults
+    # GTK 3 & GTK 4 defaults
+    mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+    for gtk_ini in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
+        if [ ! -f "$gtk_ini" ]; then
+            cat > "$gtk_ini" << 'GTKCONF'
+[Settings]
+gtk-theme-name=PywalSync-Mono
+gtk-icon-theme-name=Tela-circle-blue
+gtk-cursor-theme-name=Bibata-Modern-Ice
+gtk-cursor-theme-size=24
+gtk-font-name=JetBrainsMono Nerd Font 10
+gtk-application-prefer-dark-theme=1
+GTKCONF
+        else
+            grep -q "gtk-icon-theme-name" "$gtk_ini" 2>/dev/null || echo "gtk-icon-theme-name=Tela-circle-blue" >> "$gtk_ini"
+            grep -q "gtk-theme-name" "$gtk_ini" 2>/dev/null || echo "gtk-theme-name=PywalSync-Mono" >> "$gtk_ini"
+            grep -q "gtk-cursor-theme-name" "$gtk_ini" 2>/dev/null || echo "gtk-cursor-theme-name=Bibata-Modern-Ice" >> "$gtk_ini"
+            grep -q "gtk-application-prefer-dark-theme" "$gtk_ini" 2>/dev/null || echo "gtk-application-prefer-dark-theme=1" >> "$gtk_ini"
+        fi
+    done
     gsettings set org.gnome.desktop.interface cursor-theme "Bibata-Modern-Ice" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Tela-circle-blue" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface gtk-theme "PywalSync-Mono" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null || true
     
     step_ok "Dotfiles fully deployed."

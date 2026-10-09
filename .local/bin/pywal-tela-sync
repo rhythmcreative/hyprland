@@ -115,7 +115,14 @@ def get_accent_color():
     return '#5677fc'
 
 def update_ini_file(filepath, key, value):
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     if not os.path.exists(filepath):
+        content = f"[Settings]\n{key}={value}\ngtk-theme-name=PywalSync-Mono\ngtk-cursor-theme-name=Bibata-Modern-Ice\ngtk-cursor-theme-size=24\ngtk-font-name=JetBrainsMono Nerd Font 10\ngtk-application-prefer-dark-theme=1\n"
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except Exception:
+            pass
         return
     try:
         with open(filepath, 'r', encoding='utf-8') as f:

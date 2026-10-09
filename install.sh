@@ -2493,13 +2493,9 @@ install_rust_dock() {
             if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
                 cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
 kitty
-thunar
-firefox
 chromium
-brave-origin-nightly
 vesktop
 org.telegram.desktop
-pavucontrol
 PINNED
             fi
             step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
@@ -2591,13 +2587,9 @@ PINNED
         if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
             cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
 kitty
-thunar
-firefox
 chromium
-brave-origin-nightly
 vesktop
 org.telegram.desktop
-pavucontrol
 PINNED
         fi
         step_ok "rust-dock deployed to ~/.local/bin/rust-dock"

@@ -4792,15 +4792,28 @@ step_dotfiles() {
     local supports_lua=false
 
     if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
-        if strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
-            supports_lua=true
+        local local_ver
+        local_ver=$("$hypr_bin" --version 2>/dev/null | grep -oE 'Hyprland [0-9]+\.[0-9]+' | awk '{print $2}' || true)
+        if [ -z "$local_ver" ] && command -v hyprctl >/dev/null 2>&1; then
+            local_ver=$(hyprctl version 2>/dev/null | grep -oE 'Tag: v[0-9]+\.[0-9]+|v[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
         fi
-    fi
-
-    # Standard upstream packages for Debian and Ubuntu default to hyprlang,
-    # but if a modern build with Lua manager is present, supports_lua remains true.
-    if [ "$supports_lua" = false ]; then
-        supports_lua=false
+        if [ -n "$local_ver" ]; then
+            local maj min
+            maj=$(echo "$local_ver" | cut -d. -f1)
+            min=$(echo "$local_ver" | cut -d. -f2)
+            if [ "$maj" -gt 0 ] 2>/dev/null || [ "$min" -ge 55 ] 2>/dev/null; then
+                supports_lua=true
+            fi
+        fi
+        if [ "$supports_lua" = false ]; then
+            if command -v ldd >/dev/null 2>&1 && ldd "$hypr_bin" 2>/dev/null | grep -qiE "liblua|libluajit"; then
+                supports_lua=true
+            elif command -v readelf >/dev/null 2>&1 && readelf -d "$hypr_bin" 2>/dev/null | grep -qiE "lua"; then
+                supports_lua=true
+            elif command -v strings >/dev/null 2>&1 && strings "$hypr_bin" 2>/dev/null | grep -qiE "luaL_newstate|lua_createtable|hyprland\.lua|Config is lua|loading lua mgr|lua mgr"; then
+                supports_lua=true
+            fi
+        fi
     fi
 
     if [ "$supports_lua" = true ]; then
@@ -5372,21 +5385,23 @@ step_system() {
     if [ "$ENABLE_SDDM" = true ] && ! command -v sddm >/dev/null 2>&1; then
         step_item "Installing SDDM display manager..."
         if [ "$DISTRO" = "fedora" ]; then
-            sudo dnf install -y sddm >> "$LOG_FILE" 2>&1 || true
+            sudo dnf install -y sddm < /dev/null >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 libqt6svg6 qt6-virtualkeyboard-plugin libqt6multimedia6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtcore qml6-module-qt5compat-graphicaleffects libqt6core5compat6 qml6-module-qtmultimedia qml6-module-qtquick-virtualkeyboard layer-shell-qt liblayershellqtinterface6 qml6-module-org-kde-layershell qt6-wayland qml-module-qtgraphicaleffects qml-module-qtquick-controls2 libqt5svg5 qml-module-qtquick-shapes qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick-virtualkeyboard qtwayland5 >> "$LOG_FILE" 2>&1 || \
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sddm libxcb-cursor0 layer-shell-qt >> "$LOG_FILE" 2>&1 || true
-        elif [ "$DISTRO" = "alpine" ]; then
-            sudo apk add --no-cache sddm sddm-openrc >> "$LOG_FILE" 2>&1 || true
-        elif [ "$DISTRO" = "opensuse" ]; then
-            if zypper search -s sddm-qt6 >/dev/null 2>&1; then
-                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm-qt6 >> "$LOG_FILE" 2>&1 || \
-                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
-            else
-                sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses sddm >> "$LOG_FILE" 2>&1 || true
+            sudo mkdir -p /etc/X11
+            echo "/usr/bin/sddm" | sudo tee /etc/X11/default-display-manager >/dev/null 2>&1 || true
+            if command -v debconf-set-selections >/dev/null 2>&1; then
+                echo "sddm shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
+                echo "shared/default-x-display-manager select sddm" | sudo debconf-set-selections 2>/dev/null || true
             fi
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" sddm libxcb-cursor0 libqt6svg6 qt6-virtualkeyboard-plugin libqt6multimedia6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtcore qml6-module-qt5compat-graphicaleffects libqt6core5compat6 qml6-module-qtmultimedia qml6-module-qtquick-virtualkeyboard layer-shell-qt liblayershellqtinterface6 qml6-module-org-kde-layershell qt6-wayland qml-module-qtgraphicaleffects qml-module-qtquick-controls2 libqt5svg5 qml-module-qtquick-shapes qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick-virtualkeyboard qtwayland5 < /dev/null >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" sddm libxcb-cursor0 layer-shell-qt < /dev/null >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "alpine" ]; then
+            sudo apk add --no-cache sddm sddm-openrc < /dev/null >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses -y sddm-qt6 sddm < /dev/null >> "$LOG_FILE" 2>&1 || \
+            sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses -y sddm < /dev/null >> "$LOG_FILE" 2>&1 || true
         else
-            yay -S --needed --noconfirm sddm >> "$LOG_FILE" 2>&1 || true
+            sudo pacman -S --needed --noconfirm sddm < /dev/null >> "$LOG_FILE" 2>&1 || true
         fi
     fi
 
@@ -5740,10 +5755,6 @@ DESK_EOF
         if [ -n "$other_dm" ] && [ "$other_dm" != "sddm" ]; then
             step_item "Disabling $other_dm in favor of SDDM..."
             if command -v systemctl >/dev/null 2>&1; then
-                if [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ]; then
-                    sudo systemctl stop "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
-                    sudo systemctl stop "$other_dm" >> "$LOG_FILE" 2>&1 || true
-                fi
                 sudo systemctl disable "$other_dm.service" >> "$LOG_FILE" 2>&1 || true
                 sudo systemctl disable "$other_dm" >> "$LOG_FILE" 2>&1 || true
             elif command -v rc-service >/dev/null 2>&1 || command -v rc-update >/dev/null 2>&1; then
@@ -5757,10 +5768,6 @@ DESK_EOF
             if [ "$dm" != "sddm" ]; then
                 if command -v systemctl >/dev/null 2>&1; then
                     if systemctl is-enabled "$dm.service" >/dev/null 2>&1 || systemctl is-enabled "$dm" >/dev/null 2>&1; then
-                        if [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ]; then
-                            sudo systemctl stop "$dm.service" >> "$LOG_FILE" 2>&1 || true
-                            sudo systemctl stop "$dm" >> "$LOG_FILE" 2>&1 || true
-                        fi
                         sudo systemctl disable "$dm.service" >> "$LOG_FILE" 2>&1 || true
                         sudo systemctl disable "$dm" >> "$LOG_FILE" 2>&1 || true
                     fi
@@ -5809,7 +5816,7 @@ DESK_EOF
             echo "/usr/bin/sddm" | sudo tee /etc/X11/default-display-manager >/dev/null 2>&1 || true
         fi
         if command -v dpkg-reconfigure >/dev/null 2>&1 && dpkg -l sddm >/dev/null 2>&1; then
-            sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -fnoninteractive sddm >> "$LOG_FILE" 2>&1 || true
+            timeout 5 sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -fnoninteractive sddm < /dev/null >> "$LOG_FILE" 2>&1 || true
         fi
 
         # Ensure sddm user has access to video/render devices for Wayland greeter
@@ -6297,7 +6304,7 @@ else
     if [ "$ENABLE_SDDM" = true ] && { command -v systemctl >/dev/null 2>&1 && { systemctl cat sddm.service >/dev/null 2>&1 || systemctl cat display-manager.service >/dev/null 2>&1; } || [ -x /etc/init.d/sddm ]; }; then
         if confirm_prompt "Start SDDM login manager now?"; then
             if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl start sddm || sudo systemctl start display-manager || {
+                sudo systemctl start --no-block sddm 2>/dev/null || sudo systemctl start --no-block display-manager 2>/dev/null || {
                     gum style --foreground 3 --padding "0 0 1 $PADDING_LEFT" "Could not start SDDM directly. Rebooting into desktop..."
                     rhythm_reboot
                 }

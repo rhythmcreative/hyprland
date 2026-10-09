@@ -42,11 +42,25 @@ if [ -z "$PLANTILLA" ]; then
     fi
     use_lua=0
     if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
-        # Standard upstream and distribution Hyprland builds (Debian, Arch, Fedora)
-        # use hyprland.conf (hyprlang). Only custom builds embedding Lua manager
-        # accept hyprland.lua directly as a compositor config.
-        if command -v strings >/dev/null 2>&1 && strings "$hypr_bin" 2>/dev/null | grep -q "lua mgr"; then
-            use_lua=1
+        local_ver=$("$hypr_bin" --version 2>/dev/null | grep -oE 'Hyprland [0-9]+\.[0-9]+' | awk '{print $2}' || true)
+        if [ -z "$local_ver" ] && command -v hyprctl >/dev/null 2>&1; then
+            local_ver=$(hyprctl version 2>/dev/null | grep -oE 'Tag: v[0-9]+\.[0-9]+|v[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
+        fi
+        if [ -n "$local_ver" ]; then
+            maj=$(echo "$local_ver" | cut -d. -f1)
+            min=$(echo "$local_ver" | cut -d. -f2)
+            if [ "$maj" -gt 0 ] 2>/dev/null || [ "$min" -ge 55 ] 2>/dev/null; then
+                use_lua=1
+            fi
+        fi
+        if [ "$use_lua" -eq 0 ]; then
+            if command -v ldd >/dev/null 2>&1 && ldd "$hypr_bin" 2>/dev/null | grep -qiE "liblua|libluajit"; then
+                use_lua=1
+            elif command -v readelf >/dev/null 2>&1 && readelf -d "$hypr_bin" 2>/dev/null | grep -qiE "lua"; then
+                use_lua=1
+            elif command -v strings >/dev/null 2>&1 && strings "$hypr_bin" 2>/dev/null | grep -qiE "luaL_newstate|lua_createtable|hyprland\.lua|Config is lua|loading lua mgr|lua mgr"; then
+                use_lua=1
+            fi
         fi
     fi
 
@@ -54,7 +68,7 @@ if [ -z "$PLANTILLA" ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     elif [ -f /usr/share/sddm/hyprland.conf ]; then
         PLANTILLA="/usr/share/sddm/hyprland.conf"
-    elif [ "$use_lua" -eq 1 ] && [ -f /usr/share/sddm/hyprland.lua ]; then
+    elif [ -f /usr/share/sddm/hyprland.lua ]; then
         PLANTILLA="/usr/share/sddm/hyprland.lua"
     else
         PLANTILLA="/usr/share/sddm/hyprland.conf"

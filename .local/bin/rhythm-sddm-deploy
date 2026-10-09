@@ -103,7 +103,8 @@ conf_sddm() {
     elif command -v dpkg-query >/dev/null 2>&1; then
         sddm_ver=$(dpkg-query -W -f='${Version}' sddm 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+' || true)
     elif command -v rpm >/dev/null 2>&1; then
-        sddm_ver=$(rpm -q --qf '%{VERSION}' sddm 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+' || true)
+        sddm_ver=$(rpm -q --qf '%{VERSION}' sddm 2>/dev/null || rpm -q --qf '%{VERSION}' sddm-qt6 2>/dev/null || true)
+        sddm_ver=$(echo "$sddm_ver" | grep -oE '^[0-9]+\.[0-9]+' || true)
     elif command -v apk >/dev/null 2>&1; then
         sddm_ver=$(apk info sddm 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1 || true)
     fi
@@ -117,7 +118,7 @@ conf_sddm() {
     local supports_wayland=1
     if [ -n "$sddm_ver" ] && [ "$major" -eq 0 ] && [ "$minor" -lt 20 ]; then
         supports_wayland=0
-    elif command -v sddm >/dev/null 2>&1 && ! sddm --example-config 2>/dev/null | grep -q '\[Wayland\]'; then
+    elif command -v sddm >/dev/null 2>&1 && ! timeout 2 sddm --example-config 2>/dev/null | grep -q '\[Wayland\]'; then
         supports_wayland=0
     fi
 

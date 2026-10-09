@@ -3350,6 +3350,7 @@ step_software() {
             qt6-qtmultimedia
             qt6-qtvirtualkeyboard
             gtk4-layer-shell
+            layer-shell-qt
             swaybg
             qt6ct
             kvantum-qt6
@@ -5395,6 +5396,27 @@ step_system() {
         # aqui se pusiera el CompositorCommand a mano y el tema del cursor aqui,
         # una actualizacion dejaria el sddm.conf de una forma y el cursor de
         # otra.
+        # Ensure core session bus and device permissions are configured before SDDM starts
+        if command -v rc-service >/dev/null 2>&1; then
+            if command -v setup-devd >/dev/null 2>&1; then
+                sudo setup-devd udev >> "$LOG_FILE" 2>&1 || true
+            fi
+            sudo rc-update add dbus default >> "$LOG_FILE" 2>&1 || true
+            sudo rc-service dbus start >> "$LOG_FILE" 2>&1 || true
+            if rc-service -l 2>/dev/null | grep -q elogind; then
+                sudo rc-update add elogind default >> "$LOG_FILE" 2>&1 || true
+                sudo rc-service elogind start >> "$LOG_FILE" 2>&1 || true
+            fi
+            for grp in video input seat audio render; do
+                if getent group "$grp" >/dev/null 2>&1; then
+                    sudo adduser "$USER" "$grp" >> "$LOG_FILE" 2>&1 || true
+                    if id -u sddm >/dev/null 2>&1; then
+                        sudo adduser sddm "$grp" >> "$LOG_FILE" 2>&1 || true
+                    fi
+                fi
+            done
+        fi
+
         local deploy_bin="$HOME/.local/bin/rhythm-sddm-deploy"
         [ ! -x "$deploy_bin" ] && [ -x "$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy" ] && deploy_bin="$DOTFILES_DIR/.local/bin/rhythm-sddm-deploy"
         if [ -x "$deploy_bin" ]; then

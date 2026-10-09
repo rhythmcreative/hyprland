@@ -2498,6 +2498,27 @@ install_rust_dock() {
         return 0
     fi
 
+    # Prioritize deploying the canonical bundled rust-dock binary directly
+    if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+        step_item "Deploying canonical rust-dock binary..."
+        mkdir -p "$HOME/.local/bin" "$HOME/.local/share/rust-dock"
+        cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+        chmod +x "$HOME/.local/bin/rust-dock"
+
+        if [ -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" ]; then
+            cp -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" "$HOME/.local/share/rust-dock/pinned"
+        elif [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
+            cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
+kitty
+chromium
+vesktop
+org.telegram.desktop
+PINNED
+        fi
+        step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
+        return 0
+    fi
+
     step_item "Ensuring build dependencies (rust, gtk4, gtk4-layer-shell)..."
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
@@ -2546,53 +2567,16 @@ install_rust_dock() {
         fi
     fi
 
-    # rust-dock uses edition 2024 and let-chains, requiring rustc >= 1.85.0.
-    # Distros like Debian 12/13 package older rustc (< 1.85).
+    # Fallback to rustup if needed
     if [ "$rust_version_ok" = false ]; then
-        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-            step_item "System Rust is older than 1.85 (Rust 2024 edition required); deploying bundled rust-dock..."
-            mkdir -p "$HOME/.local/bin"
-            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-            chmod +x "$HOME/.local/bin/rust-dock"
-
-            mkdir -p "$HOME/.local/share/rust-dock"
-            if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
-                cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
-kitty
-PINNED
-            fi
-            step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
-            return 0
-        fi
-
-        # If no bundled binary, install modern Rust toolchain via rustup
-        step_item "Rust >= 1.85 required for rust-dock (edition 2024). Installing toolchain via rustup..."
+        step_item "Rust >= 1.85 required for rust-dock. Installing toolchain via rustup..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable >> "$LOG_FILE" 2>&1 || true
         [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
         export PATH="$HOME/.cargo/bin:$PATH"
     fi
 
     if ! command -v cargo > /dev/null 2>&1; then
-        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-            step_warn "Cargo not found; using bundled rust-dock binary."
-            mkdir -p "$HOME/.local/bin"
-            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-            chmod +x "$HOME/.local/bin/rust-dock"
-            return 0
-        fi
         step_warn "Cargo not found. Skipping rust-dock build."
-        return 0
-    fi
-
-    if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
-        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-            step_warn "gtk4-layer-shell dev files not found; using bundled rust-dock binary."
-            mkdir -p "$HOME/.local/bin"
-            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-            chmod +x "$HOME/.local/bin/rust-dock"
-            return 0
-        fi
-        step_warn "gtk4-layer-shell not found. Skipping rust-dock build (falling back to Waybar dock)."
         return 0
     fi
 
@@ -2604,19 +2588,13 @@ PINNED
     elif [ -d "$HOME/rust-dock" ] && [ -f "$HOME/rust-dock/Cargo.toml" ]; then
         source_dir="$HOME/rust-dock"
     else
-        # Directorio privado para el clone.
         source_dir=$(mktemp -d "${TMPDIR:-/tmp}/rust-dock-build.XXXXXXXX")
-        rmdir "$source_dir"   # git clone necesita que el destino no exista
+        rmdir "$source_dir"
         if git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$source_dir" >> "$LOG_FILE" 2>&1; then
             temp_clone=true
         else
             step_warn "Could not clone rust-dock repository. Skipping build."
             rm -rf "$source_dir"
-            if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-                mkdir -p "$HOME/.local/bin"
-                cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-                chmod +x "$HOME/.local/bin/rust-dock"
-            fi
             return
         fi
     fi
@@ -2628,28 +2606,22 @@ PINNED
         bash -c "export PATH=\"\$HOME/.cargo/bin:\$PATH\"; export PKG_CONFIG_PATH=\"/usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:\${PKG_CONFIG_PATH:-}\"; export LD_LIBRARY_PATH=\"/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}\"; cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
 
     if [ "$build_ok" -ne 1 ] || [ ! -f "$source_dir/target/release/rust-dock" ]; then
-        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-            step_warn "rust-dock build failed; using bundled binary as fallback."
-            mkdir -p "$HOME/.local/bin"
-            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-            chmod +x "$HOME/.local/bin/rust-dock"
-            [ "$temp_clone" = true ] && rm -rf "$source_dir"
-            return
-        fi
         step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
         [ "$temp_clone" = true ] && rm -rf "$source_dir"
         return
     fi
 
     if [ -f "$source_dir/target/release/rust-dock" ]; then
-        mkdir -p "$HOME/.local/bin"
+        mkdir -p "$HOME/.local/bin" "$HOME/.local/share/rust-dock"
         cp -f "$source_dir/target/release/rust-dock" "$HOME/.local/bin/rust-dock"
         chmod +x "$HOME/.local/bin/rust-dock"
         
-        mkdir -p "$HOME/.local/share/rust-dock"
         if [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
             cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
 kitty
+chromium
+vesktop
+org.telegram.desktop
 PINNED
         fi
         step_ok "rust-dock deployed to ~/.local/bin/rust-dock"

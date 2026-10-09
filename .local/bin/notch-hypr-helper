@@ -4,6 +4,7 @@ import os
 import subprocess
 import json
 import glob
+import shutil
 
 # Ensure environment variables are set for Hyprland IPC
 xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -110,7 +111,10 @@ def main():
                 os.remove(PERF_FILE)
             except OSError:
                 pass
-            subprocess.run(["powerprofilesctl", "set", "balanced"], stderr=subprocess.DEVNULL)
+            if shutil.which("powerprofilesctl"):
+                subprocess.run(["powerprofilesctl", "set", "balanced"], stderr=subprocess.DEVNULL)
+            elif shutil.which("cpupower"):
+                subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "powersave"], stderr=subprocess.DEVNULL)
             run_hyprctl(["reload"])
             subprocess.run(["notify-send", "Performance", "Balanced mode restored"], stderr=subprocess.DEVNULL)
         else:
@@ -124,7 +128,10 @@ def main():
                     f.write("perf\n")
             except OSError:
                 pass
-            subprocess.run(["powerprofilesctl", "set", "performance"], stderr=subprocess.DEVNULL)
+            if shutil.which("powerprofilesctl"):
+                subprocess.run(["powerprofilesctl", "set", "performance"], stderr=subprocess.DEVNULL)
+            elif shutil.which("cpupower"):
+                subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "performance"], stderr=subprocess.DEVNULL)
             res = run_hyprctl(["eval", "hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 1.0, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
             if "legacy parsers" in res or "unknown" in res.lower() or not res.strip():
                 run_hyprctl(["--batch", "keyword decoration:active_opacity 1.0; keyword decoration:inactive_opacity 1.0; keyword decoration:blur:enabled 0; keyword decoration:shadow:enabled 0; keyword animations:enabled 0"])

@@ -55,8 +55,10 @@ case "${1:-}" in
         fi
         touch /tmp/wallpaper-bars-hidden
         [ "$monitor" = "all" ] || echo "$monitor" > /tmp/wallpaper-bars-monitor
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-            --any-display call island hide "$monitor" >/dev/null 2>&1 || true
+        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+                --any-display call island hide "$monitor" >/dev/null 2>&1 || true
+        fi
         if [ "$monitor" = "all" ]; then
             pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || true
             pkill -SIGUSR1 -x .waybar-wrapped >/dev/null 2>&1 || true
@@ -106,8 +108,10 @@ case "${1:-}" in
                 pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null || true
             fi
         fi
-        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-            --any-display call island reveal "$monitor" >/dev/null 2>&1 || true
+        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+                --any-display call island reveal "$monitor" >/dev/null 2>&1 || true
+        fi
         rm -f /tmp/wallpaper-bars-monitor
         ;;
     *)

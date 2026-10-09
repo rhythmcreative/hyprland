@@ -2501,6 +2501,13 @@ install_rust_dock() {
     # Prioritize deploying the canonical bundled rust-dock binary directly
     if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
         step_item "Deploying canonical rust-dock binary..."
+        if [ "$DISTRO" = "opensuse" ]; then
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses libgtk4-layer-shell0 >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "fedora" ]; then
+            sudo dnf install -y gtk4-layer-shell >> "$LOG_FILE" 2>&1 || true
+        elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk4-layer-shell0 >> "$LOG_FILE" 2>&1 || true
+        fi
         mkdir -p "$HOME/.local/bin" "$HOME/.local/share/rust-dock"
         cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
         chmod +x "$HOME/.local/bin/rust-dock"
@@ -2725,6 +2732,36 @@ install_themes_and_fonts() {
     else
         step_ok "Pywal already present."
     fi
+
+    # ImageMagick 7 policy fix (openSUSE/hardened distros block TXT coder / stdout)
+    for pol in /etc/IM-7/policy.xml /etc/ImageMagick-7/policy.xml; do
+        if [ -f "$pol" ]; then
+            sudo sed -i 's/pattern="{MSL,MVG,PS,SVG,TXT,URL,XPS}"/pattern="{MSL,MVG,PS,SVG,URL,XPS}"/g' "$pol" 2>/dev/null || true
+            sudo sed -i 's/<policy domain="coder" rights="none" pattern="TEXT" \/>/<!-- <policy domain="coder" rights="none" pattern="TEXT" \/> -->/g' "$pol" 2>/dev/null || true
+        fi
+    done
+
+    # Inject colorthief into pywal venv as resilient secondary backend
+    if command -v pipx >/dev/null 2>&1; then
+        pipx inject pywal colorthief >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Patch pywal16 wal backend to support ImageMagick 7 (TXT:-) and guard against empty palette infinite loop
+    python3 -c '
+import glob
+for p in glob.glob("/home/*/.local/share/pipx/venvs/pywal/lib*/python*/site-packages/pywal/backends/wal.py") + \
+         glob.glob("/root/.local/share/pipx/venvs/pywal/lib*/python*/site-packages/pywal/backends/wal.py") + \
+         glob.glob("/usr/lib*/python*/site-packages/pywal/backends/wal.py"):
+    try:
+        with open(p, "r") as f:
+            c = f.read()
+        c = c.replace("\"txt:-\"", "\"TXT:-\"")
+        c = c.replace("while len(hex_colors) < 16:\n                hex_colors.extend(hex_colors)", "if hex_colors:\n                while len(hex_colors) < 16:\n                    hex_colors.extend(hex_colors)")
+        with open(p, "w") as f:
+            f.write(c)
+    except Exception:
+        pass
+' >> "$LOG_FILE" 2>&1 || true
 }
 
 install_quickshell() {
@@ -3577,7 +3614,7 @@ step_software() {
             inotify-tools
             psmisc
             xdg-user-dirs
-            btrfs-progs
+            btrfsprogs
             snapper
             nwg-displays
             nwg-look
@@ -3585,9 +3622,9 @@ step_software() {
             gnome-keyring
             pciutils
             power-profiles-daemon
-            gtk4
+            libgtk-4-1
             gtk4-devel
-            gtk4-layer-shell
+            libgtk4-layer-shell0
             gtk4-layer-shell-devel
         )
 
@@ -3607,7 +3644,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in rofi-wayland swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava gtk4-layer-shell symbols-only-nerd-fonts libfuse2 fuse; do
+        for extra in rofi-wayland swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava libgtk4-layer-shell0 symbols-only-nerd-fonts libfuse2 fuse; do
             sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 

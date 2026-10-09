@@ -98,7 +98,7 @@ fi
                 ;;
         esac
         echo "$WALLPAPER_PATH" > "$HOME/.cache/wallpaper-pywal-src"
-        wal -i "$PYWAL_SRC" -n -q
+        timeout 10 wal -i "$PYWAL_SRC" -n -q || timeout 10 wal --backend colorthief -i "$PYWAL_SRC" -n -q || true
     fi
 
     # Actualizar GTK, Qt, Rofi, Mako y preparar Waybar/Rust-dock

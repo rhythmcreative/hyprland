@@ -1,7 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Script to toggle power saving mode in Hyprland and powerprofilesctl
+export PATH="$HOME/.local/bin:$PATH"
 
-# Script to toggle power saving mode in Hyprland
-# usage: power_save.sh [on|off]
+if [ -x "$HOME/.local/bin/toggle-powersave" ]; then
+    exec "$HOME/.local/bin/toggle-powersave" "${1:-toggle}"
+fi
 
 STATUS_FILE="/tmp/hyprland_power_save"
 

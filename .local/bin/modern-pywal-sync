@@ -449,7 +449,7 @@ if [ ! -f "$HOME/.cache/wal/colors.sh" ]; then
     if WALLPAPER_PALETA=$(resolver_wallpaper_paleta) \
         && command -v wal >/dev/null 2>&1; then
         echo "Pywal no habia corrido; se genera la paleta desde $(basename "$WALLPAPER_PALETA")..."
-        timeout 15 wal -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || true
+        timeout 10 wal -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || timeout 10 wal --backend colorthief -i "$WALLPAPER_PALETA" -n -q >/dev/null 2>&1 || true
     fi
 fi
 
@@ -607,12 +607,10 @@ if [ "$COMPOSITOR_RUNNING" -eq 1 ] || [ "$STARTUP" -eq 1 ]; then
     pkill -SIGUSR2 -x waybar 2>/dev/null || true
     pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
 
-    # 6d. Asegurar Dynamic Island corriendo y recargar colores de Pywal
+    # 6d. Recargar colores de Pywal en Dynamic Island si esta corriendo
     echo "  • Dynamic Island (Quickshell)..."
     if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         timeout 2 quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call theme reload >/dev/null 2>&1 || true
-    else
-        "$HOME/.local/bin/quickshell-island" &
     fi
 fi
 

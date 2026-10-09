@@ -81,10 +81,23 @@ fi
                     magick "${WALLPAPER_PATH}[0]" "/tmp/wallpaper-frame.png" 2>/dev/null && PYWAL_SRC="/tmp/wallpaper-frame.png"
                 elif command -v convert >/dev/null 2>&1; then
                     convert "${WALLPAPER_PATH}[0]" "/tmp/wallpaper-frame.png" 2>/dev/null && PYWAL_SRC="/tmp/wallpaper-frame.png"
+                elif command -v ffmpeg >/dev/null 2>&1; then
+                    ffmpeg -y -i "$WALLPAPER_PATH" -vframes 1 "/tmp/wallpaper-frame.png" >/dev/null 2>&1 && PYWAL_SRC="/tmp/wallpaper-frame.png"
+                fi
+                ;;
+            *)
+                # Muestreo optimizado de 512px para extraer la paleta en < 0.1s sin procesar gigabytes en RAM
+                SAMPLE_SRC="/tmp/wallpaper-pywal-sample.jpg"
+                if command -v ffmpegthumbnailer >/dev/null 2>&1; then
+                    ffmpegthumbnailer -i "$WALLPAPER_PATH" -o "$SAMPLE_SRC" -s 512 -q 8 2>/dev/null && PYWAL_SRC="$SAMPLE_SRC"
+                elif command -v magick >/dev/null 2>&1; then
+                    magick "$WALLPAPER_PATH" -resize 512x512^ "$SAMPLE_SRC" 2>/dev/null && PYWAL_SRC="$SAMPLE_SRC"
+                elif command -v convert >/dev/null 2>&1; then
+                    convert "$WALLPAPER_PATH" -resize 512x512^ "$SAMPLE_SRC" 2>/dev/null && PYWAL_SRC="$SAMPLE_SRC"
                 fi
                 ;;
         esac
-        echo "$PYWAL_SRC" > "$HOME/.cache/wallpaper-pywal-src"
+        echo "$WALLPAPER_PATH" > "$HOME/.cache/wallpaper-pywal-src"
         wal -i "$PYWAL_SRC" -n -q
     fi
 

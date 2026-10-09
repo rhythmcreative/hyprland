@@ -65,7 +65,7 @@ wallpaper_legible_para_el_usuario() {
     # ~/Pictures/Wallpapers/) se rechazaria siempre y el login se quedaria con
     # el fondo por defecto.
     case "$f" in
-        "$REAL_HOME"/.cache/*|"$REAL_HOME"/Pictures/*|"$REAL_HOME"/.config/hypr/wallpapers/*|"$REAL_HOME"/Downloads/*|"$REAL_HOME"/wallpapers/*|"$REAL_HOME"/Wallpapers/*) ;;
+        "$REAL_HOME"/*|/usr/share/backgrounds/*|/usr/share/wallpapers/*|/usr/share/hypr/*) ;;
         *) return 1 ;;
     esac
     # Legible por el usuario delegado, no solo por root.
@@ -92,9 +92,6 @@ fi
 
 # Si el wallpaper detectado no existe, o no es un fichero normal y legible por
 # el usuario, usar el del tema como último recurso.
-#
-# Antes solo se comprobaba que existiera: un symlink a /etc/shadow existia, se
-# copiaba con permisos de root a un destino 644 y se publicaba su contenido.
 if [ ! -f "$CURRENT_WP" ]; then
     CURRENT_WP="$SDDM_THEME_DIR/Backgrounds/current_wallpaper.jpg"
     echo "El archivo de wallpaper no existe. Usando fondo del tema."
@@ -108,13 +105,22 @@ echo "Sincronizando wallpaper: $(basename "$CURRENT_WP")"
 
 # 2. Copiar y convertir wallpaper si es necesario
 # SDDM prefiere JPG
+mkdir -p "$BACKGROUNDS_DIR"
 TARGET_WP="$BACKGROUNDS_DIR/current_wallpaper.jpg"
 if [[ "$CURRENT_WP" == *.gif || "$CURRENT_WP" == *.webp ]]; then
-    magick "$CURRENT_WP[0]" -quality 90 "$TARGET_WP"
+    if command -v magick >/dev/null 2>&1; then
+        magick "$CURRENT_WP[0]" -quality 90 "$TARGET_WP" 2>/dev/null || cp -f "$CURRENT_WP" "$TARGET_WP"
+    elif command -v convert >/dev/null 2>&1; then
+        convert "$CURRENT_WP[0]" -quality 90 "$TARGET_WP" 2>/dev/null || cp -f "$CURRENT_WP" "$TARGET_WP"
+    elif command -v ffmpeg >/dev/null 2>&1; then
+        ffmpeg -y -i "$CURRENT_WP" -vframes 1 "$TARGET_WP" >/dev/null 2>&1 || cp -f "$CURRENT_WP" "$TARGET_WP"
+    else
+        cp -f "$CURRENT_WP" "$TARGET_WP"
+    fi
 elif [ "$CURRENT_WP" != "$TARGET_WP" ]; then
     cp -f "$CURRENT_WP" "$TARGET_WP"
 fi
-chmod 644 "$TARGET_WP"
+chmod 644 "$TARGET_WP" 2>/dev/null || true
 
 # 3. Sincronizar colores de Pywal
 PYWAL_SH="$REAL_HOME/.cache/wal/colors.sh"

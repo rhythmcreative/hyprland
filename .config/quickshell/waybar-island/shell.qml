@@ -3044,6 +3044,7 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.powerSaverEnabled = !root.powerSaverEnabled
+                                        if (root.powerSaverEnabled) root.perfMode = false
                                         root.runCmd("~/.local/bin/toggle-powersave")
                                     }
                                 }
@@ -3108,6 +3109,7 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.perfMode = !root.perfMode
+                                        if (root.perfMode) root.powerSaverEnabled = false
                                         root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-perf")
                                         hyprRefreshTimer.restart()
                                     }
@@ -4980,49 +4982,56 @@ ShellRoot {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         root.perfMode = !root.perfMode
+                                        if (root.perfMode) root.powerSaverEnabled = false
                                         root.runCmd("$HOME/.local/bin/notch-hypr-helper toggle-perf")
                                         hyprRefreshTimer.restart()
                                     }
                                 }
                             }
 
-                            // Batteries: como los otros cinco, una tarjeta mas de la cuadrícula. Abre el
-                            // apartado con el detalle de cada pila. No se dibuja si esta maquina no tiene
-                            // ninguna bateria.
+                            // Batteries / Power Source: muestra baterías si existen o estado de corriente directa / AC
                             Rectangle {
                             Layout.fillWidth: true
-                            // Con Power Saver fuera de la cuadricula, la bateria se queda sola en su
-                            // fila y ocupa las dos columnas.
                             Layout.columnSpan: 2
                             height: 54
                             radius: 14
-                            visible: (root.batt?.count ?? 0) > 0
+                            visible: true
                             color: root.colSurface
 
                             RowLayout {
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 10
-                            Text { text: "󰁹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 20 }
+                            Text {
+                                text: (root.batt?.count ?? 0) > 0 ? "󰁹" : "󰚥"
+                                color: root.colAccent
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 20
+                            }
                             ColumnLayout {
                             spacing: 1
                             Layout.fillWidth: true
-                            Text { text: "Batteries"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
                             Text {
-                            // Los ciclos van aqui tambien, no solo en el detalle: es el dato que
-                            // se mira de reojo. Con varias pilas se suman, como el porcentaje.
+                                text: (root.batt?.count ?? 0) > 0 ? "Batteries" : "Power Source"
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                            }
+                            Text {
                             text: (root.batt?.count ?? 0) > 1
                             ? (root.batt.count) + " devices · " + (root.batt.total_pct ?? 0) + "% average · "
                               + ((root.batt?.total_cycles ?? 0) + " cycles")
-                            : ((root.batt?.total_pct ?? 0) + "% · " + ((root.batt?.ac?.online) ? "Charging" : "On battery")
-                              + " · " + ((root.batt?.total_cycles ?? 0) + " cycles"))
+                            : ((root.batt?.count ?? 0) === 1
+                               ? ((root.batt?.total_pct ?? 0) + "% · " + ((root.batt?.ac?.online) ? "Charging" : "On battery")
+                                 + " · " + ((root.batt?.total_cycles ?? 0) + " cycles"))
+                               : ((root.batt?.ac?.online ?? true) ? "AC Mains Connected · Direct Power" : "Direct Power Active"))
                             color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
                             elide: Text.ElideRight; Layout.fillWidth: true
                             }
                             }
 
-                            // Separador + chevron, igual que las demas tarjetas: el icono de
-                            // carga sobraba aqui, el estado de red ya sale en el subtitulo.
+                            // Separador + chevron
                             Rectangle {
                                 width: 1
                                 height: 16
@@ -5279,14 +5288,14 @@ ShellRoot {
                         // 28 de cabecera + 116 por bateria + 8 de separacion + 44 del boton Back.
                         // Un Repeater no propaga el implicitHeight de sus delegates al layout padre,
                         // asi que el alto se declara aqui y no sale de calcularlo.
-                        Layout.preferredHeight: (root.batt?.count ?? 0) > 0 ? (28 + root.batt.count * 116 + 8 + 44) : 0
+                        Layout.preferredHeight: (root.batt?.count ?? 0) > 0 ? (28 + root.batt.count * 116 + 8 + 44) : (28 + 100 + 8 + 44)
 
                         // Cabecera: total de todas las pilas y estado del cargador
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
-                            Text { text: "󰁹"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
-                            Text { text: "Batteries"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
+                            Text { text: (root.batt?.count ?? 0) > 0 ? "󰁹" : "󰚥"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                            Text { text: (root.batt?.count ?? 0) > 0 ? "Batteries" : "Power Source"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: (root.batt?.count ?? 0) > 1
@@ -5294,9 +5303,42 @@ ShellRoot {
                                 color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
                             }
                             Text {
-                                text: (root.batt?.ac?.online) ? "Charging" : "On battery"
-                                color: (root.batt?.ac?.online) ? root.colAccent : root.colMuted
+                                text: (root.batt?.count ?? 0) > 0 ? ((root.batt?.ac?.online) ? "Charging" : "On battery") : ((root.batt?.ac?.online ?? true) ? "AC Mains Online" : "External Power")
+                                color: (root.batt?.ac?.online ?? true) ? root.colAccent : root.colMuted
                                 font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9
+                            }
+                        }
+
+                        // Tarjeta para escritorio / corriente directa cuando no hay baterías
+                        Rectangle {
+                            visible: (root.batt?.count ?? 0) === 0
+                            Layout.fillWidth: true
+                            height: 100
+                            radius: 12
+                            color: root.colSurface
+                            border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
+                            border.width: 1
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 6
+
+                                RowLayout {
+                                    spacing: 8
+                                    Text { text: "󰚥"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 18 }
+                                    Text { text: "Direct Power Supply Active"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; font.weight: Font.Bold }
+                                }
+                                Text {
+                                    text: (root.batt?.ac?.online ?? true)
+                                        ? "AC Mains power connected. System is running continuously on wall power supply."
+                                        : "External power supply active. No internal battery present."
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
                             }
                         }
 

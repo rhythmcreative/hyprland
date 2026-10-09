@@ -14,11 +14,14 @@ is_active() {
 
 enable_powersave() {
     touch "$STATE_FILE"
+    rm -f /tmp/hypr_performance_mode 2>/dev/null || true
 
-    # 1. CPU Energy Performance Preference (EPP) to power-saving
-    if [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
-        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "power" >/dev/null 2>&1 || true
-        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor <<< "powersave" >/dev/null 2>&1 || true
+    # 1. CPU Energy Performance Preference (EPP) to power-saving via powerprofilesctl
+    if command -v powerprofilesctl >/dev/null 2>&1; then
+        powerprofilesctl set power-saver >/dev/null 2>&1 || true
+    elif [ "$EUID" -eq 0 ] && [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
+        tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "power" >/dev/null 2>&1 || true
+        tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor <<< "powersave" >/dev/null 2>&1 || true
     fi
 
     # 2. Dim brightness gently to eco level (35%) if currently higher
@@ -36,14 +39,8 @@ enable_powersave() {
 
     # 3. Disable heavy Hyprland blur/shadows but PRESERVE animations (animations = true)
     if command -v hyprctl >/dev/null 2>&1; then
-        if ! hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = true } })' >/dev/null 2>&1; then
-            hyprctl keyword decoration:active_opacity 1.0 >/dev/null 2>&1 || true
-            hyprctl keyword decoration:inactive_opacity 0.98 >/dev/null 2>&1 || true
-            hyprctl keyword decoration:blur:enabled 0 >/dev/null 2>&1 || true
-            hyprctl keyword decoration:shadow:enabled 0 >/dev/null 2>&1 || true
-            hyprctl keyword decoration:drop_shadow 0 >/dev/null 2>&1 || true
-            hyprctl keyword animations:enabled 1 >/dev/null 2>&1 || true
-        fi
+        hyprctl eval 'hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 0.98, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = true } })' >/dev/null 2>&1 || true
+        hyprctl --batch "keyword decoration:active_opacity 1.0; keyword decoration:inactive_opacity 0.98; keyword decoration:blur:enabled 0; keyword decoration:shadow:enabled 0; keyword decoration:drop_shadow 0; keyword animations:enabled 1" >/dev/null 2>&1 || true
         hyprctl eval 'hl.window_rule({ name = "powersave-opaque", match = { class = ".*" }, opaque = true })' >/dev/null 2>&1 || \
             hyprctl keyword windowrulev2 "opaque,class:.*" >/dev/null 2>&1 || true
     fi
@@ -57,21 +54,7 @@ enable_powersave() {
     pkill -SIGUSR1 kitty 2>/dev/null || true
 
     # 5. Los menus de rofi se vuelven macizos.
-    #
-    # Esto es lo que hace el ahorro de verdad aqui: sin translucidez no hay nada
-    # que componer detras del panel. El color va SIN alfa a proposito — con alfa
-    # seguia siendo un panel y solo se notaba menos; lo que se quiere es que el
-    # fondo no se vea.
-    #
-    # El macizo se aplica DETRAS del translucido comun, que es lo que genera
-    # rofi-themed. Rofi fusiona los -theme-str y gana el ultimo, asi que el orden
-    # es lo que decide si esto se ve o no.
-    #
-    # Los ficheros los escribe rofi-colors, no este script: si cada uno escribiera
-    # el suyo, cambiar el fondo con el ahorro activo dejaba el macizo con el
-    # color del fondo anterior.
     "$HOME/.local/bin/rofi-colors" 2>/dev/null || true
-
 
     # 6. Desktop Notification
     notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true
@@ -81,9 +64,11 @@ enable_powersave() {
 disable_powersave() {
     rm -f "$STATE_FILE"
 
-    # 1. Restore CPU to performance / balanced
-    if [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
-        sudo tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "performance" >/dev/null 2>&1 || true
+    # 1. Restore CPU to balanced via powerprofilesctl or sysfs
+    if command -v powerprofilesctl >/dev/null 2>&1; then
+        powerprofilesctl set balanced >/dev/null 2>&1 || true
+    elif [ "$EUID" -eq 0 ] && [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
+        tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference <<< "performance" >/dev/null 2>&1 || true
     fi
 
     # 2. Restore previous brightness if saved

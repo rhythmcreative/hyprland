@@ -579,9 +579,8 @@ elif [ "$COMPOSITOR_RUNNING" -eq 1 ]; then
     # si toca reconstruir aunque las barras ya esten donde deben.
     (
         pkill -x waybar 2>/dev/null || true
-        sleep 0.3
+        sleep 0.1
         "$HOME/.config/waybar/launch.sh" --force >/dev/null 2>&1
-        sleep 1
         pkill -x nm-applet 2>/dev/null || true
         nm-applet --indicator >/dev/null 2>&1 &
     ) &

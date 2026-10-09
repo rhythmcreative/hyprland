@@ -251,6 +251,24 @@ else
     log "missing $REPO_DIR/sddm/sddm-greeter-monitor"; fallo=1
 fi
 
+if [ -f "$REPO_DIR/.local/bin/sddm-auto-sync-local" ]; then
+    install -T -m 755 "$REPO_DIR/.local/bin/sddm-auto-sync-local" \
+        /usr/local/lib/rhythm/sddm-auto-sync-local || fallo=1
+    chown root:root /usr/local/lib/rhythm/sddm-auto-sync-local 2>/dev/null
+    chmod 755 /usr/local/lib/rhythm/sddm-auto-sync-local 2>/dev/null
+
+    # Sudoers NOPASSWD para permitir sddm-sync-wrapper sin pedir contraseña
+    target_sync_user="${SUDO_USER:-$USER}"
+    if [ "$target_sync_user" = "root" ]; then
+        target_sync_user=$(awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}' /etc/passwd 2>/dev/null || echo "$USER")
+    fi
+    if [ -n "$target_sync_user" ] && [ "$target_sync_user" != "root" ]; then
+        mkdir -p /etc/sudoers.d
+        echo "$target_sync_user ALL=(root) NOPASSWD: /usr/local/lib/rhythm/sddm-auto-sync-local" > /etc/sudoers.d/sddm-sync
+        chmod 440 /etc/sudoers.d/sddm-sync
+    fi
+fi
+
 if [ -f "$REPO_DIR/sddm/hyprland.conf" ]; then
     install -T -m 644 "$REPO_DIR/sddm/hyprland.conf" /usr/share/sddm/hyprland.conf || fallo=1
     chown root:root /usr/share/sddm/hyprland.conf 2>/dev/null

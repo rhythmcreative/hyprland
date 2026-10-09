@@ -169,15 +169,24 @@ for img in "${images[@]}"; do
 done
 
 if [ ${#missing_thumbs[@]} -gt 0 ]; then
-    conv="magick"
-    command -v magick >/dev/null 2>&1 || conv="convert"
-    if command -v "$conv" >/dev/null 2>&1; then
-        printf '%s\n' "${missing_thumbs[@]}" | xargs -P 4 -I {} sh -c '
+    if command -v ffmpegthumbnailer >/dev/null 2>&1; then
+        printf '%s\n' "${missing_thumbs[@]}" | xargs -P 8 -I {} sh -c '
             img="$1"
             base="$(basename "$img")"
             thumb="'"$PREVIEW_DIR"'/${base%.*}_thumb.jpg"
-            "'"$conv"'" "$img" -thumbnail 300x200^ -gravity center -extent 300x200 "$thumb" 2>/dev/null || true
+            ffmpegthumbnailer -i "$img" -o "$thumb" -s 300 -q 8 2>/dev/null || true
         ' _ {} || true
+    else
+        conv="magick"
+        command -v magick >/dev/null 2>&1 || conv="convert"
+        if command -v "$conv" >/dev/null 2>&1; then
+            printf '%s\n' "${missing_thumbs[@]}" | xargs -P 4 -I {} sh -c '
+                img="$1"
+                base="$(basename "$img")"
+                thumb="'"$PREVIEW_DIR"'/${base%.*}_thumb.jpg"
+                "'"$conv"'" "$img" -thumbnail 300x200^ -gravity center -extent 300x200 "$thumb" 2>/dev/null || true
+            ' _ {} || true
+        fi
     fi
 fi
 

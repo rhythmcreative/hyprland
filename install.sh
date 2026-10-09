@@ -2376,13 +2376,13 @@ install_rust_dock() {
     if [ "$DISTRO" = "fedora" ]; then
         sudo dnf install -y rust cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel grim >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev build-essential >> "$LOG_FILE" 2>&1 || \
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc pkg-config libgtk-4-dev grim build-essential >> "$LOG_FILE" 2>&1 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cargo rustc pkg-config libgtk-4-dev grim libgtk4-layer-shell-dev build-essential >> "$LOG_FILE" 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cargo rustc pkg-config libgtk-4-dev grim build-essential >> "$LOG_FILE" 2>&1 || true
 
         # Build gtk4-layer-shell from source if not available in repos (e.g. Debian 12 Bookworm)
         if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
             step_item "Building gtk4-layer-shell from source for $DISTRO..."
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends meson ninja-build libwayland-dev wayland-protocols >> "$LOG_FILE" 2>&1 || true
             if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
                 local gls_dir
                 gls_dir=$(mktemp -d "${TMPDIR:-/tmp}/gtk4-layer-shell.XXXXXXXX")
@@ -2411,7 +2411,7 @@ install_rust_dock() {
     if ! command -v cargo > /dev/null 2>&1; then
         if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             step_item "Installing Cargo & Rust toolchain..."
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc >> "$LOG_FILE" 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cargo rustc >> "$LOG_FILE" 2>&1 || true
             if ! command -v cargo > /dev/null 2>&1; then
                 step_item "Installing Cargo via rustup fallback..."
                 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal >> "$LOG_FILE" 2>&1 || true
@@ -2428,11 +2428,25 @@ install_rust_dock() {
     fi
 
     if ! command -v cargo > /dev/null 2>&1; then
+        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+            step_warn "Cargo not found; using bundled rust-dock binary."
+            mkdir -p "$HOME/.local/bin"
+            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+            chmod +x "$HOME/.local/bin/rust-dock"
+            return 0
+        fi
         step_warn "Cargo not found. Skipping rust-dock build."
         return 0
     fi
 
     if ! pkg-config --exists gtk4-layer-shell-0 2>/dev/null && ! pkg-config --exists gtk4-layer-shell 2>/dev/null; then
+        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+            step_warn "gtk4-layer-shell dev files not found; using bundled rust-dock binary."
+            mkdir -p "$HOME/.local/bin"
+            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+            chmod +x "$HOME/.local/bin/rust-dock"
+            return 0
+        fi
         step_warn "gtk4-layer-shell not found. Skipping rust-dock build (falling back to Waybar dock)."
         return 0
     fi
@@ -2445,10 +2459,7 @@ install_rust_dock() {
     elif [ -d "$HOME/rust-dock" ] && [ -f "$HOME/rust-dock/Cargo.toml" ]; then
         source_dir="$HOME/rust-dock"
     else
-        # Directorio privado para el clone. Con "/tmp/rust-dock-build" fijo,
-        # otro usuario de la maquina puede dejar ahí un Cargo.toml con codigo
-        # suyo: el build compila lo que encuentre, y despues se instala como
-        # ~/.local/bin/rust-dock, que se ejecuta en cada arranque.
+        # Directorio privado para el clone.
         source_dir=$(mktemp -d "${TMPDIR:-/tmp}/rust-dock-build.XXXXXXXX")
         rmdir "$source_dir"   # git clone necesita que el destino no exista
         if git clone --depth=1 https://github.com/rhythmcreative/rust-dock.git "$source_dir" >> "$LOG_FILE" 2>&1; then
@@ -2456,24 +2467,31 @@ install_rust_dock() {
         else
             step_warn "Could not clone rust-dock repository. Skipping build."
             rm -rf "$source_dir"
+            if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+                mkdir -p "$HOME/.local/bin"
+                cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+                chmod +x "$HOME/.local/bin/rust-dock"
+            fi
             return
         fi
     fi
 
-    # Que el build se zampe su error con "|| true" era peor de lo que parece: si
-    # fallaba, el codigo seguia al "if [ -f ... ]" y, como un binario de una
-    # compilacion anterior seguia ahi, lo instalaba como si fuera el nuevo. Se
-    # borra antes de compilar y se mira el resultado de verdad.
     rm -f "$source_dir/target/release/rust-dock" 2>/dev/null || true
 
     local build_ok=1
     rhythm_spin "Compiling rust-dock (release)..." -- \
-        bash -c "export PATH=\"\$HOME/.cargo/bin:\$PATH\"; cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
+        bash -c "export PATH=\"\$HOME/.cargo/bin:\$PATH\"; export PKG_CONFIG_PATH=\"/usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:\${PKG_CONFIG_PATH:-}\"; export LD_LIBRARY_PATH=\"/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}\"; cd '$source_dir' && cargo build --release >> '$LOG_FILE' 2>&1" || build_ok=0
 
     if [ "$build_ok" -ne 1 ] || [ ! -f "$source_dir/target/release/rust-dock" ]; then
+        if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
+            step_warn "rust-dock build failed; using bundled binary as fallback."
+            mkdir -p "$HOME/.local/bin"
+            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+            chmod +x "$HOME/.local/bin/rust-dock"
+            [ "$temp_clone" = true ] && rm -rf "$source_dir"
+            return
+        fi
         step_warn "rust-dock build failed. Inspect $LOG_FILE for details."
-        # Nada se instala. Antes, un fallo de compilacion podia acabar
-        # desplegando el binario de una version anterior.
         [ "$temp_clone" = true ] && rm -rf "$source_dir"
         return
     fi
@@ -2958,7 +2976,8 @@ step_software() {
             qt6-virtualkeyboard-plugin
             libqt6multimedia6
             qt6-wayland
-            quickshell
+            cargo
+            rustc
             qml6-module-qt-labs-platform
             qml6-module-qt-labs-folderlistmodel
             qml6-module-qt-labs-settings
@@ -5173,7 +5192,11 @@ step_system() {
                 "$DOTFILES_DIR/.local/bin/sddm-auto-sync-local" \
                 /usr/local/lib/rhythm/sddm-auto-sync-local
         fi
-        echo "$USER ALL=(root) NOPASSWD: /usr/local/lib/rhythm/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
+        local target_sync_user="${SUDO_USER:-$USER}"
+        if [ "$target_sync_user" = "root" ]; then
+            target_sync_user=$(awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}' /etc/passwd 2>/dev/null || echo "$USER")
+        fi
+        echo "$target_sync_user ALL=(root) NOPASSWD: /usr/local/lib/rhythm/sddm-auto-sync-local" | sudo tee /etc/sudoers.d/sddm-sync > /dev/null
         sudo chmod 440 /etc/sudoers.d/sddm-sync
 
         # Pywal SDDM sync.

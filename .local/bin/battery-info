@@ -59,8 +59,24 @@ def battery(name: str) -> dict:
     power_now = num(g("power_now"))
     current_now = num(g("current_now"))
     voltage = num(g("voltage_now"))
+    charge_now = num(g("charge_now"))
+    charge_full = num(g("charge_full"))
+    charge_design = num(g("charge_full_design"))
     threshold = num(g("charge_control_end_threshold"))
     status = g("status") or "Unknown"
+
+    if energy_now is None and charge_now is not None and voltage:
+        energy_now = (charge_now * voltage) / 1e6
+    if energy_full is None and charge_full is not None and voltage:
+        energy_full = (charge_full * voltage) / 1e6
+    if energy_design is None and charge_design is not None and voltage:
+        energy_design = (charge_design * voltage) / 1e6
+    if power_now is None and current_now is not None and voltage:
+        power_now = (current_now * voltage) / 1e6
+    if cap is None and energy_now is not None and energy_full and energy_full > 0:
+        cap = int(round((energy_now / energy_full) * 100))
+    elif cap is None and charge_now is not None and charge_full and charge_full > 0:
+        cap = int(round((charge_now / charge_full) * 100))
 
     # Wh a partir de los microwatios-hora del kernel
     wh = lambda v: round(v / 1e6, 2) if v is not None else None
@@ -79,23 +95,35 @@ def battery(name: str) -> dict:
         "energy_design": wh(energy_design),
         "power_w": round(power_now / 1e6, 2) if power_now else None,
         "current_a": round(current_now / 1e6, 3) if current_now else None,
-        "present": g("present") in ("1", "true", None) and (cap is not None or energy_now is not None),
+        "present": g("present") in ("1", "true", None) and (cap is not None or energy_now is not None or charge_now is not None),
     }
 
     # Salud: capacidad real frente a la de fabrica. Sin energy_design no hay dato.
     if energy_full and energy_design and energy_design > 0:
         out["health"] = min(100, round(energy_full / energy_design * 100))
+    elif charge_full and charge_design and charge_design > 0:
+        out["health"] = min(100, round(charge_full / charge_design * 100))
     else:
         out["health"] = None
 
     # Minutos que faltan para llena o para vacia, con el consumo de ahora.
-    # Si no hay consumo (cargando en el techo o dormida) no se inventa nada.
-    if power_now and power_now > 0:
-        if status == "Charging" and energy_full and energy_now is not None:
-            mins = (energy_full - energy_now) / power_now * 60
-            out["time_to_full"] = int(mins) if mins >= 0 else None
-        elif status == "Discharging" and energy_now is not None:
-            out["time_empty"] = int(energy_now / power_now * 60)
+    if (power_now and power_now > 0) or (current_now and current_now > 0):
+        if status == "Charging":
+            if energy_full and energy_now is not None and power_now and power_now > 0:
+                mins = (energy_full - energy_now) / power_now * 60
+                out["time_to_full"] = int(mins) if mins >= 0 else None
+            elif charge_full and charge_now is not None and current_now and current_now > 0:
+                mins = (charge_full - charge_now) / current_now * 60
+                out["time_to_full"] = int(mins) if mins >= 0 else None
+            else:
+                out["time_to_full"] = None
+        elif status == "Discharging":
+            if energy_now is not None and power_now and power_now > 0:
+                out["time_empty"] = int(energy_now / power_now * 60)
+            elif charge_now is not None and current_now and current_now > 0:
+                out["time_empty"] = int(charge_now / current_now * 60)
+            else:
+                out["time_empty"] = None
         else:
             out["time_to_full"] = None
             out["time_empty"] = None

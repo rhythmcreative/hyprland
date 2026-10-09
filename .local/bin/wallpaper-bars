@@ -50,6 +50,10 @@ dock_pids_for_monitor() {
 
 case "${1:-}" in
     hide)
+        if [ -f /tmp/wallpaper-bars-hidden ]; then
+            exit 0
+        fi
+        touch /tmp/wallpaper-bars-hidden
         [ "$monitor" = "all" ] || echo "$monitor" > /tmp/wallpaper-bars-monitor
         quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
             --any-display call island hide "$monitor" >/dev/null 2>&1 || true
@@ -78,6 +82,7 @@ case "${1:-}" in
         fi
         ;;
     show)
+        rm -f /tmp/wallpaper-bars-hidden
         if [ "$monitor" = "all" ]; then
             pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
             pkill -SIGUSR2 -x .waybar-wrapped >/dev/null 2>&1 || true

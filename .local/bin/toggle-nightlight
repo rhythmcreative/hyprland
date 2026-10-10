@@ -47,20 +47,48 @@ save_settings() {
 # morir seguia contando durante unos segundos.
 SUNSET_UNIT="rhythm-hyprsunset.service"
 
-is_on() { systemctl --user is-active --quiet "$SUNSET_UNIT"; }
+is_on() {
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet "$SUNSET_UNIT" 2>/dev/null; then
+        return 0
+    fi
+    pgrep -u "$UID" -x hyprsunset >/dev/null 2>&1
+}
 
 start_nightlight() {
     read_settings
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-    systemctl --user start "$SUNSET_UNIT" >/dev/null 2>&1 || return 1
-    return 0
+    local started=0
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+        if systemctl --user start "$SUNSET_UNIT" >/dev/null 2>&1; then
+            started=1
+        fi
+    fi
+    if [ "$started" -eq 0 ]; then
+        pkill -u "$UID" -x hyprsunset >/dev/null 2>&1 || true
+        nohup hyprsunset -t "$TEMPERATURE" -g "$GAMMA" >/dev/null 2>&1 &
+        sleep 0.1
+        if pgrep -u "$UID" -x hyprsunset >/dev/null 2>&1; then
+            started=1
+        fi
+    fi
+    if [ "$started" -eq 1 ]; then
+        if command -v hyprctl >/dev/null 2>&1; then
+            hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+    return 1
 }
 
 stop_nightlight() {
-    systemctl --user stop "$SUNSET_UNIT" >/dev/null 2>&1 || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user stop "$SUNSET_UNIT" >/dev/null 2>&1 || true
+    fi
+    if command -v hyprctl >/dev/null 2>&1; then
+        hyprctl hyprsunset identity >/dev/null 2>&1 || true
+    fi
+    pkill -u "$UID" -x hyprsunset >/dev/null 2>&1 || true
 }
-
-
 
 set_temperature() {
     local value="${1:-}"
@@ -72,10 +100,13 @@ set_temperature() {
     TEMPERATURE="$value"
     save_settings
     if is_on; then
-        # El servicio lee la conf al arrancar, asi que reiniciarlo es lo que
-        # hace que el valor nuevo entre. hyprctl hyprsunset solo vale si el
-        # proceso ya esta hablando por su socket.
-        systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
+        if command -v hyprctl >/dev/null 2>&1 && hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1; then
+            :
+        elif command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet "$SUNSET_UNIT" 2>/dev/null; then
+            systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
+        else
+            start_nightlight
+        fi
     fi
     echo "$TEMPERATURE"
 }
@@ -90,7 +121,15 @@ set_gamma() {
     GAMMA="$value"
     save_settings
     if is_on; then
-        systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
+        local g_val
+        g_val=$(awk "BEGIN {printf \"%.2f\", $value / 100}")
+        if command -v hyprctl >/dev/null 2>&1 && hyprctl hyprsunset gamma "$g_val" >/dev/null 2>&1; then
+            :
+        elif command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet "$SUNSET_UNIT" 2>/dev/null; then
+            systemctl --user restart "$SUNSET_UNIT" >/dev/null 2>&1 || start_nightlight
+        else
+            start_nightlight
+        fi
     fi
     echo "$GAMMA"
 }

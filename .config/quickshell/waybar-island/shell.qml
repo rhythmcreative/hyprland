@@ -2882,8 +2882,9 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                islandWin.controlSubView = 5
-                                                nightLightSettingsProc.running = true
+                                                root.nightLightEnabled = !root.nightLightEnabled
+                                                root.runCmd("~/.local/bin/toggle-nightlight " + (root.nightLightEnabled ? "on" : "off"))
+                                                nightLightSettingsRefreshTimer.restart()
                                             }
                                         }
                                     }
@@ -5111,6 +5112,7 @@ ShellRoot {
                                                 onClicked: {
                                                     root.hyprRounding = modelData.val
                                                     root.runCmd("$HOME/.local/bin/notch-hypr-helper set-rounding " + modelData.val)
+                                                    hyprRefreshTimer.restart()
                                                 }
                                             }
                                         }
@@ -5157,6 +5159,7 @@ ShellRoot {
                                                 onClicked: {
                                                     root.hyprGaps = modelData.val
                                                     root.runCmd("$HOME/.local/bin/notch-hypr-helper set-gaps " + modelData.val)
+                                                    hyprRefreshTimer.restart()
                                                 }
                                             }
                                         }

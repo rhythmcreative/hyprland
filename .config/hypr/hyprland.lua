@@ -567,4 +567,39 @@ local function cargar_user()
     end
 end
 
+-- ── Ajustes persistentes de interfaz (redondeo, gaps, efectos) ──────────────
+local function aplicar_hypr_tweaks()
+    local home = os.getenv("HOME") or ""
+    local candidatas = {
+        home .. "/.config/rhythm/hypr-tweaks.conf",
+        home .. "/.config/hypr/tweaks.conf",
+    }
+    for _, ruta in ipairs(candidatas) do
+        local f = io.open(ruta, "r")
+        if f then
+            for linea in f:lines() do
+                local k, v = linea:match("^%s*([%w_:]+)%s*=%s*([%w_]+)%s*$")
+                if k and v then
+                    if k == "rounding" or k == "decoration:rounding" then
+                        local num = tonumber(v)
+                        if num then hl.config({ decoration = { rounding = num } }) end
+                    elseif k == "gaps_out" or k == "general:gaps_out" then
+                        local num = tonumber(v)
+                        if num then hl.config({ general = { gaps_out = num } }) end
+                    elseif k == "anim" or k == "animations:enabled" then
+                        hl.config({ animations = { enabled = (v == "true" or v == "1") } })
+                    elseif k == "blur" or k == "decoration:blur:enabled" then
+                        hl.config({ decoration = { blur = { enabled = (v == "true" or v == "1") } } })
+                    elseif k == "shadow" or k == "decoration:shadow:enabled" then
+                        hl.config({ decoration = { shadow = { enabled = (v == "true" or v == "1") } } })
+                    end
+                end
+            end
+            f:close()
+            break
+        end
+    end
+end
+
+aplicar_hypr_tweaks()
 cargar_user()

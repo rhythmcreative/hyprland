@@ -6,8 +6,6 @@
 optimize() {
     hyprctl --batch "\
         keyword general:no_border_on_floating 1;\
-        keyword decoration:active_opacity 1.0;\
-        keyword decoration:inactive_opacity 1.0;\
         keyword decoration:blur:enabled 0;\
         keyword decoration:shadow:enabled 0;\
         keyword decoration:drop_shadow 0;\
@@ -19,6 +17,9 @@ optimize() {
 
 restore() {
     hyprctl reload
+    if command -v notch-hypr-helper >/dev/null 2>&1; then
+        notch-hypr-helper apply-tweaks >/dev/null 2>&1 || true
+    fi
     notify-send "Performance Optimization" "Default settings restored"
 }
 

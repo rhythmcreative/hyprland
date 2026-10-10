@@ -21,6 +21,52 @@ if "HYPRLAND_INSTANCE_SIGNATURE" not in os.environ:
                 break
 
 PERF_FILE = "/tmp/hypr_performance_mode"
+TWEAKS_CONF = os.path.expanduser("~/.config/rhythm/hypr-tweaks.conf")
+TWEAKS_HYPR_CONF = os.path.expanduser("~/.config/hypr/tweaks.conf")
+
+def read_tweaks():
+    tweaks = {}
+    if os.path.exists(TWEAKS_CONF):
+        try:
+            with open(TWEAKS_CONF, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        tweaks[k.strip()] = v.strip()
+        except Exception:
+            pass
+    return tweaks
+
+def save_tweak(key, value):
+    tweaks = read_tweaks()
+    tweaks[key] = str(value)
+    os.makedirs(os.path.dirname(TWEAKS_CONF), exist_ok=True)
+    try:
+        with open(TWEAKS_CONF, "w") as f:
+            for k, v in tweaks.items():
+                f.write(f"{k}={v}\n")
+    except Exception:
+        pass
+    try:
+        os.makedirs(os.path.dirname(TWEAKS_HYPR_CONF), exist_ok=True)
+        with open(TWEAKS_HYPR_CONF, "w") as f:
+            f.write("# Generated tweaks by notch-hypr-helper\n")
+            if "rounding" in tweaks:
+                f.write(f"decoration:rounding = {tweaks['rounding']}\n")
+            if "gaps_out" in tweaks:
+                f.write(f"general:gaps_out = {tweaks['gaps_out']}\n")
+            if "anim" in tweaks:
+                val = "1" if tweaks['anim'] in ["true", "1"] else "0"
+                f.write(f"animations:enabled = {val}\n")
+            if "blur" in tweaks:
+                val = "1" if tweaks['blur'] in ["true", "1"] else "0"
+                f.write(f"decoration:blur:enabled = {val}\n")
+            if "shadow" in tweaks:
+                val = "1" if tweaks['shadow'] in ["true", "1"] else "0"
+                f.write(f"decoration:shadow:enabled = {val}\n")
+    except Exception:
+        pass
 
 def run_hyprctl(args):
     try:
@@ -49,13 +95,69 @@ def get_option(opt_name):
                     return 10
     return None
 
+def set_hypr_option(lua_str, keyword_key, keyword_val):
+    res = run_hyprctl(["eval", lua_str])
+    if "legacy parsers" in res or "unknown" in res.lower() or not res.strip():
+        run_hyprctl(["keyword", keyword_key, str(keyword_val)])
+
+def apply_saved_tweaks():
+    tweaks = read_tweaks()
+    if not tweaks:
+        return
+    if "rounding" in tweaks:
+        try:
+            r = int(tweaks["rounding"])
+            set_hypr_option(f"hl.config({{ decoration = {{ rounding = {r} }} }})", "decoration:rounding", r)
+        except ValueError:
+            pass
+    if "gaps_out" in tweaks:
+        try:
+            g = int(tweaks["gaps_out"])
+            set_hypr_option(f"hl.config({{ general = {{ gaps_out = {g} }} }})", "general:gaps_out", g)
+        except ValueError:
+            pass
+    if "anim" in tweaks:
+        val = tweaks["anim"] in ["true", "1"]
+        kw_val = "1" if val else "0"
+        set_hypr_option(f"hl.config({{ animations = {{ enabled = {str(val).lower()} }} }})", "animations:enabled", kw_val)
+    if "blur" in tweaks:
+        val = tweaks["blur"] in ["true", "1"]
+        kw_val = "1" if val else "0"
+        set_hypr_option(f"hl.config({{ decoration = {{ blur = {{ enabled = {str(val).lower()} }} }} }})", "decoration:blur:enabled", kw_val)
+    if "shadow" in tweaks:
+        val = tweaks["shadow"] in ["true", "1"]
+        kw_val = "1" if val else "0"
+        set_hypr_option(f"hl.config({{ decoration = {{ shadow = {{ enabled = {str(val).lower()} }} }} }})", "decoration:shadow:enabled", kw_val)
+
 def status():
+    tweaks = read_tweaks()
     anim = get_option("animations:enabled")
     blur = get_option("decoration:blur:enabled")
     shadow = get_option("decoration:shadow:enabled")
     rounding = get_option("decoration:rounding")
     gaps = get_option("general:gaps_out")
     perf = os.path.exists(PERF_FILE)
+
+    if "rounding" in tweaks:
+        try:
+            saved_r = int(tweaks["rounding"])
+            if rounding is None or rounding == 10:
+                rounding = saved_r
+        except ValueError:
+            pass
+    if "gaps_out" in tweaks:
+        try:
+            saved_g = int(tweaks["gaps_out"])
+            if gaps is None or gaps == 10:
+                gaps = saved_g
+        except ValueError:
+            pass
+    if "anim" in tweaks and anim is None:
+        anim = tweaks["anim"] in ["true", "1"]
+    if "blur" in tweaks and blur is None:
+        blur = tweaks["blur"] in ["true", "1"]
+    if "shadow" in tweaks and shadow is None:
+        shadow = tweaks["shadow"] in ["true", "1"]
 
     data = {
         "anim": anim if anim is not None else True,
@@ -66,11 +168,6 @@ def status():
         "perf": perf
     }
     print(json.dumps(data))
-
-def set_hypr_option(lua_str, keyword_key, keyword_val):
-    res = run_hyprctl(["eval", lua_str])
-    if "legacy parsers" in res or "unknown" in res.lower() or not res.strip():
-        run_hyprctl(["keyword", keyword_key, str(keyword_val)])
 
 def main():
     if len(sys.argv) < 2:
@@ -84,27 +181,34 @@ def main():
     elif cmd == "set-anim" and len(sys.argv) > 2:
         val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
         kw_val = "1" if val == "true" else "0"
+        save_tweak("anim", val)
         set_hypr_option(f"hl.config({{ animations = {{ enabled = {val} }} }})", "animations:enabled", kw_val)
     elif cmd == "set-blur" and len(sys.argv) > 2:
         val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
         kw_val = "1" if val == "true" else "0"
+        save_tweak("blur", val)
         set_hypr_option(f"hl.config({{ decoration = {{ blur = {{ enabled = {val} }} }} }})", "decoration:blur:enabled", kw_val)
     elif cmd == "set-shadow" and len(sys.argv) > 2:
         val = "true" if sys.argv[2].lower() in ["true", "1", "yes"] else "false"
         kw_val = "1" if val == "true" else "0"
+        save_tweak("shadow", val)
         set_hypr_option(f"hl.config({{ decoration = {{ shadow = {{ enabled = {val} }} }} }})", "decoration:shadow:enabled", kw_val)
     elif cmd == "set-rounding" and len(sys.argv) > 2:
         try:
             r = int(sys.argv[2])
+            save_tweak("rounding", r)
             set_hypr_option(f"hl.config({{ decoration = {{ rounding = {r} }} }})", "decoration:rounding", r)
         except ValueError:
             pass
     elif cmd == "set-gaps" and len(sys.argv) > 2:
         try:
             g = int(sys.argv[2])
+            save_tweak("gaps_out", g)
             set_hypr_option(f"hl.config({{ general = {{ gaps_out = {g} }} }})", "general:gaps_out", g)
         except ValueError:
             pass
+    elif cmd == "apply-tweaks":
+        apply_saved_tweaks()
     elif cmd == "toggle-perf":
         if os.path.exists(PERF_FILE):
             try:
@@ -116,6 +220,7 @@ def main():
             elif shutil.which("cpupower"):
                 subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "powersave"], stderr=subprocess.DEVNULL)
             run_hyprctl(["reload"])
+            apply_saved_tweaks()
             subprocess.run(["notify-send", "Performance", "Balanced mode restored"], stderr=subprocess.DEVNULL)
         else:
             if os.path.exists("/tmp/powersave-active"):
@@ -132,9 +237,9 @@ def main():
                 subprocess.run(["powerprofilesctl", "set", "performance"], stderr=subprocess.DEVNULL)
             elif shutil.which("cpupower"):
                 subprocess.run(["sudo", "cpupower", "frequency-set", "-g", "performance"], stderr=subprocess.DEVNULL)
-            res = run_hyprctl(["eval", "hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = 1.0, blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
+            res = run_hyprctl(["eval", "hl.config({ decoration = { blur = { enabled = false }, shadow = { enabled = false } }, animations = { enabled = false } })"])
             if "legacy parsers" in res or "unknown" in res.lower() or not res.strip():
-                run_hyprctl(["--batch", "keyword decoration:active_opacity 1.0; keyword decoration:inactive_opacity 1.0; keyword decoration:blur:enabled 0; keyword decoration:shadow:enabled 0; keyword animations:enabled 0"])
+                run_hyprctl(["--batch", "keyword decoration:blur:enabled 0; keyword decoration:shadow:enabled 0; keyword animations:enabled 0"])
             subprocess.run(["notify-send", "Performance", "Max performance enabled"], stderr=subprocess.DEVNULL)
     elif cmd == "toggle-split":
         res = run_hyprctl(["dispatch", 'hl.dsp.layout("togglesplit")'])
@@ -142,6 +247,7 @@ def main():
             run_hyprctl(["dispatch", "togglesplit"])
     elif cmd == "reload":
         run_hyprctl(["reload"])
+        apply_saved_tweaks()
     elif cmd == "monitors":
         subprocess.Popen(["nwg-displays"])
     else:

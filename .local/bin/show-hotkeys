@@ -94,8 +94,7 @@ SUPER + Left Mouse Drag   │ Move Floating Window             │ Mouse
 SUPER + Right Mouse Drag  │ Resize Floating Window           │ Mouse
 Volume Up / Down / Mute   │ Dynamic Audio with Notch         │ Hardware
 Brightness Up / Down      │ Screen Brightness with Notch     │ Hardware
-F10                       │ Toggle Bluetooth                 │ Hardware
-F11 / F12                 │ Fine Volume Tuning (- / +)       │ Hardware
+SUPER + F10               │ Toggle Bluetooth                 │ Network
 XF86AudioPlay / Pause     │ Play / Pause Media               │ Media
 SUPER + ALT + K           │ Cast Screen (Miracast/Chromecast)│ Media
 XF86AudioNext / Prev      │ Next / Previous Track            │ Media
@@ -184,7 +183,7 @@ if [ -n "$selected" ]; then
         *"SUPER + ALT + M"*)
             "$HOME/.local/bin/toggle-noise-suppression" &
             ;;
-        *"F10"*)
+        *"SUPER + F10"*|*"F10"*)
             "$HOME/.local/bin/toggle-bluetooth" &
             ;;
     esac

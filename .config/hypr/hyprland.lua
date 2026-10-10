@@ -519,11 +519,9 @@ hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
 -- Misc
-hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
+hl.bind(mainMod .. " + F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
 hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("~/.local/bin/toggle-keyboard-layout"))
 hl.bind(mainMod .. " + ALT + K", hl.dsp.exec_cmd("~/.local/bin/cast-screen"))
-hl.bind("F11", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"))
-hl.bind("F12", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"))
 hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
 hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("~/.config/hypr/scripts/power_save.sh"))

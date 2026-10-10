@@ -47,7 +47,7 @@ EOF
 
     # Generar configuración para cada monitor conectado
     if command -v jq >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then
-        hyprctl monitors -j | jq -r '.[] | "monitor=\(.name),\(.width)x\(.height)@\(.refreshRate),\(.x)x\(.y),\(.scale)"' >> "$temp_conf"
+        hyprctl monitors -j | jq -r '.[] | "monitor=\(.name),\(.width)x\(.height)@\(.refreshRate),\(.x)x\(.y),\(.scale)\(if .transform != 0 then ",transform,\(.transform)" else "" end)"' >> "$temp_conf"
     else
         local monitor_index=0
         for monitor in "${connected_monitors[@]}"; do

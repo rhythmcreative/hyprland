@@ -80,39 +80,117 @@ hl.monitor({
 -- (sin huecos, se recoloca sola al enchufar y desenchufar) basta con tener
 -- monitors.conf vacío o borrar su contenido.
 local function aplicar_monitors_nwg()
-    local ruta = (os.getenv("HOME") or "") .. "/.config/hypr/monitors.conf"
-    local f = io.open(ruta, "r")
-    if not f then return end
-    for linea in f:lines() do
-        local limpio = linea:gsub("^%s+", ""):gsub("%s+$", "")
-        if limpio ~= "" and not limpio:match("^#") then
-            local partes = {}
-            for p in limpio:gmatch("[^,]+") do partes[#partes + 1] = p end
-            -- monitor=SALIDA,MODO,POSICION,ESCALA[,TRANSFORM][,vrr][,PROFUNDIDAD]
-            local salida = partes[1] and partes[1]:match("^monitor%s*=%s*(.+)$")
-            local modo, pos, escala = partes[2], partes[3], partes[4]
-            if salida and salida ~= "" and modo and pos and escala then
-                local regla = {
-                    output   = salida,
-                    mode     = modo,
-                    position = pos,
-                    scale    = escala,
-                }
-                -- Lo que sigue a la escala es la transformacion (0-3) o la
-                -- palabra "vrr". Se pasa lo que se entienda, se ignora lo demás.
-                local extra = partes[5]
-                if extra then
-                    if extra:match("^%d+$") and tonumber(extra) <= 3 then
-                        regla.transform = tonumber(extra)
-                    elseif extra:lower() == "vrr" then
-                        regla.vrr = 1
+    local home = os.getenv("HOME") or ""
+    local conf_ruta = home .. "/.config/hypr/monitors.conf"
+    local lua_ruta = home .. "/.config/hypr/monitors.lua"
+
+    local orden = {}
+    local monitores = {}
+
+    local f = io.open(conf_ruta, "r")
+    if f then
+        for linea in f:lines() do
+            local limpio = linea:gsub("^%s+", ""):gsub("%s+$", "")
+            if limpio ~= "" and not limpio:match("^#") then
+                local resto = limpio:match("^monitor%s*=%s*(.+)$")
+                if resto then
+                    local partes = {}
+                    for p in resto:gmatch("[^,]+") do
+                        local t = p:gsub("^%s+", ""):gsub("%s+$", "")
+                        if t ~= "" then table.insert(partes, t) end
+                    end
+
+                    local salida = partes[1]
+                    if salida and salida ~= "" then
+                        if not monitores[salida] then
+                            monitores[salida] = { output = salida }
+                            table.insert(orden, salida)
+                        end
+                        local m = monitores[salida]
+
+                        if #partes >= 2 and partes[2]:lower() == "disable" then
+                            m.disabled = true
+                            m.mode = "disable"
+                        elseif #partes >= 3 and partes[2]:lower() == "transform" then
+                            local t = tonumber(partes[3])
+                            if t and t >= 0 and t <= 7 then
+                                m.transform = t
+                            end
+                        else
+                            local idx = 2
+                            if partes[idx] and partes[idx]:lower() ~= "transform" and partes[idx]:lower() ~= "vrr" and partes[idx]:lower() ~= "mirror" and partes[idx]:lower() ~= "bitdepth" and partes[idx]:lower() ~= "cm" then
+                                m.mode = partes[idx]
+                                idx = idx + 1
+                            end
+                            if partes[idx] and partes[idx]:lower() ~= "transform" and partes[idx]:lower() ~= "vrr" and partes[idx]:lower() ~= "mirror" and partes[idx]:lower() ~= "bitdepth" and partes[idx]:lower() ~= "cm" then
+                                m.position = partes[idx]
+                                idx = idx + 1
+                            end
+                            if partes[idx] and partes[idx]:lower() ~= "transform" and partes[idx]:lower() ~= "vrr" and partes[idx]:lower() ~= "mirror" and partes[idx]:lower() ~= "bitdepth" and partes[idx]:lower() ~= "cm" then
+                                m.scale = partes[idx]
+                                idx = idx + 1
+                            end
+
+                            while idx <= #partes do
+                                local clave = partes[idx]:lower()
+                                if clave == "transform" and partes[idx + 1] then
+                                    local t = tonumber(partes[idx + 1])
+                                    if t and t >= 0 and t <= 7 then m.transform = t end
+                                    idx = idx + 2
+                                elseif clave == "vrr" and partes[idx + 1] then
+                                    local v = tonumber(partes[idx + 1])
+                                    if v then m.vrr = v end
+                                    idx = idx + 2
+                                elseif clave == "mirror" and partes[idx + 1] then
+                                    m.mirror = partes[idx + 1]
+                                    idx = idx + 2
+                                elseif clave == "bitdepth" and partes[idx + 1] then
+                                    local b = tonumber(partes[idx + 1])
+                                    if b then m.bitdepth = b end
+                                    idx = idx + 2
+                                elseif clave == "cm" and partes[idx + 1] then
+                                    m.cm = partes[idx + 1]
+                                    idx = idx + 2
+                                elseif clave == "vrr" then
+                                    m.vrr = 1
+                                    idx = idx + 1
+                                elseif clave:match("^%d+$") and tonumber(clave) >= 0 and tonumber(clave) <= 7 and not m.transform then
+                                    m.transform = tonumber(clave)
+                                    idx = idx + 1
+                                else
+                                    idx = idx + 1
+                                end
+                            end
+                        end
                     end
                 end
+            end
+        end
+        f:close()
+    end
+
+    if #orden > 0 then
+        for _, nombre in ipairs(orden) do
+            local regla = monitores[nombre]
+            if regla.disabled then
+                hl.monitor({ output = regla.output, disabled = true, mode = "disable" })
+            else
+                regla.mode = regla.mode or "preferred"
+                regla.position = regla.position or "auto"
+                regla.scale = regla.scale or "1"
                 hl.monitor(regla)
             end
         end
+    else
+        local lf = io.open(lua_ruta, "r")
+        if lf then
+            lf:close()
+            local chunk = loadfile(lua_ruta)
+            if chunk then
+                pcall(chunk)
+            end
+        end
     end
-    f:close()
 end
 
 aplicar_monitors_nwg()

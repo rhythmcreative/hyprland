@@ -41,3 +41,4 @@ user_edits/
 .config/rofi/style-3-pywal.rasi
 .config/mako/config
 .config/waybar/colors-pywal.css
+.agents/

@@ -606,6 +606,14 @@ ShellRoot {
             root.refreshAllStates()
             return "expanded"
         }
+        function select_wifi(screenName: string, ssid: string, isEnterprise: bool): string {
+            let panel = root.setPanelState(screenName, true, 0, 1)
+            if (!panel) return "unavailable"
+            panel.selectedWifiSsid = ssid
+            panel.selectedWifiIsEnterprise = isEnterprise
+            panel.wifiConnectState = "idle"
+            return "selected"
+        }
         function open_bt(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 0, 2)
             if (!panel) return "unavailable"
@@ -4853,7 +4861,8 @@ ShellRoot {
                         // Header card: Wi-Fi master switch & quick buttons
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 60
+                            Layout.preferredHeight: 60
+                            implicitHeight: 60
                             radius: 14
                             color: root.colSurface
                             border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
@@ -4981,6 +4990,7 @@ ShellRoot {
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 38
+                            implicitHeight: 38
                             radius: 10
                             visible: root.wifiPortalDetected && root.wifiEnabled
                             color: Qt.rgba(255/255, 167/255, 38/255, 0.20)
@@ -5050,6 +5060,7 @@ ShellRoot {
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 34
+                            implicitHeight: 34
                             radius: 10
                             visible: islandWin.selectedWifiSsid === "" && islandWin.wifiConnectState !== "idle"
                             color: Qt.rgba(76/255, 175/255, 80/255, 0.18)
@@ -5071,14 +5082,16 @@ ShellRoot {
                         // Inline Wi-Fi password / WPA Enterprise card; errors stay here for retry.
                         Rectangle {
                             Layout.fillWidth: true
-                            height: islandWin.selectedWifiIsEnterprise
+                            Layout.preferredHeight: islandWin.selectedWifiIsEnterprise
                                 ? (islandWin.wifiConnectState === "idle" ? 154 : 188)
                                 : (islandWin.wifiConnectState === "idle" ? 48 : 76)
+                            implicitHeight: Layout.preferredHeight
                             radius: 12
                             color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
                             border.color: islandWin.wifiConnectState === "error" ? "#ef5350" : root.colAccent
                             border.width: 1
                             visible: islandWin.selectedWifiSsid !== ""
+                            clip: true
 
                             ColumnLayout {
                                 anchors.fill: parent
@@ -5465,12 +5478,13 @@ ShellRoot {
                         // Available Networks List
                         Flickable {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: islandWin.selectedWifiSsid !== "" ? (islandWin.selectedWifiIsEnterprise ? 210 : 300) : 355
+                            Layout.preferredHeight: Math.min(islandWin.selectedWifiSsid !== "" ? (islandWin.selectedWifiIsEnterprise ? 240 : 290) : 350, Math.max(90, wifiNetColumn.implicitHeight))
                             contentWidth: width
                             contentHeight: wifiNetColumn.implicitHeight
                             clip: true
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            ColumnLayout {
+                            Column {
                                 id: wifiNetColumn
                                 width: parent.width
                                 spacing: 6
@@ -5478,16 +5492,51 @@ ShellRoot {
                                 Repeater {
                                     model: root.wifiList
                                     delegate: Rectangle {
-                                        Layout.fillWidth: true
+                                        width: parent.width
                                         height: 44
                                         radius: 12
                                         color: modelData.connected ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.18) : root.colSurface
                                         border.color: modelData.connected ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.05)
                                         border.width: 1
 
+                                        // Click entire row to connect or expand password prompt
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (modelData.connected) {
+                                                    root.runCmd("~/.local/bin/notch-wifi-helper disconnect")
+                                                    wifiListProc.running = true
+                                                } else {
+                                                    if (modelData.saved) {
+                                                        root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", true, modelData.is_enterprise === true, "")
+                                                    } else if (modelData.security === "Open" || modelData.security === "Abierta" || modelData.security === "--") {
+                                                        islandWin.selectedWifiSsid = ""
+                                                        islandWin.selectedWifiIsEnterprise = false
+                                                        islandWin.wifiConnectState = "idle"
+                                                        islandWin.wifiConnectMessage = ""
+                                                        root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", false, false, "")
+                                                    } else {
+                                                        islandWin.selectedWifiSsid = modelData.ssid
+                                                        islandWin.selectedWifiIsEnterprise = modelData.is_enterprise === true ||
+                                                            (modelData.security && (modelData.security.indexOf("802.1X") !== -1 || modelData.security.indexOf("Enterprise") !== -1 || modelData.security.indexOf("EAP") !== -1))
+                                                        islandWin.wifiConnectState = "idle"
+                                                        islandWin.wifiConnectMessage = ""
+                                                        islandWin.clearWifiPassword()
+                                                        if (islandWin.selectedWifiIsEnterprise) {
+                                                            wifiUserInput.forceActiveFocus()
+                                                        } else {
+                                                            wifiPassInput.forceActiveFocus()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         RowLayout {
                                             anchors.fill: parent
-                                            anchors.margins: 10
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 10
                                             spacing: 10
 
                                             Text {
@@ -5499,7 +5548,7 @@ ShellRoot {
                                             }
 
                                             ColumnLayout {
-                                                spacing: 0
+                                                spacing: 1
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignVCenter
 
@@ -5544,8 +5593,6 @@ ShellRoot {
                                                 }
                                             }
 
-                                            Item { Layout.fillWidth: true }
-
                                             Rectangle {
                                                 height: 26
                                                 width: modelData.connected ? 95 : 72
@@ -5560,53 +5607,22 @@ ShellRoot {
                                                     font.pixelSize: 10
                                                     font.weight: Font.Bold
                                                 }
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        if (modelData.connected) {
-                                                            root.runCmd("~/.local/bin/notch-wifi-helper disconnect")
-                                                            wifiListProc.running = true
-                                                        } else {
-                                                            if (modelData.saved) {
-                                                                // Reuse NetworkManager's saved credentials; only show the password
-                                                                // form if bringing the saved profile up fails.
-                                                                root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", true, modelData.is_enterprise === true, "")
-                                                            } else if (modelData.security === "Open" || modelData.security === "Abierta" || modelData.security === "--") {
-                                                                islandWin.selectedWifiSsid = ""
-                                                                islandWin.selectedWifiIsEnterprise = false
-                                                                islandWin.wifiConnectState = "idle"
-                                                                islandWin.wifiConnectMessage = ""
-                                                                root.startWifiConnect(islandWin.modelData.name, modelData.ssid, "", false, false, "")
-                                                            } else {
-                                                                islandWin.selectedWifiSsid = modelData.ssid
-                                                                islandWin.selectedWifiIsEnterprise = modelData.is_enterprise === true ||
-                                                                    (modelData.security && (modelData.security.indexOf("802.1X") !== -1 || modelData.security.indexOf("Enterprise") !== -1 || modelData.security.indexOf("EAP") !== -1))
-                                                                islandWin.wifiConnectState = "idle"
-                                                                islandWin.wifiConnectMessage = ""
-                                                                islandWin.clearWifiPassword()
-                                                                if (islandWin.selectedWifiIsEnterprise) {
-                                                                    wifiUserInput.forceActiveFocus()
-                                                                } else {
-                                                                    wifiPassInput.forceActiveFocus()
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                Text {
+                                Item {
+                                    width: parent.width
+                                    height: 50
                                     visible: root.wifiList.length === 0
-                                    text: root.wifiScanning ? root.t("wifi_scanning", "Scanning nearby Wi-Fi networks...") : root.t("wifi_none", "No Wi-Fi networks found. Click Scan.")
-                                    color: root.colMuted
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.topMargin: 20
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.wifiScanning ? root.t("wifi_scanning", "Scanning nearby Wi-Fi networks...") : root.t("wifi_none", "No Wi-Fi networks found. Click Scan.")
+                                        color: root.colMuted
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                    }
                                 }
                             }
                         }

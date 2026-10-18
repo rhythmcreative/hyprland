@@ -71,10 +71,10 @@ new_pid=$!
 sleep 2
 if kill -0 "$new_pid" 2>/dev/null; then
     log "Waybar iniciado correctamente (PID: $new_pid)"
-    notify-send "Waybar Limpiado" "Waybar reiniciado con instancia única" -t 3000 2>/dev/null || true
+    notify-send "Waybar Cleaned" "Waybar restarted with single instance" -t 3000 2>/dev/null || true
 else
     log "Error al iniciar waybar"
-    notify-send "Error" "No se pudo iniciar waybar después de la limpieza" -u critical -t 5000 2>/dev/null || true
+    notify-send "Error" "Failed to start Waybar after cleanup" -u critical -t 5000 2>/dev/null || true
     exit 1
 fi
 

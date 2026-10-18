@@ -27,5 +27,5 @@ if [[ $? -eq 0 ]]; then
     log "Sincronización completada exitosamente"
 else
     log "ERROR: Fallo en la sincronización"
-    notify-send "SDDM Wallpaper" "Error al sincronizar wallpaper con SDDM"
+    notify-send "SDDM Wallpaper" "Error syncing wallpaper with SDDM"
 fi

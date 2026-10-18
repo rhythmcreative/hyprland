@@ -27,7 +27,7 @@ log() {
 # Verificar si tenemos permisos de administrador
 if [[ $EUID -ne 0 ]]; then
     log "ERROR: Este script debe ejecutarse con permisos de root"
-    notify-send "SDDM Wallpaper Sync" "Error: Se requieren permisos de administrador"
+    notify-send "SDDM Wallpaper Sync" "Error: Administrator privileges required"
     exit 1
 fi
 

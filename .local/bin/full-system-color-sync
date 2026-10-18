@@ -31,7 +31,7 @@ fi
 
 # Send notification
 if command -v notify-send > /dev/null; then
-    notify-send "Sincronización Completa" "Waybar + Dunst + nm-applet sincronizados con pywal" -t 3000 -i preferences-desktop-theme
+    notify-send "Sync Complete" "Waybar + Dunst + nm-applet synced with pywal" -t 3000 -i preferences-desktop-theme
 fi
 
 echo "Sincronización completa del sistema finalizada!"

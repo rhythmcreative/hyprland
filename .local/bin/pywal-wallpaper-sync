@@ -26,7 +26,7 @@ apply_pywal() {
     local wallpaper="$1"
     
     if [ ! -f "$wallpaper" ]; then
-        notify-send "Pywal Sync" "Wallpaper no encontrado: $wallpaper" 2>/dev/null
+        notify-send "Pywal Sync" "Wallpaper not found: $wallpaper" 2>/dev/null
         return 1
     fi
     
@@ -40,7 +40,7 @@ apply_pywal() {
     
     # Verificar que los archivos de colores se generaron correctamente
     if [ ! -f ~/.cache/wal/colors-rofi.rasi ]; then
-        notify-send "Pywal" "Error generando colores para rofi" 2>/dev/null
+        notify-send "Pywal" "Error generating colors for rofi" 2>/dev/null
         return 1
     fi
     
@@ -75,7 +75,7 @@ main() {
         if [ -f ~/.cache/wal/wal ]; then
             CURRENT_WALLPAPER=$(cat ~/.cache/wal/wal)
         else
-            notify-send "Pywal Sync" "No se pudo detectar el wallpaper actual"
+            notify-send "Pywal Sync" "Could not detect current wallpaper"
             echo "Error: No se pudo detectar el wallpaper actual"
             exit 1
         fi
@@ -89,7 +89,7 @@ main() {
         reload_components
         echo "Sincronización completada exitosamente"
     else
-        notify-send "Error Pywal" "No se pudo sincronizar el tema" -t 3000 2>/dev/null
+        notify-send "Pywal Error" "Failed to synchronize theme" -t 3000 2>/dev/null
         echo "Error en la sincronización"
         exit 1
     fi
@@ -97,7 +97,7 @@ main() {
 
 # Verificar dependencias
 if ! command -v wal &> /dev/null; then
-    notify-send "Error" "pywal no está instalado" 2>/dev/null
+    notify-send "Error" "pywal is not installed" 2>/dev/null
     echo "Error: pywal no está instalado"
     exit 1
 fi

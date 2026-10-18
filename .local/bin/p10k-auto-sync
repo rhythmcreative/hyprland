@@ -135,5 +135,5 @@ log "Auto-sincronización P10k completada"
 
 # Mostrar notificación discreta
 if command -v notify-send >/dev/null 2>&1; then
-    notify-send "P10k Sync" "Colores actualizados automáticamente" -t 2000 >/dev/null 2>&1 || true
+    notify-send "P10k Sync" "Colors updated automatically" -t 2000 >/dev/null 2>&1 || true
 fi

@@ -344,11 +344,11 @@ ShellRoot {
             const body = (n.body || "").toLowerCase()
             const full = `${app} ${summary} ${body}`
 
-            // Filtrar y silenciar notificaciones repetitivas de cambio de wallpaper / pywal / sync
+            // Filter and silence repetitive background sync / pywal / wallpaper notifications
             const ignoredKeywords = [
-                "pywal", "wallpaper", "sincroniz", "fondo", "sddm", "waybar",
-                "oh my posh", "colores", "tema actualizado", "aplicando",
-                "nm-applet", "p10k", "recargado", "reiniciado", "mako"
+                "pywal", "wallpaper", "sincroniz", "sync", "fondo", "sddm", "waybar",
+                "oh my posh", "colores", "colors", "tema actualizado", "theme updated", "aplicando",
+                "nm-applet", "p10k", "recargado", "reloaded", "reiniciado", "restarted", "mako"
             ]
             const isSpam = ignoredKeywords.some(kw => full.includes(kw))
             if (isSpam) {
@@ -3117,7 +3117,7 @@ ShellRoot {
                             }
                             Item { Layout.fillWidth: true }
                             Text {
-                                text: "ahora"
+                                text: root.t("notif_now", "now")
                                 color: root.colMuted
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 9
@@ -3125,7 +3125,7 @@ ShellRoot {
                         }
 
                         Text {
-                            text: root.notifSummary || "Notificación"
+                            text: root.notifSummary || root.t("notif_default", "Notification")
                             color: root.colFg
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 12

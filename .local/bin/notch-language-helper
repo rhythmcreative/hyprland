@@ -518,7 +518,7 @@ def set_user_locale(loc):
 
     try:
         label = next((l["label"] for l in POPULAR_LOCALES if l["locale"] == clean_loc), clean_loc)
-        subprocess.run(["notify-send", "-a", "Language Settings", "-i", "preferences-desktop-locale", "Idioma de usuario actualizado", f"{label}\nSe aplicará completamente al reiniciar la sesión."], capture_output=True, timeout=2)
+        subprocess.run(["notify-send", "-a", "Language Settings", "-i", "preferences-desktop-locale", "User language updated", f"{label}\nWill take full effect after restarting your session."], capture_output=True, timeout=2)
     except Exception:
         pass
 
@@ -567,7 +567,7 @@ def set_system_locale(loc):
 
     try:
         label = next((l["label"] for l in POPULAR_LOCALES if l["locale"] == clean_loc), clean_loc)
-        subprocess.run(["notify-send", "-a", "Language Settings", "-i", "preferences-desktop-locale", "Idioma del sistema actualizado", f"{label} (localectl)."], capture_output=True, timeout=2)
+        subprocess.run(["notify-send", "-a", "Language Settings", "-i", "preferences-desktop-locale", "System language updated", f"{label} (localectl)."], capture_output=True, timeout=2)
     except Exception:
         pass
 

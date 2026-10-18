@@ -12,7 +12,7 @@ notify() {
 
 # Verificar si bluetoothctl está disponible
 if ! command -v bluetoothctl &> /dev/null; then
-    notify "Error: bluetoothctl no está instalado"
+    notify "Error: bluetoothctl is not installed"
     exit 1
 fi
 
@@ -22,13 +22,13 @@ bt_status=$(bluetoothctl show | grep -i "powered" | awk '{print $2}')
 if [ "$bt_status" = "yes" ]; then
     # Bluetooth está encendido, apagarlo
     bluetoothctl power off
-    notify "Bluetooth desactivado"
-    echo "Bluetooth desactivado"
+    notify "Bluetooth disabled"
+    echo "Bluetooth disabled"
 else
     # Bluetooth está apagado, encenderlo
     rfkill unblock bluetooth 2>/dev/null || true
     sleep 0.2
     bluetoothctl power on
-    notify "Bluetooth activado"
-    echo "Bluetooth activado"
+    notify "Bluetooth enabled"
+    echo "Bluetooth enabled"
 fi

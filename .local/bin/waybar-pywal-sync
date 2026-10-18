@@ -10,7 +10,7 @@ log() {
 
 # Verificar si pywal está instalado
 if ! command -v wal &> /dev/null; then
-    notify-send "Error" "pywal no está instalado" -u critical
+    notify-send "Error" "pywal is not installed" -u critical
     exit 1
 fi
 

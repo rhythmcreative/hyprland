@@ -39,7 +39,7 @@ fi
 # Verificar que inotify está disponible
 if ! command -v inotifywait > /dev/null 2>&1; then
     log "ERROR: inotifywait no está instalado. Instala inotify-tools"
-    notify-send "SDDM Watcher" "Error: Instala inotify-tools para monitoreo automático"
+    notify-send "SDDM Watcher" "Error: Install inotify-tools for automatic monitoring"
     exit 1
 fi
 

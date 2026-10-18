@@ -33,8 +33,8 @@ if pgrep nm-applet > /dev/null; then
     
     # Notificación
     if command -v notify-send > /dev/null; then
-        notify-send "Sincronización completa" \
-                   "nm-applet ahora usa los colores de waybar" \
+        notify-send "Sync Complete" \
+                   "nm-applet now uses Waybar colors" \
                    -t 2000 -i network-wireless 2>/dev/null || true
     fi
 else

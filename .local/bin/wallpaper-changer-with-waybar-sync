@@ -89,21 +89,21 @@ apply_wallpaper_with_waybar_sync() {
 # Verificar directorio de wallpapers
 if [[ ! -d "$WALLPAPER_DIR" ]]; then
     log "ERROR: Directorio $WALLPAPER_DIR no encontrado"
-    notify-send "Error" "Directorio de wallpapers no encontrado" -u critical
+    notify-send "Error" "Wallpapers directory not found" -u critical
     exit 1
 fi
 
 # Verificar motor de wallpaper
 if ! command -v awww &>/dev/null && ! command -v swww &>/dev/null && ! command -v hyprpaper &>/dev/null && ! command -v swaybg &>/dev/null; then
     log "ERROR: Ningun motor de wallpaper instalado"
-    notify-send "Error" "Ningun motor de wallpaper instalado" -u critical
+    notify-send "Error" "No wallpaper engine installed" -u critical
     exit 1
 fi
 
 # Iniciar awww-daemon si awww es el motor
 if command -v awww &>/dev/null && ! pgrep -x "awww-daemon" > /dev/null; then
     log "Iniciando awww-daemon..."
-    notify-send "Iniciando awww..." "Preparando sistema de wallpapers"
+    notify-send "Starting awww..." "Preparing wallpaper system"
     awww-daemon --format xrgb --no-cache &
     sleep 1
 fi
@@ -116,7 +116,7 @@ mapfile -t images < <(find . -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.
 
 if [[ ${#images[@]} -eq 0 ]]; then
     log "ERROR: No se encontraron imágenes"
-    notify-send "Error" "No se encontraron imágenes en el directorio" -u critical
+    notify-send "Error" "No images found in directory" -u critical
     exit 1
 fi
 
@@ -152,7 +152,7 @@ done
 # Verificar que tenemos entradas
 if [[ ! -s "$TEMP_FILE" ]]; then
     log "ERROR: No se pudieron procesar las imágenes"
-    notify-send "Error" "No se pudieron procesar las imágenes" -u critical
+    notify-send "Error" "Could not process images" -u critical
     exit 1
 fi
 
@@ -192,7 +192,7 @@ done
 # Verificar archivo seleccionado
 if [[ -z "$selected_file" ]] || [[ ! -f "$selected_file" ]]; then
     log "ERROR: Archivo no encontrado: $selected"
-    notify-send "Error" "Archivo no encontrado" -u critical
+    notify-send "Error" "File not found: $selected" -u critical
     exit 1
 fi
 

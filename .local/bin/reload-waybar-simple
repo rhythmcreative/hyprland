@@ -14,7 +14,7 @@ log() {
 # Verificar que existen colores de pywal
 if [[ ! -f "$HOME/.cache/wal/colors.sh" ]]; then
     log "ERROR: No hay colores de pywal disponibles"
-    notify-send "Error" "No hay colores de pywal disponibles" -u critical
+    notify-send "Error" "No pywal colors available" -u critical
     exit 1
 fi
 
@@ -58,7 +58,7 @@ if pgrep -x waybar > /dev/null; then
     if pkill -SIGHUP waybar 2>/dev/null; then
         sleep 0.5
         log "Waybar recargado completamente (método SIGHUP)"
-        notify-send "Waybar" "Recargado con colores de pywal" -t 2000 2>/dev/null || true
+        notify-send "Waybar" "Reloaded with pywal colors" -t 2000 2>/dev/null || true
         exit 0
     fi
     
@@ -92,9 +92,9 @@ sleep 1
 
 if pgrep waybar > /dev/null 2>&1; then
     log "Waybar reiniciado exitosamente"
-    notify-send "Waybar" "Reiniciado con colores de pywal" -t 2000 2>/dev/null || true
+    notify-send "Waybar" "Restarted with pywal colors" -t 2000 2>/dev/null || true
 else
     log "ERROR: No se pudo reiniciar waybar"
-    notify-send "Error" "No se pudo reiniciar waybar" -u critical 2>/dev/null || true
+    notify-send "Error" "Failed to restart Waybar" -u critical 2>/dev/null || true
     exit 1
 fi

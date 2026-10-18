@@ -18,7 +18,7 @@ if [ -z "$code" ]; then
 fi
 
 if [ "${1:-}" = "--notify" ] && command -v notify-send >/dev/null 2>&1 && [ -n "$code" ]; then
-    notify-send "Teclado" "$code" -t 1200 -i input-keyboard >/dev/null 2>&1 || true
+    notify-send "Keyboard" "$code" -t 1200 -i input-keyboard >/dev/null 2>&1 || true
 fi
 
 echo "${code:-desconocido}"

@@ -256,8 +256,8 @@ update_nm_applet_css() {
     
     # Notificación de éxito
     if command -v notify-send > /dev/null; then
-        notify-send "nm-applet CSS Actualizado" \
-            "Colores sincronizados sin reiniciar" \
+        notify-send "nm-applet CSS Updated" \
+            "Colors synchronized without restarting" \
             -t 3000 -i network-wireless 2>/dev/null || true
     fi
     

@@ -5,26 +5,20 @@ import json
 import re
 
 def get_saved_wifi_profiles():
-# Return saved Wi-Fi SSID -> UUID mappings from NetworkManager.
+    # Return saved Wi-Fi SSID/NAME -> UUID mappings from NetworkManager.
     profiles = {}
     try:
         out = subprocess.check_output(
-            ['nmcli', '-t', '-f', 'UUID,TYPE', 'connection', 'show'],
+            ['nmcli', '-t', '-f', 'UUID,TYPE,NAME', 'connection', 'show'],
             text=True, stderr=subprocess.DEVNULL
         )
         for line in out.splitlines():
-            uuid, sep, kind = line.partition(':')
-            if not sep or kind != '802-11-wireless' or not uuid:
-                continue
-            try:
-                ssid = subprocess.check_output(
-                    ['nmcli', '-g', '802-11-wireless.ssid', 'connection', 'show', 'uuid', uuid],
-                    text=True, stderr=subprocess.DEVNULL, timeout=3
-                ).strip()
-                if ssid:
-                    profiles.setdefault(ssid, uuid)
-            except Exception:
-                continue
+            parts = line.split(':')
+            if len(parts) >= 3 and parts[1] == '802-11-wireless' and parts[0]:
+                uuid = parts[0].strip()
+                name = parts[2].replace(r'\:', ':').strip()
+                if name and uuid:
+                    profiles.setdefault(name, uuid)
     except Exception:
         pass
     return profiles
@@ -81,18 +75,31 @@ def get_wifi_list(rescan=False):
 
 def connect_enterprise(ssid, identity, password, anon_identity=None):
     try:
+        # If anonymous identity is not explicitly given and identity is an email/realm (e.g. user@domain.edu),
+        # eduroam and 802.1X standards require outer identity as anonymous@domain.edu for RADIUS proxy routing.
+        if not anon_identity and '@' in identity:
+            realm = identity.split('@', 1)[1].strip()
+            if realm:
+                anon_identity = f'anonymous@{realm}'
+
+        enterprise_params = [
+            'wifi-sec.key-mgmt', 'wpa-eap',
+            '802-1x.eap', 'peap',
+            '802-1x.phase2-auth', 'mschapv2',
+            '802-1x.identity', identity,
+            '802-1x.password', password,
+            '802-1x.password-flags', '0',
+            '802-11-wireless.cloned-mac-address', 'stable',
+            '802-11-wireless.powersave', '2',
+            'connection.autoconnect', 'yes',
+            'connection.autoconnect-retries', '0'
+        ]
+        if anon_identity:
+            enterprise_params.extend(['802-1x.anonymous-identity', anon_identity])
+
         saved_uuid = get_saved_wifi_profiles().get(ssid)
         if saved_uuid:
-            mod_args = [
-                'nmcli', 'connection', 'modify', saved_uuid,
-                'wifi-sec.key-mgmt', 'wpa-eap',
-                '802-1x.eap', 'peap',
-                '802-1x.phase2-auth', 'mschapv2',
-                '802-1x.identity', identity,
-                '802-1x.password', password
-            ]
-            if anon_identity:
-                mod_args.extend(['802-1x.anonymous-identity', anon_identity])
+            mod_args = ['nmcli', 'connection', 'modify', saved_uuid] + enterprise_params
             subprocess.run(mod_args, check=True, capture_output=True, text=True, timeout=10)
             call_args = ['nmcli', 'connection', 'up', 'uuid', saved_uuid]
         else:
@@ -100,15 +107,8 @@ def connect_enterprise(ssid, identity, password, anon_identity=None):
                 'nmcli', 'connection', 'add',
                 'type', 'wifi',
                 'con-name', ssid,
-                'ssid', ssid,
-                'wifi-sec.key-mgmt', 'wpa-eap',
-                '802-1x.eap', 'peap',
-                '802-1x.phase2-auth', 'mschapv2',
-                '802-1x.identity', identity,
-                '802-1x.password', password
-            ]
-            if anon_identity:
-                add_args.extend(['802-1x.anonymous-identity', anon_identity])
+                'ssid', ssid
+            ] + enterprise_params
             subprocess.run(add_args, check=True, capture_output=True, text=True, timeout=10)
             call_args = ['nmcli', 'connection', 'up', ssid]
 
@@ -159,8 +159,17 @@ def main():
         try:
             saved_uuid = get_saved_wifi_profiles().get(ssid)
             if saved_uuid and not password:
-                # Reuse NetworkManager's saved profile and secret; don't ask for
-                # the password again unless that profile is missing or invalid.
+                # Reuse NetworkManager's saved profile and secret; ensure stability flags are applied
+                try:
+                    subprocess.run(
+                        ['nmcli', 'connection', 'modify', saved_uuid,
+                         '802-11-wireless.cloned-mac-address', 'stable',
+                         '802-11-wireless.powersave', '2',
+                         'connection.autoconnect-retries', '0'],
+                        capture_output=True, text=True, timeout=3
+                    )
+                except Exception:
+                    pass
                 call_args = ['nmcli', 'connection', 'up', 'uuid', saved_uuid]
             else:
                 call_args = ['nmcli', 'dev', 'wifi', 'connect', ssid]

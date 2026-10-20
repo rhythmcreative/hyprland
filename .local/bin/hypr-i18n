@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# hypr-i18n: User-facing string localization helper for Hyprland scripts
+# Usage: hypr-i18n <key> [arg1] [arg2] ...
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm"
+LANG_FILE="$CONFIG_DIR/language"
+LANG_CODE="es"
+
+if [ -f "$LANG_FILE" ]; then
+    read -r raw_lang < "$LANG_FILE"
+    raw_lang=$(echo "$raw_lang" | tr -d '[:space:]')
+    [ -n "$raw_lang" ] && LANG_CODE="$raw_lang"
+elif [ -n "${LANG:-}" ]; then
+    case "$LANG" in
+        es*|ES*) LANG_CODE="es" ;;
+        *) LANG_CODE="en" ;;
+    esac
+fi
+
+I18N_DIR="$CONFIG_DIR/i18n"
+LANG_CATALOG="$I18N_DIR/$LANG_CODE/scripts.json"
+EN_CATALOG="$I18N_DIR/en/scripts.json"
+
+KEY="${1:-}"
+if [ -z "$KEY" ]; then
+    echo ""
+    exit 0
+fi
+shift
+
+string=""
+if [ -f "$LANG_CATALOG" ]; then
+    string=$(jq -r --arg k "$KEY" '.[$k] // empty' "$LANG_CATALOG" 2>/dev/null)
+fi
+if [ -z "$string" ] && [ -f "$EN_CATALOG" ]; then
+    string=$(jq -r --arg k "$KEY" '.[$k] // empty' "$EN_CATALOG" 2>/dev/null)
+fi
+if [ -z "$string" ]; then
+    string="$KEY"
+fi
+
+i=1
+for arg in "$@"; do
+    string="${string//%$i/$arg}"
+    i=$((i + 1))
+done
+
+printf '%s\n' "$string"

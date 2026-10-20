@@ -531,6 +531,7 @@ hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))
 -- dispatcher de la API de lua.
 hl.bind("ALT + Return", hl.dsp.exec_cmd("hyprctl eval 'hl.dispatch(hl.dsp.window.fullscreen(0))'"))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("~/.local/bin/hypr-language menu"))
 hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("~/.local/bin/gpu-selector"))
 hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("~/.config/hypr/scripts/toggle_performance.sh"))
 hl.bind(mainMod .. " + H", hl.dsp.exec_cmd("quickshell ipc -p ~/.config/quickshell/waybar-island/shell.qml --any-display call island toggleSysMon"))

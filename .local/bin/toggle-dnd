@@ -28,7 +28,11 @@ dnd_off() {
 }
 
 dnd_notify() {
-    notify-send "Do Not Disturb" "$1" 2>/dev/null || true
+    local title msg
+    title=$(hypr-i18n dnd.title 2>/dev/null)
+    [ -z "$title" ] && title="Do Not Disturb"
+    msg="$1"
+    notify-send "$title" "$msg" 2>/dev/null || true
 }
 
 case "$ACTION" in
@@ -41,19 +45,27 @@ case "$ACTION" in
         ;;
     on)
         dnd_on
-        dnd_notify "Enabled - notifications silenced"
+        msg_on=$(hypr-i18n dnd.enabled 2>/dev/null)
+        [ -z "$msg_on" ] && msg_on="Enabled - notifications silenced"
+        dnd_notify "$msg_on"
         ;;
     off)
         dnd_off
-        dnd_notify "Disabled - notifications allowed"
+        msg_off=$(hypr-i18n dnd.disabled 2>/dev/null)
+        [ -z "$msg_off" ] && msg_off="Disabled - notifications allowed"
+        dnd_notify "$msg_off"
         ;;
     toggle|*)
         if [ -f "$STATE_FILE" ]; then
             dnd_off
-            dnd_notify "Disabled - notifications allowed"
+            msg_off=$(hypr-i18n dnd.disabled 2>/dev/null)
+            [ -z "$msg_off" ] && msg_off="Disabled - notifications allowed"
+            dnd_notify "$msg_off"
         else
             dnd_on
-            dnd_notify "Enabled - notifications silenced"
+            msg_on=$(hypr-i18n dnd.enabled 2>/dev/null)
+            [ -z "$msg_on" ] && msg_on="Enabled - notifications silenced"
+            dnd_notify "$msg_on"
         fi
         ;;
 esac

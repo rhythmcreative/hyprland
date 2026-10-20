@@ -524,6 +524,13 @@ def set_user_locale(loc):
 
     # Auto-add matching keyboard layout if available
     lang_code = clean_loc.split("_")[0].split(".")[0].lower()
+    try:
+        rhythm_lang_file = Path.home() / ".config/rhythm/language"
+        rhythm_lang_file.parent.mkdir(parents=True, exist_ok=True)
+        rhythm_lang_file.write_text(f"{lang_code}\n", encoding="utf-8")
+        subprocess.run(["quickshell", "ipc", "-p", str(Path.home() / ".config/quickshell/waybar-island/shell.qml"), "--any-display", "call", "language", "set", lang_code], capture_output=True, timeout=2)
+    except Exception:
+        pass
     locale_layout_map = {
         "es": "es", "en": "us", "fr": "fr", "de": "de", "it": "it",
         "pt": "pt", "ru": "ru", "ja": "jp", "zh": "cn", "cmn": "cn",

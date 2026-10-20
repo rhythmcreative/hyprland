@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# hypr-language: Manage active language for Hyprland, Quickshell and user environment
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm"
+LANG_FILE="$CONFIG_DIR/language"
+LOCALES_JSON="$CONFIG_DIR/i18n/locales.json"
+
+current_language() {
+    if [ -f "$LANG_FILE" ]; then
+        code=$(head -n 1 "$LANG_FILE" | tr -d '[:space:]')
+        if [ -n "$code" ]; then
+            echo "$code"
+            return
+        fi
+    fi
+    echo "es"
+}
+
+list_languages() {
+    jq -r 'to_entries[] | "\(.key)\t\(.value.name)\t\(.value.flag)\t\(.value.locale)"' "$LOCALES_JSON" 2>/dev/null
+}
+
+set_language() {
+    local target="$1"
+    local locale name flag
+    locale=$(jq -r --arg c "$target" '.[$c].locale // empty' "$LOCALES_JSON" 2>/dev/null)
+    if [ -z "$locale" ]; then
+        echo "Error: Unknown language code '$target'. Run 'hypr-language list' to see available codes." >&2
+        exit 1
+    fi
+    name=$(jq -r --arg c "$target" '.[$c].name' "$LOCALES_JSON" 2>/dev/null)
+    flag=$(jq -r --arg c "$target" '.[$c].flag' "$LOCALES_JSON" 2>/dev/null)
+
+    # 1. Save language choice
+    mkdir -p "$CONFIG_DIR"
+    echo "$target" > "$LANG_FILE"
+
+    # 2. Update session environment for UWSM and systemd
+    UWSM_ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/uwsm/env.d"
+    mkdir -p "$UWSM_ENV_DIR"
+    echo "export LANG=$locale" > "$UWSM_ENV_DIR/50-hypr-language"
+    echo "export LC_ALL=$locale" >> "$UWSM_ENV_DIR/50-hypr-language"
+
+    # 3. Propagate to active Hyprland session and DBus
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+        hyprctl setenv LANG "$locale" >/dev/null 2>&1 || true
+        hyprctl setenv LC_ALL "$locale" >/dev/null 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user import-environment LANG LC_ALL >/dev/null 2>&1 || true
+    fi
+    if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+        dbus-update-activation-environment --systemd LANG LC_ALL >/dev/null 2>&1 || true
+    fi
+
+    # 4. Notify Quickshell IPC
+    if quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call language set "$target" >/dev/null 2>&1; then
+        :
+    fi
+
+    # 5. Send desktop notification
+    title=$(hypr-i18n lang.changed_title 2>/dev/null || echo "Language Changed")
+    body=$(hypr-i18n lang.changed_body "$flag $name" 2>/dev/null || echo "Switched to $flag $name")
+    notify-send -a "Language" -i "preferences-desktop-locale" "$title" "$body" -t 2500 2>/dev/null || true
+    echo "Switched language to: $flag $name ($target)"
+}
+
+toggle_language() {
+    curr=$(current_language)
+    if [ "$curr" = "es" ]; then
+        set_language "en"
+    else
+        set_language "es"
+    fi
+}
+
+menu_selector() {
+    local entries=""
+    while IFS=$'\t' read -r code name flag loc; do
+        entries+="$flag  $name ($code)\n"
+    done < <(list_languages)
+
+    chosen=$(printf "$entries" | rofi-themed -dmenu -i -p "Language" 2>/dev/null || printf "$entries" | rofi -dmenu -i -p "Language" 2>/dev/null)
+    if [ -n "$chosen" ]; then
+        selected_code=$(echo "$chosen" | grep -oP '\(\K[a-z]{2}(?=\))')
+        if [ -n "$selected_code" ]; then
+            set_language "$selected_code"
+        fi
+    fi
+}
+
+case "${1:-}" in
+    "")
+        current_language
+        ;;
+    list)
+        list_languages
+        ;;
+    toggle)
+        toggle_language
+        ;;
+    menu)
+        menu_selector
+        ;;
+    set)
+        set_language "${2:-}"
+        ;;
+    es|en)
+        set_language "$1"
+        ;;
+    *)
+        echo "Usage: hypr-language [es|en|set <code>|toggle|list|menu]" >&2
+        exit 1
+        ;;
+esac

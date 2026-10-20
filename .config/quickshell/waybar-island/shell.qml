@@ -4865,9 +4865,15 @@ ShellRoot {
                                 }
                                 MouseArea {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.runCmd("~/.local/bin/toggle-keyboard-layout")
-                                        kbProc.running = true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            root.runCmd("~/.local/bin/toggle-keyboard-layout --notify")
+                                            kbProc.running = true
+                                        } else {
+                                            islandWin.expanded = false
+                                            root.runCmd("~/.local/bin/keyboard-menu")
+                                        }
                                     }
                                 }
                             }

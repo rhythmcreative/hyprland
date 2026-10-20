@@ -588,6 +588,7 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 -- Misc
 hl.bind(mainMod .. " + F10", hl.dsp.exec_cmd("~/.local/bin/toggle-bluetooth"))
 hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("~/.local/bin/toggle-keyboard-layout"))
+hl.bind(mainMod .. " + SHIFT + K", hl.dsp.exec_cmd("~/.local/bin/keyboard-menu"))
 hl.bind(mainMod .. " + ALT + K", hl.dsp.exec_cmd("~/.local/bin/cast-screen"))
 hl.bind("XF86KbdBrightnessDown", hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight down"))
 hl.bind("XF86KbdBrightnessUp",   hl.dsp.exec_cmd("~/.local/bin/keyboard-backlight up"))

@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+keyboard-menu: Omarchy-style interactive keyboard layout and language manager.
+Displays active layout, configured layouts, hotkeys, and quick actions using Rofi
+themed with pywal / Material You.
+"""
+
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+
+HELPER = str(Path.home() / ".local/bin/notch-language-helper")
+ROFI_THEMED = str(Path.home() / ".local/bin/rofi-themed")
+THEME_FILE = str(Path.home() / ".config/rofi/settings.rasi")
+LANG_FILE = Path.home() / ".config/rhythm/language"
+
+def get_current_ui_language():
+    try:
+        if LANG_FILE.exists():
+            return LANG_FILE.read_text(encoding="utf-8").strip().lower()
+    except Exception:
+        pass
+    return "es"
+
+IS_ES = get_current_ui_language().startswith("es")
+
+# Translations dictionary
+T = {
+    "menu_title": "Distribución de Teclado" if IS_ES else "Keyboard Layout",
+    "search_hint": "Buscar o seleccionar distribución..." if IS_ES else "Search or select layout...",
+    "active_badge": "[Activo]" if IS_ES else "[Active]",
+    "add_layout": "󰐕  Añadir distribución de teclado..." if IS_ES else "󰐕  Add keyboard layout...",
+    "remove_layout": "󰆴  Eliminar distribución..." if IS_ES else "󰆴  Remove keyboard layout...",
+    "switch_hotkey": "󰌌  Atajo para alternar distribución..." if IS_ES else "󰌌  Switch hotkey shortcut...",
+    "ui_language": "󰗊  Idioma de la interfaz..." if IS_ES else "󰗊  Interface display language...",
+    "edit_config": "󰈙  Abrir configuración de teclado (hyprland.lua)..." if IS_ES else "󰈙  Edit keyboard configuration (hyprland.lua)...",
+    "hotkey_current": "Actual" if IS_ES else "Current",
+    "hotkey_none": "Ninguno (Desactivado)" if IS_ES else "None (Disabled)",
+    "cannot_remove_single": "No puedes eliminar la única distribución configurada." if IS_ES else "Cannot remove the only configured layout.",
+    "switched_to": "Distribución cambiada a" if IS_ES else "Switched layout to",
+    "layout_added": "Distribución añadida" if IS_ES else "Layout added",
+    "layout_removed": "Distribución eliminada" if IS_ES else "Layout removed",
+    "hotkey_updated": "Atajo de conmutación actualizado" if IS_ES else "Switch hotkey updated",
+    "choose_layout_to_add": "Seleccionar distribución para añadir" if IS_ES else "Select layout to add",
+    "choose_layout_to_remove": "Seleccionar distribución a eliminar" if IS_ES else "Select layout to remove",
+    "choose_hotkey": "Seleccionar atajo para alternar teclado" if IS_ES else "Select keyboard switch shortcut",
+}
+
+FLAGS = {
+    "us": "🇺🇸",
+    "es": "🇪🇸",
+    "latam": "🌎",
+    "gb": "🇬🇧",
+    "uk": "🇬🇧",
+    "de": "🇩🇪",
+    "fr": "🇫🇷",
+    "it": "🇮🇹",
+    "pt": "🇵🇹",
+    "br": "🇧🇷",
+    "ru": "🇷🇺",
+    "jp": "🇯🇵",
+    "kr": "🇰🇷",
+    "cn": "🇨🇳",
+    "ara": "🇸🇦",
+    "tr": "🇹🇷",
+    "pl": "🇵🇱",
+    "nl": "🇳🇱",
+    "se": "🇸🇪",
+    "no": "🇳🇴",
+    "dk": "🇩🇰",
+    "fi": "🇫🇮",
+    "gr": "🇬🇷",
+    "ua": "🇺🇦",
+    "cz": "🇨🇿",
+    "ro": "🇷🇴",
+    "hu": "🇭🇺",
+    "al": "🇦🇱",
+    "am": "🇦🇲",
+    "et": "🇪🇹",
+}
+
+def notify(title, msg):
+    try:
+        subprocess.run(
+            ["notify-send", "-a", "Keyboard", "-i", "input-keyboard", title, msg, "-t", "2200"],
+            capture_output=True,
+            timeout=1.5
+        )
+    except Exception:
+        pass
+
+def get_active_monitor():
+    try:
+        res = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=1.5)
+        if res.returncode == 0:
+            mons = json.loads(res.stdout)
+            for m in mons:
+                if m.get("focused"):
+                    return m.get("name") or "eDP-1"
+            if mons:
+                return mons[0].get("name") or "eDP-1"
+    except Exception:
+        pass
+    return "eDP-1"
+
+def run_helper(cmd_args):
+    try:
+        res = subprocess.run([HELPER] + cmd_args, capture_output=True, text=True, timeout=3.5)
+        if res.returncode == 0 and res.stdout.strip():
+            return json.loads(res.stdout)
+    except Exception:
+        pass
+    return {}
+
+def show_rofi(entries, prompt, width=640, height=480, selected_row=None):
+    mon = get_active_monitor()
+    theme_str = f"window {{ width: {width}px; height: {height}px; }} listview {{ lines: 10; }} entry {{ placeholder: \"{T['search_hint']}\"; }}"
+    cmd = [
+        ROFI_THEMED,
+        "-dmenu",
+        "-i",
+        "-p", prompt,
+        "-theme", THEME_FILE,
+        "-theme-str", theme_str,
+        "-m", mon
+    ]
+    if selected_row is not None:
+        cmd += ["-selected-row", str(selected_row)]
+
+    input_text = "\n".join(entries)
+    try:
+        proc = subprocess.run(cmd, input=input_text, text=True, capture_output=True, timeout=120)
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+def handle_add_layout():
+    available = run_helper(["available_layouts"])
+    if not isinstance(available, list) or not available:
+        notify(T["menu_title"], "No se pudieron cargar distribuciones / Could not load layouts")
+        return
+
+    status = run_helper(["status"])
+    curr_codes = [l.get("code", "").lower() for l in status.get("layouts", [])]
+
+    entries = []
+    lookup = {}
+    for item in available:
+        code = item.get("code", "").lower()
+        if code in curr_codes:
+            continue
+        flag = item.get("flag") or FLAGS.get(code, "󰌌")
+        label = item.get("label", code)
+        entry_text = f"{flag}  {label}  ({code})"
+        entries.append(entry_text)
+        lookup[entry_text] = code
+
+    if not entries:
+        notify(T["menu_title"], "Todas las distribuciones ya están añadidas")
+        return
+
+    chosen = show_rofi(entries, T["choose_layout_to_add"], width=620, height=520)
+    if chosen and chosen in lookup:
+        target_code = lookup[chosen]
+        res = run_helper(["add", target_code])
+        if res.get("status") == "added":
+            notify(T["layout_added"], f"{chosen}")
+        elif res.get("status") == "already_present":
+            notify(T["layout_added"], f"{target_code} ya está configurado")
+
+def handle_remove_layout(layouts):
+    if len(layouts) <= 1:
+        notify(T["menu_title"], T["cannot_remove_single"])
+        return
+
+    entries = []
+    lookup = {}
+    for l in layouts:
+        code = l.get("code", "").lower()
+        flag = FLAGS.get(code, "󰌌")
+        label = l.get("label", code)
+        entry_text = f"󰆴  {flag}  {label}  ({code.upper()})"
+        entries.append(entry_text)
+        lookup[entry_text] = l.get("id", 0)
+
+    chosen = show_rofi(entries, T["choose_layout_to_remove"], width=580, height=360)
+    if chosen and chosen in lookup:
+        target_id = lookup[chosen]
+        res = run_helper(["remove", str(target_id)])
+        if res.get("status") == "removed":
+            notify(T["layout_removed"], f"{chosen}")
+
+def handle_hotkey(status):
+    available_hotkeys = status.get("available_hotkeys", [])
+    current_opt = status.get("hotkey_option", "")
+
+    entries = []
+    lookup = {}
+    for hk in available_hotkeys:
+        opt = hk.get("option", "")
+        lbl = hk.get("label", "")
+        if not opt:
+            lbl = T["hotkey_none"]
+        is_active = (opt == current_opt)
+        icon = "●" if is_active else "○"
+        badge = f"  {T['active_badge']}" if is_active else ""
+        entry_text = f"{icon}  󰌌  {lbl}{badge}"
+        entries.append(entry_text)
+        lookup[entry_text] = opt
+
+    chosen = show_rofi(entries, T["choose_hotkey"], width=580, height=400)
+    if chosen and chosen in lookup:
+        target_opt = lookup[chosen]
+        run_helper(["set_hotkey", target_opt])
+        notify(T["hotkey_updated"], chosen.replace("●", "").replace("○", "").strip())
+
+def handle_edit_config():
+    editor = os.environ.get("EDITOR", "nvim")
+    config_file = str(Path.home() / ".config/hypr/hyprland.lua")
+    if not os.path.exists(config_file):
+        config_file = str(Path.home() / ".config/hypr/hyprland.conf")
+    subprocess.Popen(["kitty", "-e", editor, config_file])
+
+def main():
+    status = run_helper(["status"])
+    layouts = status.get("layouts", [])
+    active_idx = status.get("active_index", 0)
+    current_hotkey_label = status.get("current_hotkey", "None")
+    if not status.get("hotkey_option"):
+        current_hotkey_label = T["hotkey_none"]
+
+    ui_lang_code = get_current_ui_language()
+    ui_lang_label = "🇪🇸 Español" if ui_lang_code.startswith("es") else "🇺🇸 English"
+
+    entries = []
+    lookup = {}
+
+    # 1. Configured Layouts
+    for l in layouts:
+        code = l.get("code", "").lower()
+        flag = FLAGS.get(code, "󰌌")
+        label = l.get("label", code)
+        is_active = l.get("active", False)
+        bullet = "●" if is_active else "○"
+        badge = f"  {T['active_badge']}" if is_active else ""
+        # Format aligned
+        entry_text = f"{bullet}  {flag}  {label:<28} ({code.upper()}){badge}"
+        entries.append(entry_text)
+        lookup[entry_text] = {"type": "switch", "id": l.get("id", 0), "code": code, "label": label, "active": is_active}
+
+    # Separator
+    sep = "─" * 48
+    entries.append(sep)
+    lookup[sep] = {"type": "noop"}
+
+    # 2. Action items
+    add_text = T["add_layout"]
+    entries.append(add_text)
+    lookup[add_text] = {"type": "add"}
+
+    rem_text = T["remove_layout"]
+    entries.append(rem_text)
+    lookup[rem_text] = {"type": "remove"}
+
+    hk_text = f"{T['switch_hotkey']} [{current_hotkey_label}]"
+    entries.append(hk_text)
+    lookup[hk_text] = {"type": "hotkey"}
+
+    lang_text = f"{T['ui_language']} [{ui_lang_label}]"
+    entries.append(lang_text)
+    lookup[lang_text] = {"type": "language"}
+
+    cfg_text = T["edit_config"]
+    entries.append(cfg_text)
+    lookup[cfg_text] = {"type": "config"}
+
+    # Display Rofi
+    chosen = show_rofi(entries, T["menu_title"], width=620, height=480, selected_row=active_idx)
+    if not chosen or chosen not in lookup:
+        return
+
+    action = lookup[chosen]
+    act_type = action.get("type")
+
+    if act_type == "switch":
+        target_id = action.get("id")
+        target_label = action.get("label")
+        code = action.get("code")
+        if action.get("active"):
+            notify(T["menu_title"], f"{target_label} ({code.upper()}) ya está activo / already active")
+            return
+        res = run_helper(["switch", str(target_id)])
+        flag = FLAGS.get(code, "󰌌")
+        notify(T["switched_to"], f"{flag} {target_label} ({code.upper()})")
+
+    elif act_type == "add":
+        handle_add_layout()
+
+    elif act_type == "remove":
+        handle_remove_layout(layouts)
+
+    elif act_type == "hotkey":
+        handle_hotkey(status)
+
+    elif act_type == "language":
+        hypr_lang = str(Path.home() / ".local/bin/hypr-language")
+        subprocess.run([hypr_lang, "menu"])
+
+    elif act_type == "config":
+        handle_edit_config()
+
+if __name__ == "__main__":
+    main()

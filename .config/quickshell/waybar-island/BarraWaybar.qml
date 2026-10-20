@@ -834,8 +834,13 @@ print(f\"{bars}|{overall_pct}\")
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        barWin.run("$HOME/.local/bin/notch-language-helper switch 2>/dev/null || $HOME/.local/bin/toggle-keyboard-layout 2>/dev/null || hyprctl switchxkblayout all next")
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.RightButton) {
+                            barWin.run("$HOME/.local/bin/toggle-keyboard-layout --notify")
+                        } else {
+                            barWin.run("$HOME/.local/bin/keyboard-menu")
+                        }
                     }
                 }
             }

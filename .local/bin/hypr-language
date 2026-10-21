@@ -35,30 +35,45 @@ set_language() {
     mkdir -p "$CONFIG_DIR"
     echo "$target" > "$LANG_FILE"
 
-    # 2. Update session environment for UWSM and systemd
+    # 2. Update session environment for UWSM and environment.d
     UWSM_ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/uwsm/env.d"
     mkdir -p "$UWSM_ENV_DIR"
-    echo "export LANG=$locale" > "$UWSM_ENV_DIR/50-hypr-language"
-    echo "export LC_ALL=$locale" >> "$UWSM_ENV_DIR/50-hypr-language"
+    printf 'export LANG=%s\nexport LC_MESSAGES=%s\nexport LC_ALL=%s\n' "$locale" "$locale" "$locale" > "$UWSM_ENV_DIR/50-hypr-language"
 
-    # 3. Propagate to active Hyprland session and DBus
+    ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/environment.d"
+    mkdir -p "$ENV_DIR"
+    printf 'LANG="%s"\nLC_MESSAGES="%s"\nLC_ALL="%s"\n' "$locale" "$locale" "$locale" > "$ENV_DIR/10-locale.conf"
+
+    # Standard Arch / XDG user locale file
+    printf 'LANG="%s"\nLC_MESSAGES="%s"\nLC_ALL="%s"\n' "$locale" "$locale" "$locale" > "${XDG_CONFIG_HOME:-$HOME/.config}/locale.conf"
+
+    # 3. Update ~/.profile so login shells & future terminals get the new locale
+    printf 'export LANG="%s"\nexport LC_MESSAGES="%s"\nexport LC_ALL="%s"\n' "$locale" "$locale" "$locale" > "$HOME/.profile"
+
+    # 4. Update system-wide locale via localectl
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -n localectl set-locale "LANG=$locale" "LC_MESSAGES=$locale" >/dev/null 2>&1 || true
+    fi
+
+    # 5. Propagate to active Hyprland session and DBus
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
         hyprctl setenv LANG "$locale" >/dev/null 2>&1 || true
         hyprctl setenv LC_ALL "$locale" >/dev/null 2>&1 || true
+        hyprctl setenv LC_MESSAGES "$locale" >/dev/null 2>&1 || true
+        hyprctl eval "hl.env(\"LANG\", \"$locale\", true)" >/dev/null 2>&1 || true
+        hyprctl eval "hl.env(\"LC_ALL\", \"$locale\", true)" >/dev/null 2>&1 || true
     fi
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl --user import-environment LANG LC_ALL >/dev/null 2>&1 || true
+        systemctl --user import-environment LANG LC_ALL LC_MESSAGES >/dev/null 2>&1 || true
     fi
     if command -v dbus-update-activation-environment >/dev/null 2>&1; then
-        dbus-update-activation-environment --systemd LANG LC_ALL >/dev/null 2>&1 || true
+        dbus-update-activation-environment --systemd LANG LC_ALL LC_MESSAGES >/dev/null 2>&1 || true
     fi
 
-    # 4. Notify Quickshell IPC
-    if quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call language set "$target" >/dev/null 2>&1; then
-        :
-    fi
+    # 6. Notify Quickshell IPC
+    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call language set "$target" >/dev/null 2>&1 || true
 
-    # 5. Send desktop notification
+    # 7. Send desktop notification
     title=$(hypr-i18n lang.changed_title 2>/dev/null || echo "Language Changed")
     body=$(hypr-i18n lang.changed_body "$flag $name" 2>/dev/null || echo "Switched to $flag $name")
     notify-send -a "Language" -i "preferences-desktop-locale" "$title" "$body" -t 2500 2>/dev/null || true

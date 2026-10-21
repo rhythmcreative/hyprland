@@ -76,26 +76,38 @@ notify() {
     fi
 }
 
-# Obtener estado de Wi-Fi
+# Obtener estado de Wi-Fi y cadenas traducidas
 WIFI_STATE=$(nmcli -fields WIFI g 2>/dev/null | tail -n 1 | tr -d ' ')
 
+T_DIS_WIFI=$(hypr-i18n wifi.toggle_off 2>/dev/null || echo "󰖪  Disable Wi-Fi")
+T_EN_WIFI=$(hypr-i18n wifi.toggle_on 2>/dev/null || echo "󰖩  Enable Wi-Fi")
+T_RESCAN=$(hypr-i18n wifi.rescan 2>/dev/null || echo "󰑐  Scan networks again")
+T_OPEN_MGR=$(hypr-i18n wifi.open_settings 2>/dev/null || echo "󰒓  Open Connection Editor (nm-connection-editor)")
+T_HIDDEN=$(hypr-i18n wifi.connect_hidden 2>/dev/null || echo "󱛂  Connect to hidden network (Manual)")
+T_CONN=$(hypr-i18n wifi.connected 2>/dev/null || echo "Connected")
+T_SIGNAL=$(hypr-i18n wifi.signal 2>/dev/null || echo "Signal")
+T_OPEN=$(hypr-i18n wifi.open_network 2>/dev/null || echo "Open")
+T_FORGET=$(hypr-i18n wifi.forget 2>/dev/null || echo "󰆴  Forget this network")
+T_BACK=$(hypr-i18n wifi.back 2>/dev/null || echo "󰅁  Back")
+T_PROMPT=$(hypr-i18n wifi.prompt 2>/dev/null || echo "Wi-Fi Networks")
+
 if [[ "$WIFI_STATE" =~ enabled ]] || [ "$WIFI_STATE" = "enabled" ]; then
-    TOGGLE_TEXT="󰖪  Desactivar Wi-Fi"
+    TOGGLE_TEXT="$T_DIS_WIFI"
 else
-    TOGGLE_TEXT="󰖩  Activar Wi-Fi"
+    TOGGLE_TEXT="$T_EN_WIFI"
 fi
 
 # Si el Wi-Fi esta desactivado, mostrar opcion para activarlo
 if [ "$WIFI_STATE" != "enabled" ]; then
-    CHOSEN=$(echo -e "$TOGGLE_TEXT\n󰒓  Abrir Administrador (nm-connection-editor)" | rofi-themed -dmenu -i -p "Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    CHOSEN=$(echo -e "$TOGGLE_TEXT\n$T_OPEN_MGR" | rofi-themed -dmenu -i -p "$T_PROMPT" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$CHOSEN" in
-        *"Activar Wi-Fi"*)
+        *"Activar Wi-Fi"*|*"Enable Wi-Fi"*)
             nmcli radio wifi on
-            notify "Wi-Fi activado. Buscando redes..."
+            notify "$(hypr-i18n wifi.scanning 2>/dev/null || echo "Wi-Fi enabled. Scanning networks...")"
             sleep 2
             exec "$0"
             ;;
-        *"Abrir Administrador"*)
+        *"Abrir Administrador"*|*"Open Connection Editor"*)
             nm-connection-editor &
             ;;
     esac
@@ -110,12 +122,12 @@ NET_ITEMS=""
 
 while IFS=: read -r in_use ssid security bars signal; do
     [ -z "$ssid" ] && continue
-    sec_label="Abierta"
+    sec_label="$T_OPEN"
     [ -n "$security" ] && [ "$security" != "--" ] && sec_label="$security"
 
     if [ "$in_use" = "*" ]; then
         ACTIVE_CONN="$ssid"
-        NET_ITEMS="${NET_ITEMS}󰤨  $ssid (Conectado) │ Señal: ${signal}% ($bars) │ $sec_label\n"
+        NET_ITEMS="${NET_ITEMS}󰤨  $ssid ($T_CONN) │ $T_SIGNAL: ${signal}% ($bars) │ $sec_label\n"
     else
         # Icono segun senal
         if [ "$signal" -ge 75 ]; then
@@ -127,46 +139,46 @@ while IFS=: read -r in_use ssid security bars signal; do
         else
             icon="󰤟"
         fi
-        [ "$sec_label" != "Abierta" ] && icon="${icon}"
-        NET_ITEMS="${NET_ITEMS}${icon}  $ssid │ Señal: ${signal}% ($bars) │ $sec_label\n"
+        [ "$sec_label" != "$T_OPEN" ] && icon="${icon}"
+        NET_ITEMS="${NET_ITEMS}${icon}  $ssid │ $T_SIGNAL: ${signal}% ($bars) │ $sec_label\n"
     fi
 done <<< "$RAW_NETWORKS"
 
 # Cabecera de acciones
-HEADER="$TOGGLE_TEXT\n󰑐  Escanear redes de nuevo\n󰒓  Abrir Administrador de Conexiones\n󱛂  Conectar a red oculta (Manual)\n────────────────────────────────────────"
+HEADER="$TOGGLE_TEXT\n$T_RESCAN\n$T_OPEN_MGR\n$T_HIDDEN\n────────────────────────────────────────"
 
 MENU_CONTENT=$(echo -e "${HEADER}\n${NET_ITEMS}")
 
-CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "Redes Wi-Fi" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "$T_PROMPT" -theme "$THEME_FILE" -m "$ACTIVE_MON")
 
 [ -z "$CHOSEN" ] && exit 0
 [[ "$CHOSEN" =~ ^─ ]] && exit 0
 
 case "$CHOSEN" in
-    *"Desactivar Wi-Fi"*)
+    *"Desactivar Wi-Fi"*|*"Disable Wi-Fi"*)
         nmcli radio wifi off
-        notify "Wi-Fi desactivado"
+        notify "$(hypr-i18n wifi.disabled 2>/dev/null || echo "Wi-Fi disabled")"
         exit 0
         ;;
-    *"Activar Wi-Fi"*)
+    *"Activar Wi-Fi"*|*"Enable Wi-Fi"*)
         nmcli radio wifi on
-        notify "Wi-Fi activado"
+        notify "$(hypr-i18n wifi.enabled 2>/dev/null || echo "Wi-Fi enabled")"
         exit 0
         ;;
-    *"Escanear redes"*)
-        notify "Escaneando redes disponibles..."
+    *"Escanear redes"*|*"Scan networks"*)
+        notify "$(hypr-i18n wifi.scanning 2>/dev/null || echo "Scanning available networks...")"
         nmcli device wifi rescan 2>/dev/null || true
         sleep 1.5
         exec "$0"
         ;;
-    *"Abrir Administrador"*)
+    *"Abrir Administrador"*|*"Open Connection Editor"*)
         nm-connection-editor &
         exit 0
         ;;
-    *"Conectar a red oculta"*)
-        HIDDEN_SSID=$(rofi-themed -dmenu -p "Nombre de red (SSID)" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    *"red oculta"*|*"hidden network"*)
+        HIDDEN_SSID=$(rofi-themed -dmenu -p "$(hypr-i18n wifi.ssid_prompt 2>/dev/null || echo "Network Name (SSID)")" -theme "$THEME_FILE" -m "$ACTIVE_MON")
         [ -z "$HIDDEN_SSID" ] && exit 0
-        HIDDEN_PASS=$(rofi-themed -dmenu -password -p "Contraseña para $HIDDEN_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+        HIDDEN_PASS=$(rofi-themed -dmenu -password -p "$(hypr-i18n wifi.pass_prompt "$HIDDEN_SSID" 2>/dev/null || echo "Password for $HIDDEN_SSID")" -theme "$THEME_FILE" -m "$ACTIVE_MON")
         if [ -n "$HIDDEN_PASS" ]; then
             nmcli dev wifi connect "$HIDDEN_SSID" password "$HIDDEN_PASS" hidden yes
         else
@@ -177,21 +189,22 @@ case "$CHOSEN" in
 esac
 
 # Extraer el SSID seleccionado
-SELECTED_SSID=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰤨󰤥󰤢󰤟󰖩󰖪* ]+//' | sed 's/ (Conectado)//' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+SELECTED_SSID=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰤨󰤥󰤢󰤟󰖩󰖪* ]+//' | sed -E "s/ \($T_CONN|Conectado|Connected\)//" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
 [ -z "$SELECTED_SSID" ] && exit 0
 
 # Si es la red activa, ofrecer desconectar u olvidar
 if [ "$SELECTED_SSID" = "$ACTIVE_CONN" ]; then
-    ACTION=$(echo -e "󰅖  Desconectar de $SELECTED_SSID\n󰆴  Olvidar esta red\n󰅁  Volver" | rofi-themed -dmenu -i -p "$SELECTED_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    T_DISCONN_ACTION=$(hypr-i18n wifi.disconnect "$SELECTED_SSID" 2>/dev/null || echo "󰅖  Disconnect from $SELECTED_SSID")
+    ACTION=$(echo -e "$T_DISCONN_ACTION\n$T_FORGET\n$T_BACK" | rofi-themed -dmenu -i -p "$SELECTED_SSID" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
-        *"Desconectar"*)
+        *"Desconectar"*|*"Disconnect"*)
             nmcli connection down id "$SELECTED_SSID" 2>/dev/null || nmcli device disconnect wlan0 2>/dev/null
-            notify "Desconectado de $SELECTED_SSID"
+            notify "$(hypr-i18n wifi.disconnected_from "$SELECTED_SSID" 2>/dev/null || echo "Disconnected from $SELECTED_SSID")"
             ;;
-        *"Olvidar"*)
+        *"Olvidar"*|*"Forget"*)
             nmcli connection delete id "$SELECTED_SSID" 2>/dev/null
-            notify "Red $SELECTED_SSID eliminada"
+            notify "$(hypr-i18n wifi.forgot "$SELECTED_SSID" 2>/dev/null || echo "Network $SELECTED_SSID removed")"
             ;;
     esac
     exit 0

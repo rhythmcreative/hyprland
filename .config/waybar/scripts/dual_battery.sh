@@ -26,7 +26,8 @@ for a in /sys/class/power_supply/*; do
 done
 
 if [ "$NUM_BATS" -eq 0 ]; then
-    echo "{\"text\":\"󰚥\",\"tooltip\":\"Conectado a CA (Modo Sobremesa)\",\"class\":\"normal\"}"
+    ac_desktop=$(hypr-i18n battery.desktop_mode 2>/dev/null || echo "Connected to AC (Desktop Mode)")
+    echo "{\"text\":\"󰚥\",\"tooltip\":\"$ac_desktop\",\"class\":\"normal\"}"
     exit 0
 fi
 
@@ -93,13 +94,13 @@ get_battery_icon() {
 COMBINED_ICON=$(get_battery_icon "$TOTAL_CAPACITY" "$IS_CHARGING" "$AC_ONLINE")
 
 if [ "$IS_CHARGING" = true ]; then
-    TOTAL_STATUS="Cargando"
+    TOTAL_STATUS=$(hypr-i18n battery.charging 2>/dev/null || echo "Charging")
     CLASS="charging"
 elif [ "$AC_ONLINE" -eq 1 ]; then
-    TOTAL_STATUS="Conectado a CA"
+    TOTAL_STATUS=$(hypr-i18n battery.ac_power 2>/dev/null || echo "Connected to AC")
     CLASS="charging"
 else
-    TOTAL_STATUS="Descargando"
+    TOTAL_STATUS=$(hypr-i18n battery.discharging 2>/dev/null || echo "Discharging")
     if [[ $TOTAL_CAPACITY -le 15 ]]; then CLASS="critical";
     elif [[ $TOTAL_CAPACITY -le 30 ]]; then CLASS="warning";
     else CLASS="normal"; fi
@@ -107,6 +108,7 @@ fi
 
 TIME_FORMATTED=$(format_time $TOTAL_TIME_REMAINING)
 HEADER="Total: ${TOTAL_CAPACITY}% ($TOTAL_STATUS)\\n"
-FULL_TOOLTIP="${HEADER}${TOOLTIP}Tiempo restante: $TIME_FORMATTED"
+REMAINING_STR=$(hypr-i18n battery.remaining "$TIME_FORMATTED" 2>/dev/null || echo "Time remaining: $TIME_FORMATTED")
+FULL_TOOLTIP="${HEADER}${TOOLTIP}${REMAINING_STR}"
 
 echo "{\"text\":\"$COMBINED_ICON ${TOTAL_CAPACITY}%\",\"tooltip\":\"$FULL_TOOLTIP\",\"class\":\"$CLASS\"}"

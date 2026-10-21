@@ -133,9 +133,10 @@ translate_hotkeys() {
 
 prompt_text=$(hypr-i18n hotkeys.title 2>/dev/null || echo "Hotkeys")
 [ -z "$prompt_text" ] && prompt_text="Hotkeys"
+placeholder_text=$(hypr-i18n hotkeys.placeholder 2>/dev/null || echo "Type to filter shortcuts...")
 
-# Display Rofi menu with localized prompt
-selected=$(printf "%s\n" "$HOTKEYS_DATA" | translate_hotkeys | rofi-themed -dmenu -i -p "$prompt_text" -theme "$THEME_FILE")
+# Display Rofi menu with localized prompt & placeholder
+selected=$(printf "%s\n" "$HOTKEYS_DATA" | translate_hotkeys | rofi-themed -dmenu -i -p "$prompt_text" -theme "$THEME_FILE" -theme-str "entry { placeholder: \"$placeholder_text\"; }")
 
 # Restore bars simultaneously in parallel
 [ "$_WAYBAR_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null) &

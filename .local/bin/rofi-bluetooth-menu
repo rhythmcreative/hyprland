@@ -76,28 +76,39 @@ notify() {
     fi
 }
 
-# Obtener estado de Bluetooth
+# Obtener estado de Bluetooth y cadenas traducidas
 BT_STATUS=$(bluetoothctl show 2>/dev/null | grep -i "powered" | awk '{print $2}')
 
+T_DIS_BT=$(hypr-i18n bt.toggle_off 2>/dev/null || echo "󰂲  Disable Bluetooth")
+T_EN_BT=$(hypr-i18n bt.toggle_on 2>/dev/null || echo "󰂯  Enable Bluetooth")
+T_RESCAN=$(hypr-i18n bt.rescan 2>/dev/null || echo "󰑐  Scan nearby devices")
+T_OPEN_MGR=$(hypr-i18n bt.open_manager 2>/dev/null || echo "󰒓  Open Bluetooth Manager (blueman-manager)")
+T_CONN=$(hypr-i18n bt.connected 2>/dev/null || echo "Connected")
+T_PAIRED=$(hypr-i18n bt.paired 2>/dev/null || echo "Paired")
+T_BACK=$(hypr-i18n bt.back 2>/dev/null || echo "󰅁  Back")
+T_REMOVE=$(hypr-i18n bt.remove 2>/dev/null || echo "󰆴  Remove device")
+T_UNPAIR=$(hypr-i18n bt.unpair 2>/dev/null || echo "󰆴  Unpair device")
+T_PROMPT=$(hypr-i18n bt.prompt 2>/dev/null || echo "Bluetooth Devices")
+
 if [ "$BT_STATUS" = "yes" ]; then
-    POWER_OPTION="󰂲  Desactivar Bluetooth"
+    POWER_OPTION="$T_DIS_BT"
 else
-    POWER_OPTION="󰂯  Activar Bluetooth"
+    POWER_OPTION="$T_EN_BT"
 fi
 
 # Si esta apagado, mostrar opcion rapida
 if [ "$BT_STATUS" != "yes" ]; then
-    CHOSEN=$(echo -e "$POWER_OPTION\n󰒓  Abrir Administrador Completo (blueman-manager)" | rofi-themed -dmenu -i -p "Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    CHOSEN=$(echo -e "$POWER_OPTION\n$T_OPEN_MGR" | rofi-themed -dmenu -i -p "$T_PROMPT" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$CHOSEN" in
-        *"Activar Bluetooth"*)
+        *"Activar Bluetooth"*|*"Enable Bluetooth"*)
             rfkill unblock bluetooth 2>/dev/null || true
             sleep 0.2
             bluetoothctl power on
-            notify "Bluetooth activado"
+            notify "$(hypr-i18n bluetooth.enabled 2>/dev/null || echo "Bluetooth enabled")"
             sleep 1
             exec "$0"
             ;;
-        *"Abrir Administrador"*)
+        *"Abrir Administrador"*|*"Open Bluetooth Manager"*)
             blueman-manager &
             ;;
     esac
@@ -129,43 +140,43 @@ while IFS= read -r line; do
     esac
 
     if [ "$connected" = "yes" ]; then
-        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} (Conectado) │ MAC: ${mac} │ Vinculado\n"
+        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} ($T_CONN) │ MAC: ${mac} │ $T_PAIRED\n"
     elif [ "$paired" = "yes" ]; then
-        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} │ MAC: ${mac} │ Emparejado\n"
+        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} │ MAC: ${mac} │ $T_PAIRED\n"
     else
-        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} │ MAC: ${mac} │ Disponible\n"
+        DEV_ITEMS="${DEV_ITEMS}${icon}  ${name} │ MAC: ${mac}\n"
     fi
 done <<< "$RAW_DEVICES"
 
 # Cabecera de acciones
-HEADER="$POWER_OPTION\n󰑐  Escanear dispositivos cercanos\n󰒓  Abrir Administrador Completo (blueman-manager)\n────────────────────────────────────────"
+HEADER="$POWER_OPTION\n$T_RESCAN\n$T_OPEN_MGR\n────────────────────────────────────────"
 
 MENU_CONTENT=$(echo -e "${HEADER}\n${DEV_ITEMS}")
 
-CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "Dispositivos Bluetooth" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+CHOSEN=$(echo -e "$MENU_CONTENT" | rofi-themed -dmenu -i -p "$T_PROMPT" -theme "$THEME_FILE" -m "$ACTIVE_MON")
 
 [ -z "$CHOSEN" ] && exit 0
 [[ "$CHOSEN" =~ ^─ ]] && exit 0
 
 case "$CHOSEN" in
-    *"Desactivar Bluetooth"*)
+    *"Desactivar Bluetooth"*|*"Disable Bluetooth"*)
         bluetoothctl power off
-        notify "Bluetooth desactivado"
+        notify "$(hypr-i18n bluetooth.disabled 2>/dev/null || echo "Bluetooth disabled")"
         exit 0
         ;;
-    *"Activar Bluetooth"*)
+    *"Activar Bluetooth"*|*"Enable Bluetooth"*)
         rfkill unblock bluetooth 2>/dev/null || true
         sleep 0.2
         bluetoothctl power on
-        notify "Bluetooth activado"
+        notify "$(hypr-i18n bluetooth.enabled 2>/dev/null || echo "Bluetooth enabled")"
         exit 0
         ;;
-    *"Escanear dispositivos"*)
-        notify "Escaneando dispositivos cercanos (5s)..."
+    *"Escanear dispositivos"*|*"Scan nearby devices"*)
+        notify "$(hypr-i18n bt.scanning 2>/dev/null || echo "Scanning nearby devices...")"
         bluetoothctl --timeout 5 scan on >/dev/null 2>&1
         exec "$0"
         ;;
-    *"Abrir Administrador"*)
+    *"Abrir Administrador"*|*"Open Bluetooth Manager"*)
         blueman-manager &
         exit 0
         ;;
@@ -173,7 +184,7 @@ esac
 
 # Extraer MAC del dispositivo
 TARGET_MAC=$(echo "$CHOSEN" | awk -F'│' '{print $2}' | sed 's/MAC://' | tr -d ' ')
-TARGET_NAME=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰂯󰋋󰌌󰍽󰄡󰊴* ]+//' | sed 's/ (Conectado)//' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+TARGET_NAME=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰂯󰋋󰌌󰍽󰄡󰊴* ]+//' | sed -E "s/ \($T_CONN|Conectado|Connected\)//" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
 [ -z "$TARGET_MAC" ] && exit 0
 
@@ -181,38 +192,38 @@ TARGET_NAME=$(echo "$CHOSEN" | awk -F'│' '{print $1}' | sed -E 's/^[󰂯󰋋�
 IS_CONN=$(bluetoothctl info "$TARGET_MAC" 2>/dev/null | grep -i "Connected:" | awk '{print $2}')
 
 if [ "$IS_CONN" = "yes" ]; then
-    ACTION=$(echo -e "󰅖  Desconectar de $TARGET_NAME\n󰆴  Desvincular (Unpair)\n󰅁  Volver" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    T_DISCONN_ACTION=$(hypr-i18n bt.disconnect "$TARGET_NAME" 2>/dev/null || echo "󰅖  Disconnect from $TARGET_NAME")
+    ACTION=$(echo -e "$T_DISCONN_ACTION\n$T_UNPAIR\n$T_BACK" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
-        *"Desconectar"*)
-            notify "Desconectando de $TARGET_NAME..."
+        *"Desconectar"*|*"Disconnect"*)
+            notify "$(hypr-i18n bt.disconnected_from "$TARGET_NAME" 2>/dev/null || echo "Disconnected from $TARGET_NAME")"
             bluetoothctl disconnect "$TARGET_MAC"
-            notify "Desconectado de $TARGET_NAME"
             ;;
-        *"Desvincular"*)
+        *"Desvincular"*|*"Unpair"*|*"Remove"*)
             bluetoothctl remove "$TARGET_MAC"
-            notify "Dispositivo $TARGET_NAME eliminado"
+            notify "$(hypr-i18n bt.removed "$TARGET_NAME" 2>/dev/null || echo "Device $TARGET_NAME removed")"
             ;;
     esac
 else
-    ACTION=$(echo -e "󰂱  Conectar a $TARGET_NAME\n󰌷  Emparejar (Pair)\n󰆴  Eliminar dispositivo\n󰅁  Volver" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
+    T_CONN_ACTION=$(hypr-i18n bt.connect "$TARGET_NAME" 2>/dev/null || echo "󰂱  Connect to $TARGET_NAME")
+    T_PAIR_ACTION=$(hypr-i18n bt.pair 2>/dev/null || echo "󰌷  Pair device")
+    ACTION=$(echo -e "$T_CONN_ACTION\n$T_PAIR_ACTION\n$T_REMOVE\n$T_BACK" | rofi-themed -dmenu -i -p "$TARGET_NAME" -theme "$THEME_FILE" -m "$ACTIVE_MON")
     case "$ACTION" in
-        *"Conectar"*)
-            notify "Conectando a $TARGET_NAME..."
+        *"Conectar"*|*"Connect"*)
             if bluetoothctl connect "$TARGET_MAC"; then
-                notify "Conectado exitosamente a $TARGET_NAME"
+                notify "$(hypr-i18n bt.connected_to "$TARGET_NAME" 2>/dev/null || echo "Connected successfully to $TARGET_NAME")"
             else
-                notify "Fallo al conectar con $TARGET_NAME"
+                notify "$(hypr-i18n bt.connect_failed "$TARGET_NAME" 2>/dev/null || echo "Failed to connect to $TARGET_NAME")"
             fi
             ;;
-        *"Emparejar"*)
-            notify "Emparejando con $TARGET_NAME..."
+        *"Emparejar"*|*"Pair"*)
             bluetoothctl pair "$TARGET_MAC"
             bluetoothctl trust "$TARGET_MAC"
             bluetoothctl connect "$TARGET_MAC"
             ;;
-        *"Eliminar"*)
+        *"Eliminar"*|*"Remove"*)
             bluetoothctl remove "$TARGET_MAC"
-            notify "Dispositivo eliminado"
+            notify "$(hypr-i18n bt.removed "$TARGET_NAME" 2>/dev/null || echo "Device removed")"
             ;;
     esac
 fi

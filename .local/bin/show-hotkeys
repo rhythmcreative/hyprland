@@ -70,7 +70,6 @@ SUPER + Tab               │ Workspace Overview               │ Window
 SUPER + ALT + Tab         │ Switch Open Windows              │ Rofi
 SUPER + M                 │ Exit Hyprland Session            │ Session
 SUPER + L                 │ Lock Screen (Hyprlock)           │ Security
-SUPER + SHIFT + L         │ Language Selector Menu           │ System
 SUPER + Escape            │ Panic Mode (Hide All + Mute)     │ Privacy
 SUPER + BackSpace         │ Power Menu (Shutdown/Reboot)     │ Session
 SUPER + P                 │ Screenshot & Edit (Swappy)       │ Utility
@@ -106,37 +105,8 @@ Privacy Shield Daemon   │ Camera/Mic Background Alerts     │ Privacy
 EOF
 )
 
-translate_hotkeys() {
-    local lang
-    lang=$(hypr-language 2>/dev/null || echo "es")
-    local catalog="${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/i18n/$lang/hotkeys.json"
-    if [ ! -f "$catalog" ] || [ "$lang" = "en" ]; then
-        cat
-        return
-    fi
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^([^│]+)│([^│]+)│(.*)$ ]]; then
-            key="${BASH_REMATCH[1]}"
-            desc=$(echo "${BASH_REMATCH[2]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-            cat_tag="${BASH_REMATCH[3]}"
-            trans=$(jq -r --arg d "$desc" '.[$d] // empty' "$catalog" 2>/dev/null)
-            if [ -n "$trans" ]; then
-                printf "%-26s│ %-33s│%s\n" "$key" "$trans" "$cat_tag"
-            else
-                printf "%s\n" "$line"
-            fi
-        else
-            printf "%s\n" "$line"
-        fi
-    done
-}
-
-prompt_text=$(hypr-i18n hotkeys.title 2>/dev/null || echo "Hotkeys")
-[ -z "$prompt_text" ] && prompt_text="Hotkeys"
-placeholder_text=$(hypr-i18n hotkeys.placeholder 2>/dev/null || echo "Type to filter shortcuts...")
-
-# Display Rofi menu with localized prompt & placeholder
-selected=$(printf "%s\n" "$HOTKEYS_DATA" | translate_hotkeys | rofi-themed -dmenu -i -p "$prompt_text" -theme "$THEME_FILE" -theme-str "entry { placeholder: \"$placeholder_text\"; }")
+# Display Rofi menu with English prompt
+selected=$(printf "%s\n" "$HOTKEYS_DATA" | rofi-themed -dmenu -i -p "Hotkeys" -theme "$THEME_FILE")
 
 # Restore bars simultaneously in parallel
 [ "$_WAYBAR_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null) &
@@ -203,9 +173,6 @@ if [ -n "$selected" ]; then
             ;;
         *"SUPER + L"*)
             hyprlock &
-            ;;
-        *"SUPER + SHIFT + L"*)
-            "$HOME/.local/bin/hypr-language" menu &
             ;;
         *"SUPER + Escape"*)
             "$HOME/.local/bin/panic-mode" &

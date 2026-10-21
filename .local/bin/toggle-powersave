@@ -59,12 +59,7 @@ enable_powersave() {
     "$HOME/.local/bin/rofi-colors" 2>/dev/null || true
 
     # 6. Desktop Notification
-    local title_on body_on
-    title_on=$(hypr-i18n battery.saver_on_title 2>/dev/null)
-    [ -z "$title_on" ] && title_on="Battery Saver"
-    body_on=$(hypr-i18n battery.saver_on_body 2>/dev/null)
-    [ -z "$body_on" ] && body_on="Battery Saver Turned On · Performance optimized and solid window surfaces"
-    notify-send -a "$title_on" -i battery-caution "$title_on" "$body_on" 2>/dev/null || true
+    notify-send -a "Battery Saver" -i battery-caution "Battery Saver Turned On" "Performance optimized and solid window surfaces" 2>/dev/null || true
     echo "on"
 }
 
@@ -111,12 +106,7 @@ disable_powersave() {
     # fichero a vacio, que no era lo mismo que no existir.
 
     # 6. Desktop Notification
-    local title_off body_off
-    title_off=$(hypr-i18n battery.saver_off_title 2>/dev/null)
-    [ -z "$title_off" ] && title_off="Battery Saver"
-    body_off=$(hypr-i18n battery.saver_off_body 2>/dev/null)
-    [ -z "$body_off" ] && body_off="Battery Saver Turned Off · Normal performance and visual effects restored"
-    notify-send -a "$title_off" -i battery-good "$title_off" "$body_off" 2>/dev/null || true
+    notify-send -a "Battery Saver" -i battery-good "Battery Saver Turned Off" "Normal performance and visual effects restored" 2>/dev/null || true
     echo "off"
 }
 

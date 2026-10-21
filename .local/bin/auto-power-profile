@@ -98,11 +98,7 @@ while true; do
     if [ "$ac_online" -eq 0 ] && [ "$is_charging" -eq 0 ] && [ "$cap" -le 20 ]; then
         if [ ! -f "$STATUS_LOCK" ] && [ -x "$POWERSAVE_HELPER" ]; then
             "$POWERSAVE_HELPER" toggle >/dev/null 2>&1 || true
-            notif_title=$(hypr-i18n battery.saver_on_title 2>/dev/null)
-            [ -z "$notif_title" ] && notif_title="Power Saver Activated"
-            notif_body=$(hypr-i18n battery.caution_body "$cap" 2>/dev/null)
-            [ -z "$notif_body" ] && notif_body="Battery is at ${cap}%. Power saver mode engaged automatically."
-            send_notif "$notif_title" "$notif_body" "battery-low"
+            send_notif "Power Saver Activated" "Battery is at ${cap}%. Power saver mode engaged automatically." "battery-low"
         fi
     fi
 
@@ -110,11 +106,7 @@ while true; do
     if [ "$ac_online" -eq 1 ] || [ "$is_charging" -eq 1 ] || [ "$cap" -gt 35 ]; then
         if [ -f "$STATUS_LOCK" ] && [ "$ac_online" -eq 1 ] && [ -x "$POWERSAVE_HELPER" ]; then
             "$POWERSAVE_HELPER" toggle >/dev/null 2>&1 || true
-            notif_title=$(hypr-i18n battery.saver_off_title 2>/dev/null)
-            [ -z "$notif_title" ] && notif_title="Normal Mode Restored"
-            notif_body=$(hypr-i18n battery.saver_off_body 2>/dev/null)
-            [ -z "$notif_body" ] && notif_body="AC power connected. Power saver mode disengaged."
-            send_notif "$notif_title" "$notif_body" "battery-charging"
+            send_notif "Normal Mode Restored" "AC power connected. Power saver mode disengaged." "battery-charging"
         fi
     fi
 

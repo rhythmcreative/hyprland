@@ -852,25 +852,6 @@ ShellRoot {
         }
     }
 
-    IpcHandler {
-        target: "language"
-        function get(screenName: string): string {
-            return root.activeLanguage
-        }
-        function toggle(screenName: string): string {
-            let next = (root.activeLanguage === "es") ? "en" : "es"
-            root.runCmd("hypr-language set " + next)
-            return next
-        }
-        function set(code: string): string {
-            if (code && code.trim().length > 0) {
-                root.activeLanguage = code.trim()
-                catalogFile.reload()
-            }
-            return root.activeLanguage
-        }
-    }
-
     // Live pywal colors
     property int _walReloadCounter: 0
 
@@ -1075,70 +1056,7 @@ ShellRoot {
         }
     }
 
-    // Live i18n
-    property string activeLanguage: "es"
-    property int _i18nReloadCounter: 0
-    property var _i18nStrings: ({})
-    property var _i18nEnFallback: ({})
-
-    FileView {
-        id: langFile
-        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/rhythm/language"
-        watchChanges: true
-        onFileChanged: langFile.reload()
-        onLoaded: {
-            const raw = langFile.text().trim()
-            root.activeLanguage = (raw && raw.length > 0) ? raw : "es"
-            catalogFile.reload()
-        }
-        onLoadFailed: {
-            root.activeLanguage = "es"
-            catalogFile.reload()
-        }
-    }
-
-    FileView {
-        id: enCatalogFile
-        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/rhythm/i18n/en/island.json"
-        watchChanges: true
-        onFileChanged: enCatalogFile.reload()
-        onLoaded: {
-            try {
-                root._i18nEnFallback = JSON.parse(enCatalogFile.text())
-            } catch(e) {
-                root._i18nEnFallback = ({})
-            }
-            root._i18nReloadCounter++
-        }
-    }
-
-    FileView {
-        id: catalogFile
-        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/rhythm/i18n/" + root.activeLanguage + "/island.json"
-        watchChanges: true
-        onFileChanged: catalogFile.reload()
-        onLoaded: {
-            try {
-                root._i18nStrings = JSON.parse(catalogFile.text())
-            } catch(e) {
-                root._i18nStrings = ({})
-            }
-            root._i18nReloadCounter++
-        }
-        onLoadFailed: {
-            root._i18nStrings = ({})
-            root._i18nReloadCounter++
-        }
-    }
-
     function t(key, fallback) {
-        const _dep = root._i18nReloadCounter
-        if (root._i18nStrings && root._i18nStrings[key]) {
-            return root._i18nStrings[key]
-        }
-        if (root._i18nEnFallback && root._i18nEnFallback[key]) {
-            return root._i18nEnFallback[key]
-        }
         return fallback !== undefined ? fallback : (key || "")
     }
 
@@ -4880,21 +4798,6 @@ ShellRoot {
                                     Text { text: root.t("mod_tasks", "Tasks"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
                                 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { islandWin.expanded = false; root.runCmd("kitty -e htop"); } }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true; height: 36; radius: 18; color: root.colSurface
-                                border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08); border.width: 1
-                                RowLayout { anchors.centerIn: parent; spacing: 5
-                                    Text { text: "󰗊"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
-                                    Text { text: root.activeLanguage.toUpperCase(); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.runCmd("hypr-language toggle")
-                                    }
-                                }
                             }
                         }
 

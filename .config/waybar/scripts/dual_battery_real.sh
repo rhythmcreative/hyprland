@@ -46,14 +46,13 @@ get_battery_icon() {
 # 2. Caso: No hay baterías (PC de Escritorio)
 if [ "$NUM_BATS" -eq 0 ]; then
     # Mostrar solo el icono de CA (sin porcentaje)
-    ac_desktop=$(hypr-i18n battery.desktop_mode 2>/dev/null || echo "Connected to AC (Desktop Mode)")
-    echo "{\"text\":\"󰚥\",\"tooltip\":\"$ac_desktop\",\"class\":\"normal\",\"on-click\":\"true\"}"
+    echo "{\"text\":\"󰚥\",\"tooltip\":\"Conectado a CA (Modo Sobremesa)\",\"class\":\"normal\",\"on-click\":\"true\"}"
     exit 0
 fi
 
 TOTAL_CAP=0
 TEXT=""
-TOOLTIP="$(hypr-i18n bat_title 2>/dev/null || echo "Battery Status"):\\n"
+TOOLTIP="Estado de Batería:\\n"
 IS_CHARGING=false
 
 # 3. Procesar cada batería encontrada
@@ -77,8 +76,7 @@ for i in "${!ACTUAL_BATS[@]}"; do
     TOOLTIP="$TOOLTIP$BAT_NAME: $CAP% ($STAT)\\n"
 done
 
-ac_power_str=$(hypr-i18n battery.ac_power 2>/dev/null || echo "AC Power: Connected")
-[ "$AC_ONLINE" -eq 1 ] && TOOLTIP="${TOOLTIP}${ac_power_str}\\n"
+[ "$AC_ONLINE" -eq 1 ] && TOOLTIP="${TOOLTIP}Alimentación CA: Conectado\\n"
 
 # 4. Calcular promedio total para la clase CSS
 AVG_CAP=$((TOTAL_CAP / NUM_BATS))

@@ -109,15 +109,6 @@ LAYOUT_NAMES = {
     "hu": "Hungarian",
 }
 
-def get_current_ui_language():
-    try:
-        lang_file = Path.home() / ".config/rhythm/language"
-        if lang_file.exists():
-            return lang_file.read_text(encoding="utf-8").strip().lower()
-    except Exception:
-        pass
-    return "es"
-
 def get_hypr_socket():
     xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
@@ -241,16 +232,14 @@ def get_locales_info():
 
     user_label = user_lang
     sys_label = sys_lang
-    is_es = get_current_ui_language().startswith("es")
     if HAVE_HYPRLAND_LANGUAGES:
         try:
             locs, _ = get_cached_locales_and_layouts()
             for l in locs:
-                lbl = l.display_name_es if is_es else (l.display_name or l.display_name_es)
                 if l.code == user_lang or l.code.replace(".UTF-8", ".utf8") == user_lang:
-                    user_label = lbl
+                    user_label = l.display_name_es
                 if l.code == sys_lang or l.code.replace(".UTF-8", ".utf8") == sys_lang:
-                    sys_label = lbl
+                    sys_label = l.display_name_es
         except Exception:
             pass
     if user_label == user_lang:
@@ -535,13 +524,6 @@ def set_user_locale(loc):
 
     # Auto-add matching keyboard layout if available
     lang_code = clean_loc.split("_")[0].split(".")[0].lower()
-    try:
-        rhythm_lang_file = Path.home() / ".config/rhythm/language"
-        rhythm_lang_file.parent.mkdir(parents=True, exist_ok=True)
-        rhythm_lang_file.write_text(f"{lang_code}\n", encoding="utf-8")
-        subprocess.run(["quickshell", "ipc", "-p", str(Path.home() / ".config/quickshell/waybar-island/shell.qml"), "--any-display", "call", "language", "set", lang_code], capture_output=True, timeout=2)
-    except Exception:
-        pass
     locale_layout_map = {
         "es": "es", "en": "us", "fr": "fr", "de": "de", "it": "it",
         "pt": "pt", "ru": "ru", "ja": "jp", "zh": "cn", "cmn": "cn",
@@ -652,14 +634,13 @@ def main():
     elif cmd == "available_locales":
         if HAVE_HYPRLAND_LANGUAGES:
             try:
-                is_es = get_current_ui_language().startswith("es")
                 locs, _ = get_cached_locales_and_layouts()
                 out = []
                 for l in locs:
                     if "utf-8" in l.charset.lower():
                         out.append({
                             "locale": l.code,
-                            "label": l.display_name_es if is_es else (l.display_name or l.display_name_es),
+                            "label": l.display_name_es,
                             "flag": l.flag,
                             "generated": l.generated
                         })

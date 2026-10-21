@@ -454,28 +454,18 @@ no='✗'       # X mark simple
 #
 # Rofi CMD con monitor especifico
 rofi_cmd() {
-    local prompt_goodbye uptime_msg
-    prompt_goodbye=$(hypr-i18n powermenu.goodbye "$USER" 2>/dev/null)
-    [ -z "$prompt_goodbye" ] && prompt_goodbye="Goodbye ${USER}"
-    uptime_msg=$(hypr-i18n powermenu.uptime "$uptime" 2>/dev/null)
-    [ -z "$uptime_msg" ] && uptime_msg="Uptime: $uptime"
     rofi-themed -dmenu \
-        -p "$prompt_goodbye" \
-        -mesg "$uptime_msg" \
+        -p "Goodbye ${USER}" \
+        -mesg "Uptime: $uptime" \
         -theme "${TEMP_DIR}/powermenu-${ACTIVE_MONITOR}.rasi" \
         -monitor "$ACTIVE_MONITOR"
 }
 
 # Confirmation CMD con monitor especifico
 confirm_cmd() {
-    local confirm_p confirm_m
-    confirm_p=$(hypr-i18n powermenu.confirm_title 2>/dev/null)
-    [ -z "$confirm_p" ] && confirm_p="Confirmation"
-    confirm_m=$(hypr-i18n powermenu.confirm_msg 2>/dev/null)
-    [ -z "$confirm_m" ] && confirm_m="Are You Sure?"
     rofi-themed -dmenu \
-        -p "$confirm_p" \
-        -mesg "$confirm_m" \
+        -p 'Confirmation' \
+        -mesg 'Are You Sure?' \
         -theme "${TEMP_DIR}/confirm-${ACTIVE_MONITOR}.rasi" \
         -monitor "$ACTIVE_MONITOR"
 }

@@ -17,23 +17,13 @@ enable_power_save() {
         keyword general:gaps_in 0;\
         keyword general:gaps_out 0;\
         keyword general:border_size 1"
-    local title body
-    title=$(hypr-i18n powersave.enabled_title 2>/dev/null)
-    [ -z "$title" ] && title="Power Saving"
-    body=$(hypr-i18n powersave.enabled_body 2>/dev/null)
-    [ -z "$body" ] && body="Animations and blur disabled"
-    notify-send "$title" "$body" -i battery-low
+    notify-send "Power Saving" "Animations and blur disabled" -i battery-low
     touch "$STATUS_FILE"
 }
 
 disable_power_save() {
     hyprctl reload
-    local title body
-    title=$(hypr-i18n powersave.disabled_title 2>/dev/null)
-    [ -z "$title" ] && title="Power Saving"
-    body=$(hypr-i18n powersave.disabled_body 2>/dev/null)
-    [ -z "$body" ] && body="Normal mode restored"
-    notify-send "$title" "$body" -i battery-full
+    notify-send "Power Saving" "Normal mode restored" -i battery-full
     rm -f "$STATUS_FILE"
 }
 

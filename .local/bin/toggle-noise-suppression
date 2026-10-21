@@ -51,10 +51,7 @@ CONF_FILE="$CONF_DIR/source-rnnoise.conf"
 TEMPLATE="/usr/share/pipewire/filter-chain/source-rnnoise.conf"
 
 notify() {
-    local title
-    title=$(hypr-i18n noise.title 2>/dev/null)
-    [ -z "$title" ] && title="Noise Suppression"
-    notify-send -a "$title" -t 2500 "$1" "$2" 2>/dev/null || true
+    notify-send -a "Noise Suppression" -t 2500 "$1" "$2" 2>/dev/null || true
 }
 
 have_ladspa() {

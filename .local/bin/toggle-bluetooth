@@ -6,18 +6,13 @@
 # Función para mostrar notificación
 notify() {
     if command -v notify-send &> /dev/null; then
-        local title
-        title=$(hypr-i18n bluetooth.title 2>/dev/null)
-        [ -z "$title" ] && title="Bluetooth"
-        notify-send -i bluetooth -t 3000 "$title" "$1"
+        notify-send -i bluetooth -t 3000 "Bluetooth" "$1"
     fi
 }
 
 # Verificar si bluetoothctl está disponible
 if ! command -v bluetoothctl &> /dev/null; then
-    err_msg=$(hypr-i18n bluetooth.error 2>/dev/null)
-    [ -z "$err_msg" ] && err_msg="Error: bluetoothctl is not installed"
-    notify "$err_msg"
+    notify "Error: bluetoothctl is not installed"
     exit 1
 fi
 
@@ -27,17 +22,13 @@ bt_status=$(bluetoothctl show | grep -i "powered" | awk '{print $2}')
 if [ "$bt_status" = "yes" ]; then
     # Bluetooth está encendido, apagarlo
     bluetoothctl power off
-    msg_off=$(hypr-i18n bluetooth.disabled 2>/dev/null)
-    [ -z "$msg_off" ] && msg_off="Bluetooth disabled"
-    notify "$msg_off"
-    echo "$msg_off"
+    notify "Bluetooth disabled"
+    echo "Bluetooth disabled"
 else
     # Bluetooth está apagado, encenderlo
     rfkill unblock bluetooth 2>/dev/null || true
     sleep 0.2
     bluetoothctl power on
-    msg_on=$(hypr-i18n bluetooth.enabled 2>/dev/null)
-    [ -z "$msg_on" ] && msg_on="Bluetooth enabled"
-    notify "$msg_on"
-    echo "$msg_on"
+    notify "Bluetooth enabled"
+    echo "Bluetooth enabled"
 fi

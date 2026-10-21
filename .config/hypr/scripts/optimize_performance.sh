@@ -12,12 +12,7 @@ optimize() {
         keyword misc:vfr 1;\
         keyword misc:vrr 1;\
         keyword misc:no_direct_scanout 0"
-    local title body
-    title=$(hypr-i18n perf.opt_title 2>/dev/null)
-    [ -z "$title" ] && title="Performance Optimization"
-    body=$(hypr-i18n perf.opt_max 2>/dev/null)
-    [ -z "$body" ] && body="Maximum responsiveness enabled"
-    notify-send "$title" "$body"
+    notify-send "Performance Optimization" "Maximum responsiveness enabled"
 }
 
 restore() {
@@ -25,12 +20,7 @@ restore() {
     if command -v notch-hypr-helper >/dev/null 2>&1; then
         notch-hypr-helper apply-tweaks >/dev/null 2>&1 || true
     fi
-    local title body
-    title=$(hypr-i18n perf.opt_title 2>/dev/null)
-    [ -z "$title" ] && title="Performance Optimization"
-    body=$(hypr-i18n perf.opt_restored 2>/dev/null)
-    [ -z "$body" ] && body="Default settings restored"
-    notify-send "$title" "$body"
+    notify-send "Performance Optimization" "Default settings restored"
 }
 
 if [[ "$1" == "restore" ]]; then

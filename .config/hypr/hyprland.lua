@@ -419,9 +419,15 @@ hl.config({
         enable_swallow = true,
         swallow_regex = "^(kitty)$",
         focus_on_activate = true,
-        layers_hog_keyboard_focus = false,
         mouse_move_enables_dpms = true,
         key_press_enables_dpms = true,
+    },
+})
+
+-- Layers
+hl.config({
+    layers = {
+        layers_hog_keyboard_focus = false,
     },
 })
 

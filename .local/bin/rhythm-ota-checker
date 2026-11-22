@@ -1,39 +1,47 @@
 #!/usr/bin/env bash
-# rhythm-ota-checker: Background service to check for system dotfiles updates
-# Standard: Zero emojis, English notifications.
+# rhythm-ota-checker: Background cross-distro OTA update checker
+# Works behind firewalls that block ICMP ping and across all distros (including NixOS/Alpine).
 
 set -euo pipefail
 
-# Ensure user runtime
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
     export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 fi
 
-# Quick internet connectivity test
-if ! ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1 && ! ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
-    exit 0
-fi
-
 OTA_BIN="$HOME/.local/bin/system-ota"
 if [ ! -x "$OTA_BIN" ]; then
-    exit 0
+    OTA_BIN="$(command -v system-ota 2>/dev/null || true)"
 fi
+[ -n "$OTA_BIN" ] && [ -x "$OTA_BIN" ] || exit 0
 
-# Run silent check
-STATUS_JSON=$("$OTA_BIN" check --silent --json 2>/dev/null || true)
-if [ -z "$STATUS_JSON" ]; then
-    exit 0
-fi
-
-HAS_UPDATES=$(echo "$STATUS_JSON" | jq -r '.has_updates // false' 2>/dev/null || echo false)
-if [ "$HAS_UPDATES" = "true" ]; then
-    STATUS_TEXT=$(echo "$STATUS_JSON" | jq -r '.status_text // "New update available"' 2>/dev/null)
-    NEW_VER=$(echo "$STATUS_JSON" | jq -r '.latest_version // "new version"' 2>/dev/null)
-
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send -u normal -a "System Update" -i "system-software-update" \
-            "Rhythm Hyprland Update Available" \
-            "$STATUS_TEXT. Click or open Dynamic Island to review and install."
+# Skip silently if an OTA update is already running
+LOCK_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/system-ota.lock"
+if command -v flock >/dev/null 2>&1 && [ -f "$LOCK_FILE" ]; then
+    if ! flock -n "$LOCK_FILE" true 2>/dev/null; then
+        exit 0
     fi
+fi
+
+# Non-ICMP connectivity probe (works through VPNs & networks that block ping)
+if command -v curl >/dev/null 2>&1; then
+    curl -fsI --max-time 5 https://github.com >/dev/null 2>&1 || exit 0
+elif command -v ping >/dev/null 2>&1; then
+    ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1 || exit 0
+fi
+
+STATUS_JSON=$("$OTA_BIN" check --silent --json 2>/dev/null || true)
+[ -n "$STATUS_JSON" ] || exit 0
+
+HAS_UPDATES=$(printf '%s' "$STATUS_JSON" | jq -r '.has_updates // false' 2>/dev/null || echo false)
+if [ "$HAS_UPDATES" = "true" ] && command -v notify-send >/dev/null 2>&1; then
+    STATUS_TEXT=$(printf '%s' "$STATUS_JSON" | jq -r '.status_text // "New update available"' 2>/dev/null || echo "New update available")
+    TITLE="Rhythm Hyprland Update Available"
+    if command -v rhythm-i18n >/dev/null 2>&1; then
+        TITLE=$(rhythm-i18n "ota_available" "$TITLE" 2>/dev/null || echo "$TITLE")
+    fi
+    notify-send -u normal -a "System Update" -i "system-software-update" \
+        "$TITLE" \
+        "$STATUS_TEXT" 2>/dev/null || true
 fi

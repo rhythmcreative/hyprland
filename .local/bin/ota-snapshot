@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# ota-snapshot: Pre-OTA filesystem snapshot helper.
-# Creates a read-only btrfs snapshot when possible, uses timeshift/snapper
-# when available, and falls back to a config-only backup otherwise.
-# English output, no emojis. Never fatal: callers must append "|| true".
+# ota-snapshot: Non-interactive pre-OTA filesystem & config snapshot helper.
+# Cross-distro: btrfs subvolumes, timeshift, snapper, or config fallback.
+# Strictly non-interactive (sudo -n / doas -n only) so detached OTA never hangs.
 
 set -euo pipefail
 
@@ -11,6 +10,7 @@ KEEP=5
 HOME_SNAP_BASE="$HOME/.snapshots"
 ROOT_SNAP_BASE="/.snapshots"
 BACKUP_BASE="$HOME/.config.backup"
+
 REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
 if [ ! -d "$REPO_DIR/.git" ]; then
     _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
@@ -21,9 +21,22 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     fi
 fi
 
+# Non-interactive privilege runner (never blocks on password prompts)
+run_priv_ni() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        sudo -n "$@"
+    elif command -v doas >/dev/null 2>&1 && doas -n true 2>/dev/null; then
+        doas -n "$@"
+    else
+        return 1
+    fi
+}
+
 usage() {
     cat << 'EOF'
-ota-snapshot: Pre-OTA filesystem snapshot helper
+ota-snapshot: Pre-OTA filesystem snapshot helper (non-interactive)
 
 Usage: ota-snapshot [options]
 
@@ -31,49 +44,36 @@ Options:
   --list        List existing snapshots/backups and exit
   --fs-only     Only attempt filesystem snapshots, skip config fallback
   -h, --help    Show this help and exit
-
-Behavior:
-  1. If btrfs with subvolumes is detected, creates read-only snapshots
-     of /home (user level, no sudo) and / (sudo, /.snapshots).
-     Keeps the last 5 snapshots in each location.
-  2. Else if timeshift or snapper is installed, uses it.
-  3. Else falls back to a config-only backup under ~/.config.backup,
-     same layout as "system-ota backup".
 EOF
 }
 
 is_btrfs_mount() {
-    local target="$1"
     local fstype
-    fstype=$(findmnt -n -o FSTYPE "$target" 2>/dev/null || true)
+    fstype=$(findmnt -n -o FSTYPE "$1" 2>/dev/null || true)
     [ "$fstype" = "btrfs" ]
 }
 
 btrfs_has_subvolumes() {
-    btrfs subvolume list / >/dev/null 2>&1 || sudo -n btrfs subvolume list / >/dev/null 2>&1
+    btrfs subvolume list / >/dev/null 2>&1 || run_priv_ni btrfs subvolume list / >/dev/null 2>&1
 }
 
 prune_dir() {
-    # prune_dir <base> <sudo?> : keep newest $KEEP entries, delete the rest
-    local base="$1"
-    local use_sudo="${2:-false}"
-    local entries
-    if [ "$use_sudo" = "true" ]; then
-        entries=$(sudo -n ls -1t "$base" 2>/dev/null || true)
+    local base="$1" use_priv="${2:-false}" entries count=0 entry
+    if [ "$use_priv" = "true" ]; then
+        entries=$(run_priv_ni ls -1t "$base" 2>/dev/null || true)
     else
         entries=$(ls -1t "$base" 2>/dev/null || true)
     fi
-    local count=0
     while IFS= read -r entry; do
         [ -z "$entry" ] && continue
         count=$((count + 1))
         if [ "$count" -gt "$KEEP" ]; then
-            if [ "$use_sudo" = "true" ]; then
-                sudo -n btrfs subvolume delete "$base/$entry" >/dev/null 2>&1 \
-                    || sudo -n rm -rf "$base/$entry" >/dev/null 2>&1 || true
+            if [ "$use_priv" = "true" ]; then
+                run_priv_ni btrfs subvolume delete "$base/$entry" >/dev/null 2>&1 \
+                    || run_priv_ni rm -rf "$base/$entry" >/dev/null 2>&1 || true
             else
                 btrfs subvolume delete "$base/$entry" >/dev/null 2>&1 \
-                    || sudo -n btrfs subvolume delete "$base/$entry" >/dev/null 2>&1 \
+                    || run_priv_ni btrfs subvolume delete "$base/$entry" >/dev/null 2>&1 \
                     || rm -rf "$base/$entry" >/dev/null 2>&1 || true
             fi
         fi
@@ -81,9 +81,6 @@ prune_dir() {
 }
 
 snapshot_home_btrfs() {
-    # Snapshot /home subvolume into $HOME/.snapshots.
-    # Tries without sudo first, falls back to passwordless sudo
-    # (unprivileged subvolume creation requires CAP_SYS_ADMIN).
     is_btrfs_mount "/home" || is_btrfs_mount "/" || return 1
     mkdir -p "$HOME_SNAP_BASE"
     if btrfs subvolume snapshot -r /home "$HOME_SNAP_BASE/$SNAP_ID" >/dev/null 2>&1; then
@@ -91,8 +88,8 @@ snapshot_home_btrfs() {
         prune_dir "$HOME_SNAP_BASE" "false"
         return 0
     fi
-    if sudo -n btrfs subvolume snapshot -r /home "$HOME_SNAP_BASE/$SNAP_ID" >/dev/null 2>&1; then
-        echo "Home snapshot created at $HOME_SNAP_BASE/$SNAP_ID (via sudo)."
+    if run_priv_ni btrfs subvolume snapshot -r /home "$HOME_SNAP_BASE/$SNAP_ID" >/dev/null 2>&1; then
+        echo "Home snapshot created at $HOME_SNAP_BASE/$SNAP_ID."
         prune_dir "$HOME_SNAP_BASE" "false"
         return 0
     fi
@@ -100,10 +97,9 @@ snapshot_home_btrfs() {
 }
 
 snapshot_root_btrfs() {
-    # Snapshot / into /.snapshots (requires sudo).
     is_btrfs_mount "/" || return 1
-    sudo -n mkdir -p "$ROOT_SNAP_BASE" >/dev/null 2>&1 || return 1
-    if sudo -n btrfs subvolume snapshot -r / "$ROOT_SNAP_BASE/$SNAP_ID" >/dev/null 2>&1; then
+    run_priv_ni mkdir -p "$ROOT_SNAP_BASE" >/dev/null 2>&1 || return 1
+    if run_priv_ni btrfs subvolume snapshot -r / "$ROOT_SNAP_BASE/$SNAP_ID" >/dev/null 2>&1; then
         echo "Root snapshot created at $ROOT_SNAP_BASE/$SNAP_ID."
         prune_dir "$ROOT_SNAP_BASE" "true"
         return 0
@@ -113,47 +109,41 @@ snapshot_root_btrfs() {
 
 snapshot_timeshift_snapper() {
     if command -v timeshift >/dev/null 2>&1; then
-        echo "Creating timeshift snapshot..."
-        sudo -n timeshift --create --comments "ota-$SNAP_ID" >/dev/null 2>&1 \
-            || sudo timeshift --create --comments "ota-$SNAP_ID" >/dev/null 2>&1 || return 1
-        echo "Timeshift snapshot created."
-        return 0
+        if run_priv_ni timeshift --create --comments "ota-$SNAP_ID" >/dev/null 2>&1; then
+            echo "Timeshift snapshot created."
+            return 0
+        fi
     fi
     if command -v snapper >/dev/null 2>&1; then
-        echo "Creating snapper snapshot..."
-        sudo -n snapper -c root create -d "ota-$SNAP_ID" >/dev/null 2>&1 \
-            || sudo snapper -c root create -d "ota-$SNAP_ID" >/dev/null 2>&1 || return 1
-        echo "Snapper snapshot created."
-        return 0
+        if run_priv_ni snapper -c root create -d "ota-$SNAP_ID" >/dev/null 2>&1; then
+            echo "Snapper snapshot created."
+            return 0
+        fi
     fi
     return 1
 }
 
 config_fallback_backup() {
-    # Same layout as "system-ota backup" so rollback keeps working.
-    local target="$BACKUP_BASE/$SNAP_ID"
+    local target="$BACKUP_BASE/$SNAP_ID" dir
     mkdir -p "$target"
-    echo "No filesystem snapshot available, creating config backup at $target..."
-    if [ -d "$HOME/.config/hypr" ]; then cp -r "$HOME/.config/hypr" "$target/"; fi
-    if [ -d "$HOME/.config/waybar" ]; then cp -r "$HOME/.config/waybar" "$target/"; fi
-    if [ -d "$HOME/.config/quickshell" ]; then cp -r "$HOME/.config/quickshell" "$target/"; fi
-    if [ -d "$HOME/.local/bin" ]; then cp -r "$HOME/.local/bin" "$target/"; fi
-    local commit="unknown"
-    if [ -d "$REPO_DIR/.git" ]; then
-        commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+    echo "Creating config backup at $target..."
+    for dir in hypr waybar quickshell rofi kitty mako rust-dock rhythm; do
+        [ -d "$HOME/.config/$dir" ] && cp -a "$HOME/.config/$dir" "$target/$dir" 2>/dev/null || true
+    done
+    [ -d "$HOME/.local/bin" ] && cp -a "$HOME/.local/bin" "$target/bin" 2>/dev/null || true
+
+    local commit="unknown" version="unknown"
+    [ -d "$REPO_DIR/.git" ] && commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+    [ -f "$REPO_DIR/.version" ] && version=$(tr -d '[:space:]' < "$REPO_DIR/.version")
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -n --arg id "$SNAP_ID" --arg created_at "$(date -Iseconds)" --arg version "$version" --arg commit "$commit" \
+            '{id: $id, created_at: $created_at, version: $version, commit: $commit}' > "$target/checkpoint.json"
+    else
+        printf '{"id":"%s","created_at":"%s","version":"%s","commit":"%s"}\n' \
+            "$SNAP_ID" "$(date -Iseconds)" "$version" "$commit" > "$target/checkpoint.json"
     fi
-    local version="unknown"
-    if [ -f "$REPO_DIR/.version" ]; then
-        version=$(tr -d '[:space:]' < "$REPO_DIR/.version")
-    fi
-    cat > "$target/checkpoint.json" << EOF
-{
-  "id": "$SNAP_ID",
-  "created_at": "$(date -Iseconds)",
-  "version": "$version",
-  "commit": "$commit"
-}
-EOF
+    prune_dir "$BACKUP_BASE" "false"
     echo "Config backup $SNAP_ID created."
 }
 
@@ -162,7 +152,7 @@ list_snapshots() {
     ls -1t "$HOME_SNAP_BASE" 2>/dev/null || echo "(none)"
     echo ""
     echo "=== Root btrfs snapshots ($ROOT_SNAP_BASE) ==="
-    sudo -n ls -1t "$ROOT_SNAP_BASE" 2>/dev/null || ls -1t "$ROOT_SNAP_BASE" 2>/dev/null || echo "(none)"
+    run_priv_ni ls -1t "$ROOT_SNAP_BASE" 2>/dev/null || ls -1t "$ROOT_SNAP_BASE" 2>/dev/null || echo "(none)"
     echo ""
     echo "=== Config backups ($BACKUP_BASE) ==="
     ls -1t "$BACKUP_BASE" 2>/dev/null || echo "(none)"
@@ -174,16 +164,14 @@ for arg in "$@"; do
         --list) list_snapshots; exit 0 ;;
         --fs-only) FS_ONLY=true ;;
         -h|--help) usage; exit 0 ;;
-        *) echo "Unknown option: $arg"; usage; exit 1 ;;
+        *) echo "Unknown option: $arg" >&2; usage >&2; exit 1 ;;
     esac
 done
 
 did_snapshot=false
-
 if command -v btrfs >/dev/null 2>&1 && btrfs_has_subvolumes; then
     snapshot_home_btrfs || true
     snapshot_root_btrfs || true
-    # Success if at least one snapshot directory appeared for this run.
     if [ -d "$HOME_SNAP_BASE/$SNAP_ID" ] || [ -d "$ROOT_SNAP_BASE/$SNAP_ID" ]; then
         did_snapshot=true
     fi
@@ -197,7 +185,7 @@ if [ "$did_snapshot" = "true" ]; then
 fi
 
 if [ "$FS_ONLY" = "true" ]; then
-    echo "No filesystem snapshot backend available, skipping (fs-only mode)."
+    echo "No filesystem snapshot backend available (fs-only mode)."
     exit 1
 fi
 

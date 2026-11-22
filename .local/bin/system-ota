@@ -1,957 +1,833 @@
 #!/usr/bin/env bash
-# system-ota: OTA System Updater for Arch Linux & Hyprland
-# Provides check, status, update, release, changelog, rollback, and interactive GUI.
-# Standard: Zero emojis, English notifications and output.
+# system-ota: Cross-distro OTA updater for Rhythm Hyprland
+# Supports: Arch (+AUR), Fedora / Silverblue, Debian, Ubuntu, openSUSE (Leap &
+#           Tumbleweed), Alpine (musl/OpenRC), Void (xbps/runit), and NixOS.
+#
+# Commands:
+#   status [--json]
+#   check [--json] [--silent]
+#   update [--dotfiles-only] [--system|--all] [--flatpak] [--no-backup]
+#          [--dry-run] [--foreground|--detach] [--pause]
+#   changelog [--json] [-n <count>]
+#   backup [--list]
+#   rollback [<id>|--latest|--list]
+#   release <version>
+#   logs [-n <lines>]
+#   doctor
+#   gui
 
 set -euo pipefail
 
-# Repo de los dotfiles.
-#
-# Antes estaba fijo en /home/rhythmcreative/hyprland, sin fallback ni override:
-# cualquier usuario que no se llamara rhythmcreative consultaba y actualizaba
-# desde ESE repo, no desde el suyo. El update hace "cp -f" de los ficheros de
-# ahi hacia ~/.local/bin, asi que el error no era solo de lectura.
-#
-# El instalador clona en el HOME del usuario, que es donde esta de verdad. Se
-# acepta el override por entorno para quien lo clonee en otro sitio.
-REPO_DIR="${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
-if [ ! -d "$REPO_DIR/.git" ]; then
-    # Segunda opcion: si el usuario clonó el repo en otro nombre, se busca por
-    # el remoto al que apunta este propio script, que es el unico repo de
-    # dotfiles que puede ser.
-    _self_repo=$(git -C "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" rev-parse --show-toplevel 2>/dev/null || true)
-    if [ -n "$_self_repo" ] && [ -d "$_self_repo/.git" ]; then
-        REPO_DIR="$_self_repo"
-    elif [ -d "$HOME/dotfiles/.git" ]; then
-        REPO_DIR="$HOME/dotfiles"
-    elif command -v git >/dev/null 2>&1; then
-        echo "Cloning repository into $HOME/hyprland..."
-        if git clone --depth=1 https://github.com/rhythmcreative/hyprland.git "$HOME/hyprland" >> "$LOG_FILE" 2>&1; then
-            REPO_DIR="$HOME/hyprland"
-        fi
-    fi
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. Environment, Paths & Safe Defaults (initialized BEFORE any git/log action)
+# ═════════════════════════════════════════════════════════════════════════════
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 fi
-export RHYTHM_DOTFILES_DIR="$REPO_DIR"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
-STATUS_FILE="${XDG_RUNTIME_DIR:-/tmp}/ota-status.json"
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1 || true)
+    [ -n "$_wl" ] && export WAYLAND_DISPLAY="$(basename "$_wl")"
+    unset _wl
+fi
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    _sig=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1 || true)
+    [ -n "$_sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+    unset _sig
+fi
+
+CACHE_DIR="$XDG_CACHE_HOME"
+STATE_DIR="$XDG_STATE_HOME/rhythm"
 BACKUP_BASE="$HOME/.config.backup"
-LOG_FILE="${XDG_RUNTIME_DIR:-/tmp}/system-ota.log"
-touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/system-ota-$USER.log"
+KEEP_BACKUPS=5
 
-mkdir -p "$CACHE_DIR" "$BACKUP_BASE"
+if [ -d "$XDG_RUNTIME_DIR" ] && [ -w "$XDG_RUNTIME_DIR" ]; then
+    RUNTIME_BASE="$XDG_RUNTIME_DIR"
+else
+    RUNTIME_BASE="$CACHE_DIR"
+fi
 
-# Helper for NixOS detection
-is_nixos() {
-    [ -e /etc/NIXOS ] || { [ -f /etc/os-release ] && grep -q '^ID=nixos' /etc/os-release; }
+STATUS_FILE="$RUNTIME_BASE/ota-status.json"
+CACHE_STATUS_FILE="$CACHE_DIR/ota-status.json"
+LOCK_FILE="$RUNTIME_BASE/system-ota.lock"
+LOG_FILE="$RUNTIME_BASE/system-ota.log"
+OTA_DEFAULT_REMOTE="https://github.com/rhythmcreative/hyprland.git"
+
+mkdir -p "$CACHE_DIR" "$STATE_DIR" "$BACKUP_BASE" 2>/dev/null || true
+touch "$LOG_FILE" 2>/dev/null || LOG_FILE="$CACHE_DIR/system-ota.log"
+touch "$LOG_FILE" 2>/dev/null || true
+
+# Resolve dotfiles repository cleanly (override -> ~/hyprland -> script repo -> ~/dotfiles)
+resolve_repo_dir() {
+    if [ -n "${RHYTHM_DOTFILES_DIR:-}" ] && [ -d "$RHYTHM_DOTFILES_DIR/.git" ]; then
+        printf '%s\n' "$RHYTHM_DOTFILES_DIR"
+        return 0
+    fi
+    if [ -d "$HOME/hyprland/.git" ]; then
+        printf '%s\n' "$HOME/hyprland"
+        return 0
+    fi
+    local self_dir self_repo
+    self_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")"
+    self_repo="$(git -C "$self_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$self_repo" ] && [ -d "$self_repo/.git" ] && [ -f "$self_repo/.version" ]; then
+        printf '%s\n' "$self_repo"
+        return 0
+    fi
+    if [ -d "$HOME/dotfiles/.git" ] && [ -f "$HOME/dotfiles/.version" ]; then
+        printf '%s\n' "$HOME/dotfiles"
+        return 0
+    fi
+    printf '%s\n' "${RHYTHM_DOTFILES_DIR:-$HOME/hyprland}"
 }
 
-# Helper for notifications
+REPO_DIR="$(resolve_repo_dir)"
+export RHYTHM_DOTFILES_DIR="$REPO_DIR"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. Cross-Distro Detection (OS, Package Manager, Privilege Tool, Init System)
+# ═════════════════════════════════════════════════════════════════════════════
+DISTRO_ID="linux"
+DISTRO_NAME="Linux"
+PKG_MGR="none"
+INIT_SYS="other"
+PRIV_BIN=""
+
+detect_environment() {
+    if [ -e /etc/NIXOS ]; then
+        DISTRO_ID="nixos"
+        DISTRO_NAME="NixOS"
+    elif [ -f /etc/os-release ]; then
+        local id="" id_like="" pretty="" variant=""
+        id=$(awk -F= '$1=="ID"{gsub(/"/,"",$2); print tolower($2); exit}' /etc/os-release 2>/dev/null || true)
+        id_like=$(awk -F= '$1=="ID_LIKE"{gsub(/"/,"",$2); print tolower($2); exit}' /etc/os-release 2>/dev/null || true)
+        pretty=$(awk -F= '$1=="PRETTY_NAME"{gsub(/"/,"",$2); print $2; exit}' /etc/os-release 2>/dev/null || true)
+        variant=$(awk -F= '$1=="VARIANT_ID"{gsub(/"/,"",$2); print tolower($2); exit}' /etc/os-release 2>/dev/null || true)
+        [ -n "$pretty" ] && DISTRO_NAME="$pretty"
+        case "$id" in
+            nixos)                  DISTRO_ID="nixos" ;;
+            arch|cachyos|endeavouros|manjaro|garuda|artix) DISTRO_ID="arch" ;;
+            fedora)
+                if [ -x /run/ostree-booted ] || [ -f /run/ostree-booted ] || [[ "$variant" =~ silverblue|kinoite|sway-atomic|sericea|onyx ]]; then
+                    DISTRO_ID="fedora-atomic"
+                else
+                    DISTRO_ID="fedora"
+                fi
+                ;;
+            debian)                 DISTRO_ID="debian" ;;
+            ubuntu|pop|linuxmint|elementary) DISTRO_ID="ubuntu" ;;
+            opensuse-tumbleweed|opensuse-slowroll) DISTRO_ID="opensuse-tumbleweed" ;;
+            opensuse-leap|opensuse*|sles) DISTRO_ID="opensuse-leap" ;;
+            alpine)                 DISTRO_ID="alpine" ;;
+            void)                   DISTRO_ID="void" ;;
+            *)
+                case "$id_like" in
+                    *arch*)   DISTRO_ID="arch" ;;
+                    *fedora*|*rhel*) DISTRO_ID="fedora" ;;
+                    *debian*|*ubuntu*) DISTRO_ID="debian" ;;
+                    *suse*)   DISTRO_ID="opensuse-tumbleweed" ;;
+                    *)        DISTRO_ID="${id:-linux}" ;;
+                esac
+                ;;
+        esac
+    fi
+
+    if [ "$DISTRO_ID" = "nixos" ]; then
+        PKG_MGR="nix"
+    elif [ "$DISTRO_ID" = "fedora-atomic" ] && command -v rpm-ostree >/dev/null 2>&1; then
+        PKG_MGR="rpm-ostree"
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG_MGR="pacman"
+    elif command -v dnf >/dev/null 2>&1; then
+        PKG_MGR="dnf"
+    elif command -v apt-get >/dev/null 2>&1; then
+        PKG_MGR="apt"
+    elif command -v zypper >/dev/null 2>&1; then
+        PKG_MGR="zypper"
+    elif command -v apk >/dev/null 2>&1; then
+        PKG_MGR="apk"
+    elif command -v xbps-install >/dev/null 2>&1; then
+        PKG_MGR="xbps"
+    fi
+
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
+        INIT_SYS="systemd"
+    elif [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+        INIT_SYS="systemd"
+    elif [ -x /sbin/openrc ] || command -v rc-service >/dev/null 2>&1; then
+        INIT_SYS="openrc"
+    elif command -v sv >/dev/null 2>&1; then
+        INIT_SYS="runit"
+    fi
+
+    if [ "$(id -u)" -eq 0 ]; then
+        PRIV_BIN=""
+    elif command -v sudo >/dev/null 2>&1; then
+        PRIV_BIN="sudo"
+    elif command -v doas >/dev/null 2>&1; then
+        PRIV_BIN="doas"
+    fi
+}
+
+detect_environment
+
+is_nixos() { [ "$DISTRO_ID" = "nixos" ]; }
+
+# Run a privileged command safely: never hangs waiting for a password in headless/detached mode
+run_priv() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+        return $?
+    fi
+    if [ -z "$PRIV_BIN" ]; then
+        echo "  [!] No privilege escalator (sudo/doas) available." >&2
+        return 1
+    fi
+    if [ -t 0 ]; then
+        "$PRIV_BIN" "$@"
+        return $?
+    fi
+    # Non-interactive: only proceed if passwordless escalation works
+    if [ "$PRIV_BIN" = "sudo" ] && sudo -n true 2>/dev/null; then
+        sudo -n "$@"
+        return $?
+    elif [ "$PRIV_BIN" = "doas" ] && doas -n true 2>/dev/null; then
+        doas -n "$@"
+        return $?
+    fi
+    echo "  [!] Privileged command requires an interactive terminal (run: system-ota update --system --foreground)." >&2
+    return 126
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. Logging, Notifications, Locking & Safe Helpers
+# ═════════════════════════════════════════════════════════════════════════════
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE" 2>/dev/null || true
+}
+
 send_notif() {
-    local title="$1"
-    local msg="$2"
-    local urgency="${3:-normal}"
+    local title="$1" msg="$2" urgency="${3:-normal}"
     if command -v notify-send >/dev/null 2>&1; then
         notify-send -u "$urgency" -a "System Update" -i "system-software-update" "$title" "$msg" 2>/dev/null || true
     fi
 }
 
-get_local_version() {
-    if [ -f "$REPO_DIR/.version" ]; then
-        local raw
-        raw=$(cat "$REPO_DIR/.version" | tr -d '[:space:]')
-        if [ -n "$raw" ]; then
-            echo "${raw#v}"
-            return
+# Portable concurrency lock (flock when available, atomic mkdir fallback on BusyBox/Alpine)
+LOCK_HELD=0
+LOCK_DIR="${LOCK_FILE}.d"
+
+acquire_lock() {
+    if command -v flock >/dev/null 2>&1; then
+        exec 9>"$LOCK_FILE"
+        if ! flock -n 9; then
+            return 1
+        fi
+        printf '%s\n' "$$" >&9 2>/dev/null || true
+        LOCK_HELD=1
+        return 0
+    fi
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        printf '%s\n' "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+        LOCK_HELD=1
+        return 0
+    fi
+    local owner=""
+    [ -f "$LOCK_DIR/pid" ] && owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf "$LOCK_DIR" 2>/dev/null || true
+        if mkdir "$LOCK_DIR" 2>/dev/null; then
+            printf '%s\n' "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+            LOCK_HELD=1
+            return 0
         fi
     fi
-    if [ -f "$HOME/.version" ]; then
-        local raw
-        raw=$(cat "$HOME/.version" | tr -d '[:space:]')
-        if [ -n "$raw" ]; then
-            echo "${raw#v}"
-            return
+    return 1
+}
+
+release_lock() {
+    if [ "$LOCK_HELD" -eq 1 ]; then
+        if command -v flock >/dev/null 2>&1; then
+            flock -u 9 2>/dev/null || true
+            exec 9>&- 2>/dev/null || true
         fi
+        rm -rf "$LOCK_DIR" 2>/dev/null || true
+        LOCK_HELD=0
     fi
-    if [ -d "$REPO_DIR/.git" ]; then
-        local desc
-        desc=$(git -C "$REPO_DIR" describe --tags --always 2>/dev/null || true)
-        if [ -n "$desc" ]; then
-            echo "${desc#v}"
-            return
-        fi
+}
+
+is_update_running() {
+    if command -v flock >/dev/null 2>&1; then
+        [ -f "$LOCK_FILE" ] || return 1
+        ! flock -n "$LOCK_FILE" true 2>/dev/null
+        return $?
     fi
-    echo "0.1.0"
+    if [ -f "$LOCK_DIR/pid" ]; then
+        local owner
+        owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+        [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+stop_quickshell_target() {
+    local needle="$1" entry comm cmd
+    for entry in /proc/[0-9]*; do
+        read -r comm < "$entry/comm" 2>/dev/null || continue
+        case "$comm" in
+            quickshell|.quickshell*|qs) ;;
+            *) continue ;;
+        esac
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *"$needle"*) kill "${entry#/proc/}" 2>/dev/null || true ;;
+        esac
+    done
+}
+
+# Portable background launch (never uses GNU-only `setsid --fork`, which breaks BusyBox/Alpine)
+spawn_detached() {
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$@" </dev/null >/dev/null 2>&1 &
+    else
+        nohup "$@" </dev/null >/dev/null 2>&1 &
+    fi
 }
 
 ver_greater() {
-    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ] && [ "$1" != "$2" ]
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 4. Version, Git Branch & Hyprland Mode Inspection
+# ═════════════════════════════════════════════════════════════════════════════
+get_git_branch() {
+    if [ -d "$REPO_DIR/.git" ]; then
+        local b
+        b=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+        [ "$b" = "HEAD" ] && b="main"
+        printf '%s\n' "$b"
+    else
+        printf 'main\n'
+    fi
+}
+
+get_remote_ref() {
+    local branch
+    branch="$(get_git_branch)"
+    if [ -d "$REPO_DIR/.git" ]; then
+        if git -C "$REPO_DIR" rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+            printf 'origin/%s\n' "$branch"
+            return 0
+        fi
+        if git -C "$REPO_DIR" rev-parse --verify "origin/main" >/dev/null 2>&1; then
+            printf 'origin/main\n'
+            return 0
+        fi
+    fi
+    printf 'origin/main\n'
+}
+
+get_local_version() {
+    local raw=""
+    if [ -f "$REPO_DIR/.version" ]; then
+        raw=$(tr -d '[:space:]' < "$REPO_DIR/.version" 2>/dev/null || true)
+    elif [ -f "$HOME/.version" ]; then
+        raw=$(tr -d '[:space:]' < "$HOME/.version" 2>/dev/null || true)
+    fi
+    if [ -n "$raw" ]; then
+        printf '%s\n' "${raw#v}"
+        return 0
+    fi
+    if [ -d "$REPO_DIR/.git" ]; then
+        raw=$(git -C "$REPO_DIR" describe --tags --always 2>/dev/null || true)
+        [ -n "$raw" ] && { printf '%s\n' "${raw#v}"; return 0; }
+    fi
+    printf '0.1.0\n'
 }
 
 get_remote_version() {
+    local fetch_tags="${1:-false}"
     if [ -d "$REPO_DIR/.git" ]; then
-        local best=""
-        local remote_v
-        remote_v=$(git -C "$REPO_DIR" show origin/main:.version 2>/dev/null | tr -d '[:space:]' || true)
+        local ref best="" remote_v="" tag="" rtag=""
+        ref="$(get_remote_ref)"
+        remote_v=$(git -C "$REPO_DIR" show "${ref}:.version" 2>/dev/null | tr -d '[:space:]' || true)
         remote_v="${remote_v#v}"
         [ -n "$remote_v" ] && best="$remote_v"
-        local tag
+
         tag=$(git -C "$REPO_DIR" tag --list 'v*' 2>/dev/null | sed 's/^v//' | sort -V | tail -n1 || true)
         if [ -n "$tag" ] && { [ -z "$best" ] || ver_greater "$tag" "$best"; }; then
             best="$tag"
         fi
-        local rtag
-        rtag=$(git -C "$REPO_DIR" ls-remote --tags --refs origin 2>/dev/null | awk -F/ '{print $NF}' | sed 's/^v//;s/\^{}$//' | sort -Vu | sort -V | tail -n1 || true)
-        if [ -n "$rtag" ] && { [ -z "$best" ] || ver_greater "$rtag" "$best"; }; then
-            best="$rtag"
-        fi
-        if [ -n "$best" ]; then
-            echo "$best"
-            return
-        fi
-        local behind
-        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
-        if [ "$behind" -gt 0 ]; then
-            local remote_tag
-            remote_tag=$(git -C "$REPO_DIR" describe --tags origin/main 2>/dev/null || true)
-            if [ -n "$remote_tag" ]; then
-                echo "${remote_tag#v}"
-                return
+
+        if [ "$fetch_tags" = "true" ]; then
+            rtag=$(timeout 8 git -C "$REPO_DIR" ls-remote --tags --refs origin 2>/dev/null \
+                | awk -F/ '{print $NF}' | sed 's/^v//;s/\^{}$//' | sort -Vu | sort -V | tail -n1 || true)
+            if [ -n "$rtag" ] && { [ -z "$best" ] || ver_greater "$rtag" "$best"; }; then
+                best="$rtag"
             fi
+        fi
+
+        if [ -n "$best" ]; then
+            printf '%s\n' "$best"
+            return 0
         fi
     fi
     get_local_version
 }
 
-# Generate OTA status JSON
+detect_hyprland_bin() {
+    local c
+    for c in Hyprland /usr/bin/Hyprland /usr/local/bin/Hyprland hyprland /usr/bin/hyprland /usr/local/bin/hyprland start-hyprland; do
+        if command -v "$c" >/dev/null 2>&1; then
+            command -v "$c"
+            return 0
+        fi
+    done
+    return 1
+}
+
+hyprland_supports_lua() {
+    local hbin
+    hbin="$(detect_hyprland_bin 2>/dev/null || true)"
+    [ -n "$hbin" ] && [ -x "$hbin" ] || return 1
+    if command -v ldd >/dev/null 2>&1 && ldd "$hbin" 2>/dev/null | grep -qiE "liblua|libluajit"; then
+        return 0
+    fi
+    if command -v readelf >/dev/null 2>&1 && readelf -d "$hbin" 2>/dev/null | grep -qiE "lua"; then
+        return 0
+    fi
+    if command -v strings >/dev/null 2>&1 && strings "$hbin" 2>/dev/null | grep -qiE "luaL_newstate|lua_createtable|hyprland\.lua|Config is lua|loading lua mgr|lua mgr"; then
+        return 0
+    fi
+    return 1
+}
+
+# Reconcile hyprland.lua vs hyprland.conf AND adapt hyprland.conf to older Hyprland (<0.54/<0.53/<0.51)
+reconcile_hyprland_config() {
+    local conf="$HOME/.config/hypr/hyprland.conf"
+    local lua="$HOME/.config/hypr/hyprland.lua"
+    local hbin
+    hbin="$(detect_hyprland_bin 2>/dev/null || true)"
+
+    if hyprland_supports_lua; then
+        [ -f "$conf" ] && rm -f "$conf" 2>/dev/null || true
+        return 0
+    fi
+
+    [ -f "$lua" ] && rm -f "$lua" 2>/dev/null || true
+    [ -f "$conf" ] || return 0
+
+    local ver="" maj=0 min=54
+    if [ -n "$hbin" ] && [ -x "$hbin" ]; then
+        ver=$("$hbin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
+    fi
+    if [ -z "$ver" ] && command -v hyprctl >/dev/null 2>&1; then
+        ver=$(hyprctl version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
+    fi
+    if [ -n "$ver" ]; then
+        maj="${ver%%.*}"
+        min="${ver#*.}"
+    fi
+
+    if [ "$maj" -eq 0 ] && [ "$min" -lt 54 ]; then
+        if grep -q "^debug[[:space:]]*{" "$conf" 2>/dev/null; then
+            sed -i '/^debug[[:space:]]*{/,/^}/d' "$conf" 2>/dev/null || true
+            if ! grep -q "^[[:space:]]*vfr[[:space:]]*=" "$conf" 2>/dev/null; then
+                sed -i '/^[[:space:]]*vrr[[:space:]]*=/a \    vfr = true' "$conf" 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    if [ "$maj" -eq 0 ] && [ "$min" -lt 53 ]; then
+        sed -i \
+            -e 's|^windowrule = match:class \.\*, suppress_event maximize 1$|windowrulev2 = suppressevent maximize, class:.*|' \
+            -e 's|^layerrule = match:namespace \([^,]*\), blur 1$|layerrule = blur, \1|' \
+            -e 's|^layerrule = match:namespace \([^,]*\), ignore_alpha \([^,]*\)$|layerrule = ignorealpha \2, \1|' \
+            -e 's|^layerrule = match:namespace \([^,]*\), no_anim 1$|layerrule = noanim, \1|' \
+            -e 's|^layerrule = match:namespace \([^,]*\), animation \(.*\)$|layerrule = animation \2, \1|' \
+            "$conf" 2>/dev/null || true
+    fi
+
+    if [ "$maj" -eq 0 ] && [ "$min" -lt 51 ]; then
+        sed -i 's|^gesture = 3, horizontal, workspace$|gestures {\n    workspace_swipe = true\n}|' "$conf" 2>/dev/null || true
+    fi
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5. Cross-Distro Package Update Checker & Upgrader
+# ═════════════════════════════════════════════════════════════════════════════
+# Prints one package name per line (stdout), never fails.
+query_pkg_updates() {
+    case "$PKG_MGR" in
+        pacman)
+            if command -v checkupdates >/dev/null 2>&1; then
+                timeout 20 checkupdates 2>/dev/null | awk 'NF {print $1}' || true
+            else
+                pacman -Qu 2>/dev/null | awk 'NF {print $1}' || true
+            fi
+            # Include AUR updates if yay or paru is present (best effort, short timeout)
+            if command -v yay >/dev/null 2>&1; then
+                timeout 12 yay -Qua 2>/dev/null | awk 'NF {print $1}' || true
+            elif command -v paru >/dev/null 2>&1; then
+                timeout 12 paru -Qua 2>/dev/null | awk 'NF {print $1}' || true
+            fi
+            ;;
+        dnf)
+            # Strip metadata banners & Obsoleting Packages footer; take first token of 3-column rows
+            timeout 25 dnf check-update -q 2>/dev/null | awk '
+                /^[[:space:]]*$/ { next }
+                /^Obsoleting Packages/ { exit }
+                /^(Last metadata|Updating|Security:|Repositories)/ { next }
+                NF >= 3 { print $1 }
+            ' || true
+            ;;
+        rpm-ostree)
+            timeout 25 rpm-ostree upgrade --check 2>/dev/null | awk '/^[[:space:]]*Upgraded:/{f=1;next} f && NF{print $1}' || true
+            ;;
+        apt)
+            timeout 15 apt-get -s -o Debug::NoLocking=true upgrade 2>/dev/null | awk '/^Inst /{print $2}' || true
+            ;;
+        zypper)
+            timeout 25 zypper --non-interactive --no-refresh list-updates 2>/dev/null | awk -F'|' '
+                NF >= 5 {
+                    gsub(/^[ \t]+|[ \t]+$/, "", $3)
+                    if ($3 != "" && $3 != "Name" && $3 !~ /^-+$/) print $3
+                }
+            ' || true
+            ;;
+        apk)
+            # `apk version -l "<"` prints `<pkg>-<ver> < <newver>` cleanly without root
+            timeout 15 apk version -l '<' 2>/dev/null | awk 'NR>1 && NF {print $1}' || true
+            ;;
+        xbps)
+            timeout 20 xbps-install -Sun 2>/dev/null | awk 'NF {print $1}' || true
+            ;;
+        nix|none|*)
+            ;;
+    esac
+}
+
+query_flatpak_updates_count() {
+    if command -v flatpak >/dev/null 2>&1; then
+        timeout 12 flatpak remote-ls --updates --columns=application 2>/dev/null | grep -c . || echo 0
+    else
+        echo 0
+    fi
+}
+
+upgrade_system_packages() {
+    local rc=0
+    case "$PKG_MGR" in
+        pacman)
+            if [ -f /var/lib/pacman/db.lck ] && ! pgrep -x pacman >/dev/null 2>&1; then
+                echo "  [!] Stale /var/lib/pacman/db.lck detected (no pacman running). Remove it before upgrading." >&2
+                return 1
+            fi
+            echo "  Upgrading Arch packages via pacman..."
+            if [ -t 0 ]; then
+                run_priv pacman -Syu || rc=$?
+            else
+                run_priv pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1 || rc=$?
+            fi
+            if [ "$rc" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
+                if command -v yay >/dev/null 2>&1; then
+                    echo "  Upgrading AUR packages via yay..."
+                    if [ -t 0 ]; then yay -Sua || true; else yay -Sua --noconfirm >> "$LOG_FILE" 2>&1 || true; fi
+                elif command -v paru >/dev/null 2>&1; then
+                    echo "  Upgrading AUR packages via paru..."
+                    if [ -t 0 ]; then paru -Sua || true; else paru -Sua --noconfirm >> "$LOG_FILE" 2>&1 || true; fi
+                fi
+            fi
+            ;;
+        dnf)
+            echo "  Upgrading Fedora packages via dnf..."
+            run_priv dnf upgrade -y >> "$LOG_FILE" 2>&1 || rc=$?
+            ;;
+        rpm-ostree)
+            echo "  Staging Fedora Atomic update via rpm-ostree..."
+            rpm-ostree upgrade >> "$LOG_FILE" 2>&1 || run_priv rpm-ostree upgrade >> "$LOG_FILE" 2>&1 || rc=$?
+            ;;
+        apt)
+            echo "  Upgrading Debian/Ubuntu packages via apt-get..."
+            (run_priv apt-get update -y && run_priv env DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends) >> "$LOG_FILE" 2>&1 || rc=$?
+            ;;
+        zypper)
+            if [ "$DISTRO_ID" = "opensuse-leap" ]; then
+                echo "  Upgrading openSUSE Leap packages via zypper up..."
+                (run_priv zypper --no-cd --non-interactive refresh && run_priv zypper --no-cd --non-interactive update --auto-agree-with-licenses) >> "$LOG_FILE" 2>&1 || rc=$?
+            else
+                echo "  Upgrading openSUSE Tumbleweed packages via zypper dup..."
+                (run_priv zypper --no-cd --non-interactive refresh && run_priv zypper --no-cd --non-interactive dist-upgrade --auto-agree-with-licenses) >> "$LOG_FILE" 2>&1 || rc=$?
+            fi
+            ;;
+        apk)
+            echo "  Upgrading Alpine packages via apk..."
+            (run_priv apk update && run_priv apk upgrade) >> "$LOG_FILE" 2>&1 || rc=$?
+            ;;
+        xbps)
+            echo "  Upgrading Void Linux packages via xbps-install..."
+            run_priv xbps-install -Syu >> "$LOG_FILE" 2>&1 || rc=$?
+            ;;
+        nix)
+            echo "  NixOS system upgrades are handled declaratively via nixos-rebuild."
+            ;;
+        *)
+            echo "  [!] Unsupported package manager ($PKG_MGR); skipping system packages."
+            ;;
+    esac
+    return "$rc"
+}
+
+upgrade_flatpak_packages() {
+    if command -v flatpak >/dev/null 2>&1; then
+        echo "  Updating Flatpak applications..."
+        flatpak update -y --noninteractive >> "$LOG_FILE" 2>&1 || return 1
+    fi
+    return 0
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 6. Status JSON Engine (100% valid jq JSON, atomic write, backwards-compatible)
+# ═════════════════════════════════════════════════════════════════════════════
 generate_status_json() {
     local fetch_remote="${1:-false}"
 
     if [ "$fetch_remote" = "true" ] && [ -d "$REPO_DIR/.git" ]; then
-        git -C "$REPO_DIR" fetch origin main --tags --quiet 2>/dev/null || true
+        timeout 15 git -C "$REPO_DIR" fetch origin --tags --quiet 2>/dev/null || true
     fi
 
-    local local_ver
-    local_ver=$(get_local_version)
-    local remote_ver
-    remote_ver=$(get_remote_version)
+    local local_ver remote_ver branch ref
+    local_ver="$(get_local_version)"
+    remote_ver="$(get_remote_version "$fetch_remote")"
+    branch="$(get_git_branch)"
+    ref="$(get_remote_ref)"
 
-    local dotfiles_behind=0
-    local dotfiles_ahead=0
-    local dotfiles_hash="unknown"
-    local remote_hash="unknown"
-    local dotfiles_branch="main"
-
+    local behind=0 ahead=0 local_hash="unknown" remote_hash="unknown"
     if [ -d "$REPO_DIR/.git" ]; then
-        dotfiles_hash=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-        remote_hash=$(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo "$dotfiles_hash")
-        dotfiles_branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-        dotfiles_behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
-        dotfiles_ahead=$(git -C "$REPO_DIR" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+        local_hash=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        remote_hash=$(git -C "$REPO_DIR" rev-parse --short "$ref" 2>/dev/null || echo "$local_hash")
+        behind=$(git -C "$REPO_DIR" rev-list --count "HEAD..${ref}" 2>/dev/null || echo 0)
+        ahead=$(git -C "$REPO_DIR" rev-list --count "${ref}..HEAD" 2>/dev/null || echo 0)
     fi
 
-    local pacman_updates=0
-    local pacman_pkgs=()
-    # checkupdates (pacman-contrib) pregunta a los repositorios sin tocar el
-    # sistema. pacman -Qu solo compara contra la BD local, asi que sin una
-    # sincronizacion reciente no ve nada. Se prefiere el primero y se cae al
-    # segundo.
-    if command -v checkupdates >/dev/null 2>&1; then
-        local raw_pacman
-        raw_pacman=$(checkupdates 2>/dev/null || true)
-        if [ -n "$raw_pacman" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                local pkg
-                pkg=$(echo "$line" | awk '{print $1}')
-                [ -n "$pkg" ] || continue
-                pacman_pkgs+=("\"$pkg\"")
-            done <<< "$raw_pacman"
-            pacman_updates=${#pacman_pkgs[@]}
+    local raw_pkgs="" pkg_count=0 pkgs_json="[]"
+    if [ "$fetch_remote" = "true" ] || [ ! -f "$STATUS_FILE" ]; then
+        raw_pkgs="$(query_pkg_updates | awk '!seen[$0]++')"
+        if [ -n "$raw_pkgs" ]; then
+            pkg_count=$(printf '%s\n' "$raw_pkgs" | grep -c . || echo 0)
+            if command -v jq >/dev/null 2>&1; then
+                pkgs_json=$(printf '%s\n' "$raw_pkgs" | jq -R . | jq -s .)
+            fi
         fi
-    elif command -v pacman >/dev/null 2>&1; then
-        local raw_pacman
-        raw_pacman=$(pacman -Qu 2>/dev/null || true)
-        if [ -n "$raw_pacman" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                local pkg
-                pkg=$(echo "$line" | awk '{print $1}')
-                [ -n "$pkg" ] || continue
-                pacman_pkgs+=("\"$pkg\"")
-            done <<< "$raw_pacman"
-            pacman_updates=${#pacman_pkgs[@]}
-        fi
-    elif command -v dnf >/dev/null 2>&1; then
-        local raw_dnf
-        raw_dnf=$(dnf check-update -q 2>/dev/null || true)
-        if [ -n "$raw_dnf" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                [[ "$line" =~ ^(Last|Updating|Metadata|Security) ]] && continue
-                local pkg
-                pkg=$(echo "$line" | awk '{print $1}')
-                [ -n "$pkg" ] || continue
-                pacman_pkgs+=("\"$pkg\"")
-            done <<< "$raw_dnf"
-            pacman_updates=${#pacman_pkgs[@]}
-        fi
-    elif command -v apt-get >/dev/null 2>&1; then
-        local raw_apt
-        raw_apt=$(apt-get -s -o Debug::NoLocking=true upgrade 2>/dev/null | grep "^Inst " || true)
-        if [ -n "$raw_apt" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                local pkg
-                pkg=$(echo "$line" | awk '{print $2}')
-                [ -n "$pkg" ] || continue
-                pacman_pkgs+=("\"$pkg\"")
-            done <<< "$raw_apt"
-            pacman_updates=${#pacman_pkgs[@]}
-        fi
-    elif command -v apk >/dev/null 2>&1; then
-        local raw_apk
-        raw_apk=$(apk upgrade --simulate 2>/dev/null | grep -E '^Upgrading ' || true)
-        if [ -n "$raw_apk" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                local pkg
-                pkg=$(echo "$line" | awk '{print $2}')
-                [ -n "$pkg" ] || continue
-                pacman_pkgs+=("\"$pkg\"")
-            done <<< "$raw_apk"
-            pacman_updates=${#pacman_pkgs[@]}
-        fi
-    elif command -v zypper >/dev/null 2>&1; then
-        local raw_zypper
-        raw_zypper=$(zypper --non-interactive list-updates 2>/dev/null | awk -F'|' 'NR>4 {gsub(/^[ \t]+|[ \t]+$/, "", $3); if ($3 != "") print $3}' || true)
-        if [ -n "$raw_zypper" ]; then
-            while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                pacman_pkgs+=("\"$line\"")
-            done <<< "$raw_zypper"
-            pacman_updates=${#pacman_pkgs[@]}
-        fi
-    fi
-
-    local kernel_ver
-    local distro_name="Linux"
-    if [ -f /etc/os-release ]; then
-        distro_name=$(grep -E '^PRETTY_NAME=' /etc/os-release | head -n1 | cut -d= -f2- | tr -d '"' || echo "Linux")
-    fi
-    if is_nixos; then
-        kernel_ver="$(uname -r 2>/dev/null || echo "Linux") (NixOS)"
-    elif [ -n "$distro_name" ] && [ "$distro_name" != "Linux" ]; then
-        kernel_ver="$distro_name ($(uname -r 2>/dev/null || echo "kernel"))"
     else
-        kernel_ver=$(uname -r 2>/dev/null || echo "Linux")
+        # Reuse last known package list when doing fast non-network status refresh
+        if command -v jq >/dev/null 2>&1 && [ -f "$STATUS_FILE" ]; then
+            pkg_count=$(jq -r '.pkg_updates // .pacman_updates // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
+            pkgs_json=$(jq -c '.pkg_list // .pacman_list // []' "$STATUS_FILE" 2>/dev/null || echo "[]")
+        fi
     fi
 
+    local flatpak_updates=0
+    if [ "$fetch_remote" = "true" ]; then
+        flatpak_updates="$(query_flatpak_updates_count)"
+    elif command -v jq >/dev/null 2>&1 && [ -f "$STATUS_FILE" ]; then
+        flatpak_updates=$(jq -r '.flatpak_updates // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
+    fi
+
+    local hypr_mode="conf"
+    hyprland_supports_lua && hypr_mode="lua"
+
+    local kernel_str
+    kernel_str="${DISTRO_NAME} ($(uname -r 2>/dev/null || echo Linux))"
     local last_checked
-    last_checked=$(date "+%Y-%m-%d %H:%M")
+    last_checked="$(date '+%Y-%m-%d %H:%M')"
+    local in_progress="false"
+    is_update_running && in_progress="true"
 
-    local has_updates=false
-    local status="up_to_date"
-    local status_text="Rhythm Hyprland is up to date"
-
-    if [ "$local_ver" != "$remote_ver" ]; then
-        has_updates=true
+    local has_updates="false" status="up_to_date" status_text="Rhythm Hyprland is up to date"
+    if ver_greater "$remote_ver" "$local_ver"; then
+        has_updates="true"
         status="update_available"
-        status_text="New release v$remote_ver available ($dotfiles_behind commits behind)"
-    elif [ "$dotfiles_behind" -gt 0 ]; then
-        has_updates=true
+        status_text="New release v${remote_ver} available (${behind} commits behind)"
+    elif [ "$behind" -gt 0 ]; then
+        has_updates="true"
         status="update_available"
-        status_text="$dotfiles_behind new system update(s) available"
-    elif [ "$pacman_updates" -gt 0 ]; then
-        has_updates=true
+        status_text="${behind} new desktop update(s) available"
+    elif [ "$pkg_count" -gt 0 ]; then
+        has_updates="true"
         status="update_available"
-        status_text="$pacman_updates system package update(s) available"
-    else
-        has_updates=false
-        status="up_to_date"
-        status_text="Rhythm Hyprland is up to date"
-    fi
-
-    local pkgs_json="[]"
-    if [ ${#pacman_pkgs[@]} -gt 0 ]; then
-        pkgs_json="[$(IFS=,; echo "${pacman_pkgs[*]}")]"
+        status_text="${pkg_count} system package update(s) available (${PKG_MGR})"
+    elif [ "$flatpak_updates" -gt 0 ]; then
+        has_updates="true"
+        status="update_available"
+        status_text="${flatpak_updates} Flatpak update(s) available"
     fi
 
     local json_output
-    json_output=$(cat <<EOF
-{
-  "status": "$status",
-  "status_text": "$status_text",
-  "has_updates": $has_updates,
-  "current_version": "v$local_ver",
-  "latest_version": "v$remote_ver",
-  "dotfiles_branch": "$dotfiles_branch",
-  "dotfiles_behind": $dotfiles_behind,
-  "dotfiles_ahead": $dotfiles_ahead,
-  "dotfiles_hash": "$dotfiles_hash",
-  "remote_hash": "$remote_hash",
-  "pacman_updates": $pacman_updates,
-  "pacman_list": $pkgs_json,
-  "kernel": "$kernel_ver",
-  "last_checked": "$last_checked"
-}
-EOF
-)
-
-    ( echo "$json_output" > "$STATUS_FILE" ) 2>/dev/null || true
-    ( echo "$json_output" > "$CACHE_DIR/ota-status.json" ) 2>/dev/null || true
-    if [ "$STATUS_FILE" != "/tmp/ota-status.json" ]; then
-        ( echo "$json_output" > "/tmp/ota-status.json" ) 2>/dev/null || true
-    fi
-    echo "$json_output"
-}
-
-cmd_check() {
-    local json_mode=false
-    local silent=false
-
-    for arg in "$@"; do
-        case "$arg" in
-            --json) json_mode=true ;;
-            --silent|-s) silent=true ;;
-        esac
-    done
-
-    local data
-    data=$(generate_status_json "true")
-
-    local has_updates
-    has_updates=$(echo "$data" | jq -r '.has_updates')
-    local status_text
-    status_text=$(echo "$data" | jq -r '.status_text')
-    local pacman_count
-    pacman_count=$(echo "$data" | jq -r '.pacman_updates')
-    local dotfiles_count
-    dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind')
-    local cur_ver
-    cur_ver=$(echo "$data" | jq -r '.current_version')
-    local lat_ver
-    lat_ver=$(echo "$data" | jq -r '.latest_version')
-
-    if [ "$has_updates" = "true" ] && [ "$silent" != "true" ]; then
-        send_notif "System Update Available" "$status_text" "normal"
-    fi
-
-    if [ "$json_mode" = "true" ]; then
-        echo "$data"
+    if command -v jq >/dev/null 2>&1; then
+        json_output=$(jq -n \
+            --arg status "$status" \
+            --arg status_text "$status_text" \
+            --argjson has_updates "$has_updates" \
+            --arg current_version "v$local_ver" \
+            --arg latest_version "v$remote_ver" \
+            --arg dotfiles_branch "$branch" \
+            --argjson dotfiles_behind "$behind" \
+            --argjson dotfiles_ahead "$ahead" \
+            --arg dotfiles_hash "$local_hash" \
+            --arg remote_hash "$remote_hash" \
+            --argjson pkg_updates "$pkg_count" \
+            --argjson pkg_list "$pkgs_json" \
+            --argjson flatpak_updates "$flatpak_updates" \
+            --arg distro "$DISTRO_NAME" \
+            --arg distro_id "$DISTRO_ID" \
+            --arg pkg_manager "$PKG_MGR" \
+            --arg init_system "$INIT_SYS" \
+            --arg hyprland_mode "$hypr_mode" \
+            --arg kernel "$kernel_str" \
+            --arg last_checked "$last_checked" \
+            --argjson in_progress "$in_progress" \
+            '{
+                status: $status,
+                status_text: $status_text,
+                has_updates: $has_updates,
+                current_version: $current_version,
+                latest_version: $latest_version,
+                dotfiles_branch: $dotfiles_branch,
+                dotfiles_behind: $dotfiles_behind,
+                dotfiles_ahead: $dotfiles_ahead,
+                dotfiles_hash: $dotfiles_hash,
+                remote_hash: $remote_hash,
+                pacman_updates: $pkg_updates,
+                pacman_list: $pkg_list,
+                pkg_updates: $pkg_updates,
+                pkg_list: $pkg_list,
+                flatpak_updates: $flatpak_updates,
+                distro: $distro,
+                distro_id: $distro_id,
+                pkg_manager: $pkg_manager,
+                init_system: $init_system,
+                hyprland_mode: $hyprland_mode,
+                kernel: $kernel,
+                last_checked: $last_checked,
+                in_progress: $in_progress
+            }')
     else
-        echo "=========================================="
-        echo "          SYSTEM UPDATE CHECK             "
-        echo "=========================================="
-        echo "Status:          $status_text"
-        echo "Current Version: $cur_ver"
-        echo "Latest Version:  $lat_ver"
-        echo "Dotfiles Behind: $dotfiles_count"
-        echo "Pacman Updates:  $pacman_count"
-        echo "=========================================="
+        json_output=$(printf '{"status":"%s","status_text":"%s","has_updates":%s,"current_version":"v%s","latest_version":"v%s","dotfiles_branch":"%s","dotfiles_behind":%d,"dotfiles_ahead":%d,"dotfiles_hash":"%s","remote_hash":"%s","pacman_updates":%d,"pacman_list":[],"pkg_updates":%d,"pkg_list":[],"flatpak_updates":%d,"distro_id":"%s","pkg_manager":"%s","kernel":"%s","last_checked":"%s","in_progress":%s}\n' \
+            "$status" "$status_text" "$has_updates" "$local_ver" "$remote_ver" "$branch" "$behind" "$ahead" "$local_hash" "$remote_hash" "$pkg_count" "$pkg_count" "$flatpak_updates" "$DISTRO_ID" "$PKG_MGR" "$kernel_str" "$last_checked" "$in_progress")
     fi
+
+    # Atomic writes (never touch world-writable /tmp/ota-status.json)
+    local tmp="${STATUS_FILE}.tmp.$$"
+    if printf '%s\n' "$json_output" > "$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$STATUS_FILE" 2>/dev/null || rm -f "$tmp"
+    fi
+    tmp="${CACHE_STATUS_FILE}.tmp.$$"
+    if printf '%s\n' "$json_output" > "$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$CACHE_STATUS_FILE" 2>/dev/null || rm -f "$tmp"
+    fi
+
+    printf '%s\n' "$json_output"
 }
 
-cmd_status() {
-    local json_mode=false
-    for arg in "$@"; do
-        case "$arg" in
-            --json) json_mode=true ;;
-        esac
-    done
-
-    local data=""
-    if [ -f "$STATUS_FILE" ]; then
-        data=$(cat "$STATUS_FILE" 2>/dev/null || true)
-    fi
-    if [ -z "$data" ] && [ -f "$CACHE_DIR/ota-status.json" ]; then
-        data=$(cat "$CACHE_DIR/ota-status.json" 2>/dev/null || true)
-    fi
-    if [ -z "$data" ] && [ -f "/tmp/ota-status.json" ]; then
-        data=$(cat "/tmp/ota-status.json" 2>/dev/null || true)
-    fi
-    if [ -z "$data" ]; then
-        data=$(generate_status_json "false")
-    fi
-
-    if [ "$json_mode" = "true" ]; then
-        echo "$data"
-    else
-        local status_text
-        status_text=$(echo "$data" | jq -r '.status_text // "Unknown"')
-        local cur_ver
-        cur_ver=$(echo "$data" | jq -r '.current_version // "v1.0.0"')
-        local lat_ver
-        lat_ver=$(echo "$data" | jq -r '.latest_version // "v1.0.0"')
-        local dotfiles_count
-        dotfiles_count=$(echo "$data" | jq -r '.dotfiles_behind // 0')
-        local pacman_count
-        pacman_count=$(echo "$data" | jq -r '.pacman_updates // 0')
-        local last_checked
-        last_checked=$(echo "$data" | jq -r '.last_checked // "Never"')
-        local dotfiles_hash
-        dotfiles_hash=$(echo "$data" | jq -r '.dotfiles_hash // "unknown"')
-        local kernel
-        kernel=$(echo "$data" | jq -r '.kernel // "Linux"')
-
-        echo "=========================================="
-        echo "           SYSTEM UPDATE STATUS           "
-        echo "=========================================="
-        echo "Status:          $status_text"
-        echo "Current Version: $cur_ver ($dotfiles_hash)"
-        echo "Latest Version:  $lat_ver"
-        echo "Dotfiles Behind: $dotfiles_count"
-        echo "Pacman Updates:  $pacman_count"
-        echo "Linux Kernel:    $kernel"
-        echo "Last Checked:    $last_checked"
-        echo "=========================================="
-    fi
-}
-
-cmd_release() {
-    local new_ver="${1:-}"
-    if [ -z "$new_ver" ]; then
-        echo "Current version: $(get_local_version)"
-        echo "Usage: system-ota release <version> (e.g. 1.0.1 or v1.0.1)"
-        return 1
-    fi
-    new_ver="${new_ver#v}"
-    echo "$new_ver" > "$REPO_DIR/.version"
-    echo "$new_ver" > "$HOME/.version"
-
-    if [ -d "$REPO_DIR/.git" ]; then
-        git -C "$REPO_DIR" add "$REPO_DIR/.version" 2>/dev/null || true
-        git -C "$REPO_DIR" commit -m "chore(release): bump version to v$new_ver" 2>/dev/null || true
-        git -C "$REPO_DIR" tag -f "v$new_ver" -m "Release v$new_ver" 2>/dev/null || true
-    fi
-
-    generate_status_json "false" >/dev/null
-    send_notif "System Release" "Rhythm Hyprland version updated to v$new_ver" "normal"
-    echo "Release v$new_ver tagged and recorded successfully."
-}
-
-cmd_changelog() {
-    local json_mode=false
-    for arg in "$@"; do
-        case "$arg" in
-            --json) json_mode=true ;;
-        esac
-    done
-
-    if [ ! -d "$REPO_DIR/.git" ]; then
-        echo "Git repository not found at $REPO_DIR"
-        return 1
-    fi
-
-    if [ "$json_mode" = "true" ]; then
-        git -C "$REPO_DIR" log -n 10 --pretty=format:'{"hash":"%h","date":"%cr","subject":"%s"}' | jq -s .
-    else
-        echo "=== Recent Commits & Changes ==="
-        git -C "$REPO_DIR" log -n 8 --pretty=format:"* [%h] %s (%cr)"
-        echo ""
-        local behind
-        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
-        if [ "$behind" -gt 0 ]; then
-            echo ""
-            echo "=== Pending Remote Updates ($behind commits) ==="
-            git -C "$REPO_DIR" log HEAD..origin/main --pretty=format:"* [%h] %s (%cr)"
-            echo ""
+# ═════════════════════════════════════════════════════════════════════════════
+# 7. Backup & Rollback Engine (with automatic rotation)
+# ═════════════════════════════════════════════════════════════════════════════
+prune_old_backups() {
+    local count=0 entry
+    while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        count=$((count + 1))
+        if [ "$count" -gt "$KEEP_BACKUPS" ]; then
+            rm -rf "$BACKUP_BASE/$entry" 2>/dev/null || true
         fi
-    fi
+    done < <(ls -1t "$BACKUP_BASE" 2>/dev/null | grep '^ota-' || true)
+}
+
+list_backups() {
+    local found=0 d id meta ver commit created
+    for d in $(ls -1td "$BACKUP_BASE"/ota-* 2>/dev/null || true); do
+        [ -d "$d" ] || continue
+        found=1
+        id="$(basename "$d")"
+        meta="$d/checkpoint.json"
+        if [ -f "$meta" ] && command -v jq >/dev/null 2>&1; then
+            ver=$(jq -r '.version // "?"' "$meta" 2>/dev/null || echo "?")
+            commit=$(jq -r '.commit // "?"' "$meta" 2>/dev/null | cut -c1-8)
+            created=$(jq -r '.created_at // "?"' "$meta" 2>/dev/null || echo "?")
+            printf '  %-22s  v%-8s  %-8s  %s\n' "$id" "$ver" "$commit" "$created"
+        else
+            printf '  %s\n' "$id"
+        fi
+    done
+    [ "$found" -eq 0 ] && echo "  (no checkpoints found in $BACKUP_BASE)"
+    return 0
 }
 
 cmd_backup() {
-    # Pre-OTA filesystem snapshot (best effort, never fatal).
-    if command -v ota-snapshot >/dev/null 2>&1; then
-        ota-snapshot --fs-only >/dev/null 2>&1 || true
-    elif [ -x "$HOME/.local/bin/ota-snapshot" ]; then
-        "$HOME/.local/bin/ota-snapshot" --fs-only >/dev/null 2>&1 || true
+    if [ "${1:-}" = "--list" ]; then
+        echo "Available OTA checkpoints ($BACKUP_BASE):"
+        list_backups
+        return 0
+    fi
+
+    # Best-effort filesystem snapshot (non-interactive, never fatal)
+    if ! is_nixos; then
+        if command -v ota-snapshot >/dev/null 2>&1; then
+            ota-snapshot --fs-only >> "$LOG_FILE" 2>&1 || true
+        elif [ -x "$HOME/.local/bin/ota-snapshot" ]; then
+            "$HOME/.local/bin/ota-snapshot" --fs-only >> "$LOG_FILE" 2>&1 || true
+        fi
     fi
 
     local snap_id="ota-$(date +%Y%m%d_%H%M%S)"
     local target="$BACKUP_BASE/$snap_id"
     mkdir -p "$target"
 
-    echo "Creating safety checkpoint at $target..."
-    if [ -d "$HOME/.config/hypr" ]; then cp -r "$HOME/.config/hypr" "$target/"; fi
-    if [ -d "$HOME/.config/waybar" ]; then cp -r "$HOME/.config/waybar" "$target/"; fi
-    if [ -d "$HOME/.config/quickshell" ]; then cp -r "$HOME/.config/quickshell" "$target/"; fi
-    if [ -d "$HOME/.config/rofi" ]; then cp -r "$HOME/.config/rofi" "$target/"; fi
-    if [ -d "$HOME/.config/kitty" ]; then cp -r "$HOME/.config/kitty" "$target/"; fi
-    if [ -d "$HOME/.config/mako" ]; then cp -r "$HOME/.config/mako" "$target/"; fi
-    if [ -d "$HOME/.local/bin" ]; then cp -r "$HOME/.local/bin" "$target/"; fi
-
-    cat <<EOF > "$target/checkpoint.json"
-{
-  "id": "$snap_id",
-  "created_at": "$(date -Iseconds)",
-  "version": "$(get_local_version)",
-  "commit": "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
-}
-EOF
-    echo "Checkpoint $snap_id created successfully."
-    echo "$target"
-}
-
-# Devuelve la isla si este guion muere sin haberla devuelto.
-#
-# En el camino normal la isla se para antes del despliegue y se vuelve al final.
-# El trap cubre el caso de que el guion muera en medio: entonces la isla se queda
-# apagada y el usuario pierde el panel y las notificaciones sin aviso.
-_ota_devolver_isla() {
-    local rc=$?
-    [ -n "${OTA_RUNNER:-}" ] && rm -f "$OTA_RUNNER" 2>/dev/null
-    if [ "${OTA_ISLAND_WAS_ACTIVE:-false}" = "true" ] \
-       && ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-        echo "[!] El update termino de forma inesperada; devolviendo la isla..." >> "$LOG_FILE"
-        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
-            systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-            systemctl --user start waybar-island.service >/dev/null 2>&1 || true
-        else
-            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null || true
+    local dir
+    for dir in hypr waybar quickshell rofi kitty mako rust-dock rhythm; do
+        if [ -d "$HOME/.config/$dir" ]; then
+            cp -a "$HOME/.config/$dir" "$target/$dir" 2>/dev/null || true
         fi
-    fi
-    return $rc
-}
-
-# Habilita las unidades de usuario recien desplegadas.
-#
-# Esto NO puede vivir en una migracion: rhythm-migrate marca cada guion como hecho
-# en ~/.local/state/rhythm/migrations y no lo vuelve a ejecutar nunca. Una
-# migracion se ejecuta una vez, pero un servicio nuevo puede anadirse al repo
-# cualquier dia, asi que esto tiene que pasar en CADA actualizacion. Probado: con
-# la regla en una migracion ya marcada, rhythm-migrate responde "all up to date"
-# y un servicio nuevo se queda en disabled.
-#
-# La regla sale del propio fichero de la unidad: si tiene WantedBy=default.target
-# o timers.target, se habilita. Asi no hay ninguna lista que mantener y anadir un
-# servicio al repo basta.
-#
-# Solo habilita, no arranca: un update no debe abrir la webcam ni sacar el dock
-# delante de nadie. Un servicio nuevo espera al siguiente inicio de sesion, o a un
-# systemctl --user start a mano.
-ota_habilitar_servicios() {
-    # La regla vive en enable-user-services, que install.sh tambien llama. Estaba
-    # duplicada aqui y alli con dos listas distintas, que es como se llega a que un
-    # servicio se habilite en una instalacion nueva y no en una actualizacion.
-    "$HOME/.local/bin/enable-user-services" 2>/dev/null || true
-}
-
-cmd_update() {
-    local dotfiles_only=false
-    local system_packages=false
-    local skip_backup=false
-
-    # The update is normally started from the Dynamic Island, and it stops the
-    # island on purpose before replacing the island's own config files. Quickshell
-    # kills its child processes on shutdown, so without detaching first the
-    # update would kill itself at that stop and never bring the panel back.
-    if [ "${OTA_DETACHED:-0}" != "1" ]; then
-        local should_detach=true
-        if [ -t 1 ]; then
-            should_detach=false
-        fi
-        for arg in "$@"; do
-            case "$arg" in
-                --detach) should_detach=true ;;
-                --no-detach|--foreground) should_detach=false ;;
-            esac
-        done
-
-        if [ "$should_detach" = "true" ]; then
-            local runner
-            runner=$(mktemp /tmp/system-ota-run.XXXXXX)
-            if ! cp -f "$0" "$runner" 2>/dev/null; then
-                runner="$0"
-            else
-                chmod +x "$runner" 2>/dev/null || true
-            fi
-            local launched=false
-            if command -v systemd-run >/dev/null 2>&1; then
-                if OTA_DETACHED=1 OTA_RUNNER="$runner" systemd-run --user --scope --quiet bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null; then
-                    launched=true
-                fi
-            fi
-            if [ "$launched" != "true" ]; then
-                OTA_DETACHED=1 OTA_RUNNER="$runner" setsid --fork bash "$runner" update "$@" >>"$LOG_FILE" 2>&1 </dev/null || true
-            fi
-            echo "OTA update started in the background (detached)."
-            return 0
-        fi
-        export OTA_DETACHED=1
-    fi
-
-    # Red de seguridad: si este guion muere por lo que sea, aunque sea por un error
-    # que no hayamos previsto, la isla no puede quedarse apagada. Es el servidor de
-    # notificaciones, y sin ella no hay forma de avisar de nada.
-    trap '_ota_devolver_isla' EXIT
-
-    for arg in "$@"; do
-        case "$arg" in
-            --dotfiles-only) dotfiles_only=true ;;
-            --system|--all) system_packages=true ;;
-            --no-backup) skip_backup=true ;;
-        esac
     done
-
-    # NixOS declarative update handling
-    if is_nixos; then
-        echo "=== Rhythm Hyprland Update (NixOS) ==="
-        send_notif "System Update" "Starting NixOS update process..." "normal"
-        local OTA_PROBLEMS=0
-
-        # Update local git repository if cloned
-        if [ -d "$REPO_DIR/.git" ]; then
-            echo "[1/3] Updating local repository checkout ($REPO_DIR)..."
-            if ! git -C "$REPO_DIR" pull --ff-only origin main >> "$LOG_FILE" 2>&1; then
-                echo "  [!] Git pull skipped or had local modifications."
-            fi
-        fi
-
-        # Update home-manager user flake
-        local hm_dir="$HOME/.config/home-manager"
-        if [ -f "$hm_dir/flake.nix" ]; then
-            echo "[2/3] Updating user desktop environment (home-manager)..."
-            nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland "$hm_dir" >> "$LOG_FILE" 2>&1 || true
-            if command -v home-manager >/dev/null 2>&1; then
-                if ! home-manager switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] home-manager switch reported errors. Details in $LOG_FILE"
-                fi
-            else
-                if ! nix --extra-experimental-features "nix-command flakes" run home-manager -- switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] home-manager switch reported errors. Details in $LOG_FILE"
-                fi
-            fi
-        else
-            echo "[2/3] No standalone home-manager flake found at $hm_dir."
-        fi
-
-        # Update NixOS system flake if requested
-        local etc_dir="/etc/nixos"
-        if [ -f "$etc_dir/flake.nix" ] && [ "$system_packages" = true ]; then
-            echo "[3/3] Rebuilding NixOS system (/etc/nixos)..."
-            if command -v sudo >/dev/null 2>&1; then
-                sudo nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland "$etc_dir" >> "$LOG_FILE" 2>&1 || true
-                if ! sudo nixos-rebuild switch --flake "$etc_dir" >> "$LOG_FILE" 2>&1; then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] nixos-rebuild switch reported errors. Details in $LOG_FILE"
-                fi
-            else
-                echo "  [!] sudo required for system rebuild."
-            fi
-        else
-            echo "[3/3] System rebuild skipped (run with --system to rebuild /etc/nixos)."
-        fi
-
-        # Reload desktop services
-        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
-        command -v pkill >/dev/null 2>&1 && { pkill -x waybar 2>/dev/null || true; pkill -x .waybar-wrapped 2>/dev/null || true; }
-
-        generate_status_json "false" >/dev/null 2>&1 || true
-
-        if [ "$OTA_PROBLEMS" -eq 0 ]; then
-            send_notif "System Update Complete" "NixOS desktop updated successfully!" "normal"
-            echo "OTA update completed successfully."
-            return 0
-        else
-            send_notif "System Update" "Update finished with warnings. See $LOG_FILE" "normal"
-            echo "OTA update finished with $OTA_PROBLEMS issue(s). Details in $LOG_FILE"
-            return 1
-        fi
+    if [ -d "$HOME/.local/bin" ]; then
+        cp -a "$HOME/.local/bin" "$target/bin" 2>/dev/null || true
     fi
 
-    # Todo lo que falla aqui se ignoraba con "|| true" y el final escribia siempre
-    # "aplicado correctamente", asi que la notificacion decia que habia ido bien
-    # con el pull vaciado, el despliegue a medias o la isla sin volver. Se cuenta
-    # cada problema y el resumen lo dice.
-    local OTA_PROBLEMS=0
-    local OTA_DEPLOY_FAILED=0
+    local commit="unknown" ver
+    ver="$(get_local_version)"
+    [ -d "$REPO_DIR/.git" ] && commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
 
-    send_notif "System Update" "Starting OTA update process..." "normal"
-
-    # Pre-OTA filesystem snapshot before dotfiles pull (best effort, never fatal).
-    if command -v ota-snapshot >/dev/null 2>&1; then
-        ota-snapshot --fs-only >/dev/null 2>&1 || true
-    elif [ -x "$HOME/.local/bin/ota-snapshot" ]; then
-        "$HOME/.local/bin/ota-snapshot" --fs-only >/dev/null 2>&1 || true
-    fi
-
-    # Step 1: Backup
-    if [ "$skip_backup" != "true" ]; then
-        echo "[1/4] Creating system backup checkpoint..."
-        cmd_backup >/dev/null
-    fi
-
-    # Step 2: Dotfiles sync
-    echo "[2/4] Updating dotfiles from repository..."
-    if [ -d "$REPO_DIR/.git" ]; then
-        local stash_needed=false
-        if ! git -C "$REPO_DIR" diff --quiet 2>/dev/null || ! git -C "$REPO_DIR" diff --cached --quiet 2>/dev/null || [ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]; then
-            echo "Stashing local changes..."
-            git -C "$REPO_DIR" stash push -u -m "ota-pre-update-$(date +%s)" >/dev/null 2>&1 || true
-            stash_needed=true
-        fi
-
-        # Make sure local branch is on main and not stuck in rebase
-        git -C "$REPO_DIR" rebase --abort >/dev/null 2>&1 || true
-        local cur_branch
-        cur_branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-        if [ "$cur_branch" = "HEAD" ]; then
-            git -C "$REPO_DIR" checkout main >/dev/null 2>&1 || true
-        fi
-
-        # If shallow, unshallow to avoid rebase failures
-        if [ -f "$REPO_DIR/.git/shallow" ]; then
-            git -C "$REPO_DIR" fetch --unshallow origin main >/dev/null 2>&1 || true
-        fi
-
-        # Auto-heal permissions if any git objects or metadata became root-owned
-        if command -v sudo >/dev/null 2>&1; then
-            if [ -n "$(find "$REPO_DIR/.git" -user root -print -quit 2>/dev/null)" ]; then
-                sudo chown -R "$USER:$(id -gn)" "$REPO_DIR" 2>/dev/null || true
-            fi
-        fi
-
-        # Fetch and pull if behind
-        git -C "$REPO_DIR" fetch origin +refs/heads/main:refs/remotes/origin/main --tags >/dev/null 2>&1 || git -C "$REPO_DIR" fetch origin --tags >/dev/null 2>&1 || true
-        local behind
-        behind=$(git -C "$REPO_DIR" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
-        if [ "$behind" -gt 0 ]; then
-            echo "Pulling $behind new commit(s) from remote..."
-            if ! git -C "$REPO_DIR" pull --rebase origin main >> "$LOG_FILE" 2>&1; then
-                git -C "$REPO_DIR" rebase --abort >/dev/null 2>&1 || true
-                echo "  [!] Rebase falló por conflictos o divergencia. Probando fast-forward..."
-                if ! git -C "$REPO_DIR" merge --ff-only origin/main >> "$LOG_FILE" 2>&1; then
-                    local rescue_branch="backup-local-$(date +%Y%m%d-%H%M%S)"
-                    git -C "$REPO_DIR" branch "$rescue_branch" >/dev/null 2>&1 || true
-                    echo "  [!] Historial local divergente. Guardando rama de rescate '$rescue_branch' y sincronizando con origin/main..."
-                    if git -C "$REPO_DIR" reset --hard origin/main >> "$LOG_FILE" 2>&1; then
-                        echo "  [✓] Repositorio sincronizado exitosamente con la última versión de origin/main."
-                    else
-                        OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                        echo "  [!] No se pudo resetear a origin/main. Detalle en $LOG_FILE"
-                    fi
-                fi
-            fi
-        fi
-
-        if [ "$stash_needed" = "true" ]; then
-            # Antes: "|| true". Si el pop tenia conflictos, tus cambios se quedaban
-            # en el stash sin mas y el updateInsetsaba con exito, asi que no te
-            # enterabas de nada hasta que los buscabas.
-            if ! git -C "$REPO_DIR" stash pop >> "$LOG_FILE" 2>&1; then
-                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                echo "  [!] No se pudieron restaurar tus cambios locales; siguen en el stash."
-                echo "      Recuperalos con: git -C $REPO_DIR stash list"
-            fi
-        fi
-    fi
-
-    # Deploy configs & scripts
-    echo "Deploying configs and scripts..."
-
-    # Stop the island first. Its QML lives under ~/.config, which the deploy
-    # step below overwrites: Quickshell hot-reloads on change and a half-written
-    # shell.qml takes it down, leaving the unit dead after the start limit.
-    island_was_active=false
-    if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet waybar-island.service 2>/dev/null; then
-        island_was_active=true
-        # Esta es la que lee el trap de salida: si el guion muere despues de
-        # aqui, la isla se queda apagada y el trap tiene que saber que estaba viva.
-        OTA_ISLAND_WAS_ACTIVE=true
-        systemctl --user stop waybar-island.service >/dev/null 2>&1 || true
-    elif "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-        island_was_active=true
-        OTA_ISLAND_WAS_ACTIVE=true
-        pkill -f "quickshell.*waybar-island" 2>/dev/null || true
-        pkill -f "quickshell-island" 2>/dev/null || true
-    fi
-    if [ -f "$REPO_DIR/.version" ]; then
-        cp -f "$REPO_DIR/.version" "$HOME/.version" 2>/dev/null || true
-    fi
-
-    # Bootstrap latest rhythm-materialize, system-ota and ota wrappers before deployment
-    mkdir -p "$HOME/.local/bin"
-    if [ -f "$REPO_DIR/.local/bin/rhythm-materialize" ]; then
-        rm -f "$HOME/.local/bin/rhythm-materialize" 2>/dev/null || true
-        cp -f "$REPO_DIR/.local/bin/rhythm-materialize" "$HOME/.local/bin/rhythm-materialize" 2>/dev/null || true
-        chmod 755 "$HOME/.local/bin/rhythm-materialize" 2>/dev/null || true
-    fi
-    if [ -f "$REPO_DIR/.local/bin/system-ota" ]; then
-        rm -f "$HOME/.local/bin/system-ota" 2>/dev/null || true
-        cp -f "$REPO_DIR/.local/bin/system-ota" "$HOME/.local/bin/system-ota" 2>/dev/null || true
-        chmod 755 "$HOME/.local/bin/system-ota" 2>/dev/null || true
-    fi
-    if [ -f "$REPO_DIR/.local/bin/ota-updater" ]; then
-        rm -f "$HOME/.local/bin/ota-updater" 2>/dev/null || true
-        cp -f "$REPO_DIR/.local/bin/ota-updater" "$HOME/.local/bin/ota-updater" 2>/dev/null || true
-        chmod 755 "$HOME/.local/bin/ota-updater" 2>/dev/null || true
-    fi
-
-    # rhythm-materialize deploys both .config and .local/bin recursively,
-    # maintaining a ledger of tracked files and preserving user modifications
-    # into the user_edits overlay before updating.
-    if [ -x "$HOME/.local/bin/rhythm-materialize" ]; then
-        local mat_out mat_rc=0
-        mat_out=$("$HOME/.local/bin/rhythm-materialize" 2>&1) || mat_rc=$?
-        [ -n "$mat_out" ] && echo "$mat_out" | sed 's/^/  /'
-        if [ "$mat_rc" -ne 0 ]; then
-            OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
-            echo "  [!] el despliegue de configs reporto problemas (rc=$mat_rc)"
-        fi
+    if command -v jq >/dev/null 2>&1; then
+        jq -n \
+            --arg id "$snap_id" \
+            --arg created_at "$(date -Iseconds)" \
+            --arg version "$ver" \
+            --arg commit "$commit" \
+            --arg distro "$DISTRO_ID" \
+            '{id: $id, created_at: $created_at, version: $version, commit: $commit, distro: $distro}' \
+            > "$target/checkpoint.json"
     else
-        echo "  [!] rhythm-materialize no esta instalado; desplegando directamente..."
-        local _src _base
-        if [ -d "$REPO_DIR/.local/bin" ]; then
-            mkdir -p "$HOME/.local/bin"
-            for _src in "$REPO_DIR"/.local/bin/*; do
-                [ -e "$_src" ] || continue
-                _base=$(basename "$_src")
-                case "$_base" in
-                    __pycache__|*.pyc) continue ;;
-                esac
-                if ! cp -f "$_src" "$HOME/.local/bin/$_base" 2>/dev/null; then
-                    OTA_DEPLOY_FAILED=$((OTA_DEPLOY_FAILED + 1))
-                    echo "  [!] no desplegado: .local/bin/$_base"
-                fi
-            done
-            chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
-        fi
-        if [ -d "$REPO_DIR/.config" ]; then
-            cp -rf "$REPO_DIR/.config"/* "$HOME/.config/" 2>/dev/null || true
-        fi
+        printf '{"id":"%s","created_at":"%s","version":"%s","commit":"%s","distro":"%s"}\n' \
+            "$snap_id" "$(date -Iseconds)" "$ver" "$commit" "$DISTRO_ID" > "$target/checkpoint.json"
     fi
 
-    # Reconcile hyprland configuration syntax (Lua manager vs standard hyprlang)
-    local hypr_bin
-    hypr_bin=$(command -v Hyprland 2>/dev/null || command -v /usr/bin/Hyprland 2>/dev/null || command -v /usr/local/bin/Hyprland 2>/dev/null || command -v hyprland 2>/dev/null || command -v /usr/bin/hyprland 2>/dev/null || command -v /usr/local/bin/hyprland 2>/dev/null || command -v start-hyprland 2>/dev/null || command -v /usr/bin/start-hyprland 2>/dev/null || true)
-    local supports_lua=false
-    if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
-        if command -v ldd >/dev/null 2>&1 && ldd "$hypr_bin" 2>/dev/null | grep -qiE "liblua|libluajit"; then
-            supports_lua=true
-        elif command -v readelf >/dev/null 2>&1 && readelf -d "$hypr_bin" 2>/dev/null | grep -qiE "lua"; then
-            supports_lua=true
-        elif command -v strings >/dev/null 2>&1 && strings "$hypr_bin" 2>/dev/null | grep -qiE "luaL_newstate|lua_createtable|hyprland\.lua|Config is lua|loading lua mgr|lua mgr"; then
-            supports_lua=true
-        fi
-    fi
-    if [ "$supports_lua" = true ]; then
-        if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
-            rm -f "$HOME/.config/hypr/hyprland.conf"
-        fi
-    else
-        if [ -f "$HOME/.config/hypr/hyprland.lua" ]; then
-            rm -f "$HOME/.config/hypr/hyprland.lua"
-        fi
-    fi
+    prune_old_backups
+    log "Backup checkpoint created: $snap_id"
+    echo "Checkpoint $snap_id created at $target"
+}
 
-    # Piezas de SISTEMA del greeter de SDDM.
-    if [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
-        if timeout 30 "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >/dev/null 2>&1; then
-            echo "  SDDM greeter deployed."
-        else
-            echo "  [!] el greeter de SDDM no se pudo desplegar (quiza falta sudo con contrasena)."
-            echo "      sudo ~/.local/bin/rhythm-sddm-deploy"
-        fi
-    else
-        echo "  [!] rhythm-sddm-deploy no esta instalado; las piezas de /usr y /etc se quedan como estan."
-    fi
+restart_desktop_services() {
+    local was_island_active="${1:-false}"
+    local problems=0
 
-    # Los ficheros de color que pywal genera (gtk 3/4 css y settings, rofi,
-    # mako) estan versionados en el repo con los colores del momento en que se
-    #escribieron. materialize los acaba de desplegar, asi que tras cualquier update
-    # esos ficheros volvian a los colores viejos aunque pywal ya hubiera
-    # generado otros.
-    #
-    # install.sh ya fazia deploy y luego sync; aqui faltaba ese segundo paso.
-    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
-        echo "Resyncing pywal colours after deploy..."
-        if ! timeout 20 "$HOME/.local/bin/modern-pywal-sync" >> "$LOG_FILE" 2>&1; then
-            echo "  [!] modern-pywal-sync fallo; los colores pueden estar desfasados."
-            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-        fi
-    fi
-
-    if [ "$OTA_DEPLOY_FAILED" -gt 0 ]; then
-        OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-        echo "  [!] $OTA_DEPLOY_FAILED problema(s) en el despliegue."
-    fi
-
-    # Units were just replaced on disk, so systemd needs to re-read them, and any
-    # service new in this update has to be enabled or it would sit there deployed
-    # and never start on login.
-    ota_habilitar_servicios
-
-    # Step 2b: Run pending dotfiles migrations (idempotent)
-    echo "Running pending migrations..."
-    if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
-        if ! timeout 20 env RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1; then
-            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-            echo "  [!] Algunas migraciones dand problemas. Detalle en $LOG_FILE"
-        fi
-    fi
-
-    # Step 3: System packages if requested
-    if [ "$system_packages" = "true" ]; then
-        if command -v pacman >/dev/null 2>&1; then
-            echo "[3/4] Updating system packages with pacman..."
-            if command -v sudo >/dev/null 2>&1; then
-                if ! sudo pacman -Syu --noconfirm >> "$LOG_FILE" 2>&1; then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] pacman termino con errores. Detalle en $LOG_FILE"
-                fi
-            else
-                echo "Sudo not available, skipping pacman system packages."
-            fi
-        elif command -v dnf >/dev/null 2>&1; then
-            echo "[3/4] Updating system packages with dnf..."
-            if command -v sudo >/dev/null 2>&1; then
-                if ! sudo dnf upgrade -y >> "$LOG_FILE" 2>&1; then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] dnf termino con errores. Detalle en $LOG_FILE"
-                fi
-            else
-                echo "Sudo not available, skipping dnf system packages."
-            fi
-        elif command -v apt-get >/dev/null 2>&1; then
-            echo "[3/4] Updating system packages with apt-get..."
-            if command -v sudo >/dev/null 2>&1; then
-                if ! (sudo apt-get update -y >> "$LOG_FILE" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --no-install-recommends >> "$LOG_FILE" 2>&1); then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] apt-get termino con errores. Detalle en $LOG_FILE"
-                fi
-            else
-                echo "Sudo not available, skipping apt-get system packages."
-            fi
-        elif command -v apk >/dev/null 2>&1; then
-            echo "[3/4] Updating system packages with apk..."
-            if command -v sudo >/dev/null 2>&1; then
-                if ! (sudo apk update >> "$LOG_FILE" 2>&1 && sudo apk upgrade >> "$LOG_FILE" 2>&1); then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] apk termino con errores. Detalle en $LOG_FILE"
-                fi
-            else
-                echo "Sudo not available, skipping apk system packages."
-            fi
-        elif command -v zypper >/dev/null 2>&1; then
-            echo "[3/4] Updating system packages with zypper..."
-            if command -v sudo >/dev/null 2>&1; then
-                if ! (sudo zypper --no-cd --non-interactive refresh >> "$LOG_FILE" 2>&1 && sudo zypper --no-cd --non-interactive dist-upgrade --auto-agree-with-licenses >> "$LOG_FILE" 2>&1); then
-                    OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                    echo "  [!] zypper termino con errores. Detalle en $LOG_FILE"
-                fi
-            else
-                echo "Sudo not available, skipping zypper system packages."
-            fi
-        fi
-    else
-        echo "[3/4] Skipping system packages (run with --system to update packages)."
-    fi
-
-    # Step 4: Reload desktop services
-    echo "[4/4] Reloading desktop services..."
-    if command -v hyprctl >/dev/null 2>&1; then
+    if command -v hyprctl >/dev/null 2>&1 && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
         hyprctl reload >/dev/null 2>&1 || true
     fi
 
@@ -960,154 +836,792 @@ cmd_update() {
         pkill -x .waybar-wrapped 2>/dev/null || true
     fi
 
-    # Bring the island back before anything else: it is the notification server,
-    # so the completion notification below needs it already running.
-    if [ "$island_was_active" = true ] || "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-        echo "Restarting Dynamic Island..."
-        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
+    # Bring Dynamic Island back first (notification server)
+    if [ "$was_island_active" = "true" ] || "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        echo "  Restarting Dynamic Island..."
+        if [ "$INIT_SYS" = "systemd" ] && systemctl --user list-unit-files waybar-island.service >/dev/null 2>&1; then
+            systemctl --user daemon-reload >/dev/null 2>&1 || true
             systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
             systemctl --user restart waybar-island.service >/dev/null 2>&1 || true
         else
-            pkill -f "quickshell.*waybar-island" 2>/dev/null || true
-            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null || true
+            stop_quickshell_target "quickshell/waybar-island"
+            spawn_detached "$HOME/.local/bin/quickshell-island"
         fi
-        for _ in 1 2 3 4 5 6 7 8 9 10; do
+        local i
+        for i in 1 2 3 4 5 6 7 8 9 10; do
             "$HOME/.local/bin/island-running" >/dev/null 2>&1 && break
             sleep 1
         done
         if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-            echo "Island did not come back, launching it directly..."
-            if command -v systemctl >/dev/null 2>&1; then
-                systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
-            fi
-            setsid --fork "$HOME/.local/bin/quickshell-island" >/dev/null 2>&1 </dev/null
-            sleep 3
+            stop_quickshell_target "quickshell/waybar-island"
+            spawn_detached "$HOME/.local/bin/quickshell-island"
+            sleep 2
             if ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-                OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-                echo "  [!] La isla no ha vuelto. Revisa: journalctl --user -u waybar-island -n 30"
+                problems=$((problems + 1))
+                echo "  [!] Dynamic Island did not come back. Check logs." >&2
             fi
         fi
     fi
 
-    # Re-generate clean status
-    generate_status_json "false" >/dev/null 2>&1 || true
-
-    # Reconciliacion final. Lo que se despliega fuera de ~/.config (por ejemplo
-    # /etc/sddm/Xsetup) no lo toca el update, asi que un fix ahi solo llega si
-    # alguien lo reconcilia. El doctor se encarga, y su salida cuenta como
-    # problema del update si algo quedo desfasado: es informacion accionable,
-    # no ruido.
-    if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
-        echo
-        echo "Reconciling state that deploy does not cover..."
-        local doc_out
-        if doc_out=$("$HOME/.local/bin/rhythm-doctor" --fix 2>&1); then
-            [ -n "$doc_out" ] && echo "$doc_out" | sed 's/^/  /'
-        else
-            echo "$doc_out" | sed 's/^/  /'
-            OTA_PROBLEMS=$((OTA_PROBLEMS + 1))
-            echo "  [!] el doctor encontro problemas que no pudo corregir todos"
+    # Restart Dock if enabled
+    if [ -x "$HOME/.local/bin/rust-dock-launcher" ]; then
+        local dock_enabled="on"
+        if [ -f "$HOME/.config/rhythm/dock.conf" ]; then
+            dock_enabled=$(awk -F= '$1 == "enabled" {print $2; exit}' "$HOME/.config/rhythm/dock.conf" 2>/dev/null || echo "on")
+        fi
+        if [ "$dock_enabled" != "off" ]; then
+            stop_quickshell_target "quickshell/dock/shell.qml"
+            spawn_detached "$HOME/.local/bin/rust-dock-launcher"
         fi
     fi
 
-    # El resumen ya no afirma exito sin condiciones. Antes ponia "aplicado
-    # correctamente" aunque el pull hubiera fallado, el despliegue hubiera dejado
-    # ficheros sin escribir o la isla no hubiera vuelto, porque cada paso se
-    # tragaba su error con "|| true".
-    if [ "$OTA_PROBLEMS" -eq 0 ] && [ "$OTA_DEPLOY_FAILED" -eq 0 ]; then
-        send_notif "System Update Complete" "OTA update applied successfully. Desktop services reloaded." "normal"
-        echo "OTA update finished successfully!"
-    else
-        send_notif "System Update Finished With Warnings" "Termino con $OTA_PROBLEMS problema(s). Revisa el registro: $LOG_FILE" "normal"
-        echo "OTA update terminado con $OTA_PROBLEMS problema(s). Detalle en $LOG_FILE"
-        echo "No se ha dado por bueno: revisa lo de arriba antes de darlo por hecho."
+    # Non-systemd background daemons
+    if [ "$INIT_SYS" != "systemd" ] && [ -x "$HOME/.local/bin/start-user-daemons" ]; then
+        "$HOME/.local/bin/start-user-daemons" >/dev/null 2>&1 || true
     fi
+
+    return "$problems"
 }
 
 cmd_rollback() {
+    local selector="${1:-}"
+
+    if [ "$selector" = "--list" ]; then
+        if is_nixos; then
+            echo "NixOS system generations:"
+            run_priv nix-env --list-generations --profile /nix/var/nix/profiles/system 2>/dev/null || true
+            if command -v home-manager >/dev/null 2>&1; then
+                echo ""
+                echo "Home Manager generations:"
+                home-manager generations || true
+            fi
+        else
+            echo "Available OTA checkpoints ($BACKUP_BASE):"
+            list_backups
+        fi
+        return 0
+    fi
+
     if is_nixos; then
-        echo "=== NixOS System Rollback ==="
-        if [ -f /etc/nixos/flake.nix ] && command -v sudo >/dev/null 2>&1; then
+        echo "=== Rhythm Hyprland Rollback (NixOS) ==="
+        if [ -e /etc/NIXOS ]; then
             echo "Rolling back NixOS system generation..."
-            sudo nixos-rebuild --rollback switch --flake /etc/nixos || true
+            # Note: nixos-rebuild --rollback must NOT pass --flake
+            run_priv nixos-rebuild switch --rollback || true
         fi
         if command -v home-manager >/dev/null 2>&1; then
-            echo "Home-manager generations:"
-            home-manager generations || true
+            echo "Home Manager generations (activate previous manually if needed):"
+            home-manager generations | head -n 5 || true
         fi
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
         send_notif "System Rollback" "NixOS generation rollback triggered." "normal"
         echo "Rollback completed."
         return 0
     fi
 
-    local snapshots=()
-    for d in "$BACKUP_BASE"/ota-*; do
-        if [ -d "$d" ]; then
-            snapshots+=("$(basename "$d")")
-        fi
+    local snapshots=() d
+    for d in $(ls -1td "$BACKUP_BASE"/ota-* 2>/dev/null || true); do
+        [ -d "$d" ] && snapshots+=("$(basename "$d")")
     done
 
     if [ ${#snapshots[@]} -eq 0 ]; then
         echo "No backup checkpoints found in $BACKUP_BASE."
-        return 0
+        return 1
     fi
 
-    echo "Available Checkpoints:"
-    for idx in "${!snapshots[@]}"; do
-        echo "  [$((idx + 1))] ${snapshots[$idx]}"
+    local choice=""
+    if [ "$selector" = "--latest" ]; then
+        choice="${snapshots[0]}"
+    elif [ -n "$selector" ]; then
+        if [ -d "$BACKUP_BASE/$selector" ]; then
+            choice="$selector"
+        else
+            echo "Checkpoint not found: $selector" >&2
+            list_backups >&2
+            return 1
+        fi
+    else
+        echo "Available checkpoints (newest first):"
+        list_backups
+        echo ""
+        if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+            choice=$(gum choose "${snapshots[@]}")
+        else
+            local idx num
+            for idx in "${!snapshots[@]}"; do
+                echo "  [$((idx + 1))] ${snapshots[$idx]}"
+            done
+            read -r -p "Select checkpoint number: " num
+            if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#snapshots[@]}" ]; then
+                choice="${snapshots[$((num - 1))]}"
+            fi
+        fi
+    fi
+
+    if [ -z "$choice" ] || [ ! -d "$BACKUP_BASE/$choice" ]; then
+        echo "Rollback cancelled."
+        return 1
+    fi
+
+    if ! acquire_lock; then
+        echo "Another OTA operation is already running." >&2
+        return 1
+    fi
+    trap 'release_lock' EXIT
+
+    local src="$BACKUP_BASE/$choice"
+    echo "Restoring checkpoint $choice..."
+
+    local island_active="false"
+    if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        island_active="true"
+        if [ "$INIT_SYS" = "systemd" ]; then
+            systemctl --user stop waybar-island.service >/dev/null 2>&1 || true
+        else
+            stop_quickshell_target "quickshell/waybar-island"
+        fi
+    fi
+
+    local dir
+    for dir in hypr waybar quickshell rofi kitty mako rust-dock rhythm; do
+        if [ -d "$src/$dir" ]; then
+            mkdir -p "$HOME/.config/$dir"
+            cp -af "$src/$dir/." "$HOME/.config/$dir/" 2>/dev/null || true
+        fi
+    done
+    if [ -d "$src/bin" ]; then
+        mkdir -p "$HOME/.local/bin"
+        cp -af "$src/bin/." "$HOME/.local/bin/" 2>/dev/null || true
+        chmod 755 "$HOME/.local/bin"/* 2>/dev/null || true
+    fi
+
+    reconcile_hyprland_config
+    restart_desktop_services "$island_active" || true
+    generate_status_json "false" >/dev/null 2>&1 || true
+    send_notif "System Rollback" "Checkpoint $choice restored successfully." "normal"
+    log "Rollback restored checkpoint: $choice"
+    echo "Rollback to $choice completed."
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 8. Core Commands: status, check, changelog, release, logs, doctor
+# ═════════════════════════════════════════════════════════════════════════════
+cmd_check() {
+    local json_mode=false silent=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json_mode=true ;;
+            --silent|-s) silent=true ;;
+        esac
     done
 
-    local choice
-    if command -v gum >/dev/null 2>&1; then
-        choice=$(gum choose "${snapshots[@]}")
-    else
-        read -r -p "Select checkpoint number: " num
-        choice="${snapshots[$((num - 1))]}"
+    local data
+    data="$(generate_status_json "true")"
+
+    local has_updates status_text cur_ver lat_ver behind pkg_count flatpak_count
+    has_updates=$(printf '%s' "$data" | jq -r '.has_updates // false' 2>/dev/null || echo false)
+    status_text=$(printf '%s' "$data" | jq -r '.status_text // "Unknown"' 2>/dev/null || echo "Unknown")
+    cur_ver=$(printf '%s' "$data" | jq -r '.current_version // "v0.0"' 2>/dev/null || echo "v0.0")
+    lat_ver=$(printf '%s' "$data" | jq -r '.latest_version // "v0.0"' 2>/dev/null || echo "v0.0")
+    behind=$(printf '%s' "$data" | jq -r '.dotfiles_behind // 0' 2>/dev/null || echo 0)
+    pkg_count=$(printf '%s' "$data" | jq -r '.pkg_updates // 0' 2>/dev/null || echo 0)
+    flatpak_count=$(printf '%s' "$data" | jq -r '.flatpak_updates // 0' 2>/dev/null || echo 0)
+
+    if [ "$has_updates" = "true" ] && [ "$silent" != "true" ]; then
+        send_notif "System Update Available" "$status_text" "normal"
     fi
 
-    if [ -n "$choice" ] && [ -d "$BACKUP_BASE/$choice" ]; then
-        echo "Restoring checkpoint $choice..."
-        local src="$BACKUP_BASE/$choice"
-        if [ -d "$src/hypr" ]; then cp -rf "$src/hypr" "$HOME/.config/"; fi
-        if [ -d "$src/waybar" ]; then cp -rf "$src/waybar" "$HOME/.config/"; fi
-        if [ -d "$src/quickshell" ]; then cp -rf "$src/quickshell" "$HOME/.config/"; fi
-        if [ -d "$src/rofi" ]; then cp -rf "$src/rofi" "$HOME/.config/"; fi
-        if [ -d "$src/kitty" ]; then cp -rf "$src/kitty" "$HOME/.config/"; fi
-        if [ -d "$src/mako" ]; then cp -rf "$src/mako" "$HOME/.config/"; fi
-        if [ -d "$src/bin" ]; then cp -rf "$src/bin"/* "$HOME/.local/bin/"; fi
-
-        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
-        command -v pkill >/dev/null 2>&1 && { pkill -x waybar 2>/dev/null || true; pkill -x .waybar-wrapped 2>/dev/null || true; }
-        send_notif "System Update" "Checkpoint $choice restored successfully." "normal"
-        echo "Rollback completed."
+    if [ "$json_mode" = "true" ]; then
+        printf '%s\n' "$data"
+    else
+        echo "================================================"
+        echo "             SYSTEM UPDATE CHECK                "
+        echo "================================================"
+        echo "Distro:          $DISTRO_NAME ($PKG_MGR / $INIT_SYS)"
+        echo "Status:          $status_text"
+        echo "Current Version: $cur_ver"
+        echo "Latest Version:  $lat_ver"
+        echo "Dotfiles Behind: $behind"
+        echo "System Packages: $pkg_count ($PKG_MGR)"
+        [ "$flatpak_count" -gt 0 ] && echo "Flatpak Updates: $flatpak_count"
+        echo "================================================"
     fi
 }
 
+cmd_status() {
+    local json_mode=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --json) json_mode=true ;;
+        esac
+    done
+
+    # Always refresh lightweight git/version/lock metadata (no network), reusing cached pkg count
+    local data
+    data="$(generate_status_json "false")"
+
+    if [ "$json_mode" = "true" ]; then
+        printf '%s\n' "$data"
+    else
+        local status_text cur_ver lat_ver behind pkg_count flatpak_count last_checked hash kernel in_prog
+        status_text=$(printf '%s' "$data" | jq -r '.status_text // "Unknown"' 2>/dev/null || echo "Unknown")
+        cur_ver=$(printf '%s' "$data" | jq -r '.current_version // "v0.0"' 2>/dev/null || echo "v0.0")
+        lat_ver=$(printf '%s' "$data" | jq -r '.latest_version // "v0.0"' 2>/dev/null || echo "v0.0")
+        behind=$(printf '%s' "$data" | jq -r '.dotfiles_behind // 0' 2>/dev/null || echo 0)
+        pkg_count=$(printf '%s' "$data" | jq -r '.pkg_updates // 0' 2>/dev/null || echo 0)
+        flatpak_count=$(printf '%s' "$data" | jq -r '.flatpak_updates // 0' 2>/dev/null || echo 0)
+        last_checked=$(printf '%s' "$data" | jq -r '.last_checked // "Never"' 2>/dev/null || echo "Never")
+        hash=$(printf '%s' "$data" | jq -r '.dotfiles_hash // "unknown"' 2>/dev/null || echo "unknown")
+        kernel=$(printf '%s' "$data" | jq -r '.kernel // "Linux"' 2>/dev/null || echo "Linux")
+        in_prog=$(printf '%s' "$data" | jq -r '.in_progress // false' 2>/dev/null || echo "false")
+
+        echo "================================================"
+        echo "             SYSTEM UPDATE STATUS               "
+        echo "================================================"
+        echo "Status:          $status_text"
+        [ "$in_prog" = "true" ] && echo "Active Job:      OTA update currently in progress"
+        echo "Current Version: $cur_ver ($hash)"
+        echo "Latest Version:  $lat_ver"
+        echo "Dotfiles Behind: $behind"
+        echo "System Packages: $pkg_count ($PKG_MGR)"
+        [ "$flatpak_count" -gt 0 ] && echo "Flatpak Updates: $flatpak_count"
+        echo "Environment:     $kernel [$INIT_SYS]"
+        echo "Last Checked:    $last_checked"
+        echo "================================================"
+    fi
+}
+
+cmd_changelog() {
+    local json_mode=false count=10
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json_mode=true ;;
+            -n)     count="${2:-10}"; shift || true ;;
+        esac
+        shift || true
+    done
+
+    if [ ! -d "$REPO_DIR/.git" ]; then
+        if [ "$json_mode" = "true" ]; then
+            echo "[]"
+        else
+            echo "Git repository not found at $REPO_DIR"
+        fi
+        return 1
+    fi
+
+    if [ "$json_mode" = "true" ]; then
+        # Safely encode commit subjects with jq (never breaks on quotes/backslashes)
+        git -C "$REPO_DIR" log -n "$count" --format='%h%x1f%cr%x1f%s' 2>/dev/null | \
+            jq -R -s 'split("\n") | map(select(length > 0) | split("\u001f") | {hash: .[0], date: .[1], subject: .[2]})'
+    else
+        echo "=== Recent Commits & Changes ==="
+        git -C "$REPO_DIR" log -n "$count" --pretty=format:"* [%h] %s (%cr)"
+        echo ""
+        local ref behind
+        ref="$(get_remote_ref)"
+        behind=$(git -C "$REPO_DIR" rev-list --count "HEAD..${ref}" 2>/dev/null || echo 0)
+        if [ "$behind" -gt 0 ]; then
+            echo ""
+            echo "=== Pending Remote Updates ($behind commits) ==="
+            git -C "$REPO_DIR" log "HEAD..${ref}" --pretty=format:"* [%h] %s (%cr)"
+            echo ""
+        fi
+    fi
+}
+
+cmd_release() {
+    local new_ver="${1:-}"
+    if [ -z "$new_ver" ]; then
+        echo "Current version: v$(get_local_version)"
+        echo "Usage: system-ota release <version> (e.g. 0.32 or v0.32)"
+        return 1
+    fi
+    new_ver="${new_ver#v}"
+    printf '%s\n' "$new_ver" > "$REPO_DIR/.version"
+    printf '%s\n' "$new_ver" > "$HOME/.version"
+
+    if [ -d "$REPO_DIR/.git" ]; then
+        git -C "$REPO_DIR" add "$REPO_DIR/.version" 2>/dev/null || true
+        git -C "$REPO_DIR" commit -m "Bump version to $new_ver" 2>/dev/null || true
+        git -C "$REPO_DIR" tag -f "v$new_ver" -m "Release v$new_ver" 2>/dev/null || true
+    fi
+
+    generate_status_json "false" >/dev/null 2>&1 || true
+    send_notif "System Release" "Rhythm Hyprland version updated to v$new_ver" "normal"
+    echo "Release v$new_ver tagged and recorded."
+}
+
+cmd_logs() {
+    local lines=80
+    if [ "${1:-}" = "-n" ] && [ -n "${2:-}" ]; then
+        lines="$2"
+    fi
+    if [ -f "$LOG_FILE" ]; then
+        tail -n "$lines" "$LOG_FILE"
+    else
+        echo "No OTA log found at $LOG_FILE"
+    fi
+}
+
+cmd_doctor() {
+    if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
+        exec "$HOME/.local/bin/rhythm-doctor" "$@"
+    elif [ -x "$REPO_DIR/.local/bin/rhythm-doctor" ]; then
+        exec "$REPO_DIR/.local/bin/rhythm-doctor" "$@"
+    else
+        echo "rhythm-doctor not found." >&2
+        return 1
+    fi
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. Main OTA Update Pipeline (Atomic, Locked, Resumable, Multi-Distro)
+# ═════════════════════════════════════════════════════════════════════════════
+OTA_ISLAND_WAS_ACTIVE="false"
+OTA_RUNNER=""
+
+_ota_cleanup_trap() {
+    local rc=$?
+    [ -n "${OTA_RUNNER:-}" ] && rm -f "$OTA_RUNNER" 2>/dev/null || true
+    if [ "${OTA_ISLAND_WAS_ACTIVE:-false}" = "true" ] && ! "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        log "OTA exited unexpectedly (rc=$rc); restoring Dynamic Island..."
+        if [ "$INIT_SYS" = "systemd" ] && systemctl --user list-unit-files waybar-island.service >/dev/null 2>&1; then
+            systemctl --user reset-failed waybar-island.service >/dev/null 2>&1 || true
+            systemctl --user start waybar-island.service >/dev/null 2>&1 || true
+        else
+            spawn_detached "$HOME/.local/bin/quickshell-island"
+        fi
+    fi
+    release_lock
+    return "$rc"
+}
+
+ensure_repo_present() {
+    if [ -d "$REPO_DIR/.git" ]; then
+        return 0
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo "  [!] git is required to sync dotfiles." >&2
+        return 1
+    fi
+    echo "  Cloning Rhythm Hyprland repository into $REPO_DIR..."
+    if git clone --depth=1 "$OTA_DEFAULT_REMOTE" "$REPO_DIR" >> "$LOG_FILE" 2>&1; then
+        return 0
+    fi
+    echo "  [!] Failed to clone $OTA_DEFAULT_REMOTE. Check $LOG_FILE" >&2
+    return 1
+}
+
+sync_git_repo() {
+    local problems=0
+    ensure_repo_present || return 1
+
+    # Heal root-owned git objects if sudo was ever used inside repo
+    if [ "$(id -u)" -ne 0 ] && [ -n "$(find "$REPO_DIR/.git" -user root -print -quit 2>/dev/null || true)" ]; then
+        run_priv chown -R "$(id -un):$(id -gn)" "$REPO_DIR" 2>/dev/null || true
+    fi
+
+    local stash_needed=false
+    if ! git -C "$REPO_DIR" diff --quiet 2>/dev/null \
+       || ! git -C "$REPO_DIR" diff --cached --quiet 2>/dev/null \
+       || [ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]; then
+        echo "  Stashing local working tree changes..."
+        if git -C "$REPO_DIR" stash push -u -m "ota-pre-update-$(date +%s)" >> "$LOG_FILE" 2>&1; then
+            stash_needed=true
+        fi
+    fi
+
+    git -C "$REPO_DIR" rebase --abort >/dev/null 2>&1 || true
+    local branch
+    branch="$(get_git_branch)"
+    if [ "$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)" = "HEAD" ]; then
+        git -C "$REPO_DIR" checkout "$branch" >/dev/null 2>&1 || git -C "$REPO_DIR" checkout main >/dev/null 2>&1 || true
+        branch="$(get_git_branch)"
+    fi
+
+    if [ -f "$REPO_DIR/.git/shallow" ]; then
+        timeout 30 git -C "$REPO_DIR" fetch --unshallow origin "$branch" >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    if ! timeout 30 git -C "$REPO_DIR" fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" --tags >> "$LOG_FILE" 2>&1; then
+        timeout 30 git -C "$REPO_DIR" fetch origin --tags >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    local ref behind
+    ref="$(get_remote_ref)"
+    behind=$(git -C "$REPO_DIR" rev-list --count "HEAD..${ref}" 2>/dev/null || echo 0)
+
+    if [ "$behind" -gt 0 ]; then
+        echo "  Pulling $behind new commit(s) from $ref..."
+        if git -C "$REPO_DIR" merge --ff-only "$ref" >> "$LOG_FILE" 2>&1; then
+            echo "  Fast-forwarded cleanly to $(git -C "$REPO_DIR" rev-parse --short HEAD)."
+        elif git -C "$REPO_DIR" pull --rebase origin "$branch" >> "$LOG_FILE" 2>&1; then
+            echo "  Rebased cleanly onto $ref."
+        else
+            git -C "$REPO_DIR" rebase --abort >/dev/null 2>&1 || true
+            local rescue="backup-local-$(date +%Y%m%d-%H%M%S)"
+            git -C "$REPO_DIR" branch "$rescue" >/dev/null 2>&1 || true
+            echo "  [!] Local history diverged; saved branch '$rescue' and syncing to $ref..."
+            if ! git -C "$REPO_DIR" reset --hard "$ref" >> "$LOG_FILE" 2>&1; then
+                echo "  [!] Failed to reset to $ref. Details in $LOG_FILE" >&2
+                problems=$((problems + 1))
+            fi
+        fi
+    else
+        echo "  Repository already at latest commit ($(git -C "$REPO_DIR" rev-parse --short HEAD))."
+    fi
+
+    if [ "$stash_needed" = true ]; then
+        if ! git -C "$REPO_DIR" stash pop >> "$LOG_FILE" 2>&1; then
+            problems=$((problems + 1))
+            echo "  [!] Could not auto-reapply stashed local edits; preserved in: git -C $REPO_DIR stash list" >&2
+        fi
+    fi
+
+    return "$problems"
+}
+
+update_nixos_pipeline() {
+    local system_packages="$1" flatpak_flag="$2" dry_run="$3"
+    local problems=0
+
+    echo "=== Rhythm Hyprland Update (NixOS) ==="
+    if [ "$dry_run" = "true" ]; then
+        echo "[dry-run] Would pull $REPO_DIR, update home-manager flake (~/.config/home-manager)"
+        [ "$system_packages" = "true" ] && echo "[dry-run] Would update /etc/nixos flake and run nixos-rebuild switch"
+        [ "$flatpak_flag" = "true" ] && echo "[dry-run] Would run flatpak update"
+        return 0
+    fi
+
+    send_notif "System Update" "Starting NixOS update..." "normal"
+
+    if [ -d "$REPO_DIR/.git" ]; then
+        echo "[1/3] Updating local repository checkout ($REPO_DIR)..."
+        git -C "$REPO_DIR" pull --ff-only origin main >> "$LOG_FILE" 2>&1 || echo "  [!] Git pull skipped (local modifications or offline)."
+    fi
+
+    local hm_dir="$HOME/.config/home-manager"
+    if [ -f "$hm_dir/flake.nix" ]; then
+        echo "[2/3] Updating Home Manager desktop environment..."
+        nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland "$hm_dir" >> "$LOG_FILE" 2>&1 || true
+        if command -v home-manager >/dev/null 2>&1; then
+            if ! home-manager switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
+                problems=$((problems + 1))
+                echo "  [!] home-manager switch failed. Details in $LOG_FILE" >&2
+            fi
+        else
+            if ! nix --extra-experimental-features "nix-command flakes" run home-manager -- switch --flake "$hm_dir" >> "$LOG_FILE" 2>&1; then
+                problems=$((problems + 1))
+                echo "  [!] home-manager switch failed. Details in $LOG_FILE" >&2
+            fi
+        fi
+    else
+        echo "[2/3] No standalone Home Manager flake at $hm_dir; skipping."
+    fi
+
+    if [ "$system_packages" = "true" ]; then
+        echo "[3/3] Rebuilding NixOS system..."
+        if [ -f /etc/nixos/flake.nix ]; then
+            run_priv nix --extra-experimental-features "nix-command flakes" flake lock --update-input hyprland /etc/nixos >> "$LOG_FILE" 2>&1 || true
+            if ! run_priv nixos-rebuild switch --flake /etc/nixos >> "$LOG_FILE" 2>&1; then
+                problems=$((problems + 1))
+                echo "  [!] nixos-rebuild switch failed. Details in $LOG_FILE" >&2
+            fi
+        else
+            if ! run_priv nixos-rebuild switch >> "$LOG_FILE" 2>&1; then
+                problems=$((problems + 1))
+                echo "  [!] nixos-rebuild switch failed. Details in $LOG_FILE" >&2
+            fi
+        fi
+    else
+        echo "[3/3] System rebuild skipped (pass --system to rebuild NixOS)."
+    fi
+
+    if [ "$flatpak_flag" = "true" ]; then
+        upgrade_flatpak_packages || problems=$((problems + 1))
+    fi
+
+    restart_desktop_services "false" || true
+    generate_status_json "false" >/dev/null 2>&1 || true
+
+    if [ "$problems" -eq 0 ]; then
+        send_notif "System Update Complete" "NixOS desktop updated successfully." "normal"
+        echo "OTA update completed successfully."
+        return 0
+    fi
+    send_notif "System Update Warnings" "Finished with $problems issue(s). See $LOG_FILE" "normal"
+    echo "OTA update finished with $problems issue(s). Details in $LOG_FILE" >&2
+    return 1
+}
+
+cmd_update() {
+    local dotfiles_only=false system_packages=false flatpak_flag=false
+    local skip_backup=false dry_run=false pause_end=false
+    local detach_pref="auto" arg
+
+    for arg in "$@"; do
+        case "$arg" in
+            --dotfiles-only) dotfiles_only=true ;;
+            --system)        system_packages=true ;;
+            --all)           system_packages=true; flatpak_flag=true ;;
+            --flatpak)       flatpak_flag=true ;;
+            --no-backup)     skip_backup=true ;;
+            --dry-run)       dry_run=true ;;
+            --pause)         pause_end=true ;;
+            --detach)        detach_pref="yes" ;;
+            --no-detach|--foreground) detach_pref="no" ;;
+        esac
+    done
+
+    # Dry-run never detaches and never mutates state
+    if [ "$dry_run" = "true" ]; then
+        echo "=== OTA Dry-Run ($DISTRO_NAME | $PKG_MGR | $INIT_SYS) ==="
+        if is_nixos; then
+            update_nixos_pipeline "$system_packages" "$flatpak_flag" "true"
+            return 0
+        fi
+        if [ -d "$REPO_DIR/.git" ]; then
+            timeout 15 git -C "$REPO_DIR" fetch origin --tags --quiet 2>/dev/null || true
+            local ref behind
+            ref="$(get_remote_ref)"
+            behind=$(git -C "$REPO_DIR" rev-list --count "HEAD..${ref}" 2>/dev/null || echo 0)
+            echo "Repository ($REPO_DIR): $behind pending commit(s) from $ref"
+            if [ "$behind" -gt 0 ]; then
+                git -C "$REPO_DIR" log "HEAD..${ref}" --pretty=format:"  * [%h] %s (%cr)"
+                echo ""
+            fi
+        fi
+        if [ -x "$HOME/.local/bin/rhythm-materialize" ]; then
+            echo "Config/script materialization preview:"
+            "$HOME/.local/bin/rhythm-materialize" --dry-run | sed 's/^/  /'
+        fi
+        if [ "$system_packages" = "true" ]; then
+            local pcnt
+            pcnt=$(query_pkg_updates | grep -c . || echo 0)
+            echo "System packages ($PKG_MGR): $pcnt pending update(s)"
+        fi
+        [ "$flatpak_flag" = "true" ] && echo "Flatpak: $(query_flatpak_updates_count) pending update(s)"
+        return 0
+    fi
+
+    # Detach cleanly when triggered from Dynamic Island (non-TTY) so stopping waybar-island
+    # never kills this updater as a child process, AND copy self to a temp runner so
+    # updating ~/.local/bin/system-ota never corrupts the running bash script mid-flight.
+    if [ "${OTA_DETACHED:-0}" != "1" ]; then
+        local should_detach=false
+        if [ "$detach_pref" = "yes" ]; then
+            should_detach=true
+        elif [ "$detach_pref" = "auto" ] && [ ! -t 1 ]; then
+            should_detach=true
+        fi
+
+        if [ "$should_detach" = "true" ]; then
+            if is_update_running; then
+                echo "An OTA update is already running."
+                return 0
+            fi
+            local runner
+            runner=$(mktemp "$RUNTIME_BASE/system-ota-run.XXXXXX")
+            cp -f "$0" "$runner" 2>/dev/null && chmod 755 "$runner" 2>/dev/null || runner="$0"
+
+            local launched=false
+            if [ "$INIT_SYS" = "systemd" ] && command -v systemd-run >/dev/null 2>&1; then
+                if systemd-run --user --unit="rhythm-ota-$$" --collect --no-block \
+                    --setenv=OTA_DETACHED=1 --setenv="OTA_RUNNER=$runner" \
+                    bash "$runner" update "$@" >> "$LOG_FILE" 2>&1; then
+                    launched=true
+                fi
+            fi
+            if [ "$launched" != "true" ]; then
+                OTA_DETACHED=1 OTA_RUNNER="$runner" spawn_detached bash -c 'exec "$1" update "${@:2}" >> "$0" 2>&1' "$LOG_FILE" "$runner" "$@"
+            fi
+            echo "OTA update started in background (log: $LOG_FILE)."
+            return 0
+        fi
+        export OTA_DETACHED=1
+    fi
+
+    if ! acquire_lock; then
+        echo "Another OTA update is already in progress. Check: $LOG_FILE" >&2
+        return 1
+    fi
+    trap '_ota_cleanup_trap' EXIT
+
+    log "=== Starting OTA update (distro=$DISTRO_ID pkg=$PKG_MGR init=$INIT_SYS system=$system_packages flatpak=$flatpak_flag) ==="
+
+    if is_nixos; then
+        local nix_rc=0
+        update_nixos_pipeline "$system_packages" "$flatpak_flag" "false" || nix_rc=$?
+        if [ "$pause_end" = "true" ] && [ -t 0 ]; then
+            echo ""
+            read -r -p "Press Enter to close..." _ || true
+        fi
+        return "$nix_rc"
+    fi
+
+    local problems=0
+    send_notif "System Update" "Starting OTA update ($DISTRO_NAME)..." "normal"
+
+    # Step 1: Backup checkpoint
+    if [ "$skip_backup" != "true" ]; then
+        echo "[1/4] Creating backup checkpoint..."
+        cmd_backup >/dev/null || echo "  [!] Backup warning (continuing)."
+    else
+        echo "[1/4] Backup skipped (--no-backup)."
+    fi
+
+    # Step 2: Sync repository & deploy configs/scripts
+    echo "[2/4] Syncing repository and deploying configs..."
+    if ! sync_git_repo; then
+        problems=$((problems + 1))
+    fi
+
+    # Stop Dynamic Island BEFORE replacing QML files so Quickshell never hot-reloads partial files
+    local island_was_active="false"
+    if [ "$INIT_SYS" = "systemd" ] && systemctl --user is-active --quiet waybar-island.service 2>/dev/null; then
+        island_was_active="true"
+        OTA_ISLAND_WAS_ACTIVE="true"
+        systemctl --user stop waybar-island.service >/dev/null 2>&1 || true
+    elif "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+        island_was_active="true"
+        OTA_ISLAND_WAS_ACTIVE="true"
+        stop_quickshell_target "quickshell/waybar-island"
+    fi
+
+    # Bootstrap updated core OTA/materialize scripts first
+    mkdir -p "$HOME/.local/bin"
+    local core_bin
+    for core_bin in rhythm-materialize system-ota ota-updater ota-snapshot; do
+        if [ -f "$REPO_DIR/.local/bin/$core_bin" ]; then
+            cp -f "$REPO_DIR/.local/bin/$core_bin" "$HOME/.local/bin/$core_bin" 2>/dev/null || true
+            chmod 755 "$HOME/.local/bin/$core_bin" 2>/dev/null || true
+        fi
+    done
+    [ -f "$REPO_DIR/.version" ] && cp -f "$REPO_DIR/.version" "$HOME/.version" 2>/dev/null || true
+
+    if [ -x "$HOME/.local/bin/rhythm-materialize" ]; then
+        local mat_out mat_rc=0
+        mat_out=$("$HOME/.local/bin/rhythm-materialize" 2>&1) || mat_rc=$?
+        [ -n "$mat_out" ] && printf '%s\n' "$mat_out" | sed 's/^/  /'
+        if [ "$mat_rc" -ne 0 ]; then
+            problems=$((problems + 1))
+            echo "  [!] rhythm-materialize failed (rc=$mat_rc)" >&2
+        fi
+    else
+        echo "  [!] rhythm-materialize missing; falling back to direct copy." >&2
+        cp -rf "$REPO_DIR/.config/." "$HOME/.config/" 2>/dev/null || problems=$((problems + 1))
+    fi
+
+    # Keep Hyprland config matching installed compositor (Lua vs <0.54/<0.53/<0.51 conf)
+    reconcile_hyprland_config
+
+    # Optional SDDM greeter sync (only when SDDM is installed)
+    if command -v sddm >/dev/null 2>&1 && [ -x "$HOME/.local/bin/rhythm-sddm-deploy" ]; then
+        if ! timeout 20 "$HOME/.local/bin/rhythm-sddm-deploy" "$REPO_DIR" >> "$LOG_FILE" 2>&1; then
+            echo "  [i] SDDM greeter unchanged (run: sudo ~/.local/bin/rhythm-sddm-deploy if needed)."
+        fi
+    fi
+
+    # Resync Pywal colours after deploy
+    if [ -x "$HOME/.local/bin/modern-pywal-sync" ]; then
+        echo "  Resyncing Pywal theme..."
+        timeout 20 "$HOME/.local/bin/modern-pywal-sync" >> "$LOG_FILE" 2>&1 || {
+            echo "  [!] modern-pywal-sync reported warnings." >&2
+            problems=$((problems + 1))
+        }
+    fi
+
+    # Enable new user services (systemd) or start daemons (OpenRC/runit)
+    if [ "$INIT_SYS" = "systemd" ] && [ -x "$HOME/.local/bin/enable-user-services" ]; then
+        "$HOME/.local/bin/enable-user-services" >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # Idempotent dotfiles migrations
+    if [ -x "$HOME/.local/bin/rhythm-migrate" ]; then
+        echo "  Running pending migrations..."
+        if ! timeout 20 env RHYTHM_REPO="$REPO_DIR" "$HOME/.local/bin/rhythm-migrate" >> "$LOG_FILE" 2>&1; then
+            problems=$((problems + 1))
+            echo "  [!] Some migrations failed. See $LOG_FILE" >&2
+        fi
+    fi
+
+    # Step 3: System & Flatpak packages (if requested)
+    if [ "$dotfiles_only" != "true" ] && [ "$system_packages" = "true" ]; then
+        echo "[3/4] Updating system packages ($PKG_MGR)..."
+        if ! upgrade_system_packages; then
+            problems=$((problems + 1))
+            echo "  [!] System package upgrade ($PKG_MGR) reported errors. See $LOG_FILE" >&2
+        fi
+    else
+        echo "[3/4] Skipping system packages (use --system or --all to upgrade $PKG_MGR)."
+    fi
+
+    if [ "$dotfiles_only" != "true" ] && [ "$flatpak_flag" = "true" ]; then
+        upgrade_flatpak_packages || problems=$((problems + 1))
+    fi
+
+    # Step 4: Reload compositor, Dynamic Island, Dock & verify health
+    echo "[4/4] Reloading desktop services..."
+    if ! restart_desktop_services "$island_was_active"; then
+        problems=$((problems + 1))
+    fi
+
+    generate_status_json "false" >/dev/null 2>&1 || true
+
+    if [ -x "$HOME/.local/bin/rhythm-doctor" ]; then
+        echo "  Running rhythm-doctor..."
+        local doc_out
+        if doc_out=$("$HOME/.local/bin/rhythm-doctor" --fix 2>&1); then
+            printf '%s\n' "$doc_out" | tail -n 3 | sed 's/^/  /'
+        else
+            printf '%s\n' "$doc_out" | sed 's/^/  /'
+            problems=$((problems + 1))
+        fi
+    fi
+
+    log "=== OTA finished (problems=$problems) ==="
+
+    local final_rc=0
+    if [ "$problems" -eq 0 ]; then
+        send_notif "System Update Complete" "Rhythm Hyprland updated cleanly (v$(get_local_version))." "normal"
+        echo "OTA update completed successfully (v$(get_local_version))."
+    else
+        send_notif "System Update Warnings" "Finished with $problems issue(s). Log: $LOG_FILE" "normal"
+        echo "OTA update finished with $problems issue(s). Inspect log: $LOG_FILE" >&2
+        final_rc=1
+    fi
+
+    if [ "$pause_end" = "true" ] && [ -t 0 ]; then
+        echo ""
+        read -r -p "Press Enter to close..." _ || true
+    fi
+    return "$final_rc"
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. Interactive Terminal UI (`system-ota gui`)
+# ═════════════════════════════════════════════════════════════════════════════
 cmd_gui() {
     if ! command -v gum >/dev/null 2>&1; then
-        echo "gum is required for the interactive GUI."
         cmd_status
+        echo ""
+        echo "Tip: install 'gum' for the interactive TUI, or run 'system-ota help'."
         return 0
     fi
 
     while true; do
         clear
-        local status_data
-        status_data=$(generate_status_json "false")
-        local status_text
-        status_text=$(echo "$status_data" | jq -r '.status_text')
-        local cur_ver
-        cur_ver=$(echo "$status_data" | jq -r '.current_version')
-        local lat_ver
-        lat_ver=$(echo "$status_data" | jq -r '.latest_version')
-        local dotfiles_count
-        dotfiles_count=$(echo "$status_data" | jq -r '.dotfiles_behind')
-        local pacman_count
-        pacman_count=$(echo "$status_data" | jq -r '.pacman_updates')
-        local hash
-        hash=$(echo "$status_data" | jq -r '.dotfiles_hash')
-        local kernel
-        kernel=$(echo "$status_data" | jq -r '.kernel')
+        local data status_text cur_ver lat_ver behind pkg_count fp_count hash kernel
+        data="$(generate_status_json "false")"
+        status_text=$(printf '%s' "$data" | jq -r '.status_text // "Unknown"')
+        cur_ver=$(printf '%s' "$data" | jq -r '.current_version // "v0.0"')
+        lat_ver=$(printf '%s' "$data" | jq -r '.latest_version // "v0.0"')
+        behind=$(printf '%s' "$data" | jq -r '.dotfiles_behind // 0')
+        pkg_count=$(printf '%s' "$data" | jq -r '.pkg_updates // 0')
+        fp_count=$(printf '%s' "$data" | jq -r '.flatpak_updates // 0')
+        hash=$(printf '%s' "$data" | jq -r '.dotfiles_hash // "unknown"')
+        kernel=$(printf '%s' "$data" | jq -r '.kernel // "Linux"')
 
         gum style \
             --border double \
@@ -1115,145 +1629,117 @@ cmd_gui() {
             --padding "1 2" \
             --margin "1 1" \
             --align center \
-            "SYSTEM UPDATE (OTA)" \
-            "Rhythm Hyprland System" \
-            "Current Version: $cur_ver ($hash)" \
-            "Latest Available: $lat_ver" \
-            "Linux Kernel: $kernel" \
-            "Pending: $dotfiles_count dotfiles, $pacman_count packages" \
+            "RHYTHM HYPRLAND OTA" \
+            "$kernel [$PKG_MGR / $INIT_SYS]" \
+            "Installed: $cur_ver ($hash)  |  Latest: $lat_ver" \
+            "Pending: $behind dotfiles, $pkg_count packages ($PKG_MGR), $fp_count flatpak" \
             "" \
             "Status: $status_text"
 
         echo ""
-        local pkg_mgr="pacman"
-        if command -v dnf >/dev/null 2>&1; then
-            pkg_mgr="dnf"
-        elif command -v apt-get >/dev/null 2>&1; then
-            pkg_mgr="apt"
-        elif command -v apk >/dev/null 2>&1; then
-            pkg_mgr="apk"
-        elif command -v zypper >/dev/null 2>&1; then
-            pkg_mgr="zypper"
-        fi
-        if is_nixos; then pkg_mgr="nixos-rebuild"; fi
-
         local choice
         choice=$(gum choose \
             "1. Check for updates" \
-            "2. Download & Install update (Seamless)" \
-            "3. Update system packages ($pkg_mgr)" \
-            "4. View Changelog & Release Notes" \
-            "5. Tag new release version" \
-            "6. Rollback to previous checkpoint" \
-            "7. Exit")
+            "2. Update dotfiles & desktop (seamless)" \
+            "3. Full update (dotfiles + $PKG_MGR + flatpak)" \
+            "4. Dry-run preview (no changes)" \
+            "5. View changelog" \
+            "6. Create / list backups" \
+            "7. Rollback to checkpoint" \
+            "8. Run rhythm-doctor & view logs" \
+            "9. Exit") || break
 
         case "$choice" in
             "1."*)
-                gum spin --spinner dot --title "Checking for remote updates..." -- sleep 1
-                cmd_check
-                gum confirm "Press enter to return" || true
+                gum spin --spinner dot --title "Checking remote updates..." -- "$0" check --silent --json >/dev/null || true
+                cmd_status
+                read -r -p "Press Enter to return..." _ || true
                 ;;
             "2."*)
-                if gum confirm "Start OTA update now?"; then
-                    gum spin --spinner line --title "Applying update..." -- bash -c "$HOME/.local/bin/system-ota update --foreground"
-                    gum confirm "Update completed. Press enter to continue" || true
+                if gum confirm "Apply desktop OTA update now?"; then
+                    "$0" update --foreground || true
+                    read -r -p "Press Enter to return..." _ || true
                 fi
                 ;;
             "3."*)
-                if gum confirm "Run full system package update via $pkg_mgr?"; then
-                    if is_nixos; then
-                        if [ -f /etc/nixos/flake.nix ]; then
-                            sudo nixos-rebuild switch --flake /etc/nixos
-                        else
-                            sudo nixos-rebuild switch
-                        fi
-                    elif [ "$pkg_mgr" = "dnf" ]; then
-                        sudo dnf upgrade -y
-                    elif [ "$pkg_mgr" = "apt" ]; then
-                        sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --no-install-recommends
-                    elif [ "$pkg_mgr" = "apk" ]; then
-                        sudo apk update && sudo apk upgrade
-                    elif [ "$pkg_mgr" = "zypper" ]; then
-                        sudo zypper --no-cd --non-interactive refresh && sudo zypper --no-cd --non-interactive dist-upgrade --auto-agree-with-licenses
-                    else
-                        sudo pacman -Syu
-                    fi
-                    generate_status_json "false" >/dev/null 2>&1 || true
-                    gum confirm "Package update completed. Press enter to continue" || true
+                if gum confirm "Run full update (dotfiles + $PKG_MGR + flatpak)?"; then
+                    "$0" update --all --foreground || true
+                    read -r -p "Press Enter to return..." _ || true
                 fi
                 ;;
             "4."*)
-                cmd_changelog
-                gum confirm "Press enter to return" || true
+                "$0" update --all --dry-run || true
+                read -r -p "Press Enter to return..." _ || true
                 ;;
             "5."*)
-                local target_v
-                target_v=$(gum input --placeholder "e.g. 1.0.1 or 1.1.0")
-                if [ -n "$target_v" ]; then
-                    cmd_release "$target_v"
-                    gum confirm "Press enter to continue" || true
-                fi
+                cmd_changelog
+                read -r -p "Press Enter to return..." _ || true
                 ;;
             "6."*)
-                cmd_rollback
-                gum confirm "Press enter to return" || true
+                cmd_backup --list
+                if gum confirm "Create a new manual checkpoint now?"; then
+                    cmd_backup
+                fi
+                read -r -p "Press Enter to return..." _ || true
                 ;;
             "7."*)
+                cmd_rollback || true
+                read -r -p "Press Enter to return..." _ || true
+                ;;
+            "8."*)
+                cmd_doctor || true
+                echo ""
+                echo "=== Recent OTA Log ($LOG_FILE) ==="
+                cmd_logs -n 25
+                read -r -p "Press Enter to return..." _ || true
+                ;;
+            "9."*)
                 break
                 ;;
         esac
     done
 }
 
+usage() {
+    cat <<EOF
+system-ota — Cross-distro OTA updater for Rhythm Hyprland
+Detected host: $DISTRO_NAME ($PKG_MGR / $INIT_SYS)
+
+Usage: system-ota <command> [options]
+
+Commands:
+  status [--json]                  Show current OTA status (fast, no network)
+  check [--json] [--silent]        Fetch remote & check system/Flatpak updates
+  update [options]                 Apply OTA update:
+      --dotfiles-only              Sync dotfiles/scripts only
+      --system                     Also upgrade system packages ($PKG_MGR)
+      --all                        Dotfiles + system packages + Flatpak
+      --flatpak                    Also upgrade Flatpak apps
+      --no-backup                  Skip pre-update backup checkpoint
+      --dry-run                    Preview all changes without writing
+      --foreground / --detach      Force foreground or background execution
+      --pause                      Wait for Enter before exiting (for terminal launchers)
+  changelog [--json] [-n N]        Show recent commits & pending remote updates
+  backup [--list]                  Create or list safety checkpoints (keeps last $KEEP_BACKUPS)
+  rollback [<id>|--latest|--list]  Restore a previous checkpoint or NixOS generation
+  release <version>                Bump .version and create git tag
+  logs [-n N]                      Show recent OTA log ($LOG_FILE)
+  doctor                           Run rhythm-doctor health check
+  gui                              Launch interactive TUI (requires gum)
+EOF
+}
+
 case "${1:-status}" in
-    check)
-        shift
-        cmd_check "$@"
-        ;;
-    status)
-        shift
-        cmd_status "$@"
-        ;;
-    changelog)
-        shift
-        cmd_changelog "$@"
-        ;;
-    release)
-        shift
-        cmd_release "$@"
-        ;;
-    backup)
-        shift
-        cmd_backup "$@"
-        ;;
-    update|install)
-        shift
-        cmd_update "$@"
-        ;;
-    rollback)
-        shift
-        cmd_rollback "$@"
-        ;;
-    gui)
-        shift
-        cmd_gui "$@"
-        ;;
-    -h|--help|help)
-        echo "OTA System Updater"
-        echo ""
-        echo "Usage: system-ota <command> [options]"
-        echo ""
-        echo "Commands:"
-        echo "  status [--json]       Show current update status"
-        echo "  check [--json]        Check for remote updates and notify"
-        echo "  release <version>     Tag and release a new system version"
-        echo "  update [--system]     Install OTA update (dotfiles & optional pacman)"
-        echo "  changelog [--json]    View recent changes and commit history"
-        echo "  backup                Create a manual safety checkpoint"
-        echo "  rollback              Restore from a previous checkpoint"
-        echo "  gui                   Launch interactive terminal UI"
-        ;;
-    *)
-        cmd_status "$@"
-        ;;
+    check)          shift; cmd_check "$@" ;;
+    status)         shift; cmd_status "$@" ;;
+    changelog)      shift; cmd_changelog "$@" ;;
+    release)        shift; cmd_release "$@" ;;
+    backup)         shift; cmd_backup "$@" ;;
+    update|install) shift; cmd_update "$@" ;;
+    rollback)       shift; cmd_rollback "$@" ;;
+    logs)           shift; cmd_logs "$@" ;;
+    doctor)         shift; cmd_doctor "$@" ;;
+    gui)            shift; cmd_gui "$@" ;;
+    -h|--help|help) usage ;;
+    *)              cmd_status "$@" ;;
 esac

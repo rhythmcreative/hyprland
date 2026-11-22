@@ -126,6 +126,15 @@ dnd_off() {
     fi
 }
 
+hypr_eval_ok() {
+    local out
+    out=$(hyprctl eval "$1" 2>&1) || return 1
+    case "$out" in
+        *error*|*unknown*|*"legacy parsers"*|"") return 1 ;;
+    esac
+    return 0
+}
+
 hide_windows() {
     local dry="${1:-false}"
     if [ "$dry" = "true" ]; then
@@ -140,17 +149,21 @@ hide_windows() {
             | jq -r '.[] | select(.workspace.name != "special:hidden") | .address' 2>/dev/null \
             | while IFS= read -r addr; do
                 [ -z "$addr" ] && continue
-                hyprctl dispatch movetoworkspace "special:hidden,address:$addr" >/dev/null 2>&1 || true
+                if ! hypr_eval_ok "hl.dispatch(hl.dsp.window.move({workspace='special:hidden', window='address:$addr', silent=true}))"; then
+                    hyprctl dispatch movetoworkspacesilent "special:hidden,address:$addr" >/dev/null 2>&1 || \
+                    hyprctl dispatch movetoworkspace "special:hidden,address:$addr" >/dev/null 2>&1 || true
+                fi
             done
         # Make sure the special workspace itself is not left visible.
         if hyprctl activeworkspace -j 2>/dev/null | jq -e 'select(.name == "special:hidden")' >/dev/null 2>&1; then
-            # `hyprctl dispatch` no funciona en esta build de Hyprland (mete los args dentro
-        # de hl.dispatch(...) y eso no es Lua valido). El equivalente verificado
-        # para enseñar el workspace especial es este.
-        hyprctl eval 'hl.dsp.workspace.toggle_special("hidden")' >/dev/null 2>&1 || true >/dev/null 2>&1 || true
+            if ! hypr_eval_ok 'hl.dispatch(hl.dsp.workspace.toggle_special("hidden"))'; then
+                hyprctl dispatch togglespecialworkspace hidden >/dev/null 2>&1 || true
+            fi
         fi
     else
-        hyprctl dispatch movetoworkspacespecial >/dev/null 2>&1 || true
+        if ! hypr_eval_ok "hl.dispatch(hl.dsp.window.move({workspace='special:hidden', silent=true}))"; then
+            hyprctl dispatch movetoworkspacesilent special:hidden >/dev/null 2>&1 || true
+        fi
     fi
 }
 
@@ -161,10 +174,9 @@ reveal_workspace() {
         return 0
     fi
     if command -v hyprctl >/dev/null 2>&1; then
-        # `hyprctl dispatch` no funciona en esta build de Hyprland (mete los args dentro
-        # de hl.dispatch(...) y eso no es Lua valido). El equivalente verificado
-        # para enseñar el workspace especial es este.
-        hyprctl eval 'hl.dsp.workspace.toggle_special("hidden")' >/dev/null 2>&1 || true >/dev/null 2>&1 || true
+        if ! hypr_eval_ok 'hl.dispatch(hl.dsp.workspace.toggle_special("hidden"))'; then
+            hyprctl dispatch togglespecialworkspace hidden >/dev/null 2>&1 || true
+        fi
     fi
 }
 

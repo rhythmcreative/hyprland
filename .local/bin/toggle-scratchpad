@@ -5,7 +5,7 @@
 # NOTE: This Hyprland build uses a Lua config API: window rules in
 # hyprland.lua already pin the scratchpad classes to
 # `special:scratchpad`, and toggling goes through
-# `hyprctl eval 'hl.dsp.workspace.toggle_special(...)'`
+# `hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special(...))'`
 # (classic `hyprctl dispatch <args>` syntax is parsed as Lua here).
 set -u
 
@@ -13,9 +13,13 @@ MODE="${1:-terminal}"
 WS="scratchpad"
 
 toggle_ws() {
-    if ! hyprctl eval "hl.dsp.workspace.toggle_special(\"${WS}\")" >/dev/null 2>&1; then
-        hyprctl dispatch togglespecialworkspace "${WS}" >/dev/null 2>&1 || true
-    fi
+    local out
+    out=$(hyprctl eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"${WS}\"))" 2>&1 || true)
+    case "$out" in
+        *error*|*unknown*|*"legacy parsers"*|"")
+            hyprctl dispatch togglespecialworkspace "${WS}" >/dev/null 2>&1 || true
+            ;;
+    esac
 }
 
 clients_json() {

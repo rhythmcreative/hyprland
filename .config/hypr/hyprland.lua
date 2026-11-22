@@ -254,23 +254,21 @@ aplicar_monitors_nwg()
 
 -- Autostart
 hl.on("hyprland.start", function ()
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP 2>/dev/null || dbus-update-activation-environment --all WAYLAND_DISPLAY XDG_CURRENT_DESKTOP 2>/dev/null || true")
-    hl.exec_cmd("command -v systemctl >/dev/null 2>&1 && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP || true")
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE 2>/dev/null || dbus-update-activation-environment --all WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE 2>/dev/null || true")
+    hl.exec_cmd("command -v systemctl >/dev/null 2>&1 && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE || true")
     hl.exec_cmd("~/.local/bin/polkit-agent-launch &")
     hl.exec_cmd("~/.local/bin/load-last-wallpaper-fast &")
     hl.exec_cmd("command -v pipewire >/dev/null 2>&1 && ! pidof -s pipewire >/dev/null 2>&1 && pipewire &")
     hl.exec_cmd("command -v wireplumber >/dev/null 2>&1 && ! pidof -s wireplumber >/dev/null 2>&1 && wireplumber &")
     hl.exec_cmd("command -v pipewire-pulse >/dev/null 2>&1 && ! pidof -s pipewire-pulse >/dev/null 2>&1 && pipewire-pulse &")
-    hl.exec_cmd("command -v wl-paste >/dev/null 2>&1 && command -v cliphist >/dev/null 2>&1 && ! pidof -s cliphist >/dev/null 2>&1 && wl-paste --type text --watch cliphist store &")
-    hl.exec_cmd("command -v wl-paste >/dev/null 2>&1 && command -v cliphist >/dev/null 2>&1 && ! pidof -s cliphist >/dev/null 2>&1 && wl-paste --type image --watch cliphist store &")
+    hl.exec_cmd("command -v wl-paste >/dev/null 2>&1 && command -v cliphist >/dev/null 2>&1 && ! systemctl --user is-active --quiet cliphist.service 2>/dev/null && ! pgrep -x wl-paste >/dev/null 2>&1 && (wl-paste --type text --watch cliphist store & wl-paste --type image --watch cliphist store &)")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets &")
-    hl.exec_cmd("nm-applet --indicator &")
     hl.exec_cmd("hypridle &")
     hl.exec_cmd("~/.local/bin/rust-dock-launcher &")
     hl.exec_cmd("~/.local/bin/quickshell-island &")
+    hl.exec_cmd("~/.local/bin/start-user-daemons &")
     hl.exec_cmd("sleep 0.5 && ~/.local/bin/rhythm-language restore &")
-    hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync --startup")
-    hl.exec_cmd("sleep 1.0 && ~/.local/bin/notch-language-helper restore &")
+    hl.exec_cmd("sleep 0.8 && ~/.local/bin/modern-pywal-sync --startup &")
     -- Pinned compositor plugins on NixOS. The flake exports one env var per
     -- plugin with the store path of its .so; hyprctl loads them here. Unset
     -- on Arch (hyprpm owns plugin loading there), so this stays a no-op.
@@ -299,10 +297,16 @@ end
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+hl.env("GDK_BACKEND", "wayland,x11,*")
+hl.env("SDL_VIDEODRIVER", "wayland,x11")
+hl.env("MOZ_ENABLE_WAYLAND", "1")
+hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 if not os.getenv("QT_STYLE_OVERRIDE") then
     hl.env("QT_STYLE_OVERRIDE", "kvantum")
 end
-if os.getenv("LIBVA_DRIVER_NAME") == "nvidia" or (os.execute("lspci 2>/dev/null | grep -qi nvidia") == 0) then
+-- Only force NVIDIA GLX/PRIME globally when Dedicated NVIDIA mode is active
+-- (Hybrid mode lets the iGPU render desktop/Wayland apps so dGPU can enter D3cold)
+if os.getenv("LIBVA_DRIVER_NAME") == "nvidia" then
     hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
     hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
 end
@@ -357,9 +361,10 @@ hl.config({
         },
         blur = {
             enabled = true,
-            size = 15,
-            passes = 3,
-            vibrancy = 0.5,
+            size = 8,
+            passes = 2,
+            new_optimizations = true,
+            vibrancy = 0.35,
         },
     },
 })
@@ -431,10 +436,13 @@ hl.config({
     },
 })
 
--- Debug
+-- Debug & Render
 hl.config({
     debug = {
         vfr = true,
+    },
+    render = {
+        direct_scanout = 2,
     },
 })
 
@@ -490,6 +498,20 @@ hl.layer_rule({
     name  = "rust-dock-slide",
     match = { namespace = "rust-dock" },
     animation = "slide bottom",
+})
+hl.layer_rule({
+    name  = "rhythm-dock-slide",
+    match = { namespace = "rhythm-dock" },
+    animation = "slide bottom",
+    blur = true,
+    ignore_alpha = 0.1,
+})
+hl.layer_rule({
+    name  = "rhythm-dock-overlay-noanim",
+    match = { namespace = "rhythm-dock-overlay" },
+    no_anim = true,
+    blur = true,
+    ignore_alpha = 0.1,
 })
 -- La isla es la capa `quickshell` (su proceso se llama asi aunque el binario sea
 -- quickshell-island), y se escondia y se revelaba DESTRUYENDO la capa, sin

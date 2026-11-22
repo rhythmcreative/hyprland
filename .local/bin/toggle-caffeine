@@ -26,12 +26,37 @@ enable() {
     echo "on"
 }
 
+stop_caffeine_keepers() {
+    local entry pid cmd
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        [ "$pid" = "$$" ] && continue
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *caffeine-keeper*) kill "$pid" 2>/dev/null || true ;;
+        esac
+    done
+}
+
+caffeine_keeper_running() {
+    local entry pid cmd
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        [ "$pid" = "$$" ] && continue
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *caffeine-keeper*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 disable() {
     rm -f "$STATE_FILE"
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user stop "$SERVICE" 2>/dev/null || true
     fi
-    pkill -f "caffeine-keeper" 2>/dev/null || true
+    stop_caffeine_keepers
     cont_hypridle
     echo "off"
 }
@@ -43,7 +68,7 @@ case "$ACTION" in
             if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files "$SERVICE" 2>/dev/null | grep -q "$SERVICE"; then
                 systemctl --user is-active --quiet "$SERVICE" || systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
             else
-                pgrep -f "caffeine-keeper" >/dev/null 2>&1 || "$HOME/.local/bin/caffeine-keeper" &
+                caffeine_keeper_running || "$HOME/.local/bin/caffeine-keeper" &
             fi
             stop_hypridle
             echo "on"

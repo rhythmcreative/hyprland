@@ -1,6 +1,7 @@
 #!/bin/bash
 # Switch Hyprland layout presets: code | read | float
 # Usage: layout-preset <code|read|float>
+# Supports both Hyprland Lua (0.55+) via hl.config and legacy Hyprland (<0.55).
 set -u
 
 MODE="${1:-}"
@@ -14,37 +15,56 @@ notify() {
     notify-send "Layout Preset" "$1" 2>/dev/null || echo "$1"
 }
 
+hypr_eval_ok() {
+    local lua="$1"
+    local out
+    out=$(hyprctl eval "$lua" 2>&1) || return 1
+    case "$out" in
+        *error*|*unknown*|*"legacy parsers"*|"") return 1 ;;
+    esac
+    return 0
+}
+
 case "$MODE" in
     code)
         # Split editor + terminal: dwindle with tight gaps
-        hyprctl keyword general:layout dwindle >/dev/null
-        hyprctl keyword dwindle:preserve_split yes >/dev/null
-        hyprctl keyword general:gaps_in 3 >/dev/null
-        hyprctl keyword general:gaps_out 10 >/dev/null
-        hyprctl keyword decoration:rounding 10 >/dev/null
-        hyprctl keyword decoration:blur:enabled yes >/dev/null
-        hyprctl keyword misc:enable_swallow yes >/dev/null
+        if ! hypr_eval_ok 'hl.config({ general = { layout = "dwindle", gaps_in = 3, gaps_out = 10 }, dwindle = { preserve_split = true }, decoration = { rounding = 10, blur = { enabled = true } }, misc = { enable_swallow = true } })'; then
+            hyprctl --batch "\
+                keyword general:layout dwindle;\
+                keyword dwindle:preserve_split yes;\
+                keyword general:gaps_in 3;\
+                keyword general:gaps_out 10;\
+                keyword decoration:rounding 10;\
+                keyword decoration:blur:enabled yes;\
+                keyword misc:enable_swallow yes" >/dev/null 2>&1 || true
+        fi
         notify "Code preset: dwindle, gaps 3/10"
         ;;
     read)
         # Two vertical columns: master layout, roomier gaps
-        hyprctl keyword general:layout master >/dev/null
-        hyprctl keyword master:new_status master >/dev/null
-        hyprctl keyword master:orientation left >/dev/null
-        hyprctl keyword general:gaps_in 6 >/dev/null
-        hyprctl keyword general:gaps_out 12 >/dev/null
-        hyprctl keyword decoration:rounding 10 >/dev/null
-        hyprctl keyword decoration:blur:enabled yes >/dev/null
+        if ! hypr_eval_ok 'hl.config({ general = { layout = "master", gaps_in = 6, gaps_out = 12 }, master = { new_status = "master", orientation = "left" }, decoration = { rounding = 10, blur = { enabled = true } } })'; then
+            hyprctl --batch "\
+                keyword general:layout master;\
+                keyword master:new_status master;\
+                keyword master:orientation left;\
+                keyword general:gaps_in 6;\
+                keyword general:gaps_out 12;\
+                keyword decoration:rounding 10;\
+                keyword decoration:blur:enabled yes" >/dev/null 2>&1 || true
+        fi
         notify "Read preset: master, gaps 6/12"
         ;;
     float)
         # Relaxed floating-friendly: no gaps, rounder corners, stronger blur
-        hyprctl keyword general:gaps_in 0 >/dev/null
-        hyprctl keyword general:gaps_out 0 >/dev/null
-        hyprctl keyword decoration:rounding 16 >/dev/null
-        hyprctl keyword decoration:blur:enabled yes >/dev/null
-        hyprctl keyword decoration:blur:size 18 >/dev/null
-        hyprctl keyword decoration:blur:passes 3 >/dev/null
+        if ! hypr_eval_ok 'hl.config({ general = { gaps_in = 0, gaps_out = 0 }, decoration = { rounding = 16, blur = { enabled = true, size = 18, passes = 3 } } })'; then
+            hyprctl --batch "\
+                keyword general:gaps_in 0;\
+                keyword general:gaps_out 0;\
+                keyword decoration:rounding 16;\
+                keyword decoration:blur:enabled yes;\
+                keyword decoration:blur:size 18;\
+                keyword decoration:blur:passes 3" >/dev/null 2>&1 || true
+        fi
         notify "Float preset: gaps 0, rounding 16"
         ;;
     *)

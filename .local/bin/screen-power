@@ -1,29 +1,26 @@
 #!/usr/bin/env bash
 # Apaga o enciende todas las pantallas.
 #
-# Sustituye a "hyprctl dispatch dpms off", que NO funciona en Hyprland 0.56:
-# hyprctl envuelve los argumentos del dispatcher en hl.dispatch(...), que no es
-# una llamada valida, y falla con "')' expected near 'off'". hypridle lo tenia en
-# sus tres lineas, asi que la pantalla no se apagaba nunca a los 5'30".
+# Soporta Hyprland 0.55+ (API Lua: hl.dispatch(hl.dsp.dpms(...))) y
+# Hyprland < 0.55 (legacy: hyprctl dispatch dpms on|off).
 #
-# Lo que si funciona es `hyprctl repl`, que ejecuta Lua de verdad. La API de lua
-# solo expone parte de los dispatchers, pero dpms esta, y para ejecutarlo hay
-# que pasarle el dispatcher a hl.dispatch(). Verificado: apagada, grim ya no
-# captura esa salida; encendida, vuelve a capturar.
-#
-# OJO con las comillas: hl.dsp.dpms() usa comillas simples, y si van dentro de
-# las comillas dobles que se pasan a hyprctl repl, $estado y $m no se expanden y
-# el compositor recibe el texto literal '$estado'. Por eso la cadena se monta
-# primero en una variable.
+# Nota API Lua 0.57: hl.dsp.dpms("on", "eDP-1") devuelve nil (dos argumentos
+# posicionales no existen); la forma correcta con monitor es tabla
+# {state='on', monitor='eDP-1'} o cadena global 'on'/'off'.
 #
 # Uso: screen-power on|off|toggle
 
 set -u
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | head -n1)
+    _wl=$(ls -t "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v '\.lock$' | grep -v 'awww' | head -n1)
     if [ -n "$_wl" ]; then export WAYLAND_DISPLAY=$(basename "$_wl"); fi
     unset _wl
+fi
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    _sig=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)
+    [ -n "$_sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+    unset _sig
 fi
 
 estado="${1:-}"
@@ -44,25 +41,41 @@ case "$estado" in
 esac
 
 command -v hyprctl >/dev/null 2>&1 || { echo "screen-power: hyprctl no esta" >&2; exit 1; }
-command -v jq >/dev/null 2>&1 || { echo "screen-power: jq no esta" >&2; exit 1; }
 
-# Monitores activos o fallback global
-monitores=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.disabled == false) | .name' 2>/dev/null)
+hypr_eval_ok() {
+    local out
+    out=$(hyprctl eval "$1" 2>&1) || return 1
+    case "$out" in
+        *error*|*unknown*|*"legacy parsers"*|"") return 1 ;;
+    esac
+    return 0
+}
+
+monitores=""
+if command -v jq >/dev/null 2>&1; then
+    monitores=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.disabled == false) | .name' 2>/dev/null || true)
+fi
 
 fallos=0
 if [ -n "$monitores" ]; then
     for m in $monitores; do
-        lua="hl.dispatch(hl.dsp.dpms('$estado', '$m'))"
-        if ! hyprctl repl "$lua" >/dev/null 2>&1 && ! hyprctl dispatch "hl.dsp.dpms('$estado', '$m')" >/dev/null 2>&1; then
+        lua="hl.dispatch(hl.dsp.dpms({state='${estado}', monitor='${m}'}))"
+        if ! hypr_eval_ok "$lua" && ! hyprctl dispatch dpms "$estado" "$m" >/dev/null 2>&1; then
             fallos=$((fallos + 1))
         fi
     done
 fi
 
 # Despacho global para asegurar todas las salidas
-hyprctl repl "hl.dispatch(hl.dsp.dpms('$estado'))" >/dev/null 2>&1 || hyprctl dispatch "hl.dsp.dpms('$estado')" >/dev/null 2>&1 || true
+if ! hypr_eval_ok "hl.dispatch(hl.dsp.dpms('${estado}'))"; then
+    hyprctl dispatch dpms "$estado" >/dev/null 2>&1 || true
+fi
 
-[ "$estado" = "off" ] && echo "off" > "$FLAG" 2>/dev/null || rm -f "$FLAG" 2>/dev/null
+if [ "$estado" = "off" ]; then
+    echo "off" > "$FLAG" 2>/dev/null || true
+else
+    rm -f "$FLAG" 2>/dev/null || true
+fi
 
 [ "$fallos" -eq 0 ] || exit 1
 exit 0

@@ -6,9 +6,23 @@ export PATH="$HOME/.local/bin:$PATH"
 
 THEME_FILE="$HOME/.config/rofi/hotkeys.rasi"
 
-# Toggle behavior: if rofi hotkeys is already running, close it
-if pgrep -u "$(id -u)" -x rofi >/dev/null 2>&1 && pgrep -u "$(id -u)" -f "rofi -dmenu.*hotkeys.rasi" >/dev/null 2>&1; then
-    pkill -u "$(id -u)" -f "rofi -dmenu.*hotkeys.rasi"
+# Toggle behavior: if rofi hotkeys is already running, close it safely without pkill -f
+_closed_hotkeys=0
+for _entry in /proc/[0-9]*; do
+    read -r _comm < "$_entry/comm" 2>/dev/null || continue
+    case "$_comm" in
+        rofi|.rofi*) ;;
+        *) continue ;;
+    esac
+    _cmd=$(tr '\0' ' ' < "$_entry/cmdline" 2>/dev/null) || continue
+    case "$_cmd" in
+        *hotkeys.rasi*)
+            kill "${_entry#/proc/}" 2>/dev/null || true
+            _closed_hotkeys=1
+            ;;
+    esac
+done
+if [ "$_closed_hotkeys" -eq 1 ]; then
     exit 0
 fi
 
@@ -40,7 +54,9 @@ if pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; 
     _WAYBAR_WAS_VISIBLE=true
     pkill -SIGUSR1 -x waybar 2>/dev/null || pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null &
 fi
-if pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
+if "$HOME/.local/bin/dock-procs" rust-dock signal all USR1 >/dev/null 2>&1; then
+    _RUST_DOCK_WAS_VISIBLE=true
+elif pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
     _RUST_DOCK_WAS_VISIBLE=true
     pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
 fi
@@ -111,7 +127,7 @@ selected=$(printf "%s\n" "$HOTKEYS_DATA" | rofi-themed -dmenu -i -p "$p_hotkeys"
 
 # Restore bars simultaneously in parallel
 [ "$_WAYBAR_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null) &
-[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && (pkill -SIGUSR2 -x rust-dock 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null) &
+[ "$_RUST_DOCK_WAS_VISIBLE" = true ] && { "$HOME/.local/bin/dock-procs" rust-dock signal all USR2 >/dev/null 2>&1 || pkill -SIGUSR2 -x rust-dock 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null; } &
 [ "$_QUICKSHELL_WAS_VISIBLE" = true ] && quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal all >/dev/null 2>&1 &
 wait
 

@@ -271,7 +271,7 @@ in
             After = [ "default.target" ];
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ [ cfg.packageSet.rustDock ])}" ];
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ [ pkgs.quickshell cfg.packageSet.rustDock ])}" ];
             Type = "simple";
             ExecStart = "${bin}/rust-dock-monitor-watcher";
             Restart = "always";
@@ -420,7 +420,7 @@ in
             Wants = [ "network-online.target" ];
           };
           Service = {
-            Environment = [ "PATH=${lib.makeBinPath (hyprTools)}" ];
+            Environment = [ "PATH=${lib.makeBinPath (hyprTools ++ (with pkgs; [ git curl libnotify ]))}" ];
             Type = "oneshot";
             ExecStart = "${bin}/rhythm-ota-checker";
             StandardOutput = "journal";

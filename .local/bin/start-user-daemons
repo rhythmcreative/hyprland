@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# start-user-daemons: Launch background session daemons on non-systemd distros
+# (Alpine/OpenRC, Void/runit, Artix, Devuan). On systemd distros this exits 0
+# immediately because systemd --user manages all these units cleanly.
+
+set -u
+
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
+    exit 0
+fi
+
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+mkdir -p "$HOME/.cache"
+
+proc_running() {
+    local needle="$1" entry cmd
+    for entry in /proc/[0-9]*; do
+        [ "${entry#/proc/}" = "$$" ] && continue
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *"$needle"*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+launch_once() {
+    local name="$1"
+    local bin="$HOME/.local/bin/$name"
+    [ -x "$bin" ] || return 0
+    proc_running "/.local/bin/$name" && return 0
+    setsid "$bin" >> "$HOME/.cache/${name}.log" 2>&1 < /dev/null &
+}
+
+launch_once "wallpaper-monitor-watcher"
+launch_once "rust-dock-monitor-watcher"
+launch_once "privacy-shield-daemon"
+launch_once "auto-power-profile"
+
+exit 0

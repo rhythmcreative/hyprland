@@ -1,10 +1,18 @@
 #!/bin/bash
 # rhythm-locale-generate: Generate system locale for a given language code
-# Omarchy-compatible helper
+# Cross-distro: Arch, Debian/Ubuntu, Fedora, openSUSE, Alpine (musl), NixOS.
 set -euo pipefail
 
 if (( EUID == 0 )); then
   export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin
+fi
+
+# NixOS manages locales declaratively; musl (Alpine) handles UTF-8 natively without glibc locales
+if [ -e /etc/NIXOS ]; then
+  exit 0
+fi
+if ldd --version 2>&1 | grep -qi musl; then
+  exit 0
 fi
 
 registry=${RHYTHM_LOCALES_JSON:-${XDG_CONFIG_HOME:-$HOME/.config}/rhythm/i18n/locales.json}
@@ -16,8 +24,21 @@ if (( $# != 1 )) || [[ ! $code =~ ^[a-z]{2,3}(-[A-Za-z]{2})?$ ]]; then
   exit 1
 fi
 
+if [ ! -f "$registry" ] && [ -n "${SUDO_USER:-}" ]; then
+  sudo_home=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6 || true)
+  [ -n "$sudo_home" ] && [ -f "$sudo_home/.config/rhythm/i18n/locales.json" ] && \
+    registry="$sudo_home/.config/rhythm/i18n/locales.json"
+fi
 if [ ! -f "$registry" ]; then
-  registry="/home/rhythmcreative/.config/rhythm/i18n/locales.json"
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  for cand in \
+    "$script_dir/../../.config/rhythm/i18n/locales.json" \
+    "/usr/share/rhythm/i18n/locales.json"; do
+    if [ -f "$cand" ]; then
+      registry="$cand"
+      break
+    fi
+  done
 fi
 
 locale=$(jq -r --arg code "$code" '.[$code].locale // empty' "$registry" 2>/dev/null || true)
@@ -27,9 +48,28 @@ if [[ ! $locale =~ ^[a-z]{2,3}_[A-Z]{2}\.UTF-8$ ]]; then
 fi
 
 base=${locale%.UTF-8}
-if grep -qE "^#$base(\.UTF-8)? UTF-8" "$locale_gen" 2>/dev/null; then
-  sed -i -E "s/^#($base(\.UTF-8)? UTF-8)/\1/" "$locale_gen"
-elif ! grep -qE "^$base(\.UTF-8)? UTF-8" "$locale_gen" 2>/dev/null; then
-  echo "$locale UTF-8" >>"$locale_gen"
+lang_prefix=${base%%_*}
+
+# 1. Arch / Debian / Ubuntu: /etc/locale.gen + locale-gen
+if command -v locale-gen >/dev/null 2>&1; then
+  if [ -f "$locale_gen" ] || [ -w /etc ]; then
+    if grep -qE "^#$base(\.UTF-8)? UTF-8" "$locale_gen" 2>/dev/null; then
+      sed -i -E "s/^#($base(\.UTF-8)? UTF-8)/\1/" "$locale_gen"
+    elif ! grep -qE "^$base(\.UTF-8)? UTF-8" "$locale_gen" 2>/dev/null; then
+      echo "$locale UTF-8" >>"$locale_gen"
+    fi
+  fi
+  locale-gen >/dev/null 2>&1 && exit 0
 fi
-locale-gen >/dev/null
+
+# 2. Fedora / openSUSE / RHEL / fallback: localedef directly
+if command -v localedef >/dev/null 2>&1; then
+  localedef -i "$base" -f UTF-8 "$locale" >/dev/null 2>&1 && exit 0
+fi
+
+# 3. Fedora langpack fallback if localedef lacks source definitions
+if (( EUID == 0 )) && command -v dnf >/dev/null 2>&1; then
+  dnf install -y -q "glibc-langpack-${lang_prefix}" >/dev/null 2>&1 || true
+fi
+
+exit 0

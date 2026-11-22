@@ -12,11 +12,11 @@ get_current-wallpaper() {
     if [ -f "$CURRENT_WALLPAPER_FILE" ]; then
         cat "$CURRENT_WALLPAPER_FILE"
     else
-        # Intentar detectar el wallpaper desde awww o awww
+        # Intentar detectar el wallpaper desde awww o swww
         if command -v awww &>/dev/null; then
              awww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
-        else
-             awww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
+        elif command -v swww &>/dev/null; then
+             swww query 2>/dev/null | grep -o "image: .*" | cut -d' ' -f2- || echo ""
         fi
     fi
 }

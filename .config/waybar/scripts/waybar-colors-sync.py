@@ -473,7 +473,7 @@ window[class="nm-applet"],
         """Reinicia nm-applet para aplicar los nuevos colores"""
         try:
             # Matar proceso existente
-            subprocess.run(['pkill', '-f', 'nm-applet'], 
+            subprocess.run(['pkill', '-x', 'nm-applet'], 
                          stdout=subprocess.DEVNULL, 
                          stderr=subprocess.DEVNULL)
             

@@ -2501,16 +2501,55 @@ EOF
 }
 
 # --- RUST-DOCK COMPILATION & SETUP ---
+# Check whether a precompiled ELF binary can execute on this host (same arch, libc, and shared libs)
+elf_binary_compatible() {
+    local bin="$1"
+    [ -f "$bin" ] && [ -x "$bin" ] || return 1
+    # Non-ELF files (shell/python scripts) are always portable
+    if [ "$(head -c4 "$bin" 2>/dev/null | od -An -tx1 | tr -d ' \n')" != "7f454c46" ]; then
+        return 0
+    fi
+    # Reject musl hosts for glibc-linked prebuilt binaries
+    if ldd --version 2>&1 | grep -qi musl; then
+        return 1
+    fi
+    # Host architecture must match x86_64 for the bundled Arch x86_64 binaries
+    if [ "$(uname -m 2>/dev/null || true)" != "x86_64" ]; then
+        return 1
+    fi
+    if command -v ldd >/dev/null 2>&1; then
+        local ldd_out
+        ldd_out=$(ldd "$bin" 2>&1) || return 1
+        if echo "$ldd_out" | grep -qiE "not found|version .* not found|error relocating|not a dynamic executable|wrong ELF class"; then
+            return 1
+        fi
+        # Also test that dynamic linker accepts all symbol versions (e.g. GLIBC_2.39)
+        if command -v /lib64/ld-linux-x86-64.so.2 >/dev/null 2>&1; then
+            /lib64/ld-linux-x86-64.so.2 --list "$bin" >/dev/null 2>&1 || return 1
+        fi
+    fi
+    return 0
+}
+
 install_rust_dock() {
-    section "Rust-Dock Component"
+    section "Dock Component (Quickshell Dock / Rust-Dock)"
     if [ "$SKIP_RUST_DOCK" = true ]; then
         step_ok "Rust-dock build skipped via flag."
         return 0
     fi
 
-    # Prioritize deploying the canonical bundled rust-dock binary directly
+    # Always ensure default pinned apps exist for both Quickshell Dock and rust-dock
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/rust-dock"
+    if [ -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" ] && [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
+        cp -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" "$HOME/.local/share/rust-dock/pinned"
+    elif [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
+        cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
+kitty
+PINNED
+    fi
+
+    # Deploy bundled rust-dock binary ONLY if it is ABI/libc compatible with this distro
     if [ -x "$DOTFILES_DIR/.local/bin/rust-dock" ]; then
-        step_item "Deploying canonical rust-dock binary..."
         if [ "$DISTRO" = "opensuse" ]; then
             sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses libgtk4-layer-shell0 >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "fedora" ]; then
@@ -2518,18 +2557,19 @@ install_rust_dock() {
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk4-layer-shell0 >> "$LOG_FILE" 2>&1 || true
         fi
-        mkdir -p "$HOME/.local/bin" "$HOME/.local/share/rust-dock"
-        cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
-        chmod +x "$HOME/.local/bin/rust-dock"
-
-        if [ -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" ]; then
-            cp -f "$DOTFILES_DIR/.local/share/rust-dock/pinned" "$HOME/.local/share/rust-dock/pinned"
-        elif [ ! -f "$HOME/.local/share/rust-dock/pinned" ]; then
-            cat > "$HOME/.local/share/rust-dock/pinned" << 'PINNED'
-kitty
-PINNED
+        if elf_binary_compatible "$DOTFILES_DIR/.local/bin/rust-dock"; then
+            step_item "Deploying canonical rust-dock binary..."
+            cp -f "$DOTFILES_DIR/.local/bin/rust-dock" "$HOME/.local/bin/rust-dock"
+            chmod +x "$HOME/.local/bin/rust-dock"
+            step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
+            return 0
         fi
-        step_ok "rust-dock deployed to ~/.local/bin/rust-dock"
+    fi
+
+    # If Quickshell is installed and the native Quickshell Dock QML is present,
+    # skip compiling the legacy GTK4 rust-dock on incompatible libc/architectures.
+    if command -v quickshell >/dev/null 2>&1 && [ -f "$DOTFILES_DIR/.config/quickshell/dock/shell.qml" ]; then
+        step_ok "Quickshell Dock active (prebuilt rust-dock not needed on this distro/arch)."
         return 0
     fi
 
@@ -2790,8 +2830,12 @@ install_quickshell() {
         sudo add-apt-repository -y ppa:avengemedia/danklinux >> "$LOG_FILE" 2>&1 || true
         sudo apt-get update >> "$LOG_FILE" 2>&1 || true
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends quickshell >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "fedora" ]; then
+        sudo dnf install -y quickshell >> "$LOG_FILE" 2>&1 || true
     elif [ "$DISTRO" = "opensuse" ]; then
         sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses quickshell >> "$LOG_FILE" 2>&1 || true
+    elif [ "$DISTRO" = "alpine" ]; then
+        sudo apk add --no-cache quickshell >> "$LOG_FILE" 2>&1 || true
     fi
 
     if command -v quickshell >/dev/null 2>&1; then
@@ -2850,8 +2894,11 @@ exit 127
 QSEOF
             sudo chmod 755 /usr/local/bin/quickshell
             rm -f "$tmp_qs"
-            if command -v quickshell >/dev/null 2>&1; then
+            if command -v quickshell >/dev/null 2>&1 && /usr/local/bin/quickshell --version >> "$LOG_FILE" 2>&1; then
                 step_ok "Quickshell universal binary installed in /usr/local/bin/quickshell."
+                return 0
+            elif command -v quickshell >/dev/null 2>&1; then
+                step_warn "Quickshell binary installed in /usr/local/bin/quickshell (runtime probe failed; check $LOG_FILE)."
                 return 0
             fi
         fi
@@ -4827,9 +4874,47 @@ step_dotfiles() {
         step_ok "Standard Hyprland detected: hyprland.conf activated."
     fi
 
-    # Modernize gesture syntax in hyprland.conf if needed (Hyprland >= 0.51)
+    # Adapt hyprland.conf syntax automatically to the installed Hyprland version
+    # (handles Debian 12/13 & Ubuntu 24.04 with Hyprland 0.41..0.54 cleanly).
     if [ -f "$HOME/.config/hypr/hyprland.conf" ]; then
-        if grep -q "workspace_swipe[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+        local hypr_ver="" hypr_major=0 hypr_minor=54
+        if [ -n "$hypr_bin" ] && [ -x "$hypr_bin" ]; then
+            hypr_ver=$("$hypr_bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
+        fi
+        if [ -z "$hypr_ver" ] && command -v hyprctl >/dev/null 2>&1; then
+            hypr_ver=$(hyprctl version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
+        fi
+        if [ -n "$hypr_ver" ]; then
+            hypr_major="${hypr_ver%%.*}"
+            hypr_minor="${hypr_ver#*.}"
+        fi
+
+        # Hyprland < 0.54: vfr lived in misc {}, not debug {}
+        if [ "$hypr_major" -eq 0 ] && [ "$hypr_minor" -lt 54 ]; then
+            if grep -q "^debug[[:space:]]*{" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+                sed -i '/^debug[[:space:]]*{/,/^}/d' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+                if ! grep -q "^[[:space:]]*vfr[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
+                    sed -i '/^[[:space:]]*vrr[[:space:]]*=/a \    vfr = true' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+                fi
+            fi
+        fi
+
+        # Hyprland < 0.53: legacy windowrulev2 / layerrule syntax (before match:namespace / match:class)
+        if [ "$hypr_major" -eq 0 ] && [ "$hypr_minor" -lt 53 ]; then
+            sed -i \
+                -e 's|^windowrule = match:class \.\*, suppress_event maximize 1$|windowrulev2 = suppressevent maximize, class:.*|' \
+                -e 's|^layerrule = match:namespace \([^,]*\), blur 1$|layerrule = blur, \1|' \
+                -e 's|^layerrule = match:namespace \([^,]*\), ignore_alpha \([^,]*\)$|layerrule = ignorealpha \2, \1|' \
+                -e 's|^layerrule = match:namespace \([^,]*\), no_anim 1$|layerrule = noanim, \1|' \
+                -e 's|^layerrule = match:namespace \([^,]*\), animation \(.*\)$|layerrule = animation \2, \1|' \
+                "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+            step_ok "Adapted hyprland.conf rules for Hyprland ${hypr_ver} (< 0.53 legacy syntax)."
+        fi
+
+        # Hyprland < 0.51: gestures block instead of top-level gesture=
+        if [ "$hypr_major" -eq 0 ] && [ "$hypr_minor" -lt 51 ]; then
+            sed -i 's|^gesture = 3, horizontal, workspace$|gestures {\n    workspace_swipe = true\n}|' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+        elif grep -q "workspace_swipe[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
             sed -i '/gestures[[:space:]]*{/,/^[[:space:]]*}/ { /workspace_swipe[[:space:]]*=/d }' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
             if ! grep -q "^[[:space:]]*gesture[[:space:]]*=" "$HOME/.config/hypr/hyprland.conf" 2>/dev/null; then
                 sed -i '/gestures[[:space:]]*{/i gesture = 3, horizontal, workspace\n' "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
@@ -4970,6 +5055,12 @@ MONCONF
         # a ~/.local/bin.
         case "$name" in
             __pycache__|*.pyc) continue ;;
+            rust-dock|waybar_auto_hide)
+                # Never overwrite a natively built binary with an ABI-incompatible Arch ELF
+                if ! elf_binary_compatible "$DOTFILES_DIR/$file"; then
+                    continue
+                fi
+                ;;
         esac
         local target="$HOME/.local/bin/$name"
         
@@ -6127,8 +6218,12 @@ step_update() {
     # Ensure Antigravity CLI is deployed for developer workflows
     install_antigravity_cli || true
 
-    # rust-dock: relanzar para que tome el binario recien desplegado
-    if pgrep -x rust-dock >/dev/null 2>&1 || [ -x "$HOME/.local/bin/rust-dock-launcher" ]; then
+    # Dock (Quickshell Dock / rust-dock): relanzar si está habilitado
+    local dock_enabled="on"
+    if [ -f "$HOME/.config/rhythm/dock.conf" ]; then
+        dock_enabled=$(awk -F= '$1 == "enabled" {print $2; exit}' "$HOME/.config/rhythm/dock.conf" 2>/dev/null || echo "on")
+    fi
+    if [ "$dock_enabled" != "off" ] && [ -x "$HOME/.local/bin/rust-dock-launcher" ]; then
         pkill -x rust-dock >> "$LOG_FILE" 2>&1 || true
         sleep 0.3
         "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1 &

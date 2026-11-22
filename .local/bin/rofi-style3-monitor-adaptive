@@ -164,6 +164,7 @@ show_active_bars() {
 
 # Función de cleanup al salir
 cleanup() {
+    trap - EXIT INT TERM
     log_debug "Ejecutando cleanup..."
     show_active_bars
     exit 0

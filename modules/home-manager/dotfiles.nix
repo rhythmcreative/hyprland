@@ -30,7 +30,6 @@ in
     xdg.configFile."quickshell" = { source = cfg.packageSet.patchedQuickshell; recursive = true; };
     xdg.configFile."rhythm" = { source = ../../.config/rhythm; recursive = true; };
     xdg.configFile."rofi" = { source = ../../.config/rofi; recursive = true; };
-    xdg.configFile."rust-dock" = { source = ../../.config/rust-dock; recursive = true; };
     xdg.configFile."wal" = { source = cfg.packageSet.patchedWal; recursive = true; };
     xdg.configFile."waybar" = { source = cfg.packageSet.patchedWaybar; recursive = true; };
 
@@ -44,11 +43,26 @@ in
           printf '%s\n' ${lib.escapeShellArg cfg.monitors.seedText} > "$target"
         fi
 
-        # Seed ~/.config/rhythm/dock.conf to enabled=on if missing so rust-dock is enabled by default
+        # Seed ~/.config/rhythm/dock.conf to enabled=on if missing so the dock is enabled by default
         dock_conf="${config.home.homeDirectory}/.config/rhythm/dock.conf"
         if [ ! -e "$dock_conf" ]; then
           mkdir -p "$(dirname "$dock_conf")"
           printf 'enabled=on\n' > "$dock_conf"
+        fi
+
+        # Seed mutable dock config files (instead of read-only store symlinks) so
+        # right-click dock settings persist cleanly on NixOS.
+        rust_dock_dir="${config.home.homeDirectory}/.config/rust-dock"
+        mkdir -p "$rust_dock_dir"
+        if [ ! -e "$rust_dock_dir/hypr-dock.conf" ] || [ -L "$rust_dock_dir/hypr-dock.conf" ]; then
+          rm -f "$rust_dock_dir/hypr-dock.conf"
+          cp -f ${../../.config/rust-dock/hypr-dock.conf} "$rust_dock_dir/hypr-dock.conf"
+          chmod 644 "$rust_dock_dir/hypr-dock.conf"
+        fi
+        if [ ! -e "$rust_dock_dir/rust-dock.conf" ] || [ -L "$rust_dock_dir/rust-dock.conf" ]; then
+          rm -f "$rust_dock_dir/rust-dock.conf"
+          cp -f ${../../.config/rust-dock/rust-dock.conf} "$rust_dock_dir/rust-dock.conf"
+          chmod 644 "$rust_dock_dir/rust-dock.conf"
         fi
       ) || true
     '';

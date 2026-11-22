@@ -64,13 +64,27 @@ generados_por_herramientas() {
         .config/gtk-4.0/gtk.css)              return 0 ;;
         .config/gtk-4.0/nm-applet-waybar.css) return 0 ;;
         .config/gtk-4.0/settings.ini)          return 0 ;;
+        .config/Kvantum/PywalAdapta/PywalAdapta.kvconfig) return 0 ;;
         .config/mako/config)                   return 0 ;;
         .config/rhythm/language)               return 0 ;;
         .config/hypr/hyprlock-locale.conf)     return 0 ;;
+        .config/hypr/tweaks.conf)              return 0 ;;
         .config/environment.d/10-locale.conf)  return 0 ;;
         .config/uwsm/env.d/50-rhythm-language) return 0 ;;
         .cache/wal/*)                          return 0 ;;
         .local/bin/*)                          return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Ficheros de estado/preferencias locales: se copian como semilla la primera vez,
+# pero si ya existen en disco NO se sobrescriben con los valores por defecto del repo.
+semilla_si_no_existe() {
+    case "$1" in
+        .config/rhythm/language)               return 0 ;;
+        .config/hypr/hyprlock-locale.conf)     return 0 ;;
+        .config/hypr/tweaks.conf)              return 0 ;;
+        .config/Kvantum/PywalAdapta/PywalAdapta.kvconfig) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -130,6 +144,10 @@ desplegar_config() {
         target="$HOME/$rel"
 
         if [ -f "$target" ]; then
+            if semilla_si_no_existe "$rel"; then
+                SKIPPED=$((SKIPPED+1))
+                continue
+            fi
             if cmp -s "$f" "$target"; then
                 SKIPPED=$((SKIPPED+1))
                 continue
@@ -141,6 +159,7 @@ desplegar_config() {
         fi
         mkdir -p "$(dirname "$target")" 2>/dev/null
         run cp -f "$f" "$target"
+        [ -x "$f" ] && run chmod +x "$target"
         registrar "$rel" "$target"
         COPIED=$((COPIED+1))
     done < <(find "$src" -type f 2>/dev/null)
@@ -172,6 +191,27 @@ aplicar_overlay() {
     done < <(find "$OVERLAY" -type f 2>/dev/null)
 }
 
+# Comprueba si un binario ELF precompilado del repo es compatible con esta distro/arch.
+elf_binary_compatible() {
+    local bin="$1"
+    [ -f "$bin" ] || return 1
+    if [ "$(head -c4 "$bin" 2>/dev/null | od -An -tx1 | tr -d ' \n')" != "7f454c46" ]; then
+        return 0
+    fi
+    if ldd --version 2>&1 | grep -qi musl; then
+        return 1
+    fi
+    if [ "$(uname -m 2>/dev/null || true)" != "x86_64" ]; then
+        return 1
+    fi
+    if command -v ldd >/dev/null 2>&1; then
+        local out
+        out=$(ldd "$bin" 2>&1) || return 1
+        echo "$out" | grep -qiE "not found|version .* not found|error relocating|not a dynamic executable|wrong ELF class" && return 1
+    fi
+    return 0
+}
+
 # ── .local/bin ───────────────────────────────────────────────────────────────
 desplegar_bin() {
     local src="$REPO_DIR/.local/bin"
@@ -183,6 +223,12 @@ desplegar_bin() {
         rel_path="${f#"$src"/}"
         case "$rel_path" in
             *__pycache__*|*.pyc|*.swp|*.bak*) continue ;;
+            rust-dock|waybar_auto_hide)
+                if ! elf_binary_compatible "$f"; then
+                    SKIPPED=$((SKIPPED+1))
+                    continue
+                fi
+                ;;
         esac
         rel=".local/bin/$rel_path"
         target="$HOME/$rel"

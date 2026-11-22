@@ -632,7 +632,7 @@ group_update() {
     for a in "$@"; do if is_help "$a"; then group_help_update; return 0; fi; done
     local h; h="$(require system-ota)" || return 1
     case "$cmd" in
-        check|status|changelog|backup|rollback|gui|release|update) ;;
+        check|status|changelog|backup|rollback|gui|release|update|logs|doctor) ;;
         run) cmd="update" ;;
         *) err "unknown update command: $cmd (see: rhythm update --help)"; return 1 ;;
     esac

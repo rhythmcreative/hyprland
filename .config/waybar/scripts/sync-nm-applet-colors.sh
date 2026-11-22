@@ -30,7 +30,7 @@ rm -rf ~/.cache/gtk-3.0 ~/.cache/gtk-4.0
 
 # Reiniciar nm-applet
 echo "🔄 Reiniciando nm-applet..."
-pkill -f nm-applet
+pkill -x nm-applet 2>/dev/null || true
 sleep 0.5
 nm-applet & disown
 

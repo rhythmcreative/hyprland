@@ -53,7 +53,7 @@ if [ -z "$_BARS_HIDDEN" ] && [ -n "$ACTIVE_MON" ]; then
         export _RUST_DOCK_WAS_VISIBLE=true
     elif pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
         export _RUST_DOCK_WAS_VISIBLE=true
-        pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null &
+        pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
     fi
     if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
         export _QUICKSHELL_WAS_VISIBLE=true

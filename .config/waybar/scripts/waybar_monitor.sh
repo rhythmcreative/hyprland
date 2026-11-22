@@ -35,8 +35,20 @@ restart_waybar() {
     pkill -KILL waybar
     sleep 1
     
-    # Limpiar procesos zombie
-    pkill -f "waybar.*scripts"
+    # Limpiar procesos zombie de scripts de waybar (excluyendo este mismo script)
+    for _entry in /proc/[0-9]*; do
+        _pid="${_entry#/proc/}"
+        [ "$_pid" = "$$" ] && continue
+        _cmd=$(tr '\0' ' ' < "$_entry/cmdline" 2>/dev/null) || continue
+        case "$_cmd" in
+            */.config/waybar/scripts/*)
+                case "$_cmd" in
+                    *waybar_monitor.sh*) continue ;;
+                esac
+                kill "$_pid" 2>/dev/null || true
+                ;;
+        esac
+    done
     
     # Esperar un momento antes de reiniciar
     sleep 2

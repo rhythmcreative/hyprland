@@ -206,7 +206,7 @@ if [[ -f "$BLACK_PNG" ]]; then
         -- "$BLACK_PNG" 2>/dev/null || true
 fi
 
-pkill -f "$ENGINE_BIN" 2>/dev/null || true
+pkill -x "$(basename "$ENGINE_BIN")" 2>/dev/null || true
 
 if [[ -z "$WALLPAPER_IMAGE" ]]; then
     SS_FILE="$SCREENSHOT_DIR/$(basename "$WALLPAPER_DIR").png"

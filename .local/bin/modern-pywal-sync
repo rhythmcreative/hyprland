@@ -581,20 +581,28 @@ fi
 [ -n "$PALETTE_NOW" ] && printf '%s\n' "$PALETTE_NOW" > "$PALETTE_HASH_FILE"
 
 if [ "$COMPOSITOR_RUNNING" -eq 1 ] || [ "$STARTUP" -eq 1 ]; then
-    # 6b. rust-dock: relanzar para que recoja la paleta nueva
+    # 6b. Dock: Quickshell recarga colores en vivo vía IPC sin parpadeos; fallback a rust-dock
     if [ "$STARTUP" -eq 1 ] || [ "$PALETTE_CHANGED" -eq 1 ]; then
-        echo "  • rust-dock..."
-        setsid bash -c '
-            for pid in $(for entry in /proc/[0-9]*; do [ -e "$entry/exe" ] && readlink "$entry/exe" 2>/dev/null | grep -q "rust-dock" && echo "${entry#/proc/}"; done); do
-                kill "$pid" 2>/dev/null || true
-            done
-            pkill -x rust-dock >/dev/null 2>&1 || true
-            pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
-            pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
-            pkill -f "rust-dock" >/dev/null 2>&1 || true
-            sleep 0.1
-            "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
-        ' >/dev/null 2>&1 </dev/null &
+        if [ -f "$HOME/.config/quickshell/dock/shell.qml" ] && command -v quickshell >/dev/null 2>&1; then
+            echo "  • Quickshell Dock..."
+            if "$HOME/.local/bin/dock-procs" rust-dock on all >/dev/null 2>&1; then
+                timeout 2 quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" --any-display call dock reload >/dev/null 2>&1 || true
+            else
+                "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1 &
+            fi
+        else
+            echo "  • rust-dock..."
+            setsid bash -c '
+                for pid in $(for entry in /proc/[0-9]*; do [ -e "$entry/exe" ] && readlink "$entry/exe" 2>/dev/null | grep -q "rust-dock" && echo "${entry#/proc/}"; done); do
+                    kill "$pid" 2>/dev/null || true
+                done
+                pkill -x rust-dock >/dev/null 2>&1 || true
+                pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+                pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+                sleep 0.1
+                "$HOME/.local/bin/rust-dock-launcher" >/dev/null 2>&1
+            ' >/dev/null 2>&1 </dev/null &
+        fi
     fi
 
     # 6c. Recargar colores de Pywal en Quickshell (BarraWaybar + Dynamic Island)

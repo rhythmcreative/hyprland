@@ -41,7 +41,8 @@ fi
 placeholder_text=$(rhythm-i18n "rofi_search_apps" "Buscar aplicaciones..." "$active_lang" 2>/dev/null || echo "Buscar aplicaciones...")
 
 # Asegurar locale UTF-8 valido para evitar que rofi falle con 'Failed to set locale'
-if [ -n "$(locale 2>&1 >/dev/null)" ] || ! /usr/bin/rofi -v >/dev/null 2>&1; then
+_rofi_bin=$(command -v rofi 2>/dev/null || echo "/usr/bin/rofi")
+if [ -n "$(locale 2>&1 >/dev/null)" ] || ! "$_rofi_bin" -v >/dev/null 2>&1; then
     export LC_ALL="C.UTF-8"
 fi
 

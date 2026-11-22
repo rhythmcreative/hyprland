@@ -115,7 +115,15 @@ ensure_daemon() {
 
 stop_mpvpaper() {
     pkill -x "mpvpaper" 2>/dev/null || true
-    pkill -f ".local/bin/wallpaper-mpvpaper" 2>/dev/null || true
+    local entry pid cmd
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        [ "$pid" = "$$" ] && continue
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            */.local/bin/wallpaper-mpvpaper*) kill "$pid" 2>/dev/null || true ;;
+        esac
+    done
 }
 
 apply_static() {

@@ -1,6 +1,19 @@
 #!/bin/bash
 # Rofi safety wrapper for UTF-8 locale resilience across all languages
-if [ -n "$(locale 2>&1 >/dev/null)" ] || ! /usr/bin/rofi -v >/dev/null 2>&1; then
+_self_real=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")
+REAL_ROFI=""
+IFS=':' read -r -a _path_dirs <<< "${PATH:-/usr/bin:/bin}"
+for _d in "${_path_dirs[@]}"; do
+    [ -x "$_d/rofi" ] || continue
+    _cand_real=$(realpath "$_d/rofi" 2>/dev/null || echo "$_d/rofi")
+    if [ "$_cand_real" != "$_self_real" ]; then
+        REAL_ROFI="$_d/rofi"
+        break
+    fi
+done
+[ -n "$REAL_ROFI" ] || REAL_ROFI="/usr/bin/rofi"
+
+if [ -n "$(locale 2>&1 >/dev/null)" ] || ! "$REAL_ROFI" -v >/dev/null 2>&1; then
     export LC_ALL="C.UTF-8"
 fi
-exec /usr/bin/rofi "$@"
+exec "$REAL_ROFI" "$@"

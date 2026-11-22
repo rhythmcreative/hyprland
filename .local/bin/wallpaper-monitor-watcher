@@ -107,7 +107,7 @@ revision_periodica() {
     local firma_inicio_tiempo=0
 
     while true; do
-        sleep 5
+        sleep 30
         resolver_entorno
         local sig="${HYPRLAND_INSTANCE_SIGNATURE:-}"
         if [ -z "$sig" ]; then

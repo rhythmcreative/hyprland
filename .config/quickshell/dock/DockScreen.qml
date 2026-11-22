@@ -233,26 +233,26 @@ Scope {
     property string hoveredAppId: ""
     property string hoveredAppName: ""
     property string hoveredAppIcon: ""
-    property real hoveredAnchorX: 0
-    property real hoveredAnchorY: 0
+    property real hoveredAnchorX: screenObj ? screenObj.width / 2 : 960
+    property real hoveredAnchorY: screenObj ? screenObj.height / 2 : 540
 
     property bool previewOpen: false
     property string previewAppId: ""
     property string previewAppName: ""
     property string previewAppIcon: ""
-    property real previewAnchorX: 0
-    property real previewAnchorY: 0
+    property real previewAnchorX: screenObj ? screenObj.width / 2 : 960
+    property real previewAnchorY: screenObj ? screenObj.height / 2 : 540
 
     onPreviewAppIdChanged: syncPreviewListModel()
 
     property bool contextMenuOpen: false
     property var contextMenuApp: null
-    property real contextAnchorX: 0
-    property real contextAnchorY: 0
+    property real contextAnchorX: screenObj ? screenObj.width / 2 : 960
+    property real contextAnchorY: screenObj ? screenObj.height / 2 : 540
 
     property bool settingsMenuOpen: false
-    property real settingsAnchorX: 0
-    property real settingsAnchorY: 0
+    property real settingsAnchorX: screenObj ? screenObj.width / 2 : 960
+    property real settingsAnchorY: screenObj ? screenObj.height / 2 : 540
 
     readonly property bool tooltipVisible: {
         if (previewOpen || contextMenuOpen || settingsMenuOpen || dragActive)
@@ -959,8 +959,8 @@ Scope {
             anchorCenterX: screenScope.previewAnchorX
             anchorCenterY: screenScope.previewAnchorY
             dockEdgeOffset: screenScope.dockEdgeOffset
-            screenWidth: overlayWin.width
-            screenHeight: overlayWin.height
+            screenWidth: screenScope.screenObj ? screenScope.screenObj.width : overlayWin.width
+            screenHeight: screenScope.screenObj ? screenScope.screenObj.height : overlayWin.height
 
             onPreviewHoveredChanged: function(inside) {
                 screenScope.previewPanelHovered = inside
@@ -998,15 +998,17 @@ Scope {
             height: tooltipLabel.implicitHeight + padY * 2
             radius: 8
 
+            readonly property real scrW: screenScope.screenObj ? screenScope.screenObj.width : overlayWin.width
+            readonly property real scrH: screenScope.screenObj ? screenScope.screenObj.height : overlayWin.height
             readonly property real tx: {
                 if (screenScope.dockPos === "left") return screenScope.dockEdgeOffset + 4
-                if (screenScope.dockPos === "right") return overlayWin.width - screenScope.dockEdgeOffset - width - 4
-                return Math.max(10, Math.min(overlayWin.width - width - 10, screenScope.hoveredAnchorX - width / 2))
+                if (screenScope.dockPos === "right") return scrW - screenScope.dockEdgeOffset - width - 4
+                return Math.max(10, Math.min(scrW - width - 10, screenScope.hoveredAnchorX - width / 2))
             }
             readonly property real ty: {
                 if (screenScope.dockPos === "top") return screenScope.dockEdgeOffset + 4
-                if (screenScope.dockPos === "bottom") return overlayWin.height - screenScope.dockEdgeOffset - height - 4
-                return Math.max(10, Math.min(overlayWin.height - height - 10, screenScope.hoveredAnchorY - height / 2))
+                if (screenScope.dockPos === "bottom") return scrH - screenScope.dockEdgeOffset - height - 4
+                return Math.max(10, Math.min(scrH - height - 10, screenScope.hoveredAnchorY - height / 2))
             }
 
             x: tx
@@ -1019,8 +1021,8 @@ Scope {
             border.color: Qt.rgba(screenScope.rootState.colAccent.r, screenScope.rootState.colAccent.g, screenScope.rootState.colAccent.b, 0.28)
 
             Behavior on opacity { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-            Behavior on x { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-            Behavior on y { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            Behavior on x { enabled: screenScope.tooltipVisible && tooltipPill.opacity > 0.85; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            Behavior on y { enabled: screenScope.tooltipVisible && tooltipPill.opacity > 0.85; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
 
             Text {
                 id: tooltipLabel
@@ -1043,8 +1045,8 @@ Scope {
             anchorCenterX: screenScope.contextAnchorX
             anchorCenterY: screenScope.contextAnchorY
             dockEdgeOffset: screenScope.dockEdgeOffset
-            screenWidth: overlayWin.width
-            screenHeight: overlayWin.height
+            screenWidth: screenScope.screenObj ? screenScope.screenObj.width : overlayWin.width
+            screenHeight: screenScope.screenObj ? screenScope.screenObj.height : overlayWin.height
 
             onCloseRequested: {
                 screenScope.contextMenuOpen = false
@@ -1083,8 +1085,8 @@ Scope {
             anchorCenterX: screenScope.settingsAnchorX
             anchorCenterY: screenScope.settingsAnchorY
             dockEdgeOffset: screenScope.dockEdgeOffset
-            screenWidth: overlayWin.width
-            screenHeight: overlayWin.height
+            screenWidth: screenScope.screenObj ? screenScope.screenObj.width : overlayWin.width
+            screenHeight: screenScope.screenObj ? screenScope.screenObj.height : overlayWin.height
 
             onCloseRequested: {
                 screenScope.settingsMenuOpen = false

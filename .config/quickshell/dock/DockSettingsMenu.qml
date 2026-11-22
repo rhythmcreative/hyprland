@@ -29,6 +29,9 @@ Item {
         return Math.max(12, Math.min(screenHeight - menuH - 12, anchorCenterY - menuH / 2))
     }
 
+    readonly property real slideOffX: dockPosition === "left" ? -6 : (dockPosition === "right" ? 6 : 0)
+    readonly property real slideOffY: dockPosition === "top" ? -6 : (dockPosition === "bottom" ? 6 : 0)
+
     x: targetX
     y: targetY
     width: menuW
@@ -36,7 +39,14 @@ Item {
     opacity: shown ? 1.0 : 0.0
     visible: opacity > 0.01
 
-    Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+    transform: Translate {
+        x: settingsMenu.shown ? 0 : settingsMenu.slideOffX
+        y: settingsMenu.shown ? 0 : settingsMenu.slideOffY
+        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    }
 
     Rectangle {
         anchors.fill: parent

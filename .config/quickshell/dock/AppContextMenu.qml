@@ -59,19 +59,24 @@ Item {
         return Math.max(12, Math.min(screenHeight - menuH - 12, anchorCenterY - menuH / 2))
     }
 
-    readonly property real slideOffX: dockPosition === "left" ? -8 : (dockPosition === "right" ? 8 : 0)
-    readonly property real slideOffY: dockPosition === "top" ? -8 : (dockPosition === "bottom" ? 8 : 0)
+    readonly property real slideOffX: dockPosition === "left" ? -6 : (dockPosition === "right" ? 6 : 0)
+    readonly property real slideOffY: dockPosition === "top" ? -6 : (dockPosition === "bottom" ? 6 : 0)
 
-    x: targetX + (shown ? 0 : slideOffX)
-    y: targetY + (shown ? 0 : slideOffY)
+    x: targetX
+    y: targetY
     width: menuW
     height: menuH
     opacity: shown && appData ? 1.0 : 0.0
     visible: opacity > 0.01 && appData !== null
 
-    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-    Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-    Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+    transform: Translate {
+        x: menu.shown ? 0 : menu.slideOffX
+        y: menu.shown ? 0 : menu.slideOffY
+        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    }
 
     Rectangle {
         anchors.fill: parent

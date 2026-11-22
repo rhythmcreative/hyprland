@@ -56,19 +56,27 @@ Item {
         return Math.max(14, Math.min(screenHeight - panelH - 14, anchorCenterY - panelH / 2))
     }
 
-    readonly property real slideOffX: dockPosition === "left" ? -8 : (dockPosition === "right" ? 8 : 0)
-    readonly property real slideOffY: dockPosition === "top" ? -8 : (dockPosition === "bottom" ? 8 : 0)
+    readonly property real slideOffX: dockPosition === "left" ? -6 : (dockPosition === "right" ? 6 : 0)
+    readonly property real slideOffY: dockPosition === "top" ? -6 : (dockPosition === "bottom" ? 6 : 0)
 
-    x: targetX + (shown ? 0 : slideOffX)
-    y: targetY + (shown ? 0 : slideOffY)
+    x: targetX
+    y: targetY
     width: panelW
     height: panelH
     opacity: shown && winCount > 0 ? 1.0 : 0.0
     visible: opacity > 0.01 && winCount > 0
 
-    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-    Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    // Snap immediately above the icon on open; only glide horizontally when fully visible switching icons
+    Behavior on x { enabled: popup.shown && popup.opacity > 0.85; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+    Behavior on y { enabled: popup.shown && popup.opacity > 0.85; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
     Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+
+    transform: Translate {
+        x: popup.shown ? 0 : popup.slideOffX
+        y: popup.shown ? 0 : popup.slideOffY
+        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    }
 
     // Non-blocking HoverHandler tracks pointer across the whole preview panel & all cards/buttons
     HoverHandler {

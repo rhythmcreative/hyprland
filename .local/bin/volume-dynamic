@@ -1,25 +1,56 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Volume control with Quickshell Dynamic Island Live OSD Pill (and legacy eww fallback)
+set -u
 
-# Volume control with Dynamic Island notifications
-
-case "$1" in
+case "${1:-}" in
     up)
-        pactl set-sink-volume @DEFAULT_SINK@ +5%
-        # Limit to 100%
-        CURRENT=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -Po '\d+(?=%)' | head -1)
-        if [ $CURRENT -gt 100 ]; then
-            pactl set-sink-volume @DEFAULT_SINK@ 100%
+        if command -v wpctl >/dev/null 2>&1; then
+            wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2>/dev/null || true
+            wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+ 2>/dev/null || true
+        elif command -v pactl >/dev/null 2>&1; then
+            pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null || true
+            pactl set-sink-volume @DEFAULT_SINK@ +5% 2>/dev/null || true
+            CURRENT=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -Po '\d+(?=%)' | head -n1 || echo 0)
+            if [ -n "$CURRENT" ] && [ "$CURRENT" -gt 100 ] 2>/dev/null; then
+                pactl set-sink-volume @DEFAULT_SINK@ 100% 2>/dev/null || true
+            fi
         fi
         ;;
     down)
-        pactl set-sink-volume @DEFAULT_SINK@ -5%
+        if command -v wpctl >/dev/null 2>&1; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- 2>/dev/null || true
+        elif command -v pactl >/dev/null 2>&1; then
+            pactl set-sink-volume @DEFAULT_SINK@ -5% 2>/dev/null || true
+        fi
         ;;
     mute)
-        pactl set-sink-mute @DEFAULT_SINK@ toggle
+        if command -v wpctl >/dev/null 2>&1; then
+            wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || true
+        elif command -v pactl >/dev/null 2>&1; then
+            pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null || true
+        fi
         ;;
 esac
 
-# Send Dynamic Island notification via EWW
+VOL=0
+MUTED="false"
+if command -v wpctl >/dev/null 2>&1; then
+    VL=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null || true)
+    VOL=$(awk '{printf "%d", ($2 + 0) * 100}' <<< "$VL")
+    grep -q "MUTED" <<< "$VL" && MUTED="true"
+elif command -v pactl >/dev/null 2>&1; then
+    VOL=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -Po '\d+(?=%)' | head -n1 || echo 0)
+    pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | grep -qi "yes" && MUTED="true"
+fi
+[ -n "$VOL" ] || VOL=0
+
+ISLAND_QML="$HOME/.config/quickshell/waybar-island/shell.qml"
+if command -v quickshell >/dev/null 2>&1 && [ -f "$ISLAND_QML" ]; then
+    if quickshell ipc -p "$ISLAND_QML" --any-display call island showOsd volume "$VOL" "$MUTED" >/dev/null 2>&1; then
+        exit 0
+    fi
+fi
+
 if [ -x "$HOME/.local/bin/eww-volume" ]; then
     "$HOME/.local/bin/eww-volume"
 fi

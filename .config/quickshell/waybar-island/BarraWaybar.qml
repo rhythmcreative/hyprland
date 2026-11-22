@@ -10,6 +10,7 @@ import Qt5Compat.GraphicalEffects
 PanelWindow {
     id: barWin
     property var modelData: null
+    property string screenName: ""
     screen: modelData
 
     anchors {
@@ -19,9 +20,8 @@ PanelWindow {
     }
 
     implicitHeight: 40
-    height: 40
 
-    readonly property bool isScreenHidden: (islandRoot && barWin.screen && islandRoot.hiddenScreens && islandRoot.hiddenScreens[barWin.screen.name] === true)
+    readonly property bool isScreenHidden: !!(islandRoot && barWin.screenName !== "" && islandRoot.hiddenScreens && islandRoot.hiddenScreens[barWin.screenName] === true)
     visible: {
         if (islandRoot) {
             if (islandRoot.enableQuickshellWaybar === false) return false
@@ -75,20 +75,20 @@ PanelWindow {
     property int activeWsId: 1
     property string activeKeymap: (islandRoot && islandRoot.kbLayout) ? islandRoot.kbLayout : "US"
 
-    // System stats
-    property int cpuPercent: 5
-    property string cpuBar: "▁▁▁▁"
-    property string memStr: "7.6G/14.9G"
-    property string cpuTempStr: "󰔏 66°C"
-    property string gpuTempStr: "󰔏 51°C"
-    property string cavaBars: "________"
+    // System stats (shared from islandRoot: single collector for ALL monitors, 0 duplicate polling)
+    readonly property int cpuPercent: islandRoot ? islandRoot.barCpuPercent : 5
+    readonly property string cpuBar: islandRoot ? islandRoot.barCpuBar : "▁▁▁▁"
+    readonly property string memStr: islandRoot ? islandRoot.barMemStr : "0.0G/0.0G"
+    readonly property string cpuTempStr: islandRoot ? islandRoot.barCpuTempStr : "󰔏 --°C"
+    readonly property string gpuTempStr: islandRoot ? islandRoot.barGpuTempStr : "󰔏 --°C"
+    readonly property string cavaBars: islandRoot ? islandRoot.barCavaBars : "▁▁▁▁▁▁▁▁▁▁▁▁"
 
     // Bluetooth full state & icons
-    property int btConnectedCount: 0
-    property bool btPowered: true
-    property string btType: "default"
-    property string btDeviceName: ""
-    property int btBattery: -1
+    readonly property int btConnectedCount: islandRoot ? islandRoot.barBtConnectedCount : 0
+    readonly property bool btPowered: islandRoot ? islandRoot.barBtPowered : true
+    readonly property string btType: islandRoot ? islandRoot.barBtType : "default"
+    readonly property string btDeviceName: islandRoot ? islandRoot.barBtDeviceName : ""
+    readonly property int btBattery: islandRoot ? islandRoot.barBtBattery : -1
     readonly property string btIcon: {
         if (!btPowered) return "󰂲" // Off / Disabled
         if (btConnectedCount === 0) return "󰂯" // On, un-connected
@@ -101,11 +101,11 @@ PanelWindow {
     }
 
     // WiFi / Network full state & icons
-    property bool isEthernet: false
-    property bool isWifiConnected: true
-    property bool isWifiEnabled: true
-    property int wifiSignal: 75
-    property string wifiSsid: ""
+    readonly property bool isEthernet: islandRoot ? islandRoot.barIsEthernet : false
+    readonly property bool isWifiConnected: islandRoot ? islandRoot.barIsWifiConnected : true
+    readonly property bool isWifiEnabled: islandRoot ? islandRoot.barIsWifiEnabled : true
+    readonly property int wifiSignal: islandRoot ? islandRoot.barWifiSignal : 75
+    readonly property string wifiSsid: islandRoot ? islandRoot.barWifiSsid : ""
     readonly property string netIcon: {
         if (isEthernet) return "󰈀"
         if (!isWifiEnabled) return "󰤪" // Radio disabled / airplane
@@ -118,17 +118,17 @@ PanelWindow {
     }
 
     // Audio, Backlight, Battery
-    property int volPercent: 46
-    property bool volMuted: false
-    property bool isHeadphones: false
-    property int brightnessPercent: 84
-    property bool hasBattery: true
-    property int batPercent: 91
-    property bool batCharging: false
-    property bool batPlugged: false
-    property bool batDual: false
-    property string batDetail: ""
-    property string batIcon: "󰁹"
+    readonly property int volPercent: islandRoot ? islandRoot.barVolPercent : 46
+    readonly property bool volMuted: islandRoot ? islandRoot.barVolMuted : false
+    readonly property bool isHeadphones: islandRoot ? islandRoot.barIsHeadphones : false
+    readonly property int brightnessPercent: islandRoot ? islandRoot.barBrightnessPercent : 84
+    readonly property bool hasBattery: islandRoot ? islandRoot.barHasBattery : true
+    readonly property int batPercent: islandRoot ? islandRoot.barBatPercent : 100
+    readonly property bool batCharging: islandRoot ? islandRoot.barBatCharging : false
+    readonly property bool batPlugged: islandRoot ? islandRoot.barBatPlugged : false
+    readonly property bool batDual: islandRoot ? islandRoot.barBatDual : false
+    readonly property string batDetail: islandRoot ? islandRoot.barBatDetail : ""
+    readonly property string batIcon: islandRoot ? islandRoot.barBatIcon : "󰁹"
 
     // Filter workspaces for current monitor
     readonly property var currentScreenWorkspaces: {
@@ -146,8 +146,19 @@ PanelWindow {
         Quickshell.execDetached(["bash", "-c", envInit + cmd])
     }
 
+    // Dual Hyprland workspace switcher (Hyprland 0.55+ Lua API with <0.55 legacy fallback)
+    function switchWorkspace(target) {
+        const isNum = (typeof target === "number") || /^[0-9]+$/.test(String(target))
+        const luaArg = isNum ? String(Number(target)) : ("'" + String(target).replace(/'/g, "") + "'")
+        const rawTarget = String(target).replace(/'/g, "")
+        const cmd =
+            "out=$(hyprctl eval \"hl.dispatch(hl.dsp.focus({workspace=" + luaArg + "}))\" 2>&1 || true); " +
+            "case \"$out\" in *error*|*unknown*|*'legacy parsers'*|'') hyprctl dispatch workspace '" + rawTarget + "' >/dev/null 2>&1 || true ;; esac"
+        barWin.run(cmd)
+    }
+
     function toggleSysMon() {
-        const scrName = (barWin.screen && barWin.screen.name) ? barWin.screen.name : ""
+        const scrName = barWin.screenName || ((barWin.screen && barWin.screen.name) ? barWin.screen.name : "")
         if (barWin.islandRoot && typeof barWin.islandRoot.toggleSysMon === "function") {
             barWin.islandRoot.toggleSysMon(scrName)
         } else {
@@ -155,11 +166,34 @@ PanelWindow {
         }
     }
 
+    // Event-driven workspace & keyboard layout refresh (instant response, low CPU)
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            const n = event ? String(event.name || "") : ""
+            if (n === "workspace" || n === "workspacev2" || n === "focusedmon" ||
+                n === "focusedmonv2" || n === "createworkspace" || n === "createworkspacev2" ||
+                n === "destroyworkspace" || n === "destroyworkspacev2" ||
+                n === "moveworkspace" || n === "moveworkspacev2" ||
+                n === "activelayout" || n === "monitoradded" || n === "monitorremoved") {
+                if (!wsProc.running) wsProc.running = true
+                else wsRefreshPending = true
+            }
+        }
+    }
+    property bool wsRefreshPending: false
+
     // --- Timers & Processes ---
     // 1. Workspaces (Per-monitor active workspace) & Keymap
     Process {
         id: wsProc
         command: ["bash", "-c", "hyprctl -j monitors 2>/dev/null; echo '==='; hyprctl -j workspaces 2>/dev/null; echo '==='; $HOME/.local/bin/kb-layout 2>/dev/null || echo 'US'"]
+        onExited: {
+            if (barWin.wsRefreshPending) {
+                barWin.wsRefreshPending = false
+                wsProc.running = true
+            }
+        }
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -170,7 +204,7 @@ PanelWindow {
                         ws.sort((a, b) => a.id - b.id)
                         barWin.rawWorkspaces = ws
 
-                        const scrName = (barWin.screen && barWin.screen.name) ? barWin.screen.name : ""
+                        const scrName = barWin.screenName || ((barWin.screen && barWin.screen.name) ? barWin.screen.name : "")
                         const thisMon = mons.find(m => m.name === scrName)
                         if (thisMon && thisMon.activeWorkspace) {
                             barWin.activeWsId = thisMon.activeWorkspace.id
@@ -188,295 +222,13 @@ PanelWindow {
         }
     }
 
+    // Gentle fallback timer (Hyprland.onRawEvent already triggers wsProc immediately on events)
     Timer {
-        interval: 250
+        interval: 15000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: if (!wsProc.running) wsProc.running = true
-    }
-
-    // 2. Comprehensive System Stats (CPU calculation, RAM, Temps, Audio, Brightness, Bluetooth, WiFi, Battery)
-    Process {
-        id: sysProc
-        command: ["bash", "-c", "
-            # 1. Ultra-fast CPU calculation (0ms sleep, uses /proc/stat delta)
-            _prev=\"/run/user/$(id -u)/.qs_cpu_prev\"
-            read -r _ u n s id io ir sir st _ < /proc/stat
-            curr_idle=$((id + io))
-            curr_total=$((u + n + s + id + io + ir + sir + st))
-            overall_pct=5
-            if [ -f \"$_prev\" ]; then
-                read -r prev_idle prev_total < \"$_prev\"
-                diff_idle=$((curr_idle - prev_idle))
-                diff_total=$((curr_total - prev_total))
-                if [ \"$diff_total\" -gt 0 ]; then
-                    overall_pct=$(( (100 * (diff_total - diff_idle)) / diff_total ))
-                    [ \"$overall_pct\" -lt 0 ] && overall_pct=0
-                    [ \"$overall_pct\" -gt 100 ] && overall_pct=100
-                fi
-            fi
-            echo \"$curr_idle $curr_total\" > \"$_prev\"
-            icons=(\"▁\" \"▂\" \"▃\" \"▄\" \"▅\" \"▆\" \"▇\" \"█\")
-            idx=$(( overall_pct * 7 / 100 ))
-            [ \"$idx\" -gt 7 ] && idx=7
-            [ \"$idx\" -lt 0 ] && idx=0
-            ic=\"${icons[$idx]}\"
-            cpu_info=\"${ic}${ic}${ic}${ic}|$overall_pct\"
-
-            # 2. RAM
-            ram_used=$(free -m | awk '/Mem:/ {printf \"%.1fG/%.1fG\", $3/1024, $2/1024}')
-
-            # 3. CPU Temp (Dynamic scan: AMD k10temp, Intel coretemp, zenpower, or thermal_zone)
-            cpu_raw=\"\"
-            for hw in /sys/class/hwmon/hwmon*; do
-                hwn=\$(cat \"\$hw/name\" 2>/dev/null)
-                case \"\$hwn\" in
-                    k10temp|coretemp|zenpower|cpu_thermal)
-                        cpu_raw=\$(cat \"\$hw/temp1_input\" 2>/dev/null || cat \"\$hw/temp2_input\" 2>/dev/null)
-                        [ -n \"\$cpu_raw\" ] && break
-                        ;;
-                esac
-            done
-            [ -z \"\$cpu_raw\" ] && cpu_raw=\$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || cat /sys/class/hwmon/hwmon*/temp1_input 2>/dev/null | head -n1)
-            if [ -n \"\$cpu_raw\" ] && [ \"\$cpu_raw\" -gt 0 ] 2>/dev/null; then
-                cpu_temp=\"󰔏 \$((cpu_raw / 1000))°C\"
-            else
-                cpu_temp=\"󰔏 --°C\"
-            fi
-
-            # 4. GPU Temp (Dynamic scan: NVIDIA nvidia-smi, AMD amdgpu, or Intel drm)
-            gpu_t=\"\"
-            if command -v nvidia-smi >/dev/null 2>&1; then
-                nv_t=\$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' ')
-                [ -n \"\$nv_t\" ] && [ \"\$nv_t\" -gt 0 ] 2>/dev/null && gpu_t=\"\${nv_t}°C\"
-            fi
-            if [ -z \"\$gpu_t\" ]; then
-                for hw in /sys/class/hwmon/hwmon*; do
-                    if grep -qi \"amdgpu\" \"\$hw/name\" 2>/dev/null; then
-                        t_val=\$(cat \"\$hw/temp1_input\" 2>/dev/null)
-                        [ -n \"\$t_val\" ] && [ \"\$t_val\" -gt 0 ] 2>/dev/null && gpu_t=\"\$((t_val / 1000))°C\" && break
-                    fi
-                done
-            fi
-            [ -z \"\$gpu_t\" ] && gpu_temp=\"󰔏 --°C\" || gpu_temp=\"󰔏 \$gpu_t\"
-
-            # 5. Battery & Power detection
-            has_b=0
-            bat_count=0
-            tot_energy_now=0
-            tot_energy_full=0
-            tot_cap=0
-            is_charging=0
-            bat_caps=\"\"
-
-            for b in /sys/class/power_supply/*; do
-                [ -d \"\$b\" ] || continue
-                btype=\$(cat \"\$b/type\" 2>/dev/null || true)
-                if [ \"\$btype\" = \"Battery\" ]; then
-                    if [ -f \"\$b/scope\" ] && grep -qi \"device\" \"\$b/scope\"; then
-                        continue
-                    fi
-                    if [ -f \"\$b/present\" ] && [ \"\$(cat \"\$b/present\" 2>/dev/null)\" = \"0\" ]; then
-                        continue
-                    fi
-                    has_b=1
-                    bat_count=\$((bat_count + 1))
-                    c=\$(cat \"\$b/capacity\" 2>/dev/null || echo 0)
-                    s=\$(cat \"\$b/status\" 2>/dev/null || echo \"Unknown\")
-                    en_now=\$(cat \"\$b/energy_now\" 2>/dev/null || cat \"\$b/charge_now\" 2>/dev/null || echo 0)
-                    en_full=\$(cat \"\$b/energy_full\" 2>/dev/null || cat \"\$b/charge_full\" 2>/dev/null || echo 0)
-
-                    if [ \"\$en_full\" -gt 0 ] 2>/dev/null; then
-                        tot_energy_now=\$((tot_energy_now + en_now))
-                        tot_energy_full=\$((tot_energy_full + en_full))
-                    fi
-                    tot_cap=\$((tot_cap + c))
-                    if [ \"\$s\" = \"Charging\" ]; then
-                        is_charging=1
-                    fi
-                    bname=\$(basename \"\$b\")
-                    [ -n \"\$bat_caps\" ] && bat_caps=\"\$bat_caps │ \"
-                    bat_caps=\"\${bat_caps}\${c}%\"
-                fi
-            done
-
-            ac_online=0
-            for a in /sys/class/power_supply/*; do
-                [ -d \"\$a\" ] || continue
-                atype=\$(cat \"\$a/type\" 2>/dev/null || true)
-                if [ \"\$atype\" = \"Mains\" ] || [ \"\$atype\" = \"USB\" ] || [ \"\$atype\" = \"USB_PD\" ] || [ \"\$atype\" = \"USB_C\" ] || [[ \"\$a\" =~ (AC|ADP|ACAD) ]]; then
-                    if [ -f \"\$a/scope\" ] && grep -qi \"device\" \"\$a/scope\"; then
-                        continue
-                    fi
-                    if [ \"\$(cat \"\$a/online\" 2>/dev/null)\" = \"1\" ]; then
-                        ac_online=1
-                        break
-                    fi
-                fi
-            done
-
-            if [ \"\$has_b\" -eq 1 ]; then
-                if [ \"\$tot_energy_full\" -gt 0 ] 2>/dev/null; then
-                    bat_cap=\$((tot_energy_now * 100 / tot_energy_full))
-                elif [ \"\$bat_count\" -gt 0 ]; then
-                    bat_cap=\$((tot_cap / bat_count))
-                else
-                    bat_cap=100
-                fi
-                if [ \"\$is_charging\" -eq 1 ]; then
-                    bat_status=\"Charging\"
-                elif [ \"\$ac_online\" -eq 1 ]; then
-                    bat_status=\"Plugged\"
-                else
-                    bat_status=\"Discharging\"
-                fi
-            else
-                bat_cap=100
-                bat_status=\"AC\"
-            fi
-
-            # 6. Brightness
-            bri_pct=$(brightnessctl -m 2>/dev/null | head -n1 | awk -F, '{print $4}' | tr -d '%')
-            [ -z \"$bri_pct\" ] && bri_pct=84
-
-            # 7. Audio (Volume, Mute, Sink)
-            vol_line=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null)
-            vol_val=$(echo \"$vol_line\" | awk '{print int($2 * 100)}')
-            is_muted=0
-            if echo \"$vol_line\" | grep -q \"MUTED\"; then is_muted=1; fi
-            sink_name=$(wpctl status 2>/dev/null | awk '/Sinks:/{flag=1; next} /Sources:/{flag=0} flag && /\\*/{print}')
-            is_hp=0
-            if echo \"$sink_name\" | grep -iqE 'headphone|headset|buds|wh-|airpod|ear'; then is_hp=1; fi
-
-            # 8. Bluetooth (Powered, Count, Device Type, Name, Battery)
-            bt_pow=$(bluetoothctl show 2>/dev/null | grep -q \"Powered: yes\" && echo 1 || echo 0)
-            bt_cnt=$(bluetoothctl devices Connected 2>/dev/null | wc -l)
-            bt_typ=\"default\"
-            bt_name=\"\"
-            bt_bat=\"\"
-            if [ \"$bt_cnt\" -gt 0 ]; then
-                first_mac=$(bluetoothctl devices Connected 2>/dev/null | head -n1 | awk '{print $2}')
-                if [ -n \"$first_mac\" ]; then
-                    bt_name=$(bluetoothctl devices Connected 2>/dev/null | head -n1 | cut -d' ' -f3-)
-                    info_out=$(bluetoothctl info \"$first_mac\" 2>/dev/null)
-                    dev_icon=$(echo \"$info_out\" | grep \"Icon:\" | awk '{print $2}')
-                    case \"$dev_icon\" in
-                        *headphone*|*headset*|*audio*) bt_typ=\"audio\" ;;
-                        *gamepad*|*joystick*) bt_typ=\"gamepad\" ;;
-                        *mouse*) bt_typ=\"mouse\" ;;
-                        *keyboard*) bt_typ=\"keyboard\" ;;
-                        *phone*) bt_typ=\"phone\" ;;
-                        *) bt_typ=\"default\" ;;
-                    esac
-                    bat_raw=$(echo \"$info_out\" | grep -i \"Battery Percentage:\" | head -n1)
-                    if [ -n \"$bat_raw\" ]; then
-                        bt_bat=$(echo \"$bat_raw\" | grep -o '([0-9]\\+)' | tr -d '()')
-                        [ -z \"$bt_bat\" ] && bt_bat=$(echo \"$bat_raw\" | grep -o '[0-9]\\+' | tail -n1)
-                    fi
-                    if [ -z \"$bt_bat\" ]; then
-                        mac_under=$(echo \"$first_mac\" | tr ':' '_')
-                        bt_bat=$(upower -e 2>/dev/null | grep -i \"$mac_under\" | head -n1 | xargs -r upower -i 2>/dev/null | grep -i \"percentage:\" | awk '{print $2}' | tr -d '%')
-                    fi
-                fi
-            fi
-
-            # 9. WiFi / Network (Ethernet, WiFi State, Signal, SSID)
-            is_eth=0
-            if nmcli -t -f TYPE,STATE dev 2>/dev/null | grep -q \"^ethernet:connected\"; then is_eth=1; fi
-            is_wifi=0
-            if nmcli -t -f TYPE,STATE dev 2>/dev/null | grep -q \"^wifi:connected\"; then is_wifi=1; fi
-            wifi_en=1
-            if [ \"$(nmcli radio wifi 2>/dev/null)\" = \"disabled\" ]; then wifi_en=0; fi
-            wifi_line=$(nmcli -t -f IN-USE,SIGNAL,SSID dev wifi 2>/dev/null | grep \"^\\*\" | head -n1)
-            wifi_sig=$(echo \"$wifi_line\" | cut -d: -f2)
-            wifi_ssid=$(echo \"$wifi_line\" | cut -d: -f3)
-            [ -z \"$wifi_sig\" ] && wifi_sig=0
-
-            echo \"$cpu_info|$ram_used|$cpu_temp|$gpu_temp|$bat_cap|$bat_status|$bri_pct|$vol_val|$is_muted|$is_hp|$bt_cnt|$bt_pow|$bt_typ|$bt_name|$is_eth|$is_wifi|$wifi_en|$wifi_sig|$wifi_ssid|$has_b|$bat_count|$bat_caps|$bt_bat\"
-        "]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    const p = text.trim().split("|")
-                    if (p.length >= 20) {
-                        barWin.cpuBar = p[0] || "▁▁▁▁"
-                        barWin.cpuPercent = parseInt(p[1]) || 5
-                        barWin.memStr = p[2] || "7.6G/14.9G"
-                        barWin.cpuTempStr = p[3] || "󰔏 58°C"
-                        barWin.gpuTempStr = p[4] || "󰔏 51°C"
-
-                        if (p.length >= 21) barWin.hasBattery = (p[20] === "1")
-                        const batCount = (p.length >= 22) ? (parseInt(p[21]) || 0) : (barWin.hasBattery ? 1 : 0)
-                        barWin.batDual = (batCount >= 2)
-                        barWin.batDetail = (p.length >= 23) ? p[22] : ""
-
-                        barWin.batPercent = parseInt(p[5]) || 0
-                        const bStatus = p[6] || (barWin.hasBattery ? "Discharging" : "AC")
-                        barWin.batCharging = (bStatus === "Charging")
-                        barWin.batPlugged = (bStatus === "Plugged")
-
-                        if (!barWin.hasBattery || batCount === 0 || bStatus === "AC") {
-                            barWin.batIcon = "󰚥"
-                        } else if (barWin.batCharging || barWin.batPlugged) {
-                            barWin.batIcon = "󰂄"
-                        } else {
-                            const b = barWin.batPercent
-                            if (b > 90) barWin.batIcon = "󰁹"
-                            else if (b > 80) barWin.batIcon = "󰂂"
-                            else if (b > 70) barWin.batIcon = "󰂁"
-                            else if (b > 60) barWin.batIcon = "󰂀"
-                            else if (b > 50) barWin.batIcon = "󰁾"
-                            else if (b > 40) barWin.batIcon = "󰁽"
-                            else if (b > 30) barWin.batIcon = "󰁼"
-                            else if (b > 20) barWin.batIcon = "󰁻"
-                            else barWin.batIcon = "󰁺"
-                        }
-
-                        barWin.brightnessPercent = parseInt(p[7]) || 84
-                        barWin.volPercent = parseInt(p[8]) || 46
-                        barWin.volMuted = (p[9] === "1")
-                        barWin.isHeadphones = (p[10] === "1")
-
-                        // Bluetooth
-                        barWin.btConnectedCount = parseInt(p[11]) || 0
-                        barWin.btPowered = (p[12] === "1")
-                        barWin.btType = p[13] || "default"
-                        barWin.btDeviceName = p[14] || ""
-                        barWin.btBattery = (p.length >= 24 && p[23] !== "") ? (parseInt(p[23]) || -1) : -1
-
-                        // Network
-                        barWin.isEthernet = (p[15] === "1")
-                        barWin.isWifiConnected = (p[16] === "1")
-                        barWin.isWifiEnabled = (p[17] === "1")
-                        barWin.wifiSignal = parseInt(p[18]) || 0
-                        barWin.wifiSsid = p[19] || ""
-                    }
-                } catch(e) {}
-            }
-        }
-    }
-
-    Timer {
-        interval: 650
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: if (!sysProc.running) sysProc.running = true
-    }
-
-    // 3. Cava Stream
-    Process {
-        id: cavaStream
-        command: ["bash", "-c", "$HOME/.config/waybar/scripts/cava.sh"]
-        running: true
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                const tr = line.trim()
-                if (tr.length > 0) barWin.cavaBars = tr
-            }
-        }
     }
 
     // Main Bar Frame
@@ -542,7 +294,7 @@ PanelWindow {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     barWin.activeWsId = modelData.id
-                                    barWin.run("hyprctl dispatch workspace " + modelData.id)
+                                    barWin.switchWorkspace(modelData.id)
                                     if (!wsProc.running) wsProc.running = true
                                 }
                             }
@@ -554,10 +306,10 @@ PanelWindow {
                     onWheel: event => {
                         if (event.angleDelta.y > 0) {
                             barWin.activeWsId = Math.max(1, barWin.activeWsId - 1)
-                            barWin.run("hyprctl dispatch workspace m-1")
+                            barWin.switchWorkspace("m-1")
                         } else if (event.angleDelta.y < 0) {
                             barWin.activeWsId = barWin.activeWsId + 1
-                            barWin.run("hyprctl dispatch workspace m+1")
+                            barWin.switchWorkspace("m+1")
                         }
                         if (!wsProc.running) wsProc.running = true
                     }
@@ -623,7 +375,7 @@ PanelWindow {
                     }
 
                     // Divider (1px solid @color8)
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // Memory
                     Rectangle {
@@ -666,7 +418,7 @@ PanelWindow {
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // CPU Temp
                     Rectangle {
@@ -703,7 +455,7 @@ PanelWindow {
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // GPU Temp
                     Rectangle {
@@ -900,7 +652,7 @@ PanelWindow {
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // 2.2 WiFi / Network (Dynamic Signal & State Icons)
                     Rectangle {
@@ -993,7 +745,7 @@ PanelWindow {
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // 2.4 Audio Volume (Headphones / Speaker / Mute)
                     Rectangle {
@@ -1032,9 +784,9 @@ PanelWindow {
                                 if (mouse.button === Qt.RightButton) {
                                     barWin.run("pavucontrol")
                                 } else {
-                                    barWin.volMuted = !barWin.volMuted
+                                    if (barWin.islandRoot) barWin.islandRoot.barVolMuted = !barWin.volMuted
                                     barWin.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle")
-                                    if (!sysProc.running) sysProc.running = true
+                                    if (barWin.islandRoot) barWin.islandRoot.refreshBarFast()
                                 }
                             }
                             onDoubleClicked: barWin.run("pavucontrol")
@@ -1043,20 +795,22 @@ PanelWindow {
                         WheelHandler {
                             onWheel: event => {
                                 if (event.angleDelta.y > 0) {
-                                    barWin.volPercent = Math.min(150, barWin.volPercent + 2)
-                                    barWin.volMuted = false
-                                    barWin.run("wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 2%+")
+                                    if (barWin.islandRoot) {
+                                        barWin.islandRoot.barVolPercent = Math.min(150, barWin.volPercent + 2)
+                                        barWin.islandRoot.barVolMuted = false
+                                    }
+                                    barWin.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 && wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 2%+")
                                 } else if (event.angleDelta.y < 0) {
-                                    barWin.volPercent = Math.max(0, barWin.volPercent - 2)
+                                    if (barWin.islandRoot) barWin.islandRoot.barVolPercent = Math.max(0, barWin.volPercent - 2)
                                     barWin.run("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-")
                                 }
-                                if (!sysProc.running) sysProc.running = true
+                                if (barWin.islandRoot) barWin.islandRoot.refreshBarFast()
                             }
                         }
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // 2.5 Backlight / Brightness
                     Rectangle {
@@ -1094,19 +848,19 @@ PanelWindow {
                         WheelHandler {
                             onWheel: event => {
                                 if (event.angleDelta.y > 0) {
-                                    barWin.brightnessPercent = Math.min(100, barWin.brightnessPercent + 2)
+                                    if (barWin.islandRoot) barWin.islandRoot.barBrightnessPercent = Math.min(100, barWin.brightnessPercent + 2)
                                     barWin.run("brightnessctl set 2%+")
                                 } else if (event.angleDelta.y < 0) {
-                                    barWin.brightnessPercent = Math.max(1, barWin.brightnessPercent - 2)
+                                    if (barWin.islandRoot) barWin.islandRoot.barBrightnessPercent = Math.max(1, barWin.brightnessPercent - 2)
                                     barWin.run("brightnessctl set 2%-")
                                 }
-                                if (!sysProc.running) sysProc.running = true
+                                if (barWin.islandRoot) barWin.islandRoot.refreshBarFast()
                             }
                         }
                     }
 
                     // Divider
-                    Rectangle { width: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
+                    Rectangle { implicitWidth: 1; implicitHeight: 30; color: barWin.colMuted; opacity: 0.35 }
 
                     // 2.6 Battery / Desktop Power
                     Rectangle {

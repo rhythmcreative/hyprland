@@ -13,69 +13,61 @@
 set -uo pipefail
 
 LOG_FILE="/tmp/privacy-shield.log"
-POLL_INTERVAL="${PRIVACY_SHIELD_INTERVAL:-3}"
+POLL_INTERVAL="${PRIVACY_SHIELD_INTERVAL:-4}"
 COOLDOWN="${PRIVACY_SHIELD_COOLDOWN:-30}"
+STATE_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/privacy-status.json"
 
 cam_active=false
 mic_active=false
 last_cam_notify=0
 last_mic_notify=0
+last_state_json=""
+
+write_state() {
+    local json="{\"mic\": ${mic_active}, \"cam\": ${cam_active}}"
+    if [ "$json" != "$last_state_json" ] || [ ! -f "$STATE_FILE" ]; then
+        printf '%s\n' "$json" > "${STATE_FILE}.tmp.$$" 2>/dev/null && mv -f "${STATE_FILE}.tmp.$$" "$STATE_FILE" 2>/dev/null || true
+        last_state_json="$json"
+    fi
+}
 
 log() {
-    printf '%s %s\n' "$(date '+%F %T')" "$1" >> "$LOG_FILE" 2>/dev/null || true
+    printf '%(%F %T)T %s\n' -1 "$1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 camera_in_use() {
-    local dev
-    for dev in /dev/video*; do
-        [ -e "$dev" ] || continue
-        if command -v fuser >/dev/null 2>&1; then
-            if fuser -s "$dev" 2>/dev/null; then
-                return 0
-            fi
-        elif command -v lsof >/dev/null 2>&1; then
-            if lsof -t "$dev" >/dev/null 2>&1; then
-                return 0
-            fi
-        fi
-    done
+    local devs=(/dev/video*)
+    [ -e "${devs[0]}" ] || return 1
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -s "${devs[@]}" 2>/dev/null && return 0
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -t "${devs[@]}" >/dev/null 2>&1 && return 0
+    fi
     return 1
 }
 
 mic_in_use() {
-    # Skip our own monitor-style probing: check RUNNING sources, but ignore
-    # pure monitor sources (".monitor" suffix) which are always present.
+    # Fast single-line-per-source query via pactl list sources short
     if command -v pactl >/dev/null 2>&1; then
-        local out
-        out=$(pactl list sources 2>/dev/null || true)
+        local out line name state
+        out=$(pactl list sources short 2>/dev/null || true)
         if [ -n "$out" ]; then
-            if printf '%s\n' "$out" | awk '
-                /^Source #/ { name=""; state="" }
-                /^\tName: / { name=$2 }
-                /^\tState: / { state=$2 }
-                state == "RUNNING" && name != "" && name !~ /\.monitor$/ { found=1 }
-                END { exit !found }
-            '; then
-                return 0
-            else
-                return 1
-            fi
+            while IFS=$'\t' read -r _ name _ _ state _; do
+                if [ "$state" = "RUNNING" ] && [[ "$name" != *.monitor ]]; then
+                    return 0
+                fi
+            done <<< "$out"
+            return 1
         fi
-    fi
-    if command -v wpctl >/dev/null 2>&1; then
-        # wpctl has no direct capture-state query; treat a non-muted source
-        # with an active stream as in use via pactl fallback above only.
-        return 1
     fi
     return 1
 }
 
-now() { date +%s; }
-
 log "privacy-shield-daemon started (interval=${POLL_INTERVAL}s)"
+write_state
 
 while true; do
-    t=$(now)
+    printf -v t '%(%s)T' -1
 
     if camera_in_use; then
         if [ "$cam_active" = false ]; then
@@ -111,5 +103,6 @@ while true; do
         mic_active=false
     fi
 
+    write_state
     sleep "$POLL_INTERVAL"
 done

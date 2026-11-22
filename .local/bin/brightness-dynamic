@@ -1,21 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Brightness control with Quickshell Dynamic Island Live OSD Pill (and legacy eww fallback)
+set -u
 
-# Brightness control with Dynamic Island notifications
+dev_arg=()
+dev=$(ls -1 /sys/class/backlight 2>/dev/null | head -n 1 || true)
+[ -n "$dev" ] && dev_arg=(-d "$dev")
 
-dev_arg=""
-dev=$(ls -1 /sys/class/backlight 2>/dev/null | head -n 1)
-[ -n "$dev" ] && dev_arg="-d $dev"
-
-case "$1" in
+case "${1:-}" in
     up)
-        brightnessctl $dev_arg -e4 -n2 set 5%+ 2>/dev/null || brightnessctl $dev_arg set 5%+ 2>/dev/null || brightnessctl set 5%+ 2>/dev/null || true
+        brightnessctl "${dev_arg[@]}" -e4 -n2 set 5%+ 2>/dev/null \
+            || brightnessctl "${dev_arg[@]}" set 5%+ 2>/dev/null \
+            || brightnessctl set 5%+ 2>/dev/null || true
         ;;
     down)
-        brightnessctl $dev_arg -e4 -n2 set 5%- 2>/dev/null || brightnessctl $dev_arg set 5%- 2>/dev/null || brightnessctl set 5%- 2>/dev/null || true
+        brightnessctl "${dev_arg[@]}" -e4 -n2 set 5%- 2>/dev/null \
+            || brightnessctl "${dev_arg[@]}" set 5%- 2>/dev/null \
+            || brightnessctl set 5%- 2>/dev/null || true
         ;;
 esac
 
-# Send notification if script exists
+BRI=$(brightnessctl "${dev_arg[@]}" -m 2>/dev/null | head -n1 | awk -F, '{gsub(/%/,"",$4); print $4}' || true)
+[ -n "$BRI" ] || BRI=$(brightnessctl -m 2>/dev/null | head -n1 | awk -F, '{gsub(/%/,"",$4); print $4}' || echo 50)
+[ -n "$BRI" ] || BRI=50
+
+ISLAND_QML="$HOME/.config/quickshell/waybar-island/shell.qml"
+if command -v quickshell >/dev/null 2>&1 && [ -f "$ISLAND_QML" ]; then
+    if quickshell ipc -p "$ISLAND_QML" --any-display call island showOsd brightness "$BRI" false >/dev/null 2>&1; then
+        exit 0
+    fi
+fi
+
 if [ -x "$HOME/.local/bin/eww-brightness" ]; then
     "$HOME/.local/bin/eww-brightness"
 fi

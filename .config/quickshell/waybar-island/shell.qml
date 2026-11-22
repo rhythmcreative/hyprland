@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
 import Quickshell.Services.Notifications
@@ -169,80 +170,6 @@ ShellRoot {
         return "language"
     }
 
-    property var workspacesData: ({ active_id: 1, next_id: 2, count: 0, workspaces: [] })
-
-    ListModel {
-        id: workspacesModel
-    }
-
-    function updateWorkspacesModel(newList) {
-        if (!newList || !Array.isArray(newList)) return
-        let newIds = new Set(newList.map(w => w.id))
-        for (let i = workspacesModel.count - 1; i >= 0; i--) {
-            if (!newIds.has(workspacesModel.get(i).id)) {
-                workspacesModel.remove(i)
-            }
-        }
-        for (let item of newList) {
-            let foundIndex = -1
-            for (let i = 0; i < workspacesModel.count; i++) {
-                if (workspacesModel.get(i).id === item.id) {
-                    foundIndex = i
-                    break
-                }
-            }
-            if (foundIndex >= 0) {
-                let cur = workspacesModel.get(foundIndex)
-                if (cur.preview !== item.preview) workspacesModel.setProperty(foundIndex, "preview", item.preview)
-                if (cur.is_active !== item.is_active) workspacesModel.setProperty(foundIndex, "is_active", item.is_active)
-                if (cur.windows_count !== item.windows_count) workspacesModel.setProperty(foundIndex, "windows_count", item.windows_count)
-                if (cur.monitor !== item.monitor) workspacesModel.setProperty(foundIndex, "monitor", item.monitor)
-                if (cur.name !== item.name) workspacesModel.setProperty(foundIndex, "name", item.name)
-            } else {
-                let insertIdx = workspacesModel.count
-                for (let i = 0; i < workspacesModel.count; i++) {
-                    if (workspacesModel.get(i).id > item.id) {
-                        insertIdx = i
-                        break
-                    }
-                }
-                workspacesModel.insert(insertIdx, {
-                    id: item.id,
-                    name: item.name || ("" + item.id),
-                    monitor: item.monitor || "",
-                    is_active: item.is_active || false,
-                    windows_count: item.windows_count || 0,
-                    preview: item.preview || ""
-                })
-            }
-        }
-    }
-
-    function anyPanelWorkspaces() {
-        return Object.keys(root.islandPanels).some(name => root.islandPanels[name].expanded && root.islandPanels[name].currentTab === 4)
-    }
-
-    function toggleWorkspaces(screenName) {
-        let panel = root.panelForScreen(screenName)
-        if (!panel) {
-            let names = Object.keys(root.islandPanels)
-            if (names.length) {
-                screenName = names[0]
-                panel = root.islandPanels[screenName]
-            }
-        }
-        if (!panel) return "unavailable"
-        if (panel.expanded && panel.currentTab === 4) {
-            root.setPanelState(screenName, false)
-            return "collapsed"
-        } else {
-            panel.sysMonExpanded = false
-            root.setPanelState(screenName, true, 4, 0)
-            workspacesProc.running = true
-            return "workspaces"
-        }
-    }
-
     function anyPanelSubView(subView) {
         return Object.keys(root.islandPanels).some(name =>
             root.islandPanels[name].expanded && root.islandPanels[name].controlSubView === subView)
@@ -250,9 +177,44 @@ ShellRoot {
 
     property string activePlayerTitle: ""
     property string activePlayerArtist: ""
+    property string activePlayerArt: ""
+    property real mediaPosition: 0
+    property real mediaLength: 0
+    property int selectedPlayerIdx: 0
     property bool isPlaying: false
     property real volumeLevel: 0.5
     property real brightnessLevel: 0.5
+
+    // Live Hardware OSD Pill (Volume / Brightness / Mic — zero focus steal)
+    property bool osdActive: false
+    property string osdKind: "volume"
+    property int osdValue: 50
+    property bool osdMuted: false
+    property string clipSearchQuery: ""
+
+    function showOsd(kind, value, muted) {
+        root.osdKind = kind || "volume"
+        root.osdValue = Math.max(0, Math.min(150, parseInt(value, 10) || 0))
+        root.osdMuted = (muted === true || muted === "true" || muted === "1")
+        if (root.osdKind === "volume") {
+            root.volumeLevel = Math.min(1.0, root.osdValue / 100.0)
+            root.isMuted = root.osdMuted
+            root.barVolPercent = root.osdValue
+            root.barVolMuted = root.osdMuted
+        } else if (root.osdKind === "brightness") {
+            root.brightnessLevel = Math.max(0.01, Math.min(1.0, root.osdValue / 100.0))
+            root.barBrightnessPercent = root.osdValue
+        }
+        root.osdActive = true
+        osdHideTimer.restart()
+    }
+
+    Timer {
+        id: osdHideTimer
+        interval: 1800
+        repeat: false
+        onTriggered: root.osdActive = false
+    }
 
     // Notification state
     property bool notifActive: false
@@ -260,6 +222,7 @@ ShellRoot {
     property string notifSummary: ""
     property string notifBody: ""
     property string notifIcon: ""
+    property var notifActions: []
     property var currentNotification: null
     property var notifHistory: []
     property int notifUnread: 0
@@ -335,15 +298,28 @@ ShellRoot {
         }
     }
 
-    function notifPush(app, summary, body) {
-        var h = [{app: app || "System", summary: summary || "", body: body || "", time: root.notifTime()}].concat(root.notifHistory)
+    function notifPush(app, summary, body, actions) {
+        var h = [{app: app || "System", summary: summary || "", body: body || "", time: root.notifTime(), actions: actions || []}].concat(root.notifHistory)
         root.notifHistory = h.slice(0, 30)
         root.notifUnread = Math.min(99, root.notifUnread + 1)
     }
-    function notifOpenCenter(screenName) {
-        if (root.currentNotification) root.currentNotification.dismiss()
+    function notifDismissAt(index) {
+        if (index < 0 || index >= root.notifHistory.length) return
+        var copy = root.notifHistory.slice()
+        copy.splice(index, 1)
+        root.notifHistory = copy
+    }
+    function dismissBanner() {
+        notifTimer.stop()
+        if (root.currentNotification && typeof root.currentNotification.dismiss === "function") {
+            root.currentNotification.dismiss()
+        }
         root.currentNotification = null
+        root.notifActions = []
         root.notifActive = false
+    }
+    function notifOpenCenter(screenName) {
+        root.dismissBanner()
         root.notifUnread = 0
         // A pending pairing request has a short lifetime: show it instead of
         // the notification list, otherwise the request is only visible through
@@ -376,10 +352,18 @@ ShellRoot {
                 return
             }
 
+            let acts = []
+            if (n.actions && n.actions.length > 0) {
+                for (let j = 0; j < n.actions.length; ++j) {
+                    const a = n.actions[j]
+                    if (a && a.identifier !== "default") acts.push(a)
+                }
+            }
+
             // Do Not Disturb: suppress banner toast, keep server-side history
             if (root.dndEnabled) {
                 n.tracked = true
-                root.notifPush(n.appName, n.summary, n.body)
+                root.notifPush(n.appName, n.summary, n.body, acts)
                 return
             }
             n.tracked = true
@@ -400,12 +384,13 @@ ShellRoot {
                 return
             }
 
-            root.notifPush(n.appName, n.summary, n.body)
+            root.notifPush(n.appName, n.summary, n.body, acts)
             root.currentNotification = n
             root.notifAppName = n.appName || "System"
             root.notifSummary = n.summary || ""
             root.notifBody = n.body || ""
             root.notifIcon = n.appIcon || ""
+            root.notifActions = acts
             root.notifActive = true
             notifTimer.restart()
         }
@@ -430,7 +415,7 @@ ShellRoot {
     // para no esconder la isla por un fullscreen de otro espacio de trabajo.
     property var fullscreenScreens: ({})
 
-    // OTA System Update state
+    // OTA System Update state (multi-distro aware)
     property var otaData: ({
         status: "up_to_date",
         status_text: "System is up to date",
@@ -443,7 +428,15 @@ ShellRoot {
         dotfiles_hash: "",
         remote_hash: "",
         pacman_updates: 0,
+        pkg_updates: 0,
+        flatpak_updates: 0,
         pacman_list: [],
+        distro: "Linux",
+        distro_id: "linux",
+        pkg_manager: "auto",
+        init_system: "systemd",
+        hyprland_mode: "lua",
+        in_progress: false,
         kernel: "",
         last_checked: ""
     })
@@ -787,13 +780,10 @@ ShellRoot {
             return open_gpu(screenName)
         }
         function toggleWorkspaces(screenName: string): string {
-            return root.toggleWorkspaces(screenName)
+            return "disabled"
         }
         function openWorkspaces(screenName: string): string {
-            let panel = root.setPanelState(screenName, true, 4, 0)
-            if (!panel) return "unavailable"
-            workspacesProc.running = true
-            return "workspaces"
+            return "disabled"
         }
         function openAlerts(screenName: string): string {
             let panel = root.setPanelState(screenName, true, 2, 0)
@@ -911,6 +901,10 @@ ShellRoot {
             }
             return "revealed"
         }
+        function showOsd(kind: string, value: string, muted: string): string {
+            root.showOsd(kind, value, muted)
+            return "osd:" + kind + ":" + root.osdValue
+        }
     }
 
     IpcHandler {
@@ -1022,9 +1016,16 @@ ShellRoot {
         }
     }
 
-    // MPRIS tracking
+    // MPRIS tracking (multi-player + album art + seekable position)
     readonly property var players: Mpris.players.values
-    readonly property var primaryPlayer: players.length > 0 ? players[0] : null
+    readonly property var primaryPlayer: {
+        if (!players || players.length === 0) return null
+        if (selectedPlayerIdx >= 0 && selectedPlayerIdx < players.length) return players[selectedPlayerIdx]
+        for (let i = 0; i < players.length; ++i) {
+            if (players[i] && players[i].playbackState === MprisPlaybackState.Playing) return players[i]
+        }
+        return players[0]
+    }
 
     onPrimaryPlayerChanged: updateMedia()
 
@@ -1034,6 +1035,8 @@ ShellRoot {
         function onPlaybackStateChanged() { root.updateMedia() }
         function onTrackTitleChanged() { root.updateMedia() }
         function onTrackArtistChanged() { root.updateMedia() }
+        function onTrackArtUrlChanged() { root.updateMedia() }
+        function onLengthChanged() { root.updateMedia() }
     }
 
     function updateMedia() {
@@ -1041,11 +1044,38 @@ ShellRoot {
             root.isPlaying = root.primaryPlayer.playbackState === MprisPlaybackState.Playing
             root.activePlayerTitle = root.primaryPlayer.trackTitle || ""
             root.activePlayerArtist = root.primaryPlayer.trackArtist || ""
+            root.activePlayerArt = root.primaryPlayer.trackArtUrl || ""
+            root.mediaPosition = Number(root.primaryPlayer.position || 0)
+            root.mediaLength = Number(root.primaryPlayer.length || 0)
         } else {
             root.isPlaying = false
             root.activePlayerTitle = ""
             root.activePlayerArtist = ""
+            root.activePlayerArt = ""
+            root.mediaPosition = 0
+            root.mediaLength = 0
         }
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.isPlaying && root.anyPanelExpanded()
+        onTriggered: root.updateMedia()
+    }
+
+    // Throttled slider apply timers (60fps UI drag without fork storm)
+    Timer {
+        id: volApplyTimer
+        interval: 45
+        repeat: false
+        onTriggered: root.runCmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(root.volumeLevel * 100) + "%")
+    }
+    Timer {
+        id: briApplyTimer
+        interval: 45
+        repeat: false
+        onTriggered: root.runCmd("brightnessctl set " + Math.round(root.brightnessLevel * 100) + "%")
     }
 
     // Process helper to run quick commands with full environment
@@ -1057,10 +1087,10 @@ ShellRoot {
         Quickshell.execDetached(["bash", "-c", envInit + cmd])
     }
 
-    // Get live volume & brightness
+    // Get live volume & brightness (only poll rapidly while expanded; OSD & refreshAllStates keep it instant)
     Timer {
-        interval: 650
-        running: true
+        interval: 900
+        running: root.anyPanelExpanded()
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -1304,25 +1334,36 @@ ShellRoot {
 
     function getOtaStatusText() {
         const _dep = root._i18nReloadCounter
-        if (!root.otaData || !root.otaData.has_updates) {
-            return "Rhythm Hyprland " + ((root.otaData && root.otaData.current_version) || "v1.0.0") + " · " + root.t("ota_uptodate", "Up to date")
+        const o = root.otaData
+        if (!o || !o.has_updates) {
+            return "Rhythm Hyprland " + ((o && o.current_version) || "v1.0.0") + " · " + root.t("ota_uptodate", "Up to date")
         }
-        if (root.otaData.latest_version && root.otaData.latest_version !== root.otaData.current_version) {
-            return root.t("ota_new_release", "New release available:") + " " + root.otaData.latest_version + (root.otaData.dotfiles_behind > 0 ? (" (" + root.otaData.dotfiles_behind + " " + root.t("ota_behind", "behind") + ")") : "")
+        const pkgs = (o.pkg_updates !== undefined && o.pkg_updates !== null) ? Number(o.pkg_updates) : Number(o.pacman_updates || 0)
+        const flp = Number(o.flatpak_updates || 0)
+        if (o.latest_version && o.latest_version !== o.current_version) {
+            return root.t("ota_new_release", "New release available:") + " " + o.latest_version + (o.dotfiles_behind > 0 ? (" (" + o.dotfiles_behind + " " + root.t("ota_behind", "behind") + ")") : "")
         }
-        if (root.otaData.dotfiles_behind > 0) {
-            return root.otaData.dotfiles_behind + " " + root.t("ota_new_updates", "new system update(s) available")
-        }
-        if (root.otaData.pacman_updates > 0) {
-            return root.otaData.pacman_updates + " " + root.t("ota_pkg_updates", "system package update(s) available")
-        }
+        let parts = []
+        if (o.dotfiles_behind > 0) parts.push(o.dotfiles_behind + " dotfiles")
+        if (pkgs > 0) parts.push(pkgs + " " + (o.pkg_manager && o.pkg_manager !== "auto" ? o.pkg_manager : "pkg"))
+        if (flp > 0) parts.push(flp + " Flatpak")
+        if (parts.length > 0) return parts.join(" · ") + " " + root.t("ota_available_short", "updates")
         return root.t("ota_available", "System Update Available")
     }
 
-    // Sondea que monitores tienen algo a pantalla completa, para esconder la isla
-    // mientras haya un video en pantalla completa. Un segundo basta: si se pierde
-    // uno, la isla reaparece ese instante y se ve el parpadeo, pero con mas la
-    // consulta se nota.
+    // Event-driven fullscreen detection via Hyprland IPC (instant hide/show over videos & games)
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            const n = event ? String(event.name || "") : ""
+            if (n === "fullscreen" || n === "workspace" || n === "workspacev2" ||
+                n === "activewindow" || n === "activewindowv2" ||
+                n === "closewindow" || n === "openwindow") {
+                if (!fullscreenProc.running) fullscreenProc.running = true
+            }
+        }
+    }
+
     Process {
         id: fullscreenProc
         command: ["bash", "-c", "$HOME/.local/bin/island-fullscreens"]
@@ -1341,10 +1382,10 @@ ShellRoot {
 
     Timer {
         id: fullscreenTimer
-        interval: 1000
+        interval: 4000
         repeat: true
         running: true
-        onTriggered: fullscreenProc.running = true
+        onTriggered: if (!fullscreenProc.running) fullscreenProc.running = true
         triggeredOnStart: true
     }
 
@@ -1495,7 +1536,7 @@ ShellRoot {
         //  seguía al día. Esa era la desincronización entre las dos barras.
         running: true
         //  Rápido donde se nota, tranquilo de fondo.
-        interval: root.anyPanelSubView(2) ? 1500 : 3000
+        interval: root.anyPanelSubView(2) ? 1500 : (root.anyPanelExpanded() ? 3500 : 8000)
         onTriggered: {
             if (!btStatusProc.running) {
                 btStatusProc.running = true
@@ -1559,11 +1600,26 @@ ShellRoot {
 
     Timer {
         id: recPollTimer
-        interval: 1000
+        interval: root.recState.recording ? 1000 : 4000
         running: true
         repeat: true
         onTriggered: {
-            recStatusProc.running = true
+            if (!recStatusProc.running) recStatusProc.running = true
+        }
+    }
+
+    // Zero-fork reactive privacy state from privacy-shield-daemon ($XDG_RUNTIME_DIR/privacy-status.json)
+    FileView {
+        id: privacyStateFile
+        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/privacy-status.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: privacyStateFile.reload()
+        onLoaded: {
+            try {
+                const txt = privacyStateFile.text().trim()
+                if (txt.length > 0) root.privacyState = JSON.parse(txt)
+            } catch(e) {}
         }
     }
 
@@ -1579,13 +1635,14 @@ ShellRoot {
         }
     }
 
+    // Fallback polling ONLY when privacy-shield-daemon's state file is absent
     Timer {
         id: privacyPollTimer
-        interval: 2000
-        running: true
+        interval: (root.privacyState.mic || root.privacyState.cam) ? 2500 : 6000
+        running: !privacyStateFile.loaded
         repeat: true
         onTriggered: {
-            privacyStatusProc.running = true
+            if (!privacyStatusProc.running) privacyStatusProc.running = true
         }
     }
 
@@ -1680,36 +1737,6 @@ ShellRoot {
         }
     }
 
-    function refreshWorkspacesNow() {
-        if (!workspacesProc.running) workspacesProc.running = true
-    }
-
-    Process {
-        id: workspacesProc
-        command: ["bash", "-c", "$HOME/.local/bin/notch-workspaces-helper refresh"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    let d = JSON.parse(text.trim())
-                    if (d && d.workspaces) {
-                        root.workspacesData = d
-                        root.updateWorkspacesModel(d.workspaces)
-                    }
-                } catch(e) {}
-            }
-        }
-    }
-
-    Timer {
-        id: workspacesTimer
-        interval: 1000
-        repeat: true
-        running: root.anyPanelWorkspaces()
-        onTriggered: {
-            if (!workspacesProc.running) workspacesProc.running = true
-        }
-    }
-
     Process {
         id: nightLightCheckProc
         command: ["bash", "-c", "$HOME/.local/bin/toggle-nightlight status"]
@@ -1764,19 +1791,33 @@ ShellRoot {
         }
     }
 
+    // Batched toggle status check (1 single fork instead of 5 separate bash processes!)
+    Process {
+        id: togglesBatchProc
+        command: ["bash", "-c", "printf '%s|%s|%s|%s|%s\n' \"$($HOME/.local/bin/toggle-nightlight status 2>/dev/null || echo off)\" \"$($HOME/.local/bin/toggle-caffeine status 2>/dev/null || echo off)\" \"$($HOME/.local/bin/toggle-powersave status 2>/dev/null || echo off)\" \"$($HOME/.local/bin/toggle-dnd status 2>/dev/null || echo off)\" \"$($HOME/.local/bin/rust-dock-toggle-all status 2>/dev/null || echo on)\""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = text.trim().split("|")
+                if (p.length >= 5) {
+                    root.nightLightEnabled = (p[0].trim() === "on")
+                    root.caffeineEnabled = (p[1].trim() === "on")
+                    root.powerSaverEnabled = (p[2].trim() === "on")
+                    root.dndEnabled = (p[3].trim() === "on")
+                    root.dockEnabled = (p[4].trim() !== "off")
+                }
+            }
+        }
+    }
+
     Timer {
         id: togglesPollTimer
-        interval: 2000
+        interval: root.anyPanelExpanded() ? 2000 : 5000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            nightLightCheckProc.running = true
-            caffeineCheckProc.running = true
-            powerSaveCheckProc.running = true
-            dndCheckProc.running = true
-            dockStatusProc.running = true
-            }
+            if (!togglesBatchProc.running) togglesBatchProc.running = true
+        }
     }
 
     Process {
@@ -1849,6 +1890,7 @@ ShellRoot {
 
     Process {
         id: otaStatusProc
+        running: true
         command: ["bash", "-c", "$HOME/.local/bin/system-ota status --json"]
         stdout: StdioCollector {
             onStreamFinished: {
@@ -1856,6 +1898,7 @@ ShellRoot {
                 try {
                     const data = JSON.parse(text.trim())
                     root.otaData = data
+                    root.otaUpdating = (data.in_progress === true)
                 } catch(e) {}
             }
         }
@@ -1928,6 +1971,407 @@ ShellRoot {
     // Barra nativa de Quickshell equivalente a Waybar (workspaces, sys-info, cava, language, status)
     property bool enableQuickshellWaybar: true
 
+    // ── Shared Top-Bar Telemetry (single instance for ALL monitors, zero fork storms) ──
+    property int _barCpuPrevIdle: 0
+    property int _barCpuPrevTotal: 0
+    property int barCpuPercent: 5
+    property string barCpuBar: "▁▁▁▁"
+    property string barMemStr: "0.0G/0.0G"
+    property string barCpuTempStr: "󰔏 --°C"
+    property string barGpuTempStr: "󰔏 --°C"
+    property string barCavaBars: "▁▁▁▁▁▁▁▁▁▁▁▁"
+
+    property int barVolPercent: 46
+    property bool barVolMuted: false
+    property bool barIsHeadphones: false
+    property int barBrightnessPercent: 84
+
+    property bool barHasBattery: true
+    property int barBatPercent: 100
+    property bool barBatCharging: false
+    property bool barBatPlugged: false
+    property bool barBatDual: false
+    property string barBatDetail: ""
+    property string barBatIcon: "󰁹"
+
+    property int barBtConnectedCount: 0
+    property bool barBtPowered: true
+    property string barBtType: "default"
+    property string barBtDeviceName: ""
+    property int barBtBattery: -1
+
+    property bool barIsEthernet: false
+    property bool barIsWifiConnected: false
+    property bool barIsWifiEnabled: true
+    property int barWifiSignal: 0
+    property string barWifiSsid: ""
+
+    function refreshBarFast() {
+        if (!barFastProc.running) barFastProc.running = true
+    }
+
+    // Fast bar collector (every 2s, pure /proc & /sys bash builtins + 1 wpctl call -> ~2 forks total)
+    Process {
+        id: barFastProc
+        command: ["bash", "-c", "
+            # 1. CPU ticks from /proc/stat (0 forks)
+            read -r _ u n s id io ir sir st _ < /proc/stat
+            c_idle=$((id + io))
+            c_tot=$((u + n + s + id + io + ir + sir + st))
+
+            # 2. RAM from /proc/meminfo (0 forks)
+            mt=0; ma=0
+            while read -r k v _; do
+                case \"$k\" in
+                    MemTotal:) mt=$v ;;
+                    MemAvailable:) ma=$v; break ;;
+                esac
+            done < /proc/meminfo
+            mu=$((mt - ma))
+            [ \"$mu\" -lt 0 ] && mu=0
+
+            # 3. Brightness from /sys/class/backlight (0 forks; brightnessctl fallback only if no sysfs)
+            bri=\"\"
+            for bl in /sys/class/backlight/*; do
+                [ -r \"$bl/brightness\" ] && [ -r \"$bl/max_brightness\" ] || continue
+                read -r b_cur < \"$bl/brightness\"
+                read -r b_max < \"$bl/max_brightness\"
+                if [ \"${b_max:-0}\" -gt 0 ]; then
+                    bri=$(( (b_cur * 100 + b_max / 2) / b_max ))
+                    break
+                fi
+            done
+            if [ -z \"$bri\" ] && command -v brightnessctl >/dev/null 2>&1; then
+                bl_line=$(brightnessctl -m 2>/dev/null)
+                bl_line=${bl_line%%$'\n'*}
+                IFS=, read -r _ _ _ bri _ <<< \"$bl_line\"
+                bri=${bri//%/}
+            fi
+            [ -z \"$bri\" ] && bri=84
+
+            # 4. Volume & Mute (1 fork, pure bash parsing)
+            vol=46; muted=0
+            if vline=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null); then
+                [[ \"$vline\" == *MUTED* ]] && muted=1
+                vnum=${vline#Volume: }
+                vnum=${vnum%% *}
+                if [[ \"$vnum\" =~ ^([0-9]+)\\.([0-9]+)$ ]]; then
+                    vint=$((10#${BASH_REMATCH[1]}))
+                    vdec=${BASH_REMATCH[2]}00
+                    vdec=$((10#${vdec:0:2}))
+                    vol=$((vint * 100 + vdec))
+                fi
+            fi
+
+            printf '%s|%s|%s|%s|%s|%s|%s\n' \"$c_idle\" \"$c_tot\" \"$mu\" \"$mt\" \"$bri\" \"$vol\" \"$muted\"
+        "]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = text.trim().split("|")
+                if (p.length >= 7) {
+                    const ci = parseInt(p[0], 10) || 0
+                    const ct = parseInt(p[1], 10) || 0
+                    if (root._barCpuPrevTotal > 0 && ct > root._barCpuPrevTotal) {
+                        const di = ci - root._barCpuPrevIdle
+                        const dt = ct - root._barCpuPrevTotal
+                        const pct = Math.max(0, Math.min(100, Math.round((100 * (dt - di)) / dt)))
+                        root.barCpuPercent = pct
+                        const icons = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+                        const ic = icons[Math.max(0, Math.min(7, Math.floor(pct * 7 / 100)))]
+                        root.barCpuBar = ic + ic + ic + ic
+                    }
+                    root._barCpuPrevIdle = ci
+                    root._barCpuPrevTotal = ct
+
+                    const mu = parseInt(p[2], 10) || 0
+                    const mt = parseInt(p[3], 10) || 0
+                    if (mt > 0) {
+                        root.barMemStr = (mu / 1048576.0).toFixed(1) + "G/" + (mt / 1048576.0).toFixed(1) + "G"
+                    }
+                    const bri = parseInt(p[4], 10)
+                    if (!isNaN(bri)) root.barBrightnessPercent = bri
+                    const vol = parseInt(p[5], 10)
+                    if (!isNaN(vol)) root.barVolPercent = vol
+                    root.barVolMuted = (p[6] === "1")
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: barFastTimer
+        interval: 2000
+        running: root.enableQuickshellWaybar
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: if (!barFastProc.running) barFastProc.running = true
+    }
+
+    // Slow bar collector (every 6s: temps, battery, headphones, WiFi with --rescan no, BT; NEVER wakes suspended NVIDIA dGPU)
+    Process {
+        id: barSlowProc
+        command: ["bash", "-c", "
+            # 1. CPU & AMD GPU Temp via pure sysfs reads (0 forks)
+            cpu_raw=\"\"; gpu_t=\"\"
+            for hw in /sys/class/hwmon/hwmon*; do
+                [ -r \"$hw/name\" ] || continue
+                read -r hwn < \"$hw/name\"
+                case \"$hwn\" in
+                    k10temp|coretemp|zenpower|cpu_thermal)
+                        if [ -z \"$cpu_raw\" ]; then
+                            [ -r \"$hw/temp1_input\" ] && read -r cpu_raw < \"$hw/temp1_input\"
+                            [ -z \"$cpu_raw\" ] && [ -r \"$hw/temp2_input\" ] && read -r cpu_raw < \"$hw/temp2_input\"
+                        fi
+                        ;;
+                    amdgpu)
+                        if [ -z \"$gpu_t\" ] && [ -r \"$hw/temp1_input\" ]; then
+                            read -r t_val < \"$hw/temp1_input\"
+                            [ \"${t_val:-0}\" -gt 0 ] 2>/dev/null && gpu_t=\"$((t_val / 1000))°C\"
+                        fi
+                        ;;
+                esac
+            done
+            if [ -z \"$cpu_raw\" ] && [ -r /sys/class/thermal/thermal_zone0/temp ]; then
+                read -r cpu_raw < /sys/class/thermal/thermal_zone0/temp
+            fi
+            if [ \"${cpu_raw:-0}\" -gt 0 ] 2>/dev/null; then
+                cpu_temp=\"󰔏 $((cpu_raw / 1000))°C\"
+            else
+                cpu_temp=\"󰔏 --°C\"
+            fi
+
+            # Only query nvidia-smi if dGPU is already ACTIVE (never wake D3cold) and NVML matches kernel
+            nv_err_flag=\"${XDG_RUNTIME_DIR:-/tmp}/.qs_nvml_mismatch\"
+            if [ ! -f \"$nv_err_flag\" ] && command -v nvidia-smi >/dev/null 2>&1; then
+                nv_active=0
+                for dev in /sys/bus/pci/devices/*; do
+                    [ -r \"$dev/vendor\" ] || continue
+                    read -r ven < \"$dev/vendor\"
+                    if [ \"$ven\" = \"0x10de\" ] && [ -r \"$dev/power/runtime_status\" ]; then
+                        read -r rst < \"$dev/power/runtime_status\"
+                        [ \"$rst\" = \"active\" ] && nv_active=1 && break
+                    fi
+                done
+                if [ \"$nv_active\" -eq 1 ]; then
+                    nv_out=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>&1)
+                    if [[ \"$nv_out\" == *mismatch* || \"$nv_out\" == *Failed* ]]; then
+                        : > \"$nv_err_flag\" 2>/dev/null || true
+                    else
+                        nv_t=${nv_out%%$'\n'*}
+                        nv_t=${nv_t// /}
+                        [ \"${nv_t:-0}\" -gt 0 ] 2>/dev/null && gpu_t=\"${nv_t}°C\"
+                    fi
+                fi
+            fi
+            [ -n \"$gpu_t\" ] && gpu_temp=\"󰔏 $gpu_t\" || gpu_temp=\"󰔏 --°C\"
+
+            # 2. Battery & AC via pure sysfs reads (0 forks)
+            has_b=0; bat_count=0; tot_en=0; tot_ef=0; tot_cap=0; is_chg=0; ac_on=0; bat_caps=\"\"
+            for ps in /sys/class/power_supply/*; do
+                [ -r \"$ps/type\" ] || continue
+                read -r ptype < \"$ps/type\"
+                if [ -r \"$ps/scope\" ]; then
+                    read -r pscope < \"$ps/scope\"
+                    [[ \"${pscope,,}\" == *device* ]] && continue
+                fi
+                if [ \"$ptype\" = \"Battery\" ]; then
+                    if [ -r \"$ps/present\" ]; then
+                        read -r ppres < \"$ps/present\"
+                        [ \"$ppres\" = \"0\" ] && continue
+                    fi
+                    has_b=1
+                    bat_count=$((bat_count + 1))
+                    c=0; [ -r \"$ps/capacity\" ] && read -r c < \"$ps/capacity\"
+                    s=\"Unknown\"; [ -r \"$ps/status\" ] && read -r s < \"$ps/status\"
+                    en=0; ef=0
+                    if [ -r \"$ps/energy_now\" ] && [ -r \"$ps/energy_full\" ]; then
+                        read -r en < \"$ps/energy_now\"; read -r ef < \"$ps/energy_full\"
+                    elif [ -r \"$ps/charge_now\" ] && [ -r \"$ps/charge_full\" ]; then
+                        read -r en < \"$ps/charge_now\"; read -r ef < \"$ps/charge_full\"
+                    fi
+                    if [ \"${ef:-0}\" -gt 0 ] 2>/dev/null; then
+                        tot_en=$((tot_en + en)); tot_ef=$((tot_ef + ef))
+                    fi
+                    tot_cap=$((tot_cap + ${c:-0}))
+                    [ \"$s\" = \"Charging\" ] && is_chg=1
+                    [ -n \"$bat_caps\" ] && bat_caps=\"$bat_caps │ \"
+                    bat_caps=\"${bat_caps}${c}%\"
+                elif [ \"$ac_on\" -eq 0 ]; then
+                    case \"$ptype\" in
+                        Mains|USB|USB_PD|USB_C)
+                            if [ -r \"$ps/online\" ]; then
+                                read -r aon < \"$ps/online\"
+                                [ \"$aon\" = \"1\" ] && ac_on=1
+                            fi
+                            ;;
+                    esac
+                fi
+            done
+            if [ \"$has_b\" -eq 1 ]; then
+                if [ \"$tot_ef\" -gt 0 ]; then bat_cap=$((tot_en * 100 / tot_ef))
+                elif [ \"$bat_count\" -gt 0 ]; then bat_cap=$((tot_cap / bat_count))
+                else bat_cap=100; fi
+                if [ \"$is_chg\" -eq 1 ]; then bat_status=\"Charging\"
+                elif [ \"$ac_on\" -eq 1 ]; then bat_status=\"Plugged\"
+                else bat_status=\"Discharging\"; fi
+            else
+                bat_cap=100; bat_status=\"AC\"
+            fi
+
+            # 3. Audio headphones check (1 wpctl status call)
+            is_hp=0
+            if wp_st=$(wpctl status 2>/dev/null); then
+                in_sinks=0
+                while IFS= read -r l; do
+                    case \"$l\" in
+                        *Sinks:*) in_sinks=1; continue ;;
+                        *Sources:*|*Filters:*|*Streams:*) [ \"$in_sinks\" -eq 1 ] && break ;;
+                    esac
+                    if [ \"$in_sinks\" -eq 1 ] && [[ \"$l\" == *'*'* ]]; then
+                        ll=${l,,}
+                        case \"$ll\" in *headphone*|*headset*|*buds*|*wh-*|*airpod*|*ear*) is_hp=1 ;; esac
+                        break
+                    fi
+                done <<< \"$wp_st\"
+            fi
+
+            # 4. Network (1 nmcli dev + optional --rescan no wifi list; NEVER triggers rescan)
+            is_eth=0; is_wifi=0; wifi_en=1; wifi_sig=0; wifi_ssid=\"\"
+            if nm_dev=$(nmcli -t -f TYPE,STATE dev 2>/dev/null); then
+                while IFS=: read -r nt ns; do
+                    if [ \"$nt\" = \"ethernet\" ] && [ \"$ns\" = \"connected\" ]; then is_eth=1; fi
+                    if [ \"$nt\" = \"wifi\" ]; then
+                        [ \"$ns\" = \"connected\" ] && is_wifi=1
+                        [ \"$ns\" = \"unavailable\" ] && wifi_en=0
+                    fi
+                done <<< \"$nm_dev\"
+                if [ \"$is_wifi\" -eq 1 ]; then
+                    if wlist=$(nmcli -t -f IN-USE,SIGNAL,SSID dev wifi list --rescan no 2>/dev/null); then
+                        while IFS=: read -r wuse wsig wssid; do
+                            if [ \"$wuse\" = \"*\" ]; then
+                                wifi_sig=${wsig:-0}; wifi_ssid=$wssid; break
+                            fi
+                        done <<< \"$wlist\"
+                    fi
+                elif [ \"$wifi_en\" -eq 1 ]; then
+                    [ \"$(nmcli radio wifi 2>/dev/null)\" = \"disabled\" ] && wifi_en=0
+                fi
+            fi
+
+            # 5. Bluetooth (only query devices/info when powered & connected)
+            bt_pow=0; bt_cnt=0; bt_typ=\"default\"; bt_name=\"\"; bt_bat=\"\"
+            if bt_show=$(bluetoothctl show 2>/dev/null); then
+                [[ \"$bt_show\" == *'Powered: yes'* ]] && bt_pow=1
+            fi
+            if [ \"$bt_pow\" -eq 1 ]; then
+                bt_devs=$(bluetoothctl devices Connected 2>/dev/null)
+                first_mac=\"\"
+                while IFS= read -r bline; do
+                    [ -z \"$bline\" ] && continue
+                    bt_cnt=$((bt_cnt + 1))
+                    if [ -z \"$first_mac\" ]; then
+                        read -r _ first_mac bt_name <<< \"$bline\"
+                    fi
+                done <<< \"$bt_devs\"
+                if [ -n \"$first_mac\" ]; then
+                    info_out=$(bluetoothctl info \"$first_mac\" 2>/dev/null)
+                    while IFS= read -r il; do
+                        case \"$il\" in
+                            *'Icon:'*)
+                                dev_icon=${il#*Icon: }
+                                case \"$dev_icon\" in
+                                    *headphone*|*headset*|*audio*) bt_typ=\"audio\" ;;
+                                    *gamepad*|*joystick*) bt_typ=\"gamepad\" ;;
+                                    *mouse*) bt_typ=\"mouse\" ;;
+                                    *keyboard*) bt_typ=\"keyboard\" ;;
+                                    *phone*) bt_typ=\"phone\" ;;
+                                esac
+                                ;;
+                            *'Battery Percentage:'*)
+                                if [[ \"$il\" =~ \\(([0-9]+)\\) ]]; then
+                                    bt_bat=${BASH_REMATCH[1]}
+                                fi
+                                ;;
+                        esac
+                    done <<< \"$info_out\"
+                fi
+            fi
+
+            printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+                \"$cpu_temp\" \"$gpu_temp\" \"$bat_cap\" \"$bat_status\" \"$is_hp\" \
+                \"$bt_cnt\" \"$bt_pow\" \"$bt_typ\" \"$bt_name\" \
+                \"$is_eth\" \"$is_wifi\" \"$wifi_en\" \"$wifi_sig\" \"$wifi_ssid\" \
+                \"$has_b\" \"$bat_count\" \"$bat_caps\" \"$bt_bat\"
+        "]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = text.trim().split("|")
+                if (p.length >= 17) {
+                    root.barCpuTempStr = p[0] || "󰔏 --°C"
+                    root.barGpuTempStr = p[1] || "󰔏 --°C"
+                    root.barHasBattery = (p[14] === "1")
+                    const batCount = parseInt(p[15], 10) || (root.barHasBattery ? 1 : 0)
+                    root.barBatDual = (batCount >= 2)
+                    root.barBatDetail = p[16] || ""
+                    root.barBatPercent = parseInt(p[2], 10) || 0
+                    const bStatus = p[3] || (root.barHasBattery ? "Discharging" : "AC")
+                    root.barBatCharging = (bStatus === "Charging")
+                    root.barBatPlugged = (bStatus === "Plugged")
+                    if (!root.barHasBattery || batCount === 0 || bStatus === "AC") {
+                        root.barBatIcon = "󰚥"
+                    } else if (root.barBatCharging || root.barBatPlugged) {
+                        root.barBatIcon = "󰂄"
+                    } else {
+                        const b = root.barBatPercent
+                        if (b > 90) root.barBatIcon = "󰁹"
+                        else if (b > 80) root.barBatIcon = "󰂂"
+                        else if (b > 70) root.barBatIcon = "󰂁"
+                        else if (b > 60) root.barBatIcon = "󰂀"
+                        else if (b > 50) root.barBatIcon = "󰁾"
+                        else if (b > 40) root.barBatIcon = "󰁽"
+                        else if (b > 30) root.barBatIcon = "󰁼"
+                        else if (b > 20) root.barBatIcon = "󰁻"
+                        else root.barBatIcon = "󰁺"
+                    }
+                    root.barIsHeadphones = (p[4] === "1")
+                    root.barBtConnectedCount = parseInt(p[5], 10) || 0
+                    root.barBtPowered = (p[6] === "1")
+                    root.barBtType = p[7] || "default"
+                    root.barBtDeviceName = p[8] || ""
+                    root.barBtBattery = (p.length >= 18 && p[17] !== "") ? (parseInt(p[17], 10) || -1) : -1
+                    root.barIsEthernet = (p[9] === "1")
+                    root.barIsWifiConnected = (p[10] === "1")
+                    root.barIsWifiEnabled = (p[11] === "1")
+                    root.barWifiSignal = parseInt(p[12], 10) || 0
+                    root.barWifiSsid = p[13] || ""
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: barSlowTimer
+        interval: 6000
+        running: root.enableQuickshellWaybar
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: if (!barSlowProc.running) barSlowProc.running = true
+    }
+
+    // Single shared Cava stream for ALL monitors (optimized cava.sh: 0 forks/frame, sleeps on silence)
+    Process {
+        id: sharedCavaStream
+        command: ["bash", "-c", "$HOME/.config/waybar/scripts/cava.sh"]
+        running: root.enableQuickshellWaybar
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => {
+                const tr = line.trim()
+                if (tr.length > 0) root.barCavaBars = tr
+            }
+        }
+    }
+
     Variants {
         id: waybarVariants
         model: Quickshell.screens
@@ -1935,6 +2379,7 @@ ShellRoot {
         BarraWaybar {
             required property var modelData
             screen: modelData
+            screenName: modelData ? modelData.name : ""
             islandRoot: root
         }
     }
@@ -1979,23 +2424,12 @@ ShellRoot {
             }
             Behavior on tabFade { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
-            Timer {
-                id: wsLiveStreamTimer
-                interval: 200
-                repeat: false
-                running: false
-                onTriggered: {
-                    root.refreshWorkspacesNow()
-                }
-            }
-
             Component.onCompleted: root.registerIslandPanel(modelData.name, islandWin)
             Component.onDestruction: root.unregisterIslandPanel(modelData.name)
 
             onCurrentTabChanged: {
                 if (islandWin.controlSubView !== 4 && !(root.pairRequest.active && islandWin.currentTab === 0)) islandWin.controlSubView = 0
-                if (islandWin.currentTab === 1) hyprStatusProc.running = true
-                if (islandWin.currentTab === 4) workspacesProc.running = true
+                if (islandWin.currentTab === 1) { hyprStatusProc.running = true; if (!otaStatusProc.running) otaStatusProc.running = true }
                 islandWin.tabFade = 0.0
                 tabFadeReset.restart()
             }
@@ -2004,7 +2438,6 @@ ShellRoot {
                     islandWin.sysMonExpanded = false
                     islandWin.langExpanded = false
                     root.refreshAllStates()
-                    if (islandWin.currentTab === 4) workspacesProc.running = true
                 }
                 else if (!root.anyPanelExpanded()) root.runCmd("$HOME/.local/bin/notch-bt-helper stop_scan")
             }
@@ -2080,7 +2513,7 @@ ShellRoot {
                     }
                 }
             }
-            Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (islandWin.expanded && !root.notifActive && islandWin.currentTab !== 4) islandWin.expanded = false } }
+            Timer { id: hoverCollapseGrace; interval: 500; repeat: false; onTriggered: { if (islandWin.expanded && !root.notifActive) islandWin.expanded = false } }
             Timer { id: hoverExpandTimer; interval: 150; repeat: false; onTriggered: { if (!islandWin.expanded && !root.notifActive) { islandWin.expanded = true; if (!root.pairRequest.active) islandWin.controlSubView = 0; root.refreshAllStates() } } }
 
             screen: modelData
@@ -2144,9 +2577,13 @@ ShellRoot {
                 anchors.fill: parent
                 focus: islandWin.expanded || islandWin.sysMonExpanded || islandWin.langExpanded
                 Keys.onEscapePressed: {
-                    islandWin.expanded = false
-                    islandWin.sysMonExpanded = false
-                    islandWin.langExpanded = false
+                    if (islandWin.expanded && islandWin.controlSubView !== 0) {
+                        islandWin.controlSubView = 0
+                    } else {
+                        islandWin.expanded = false
+                        islandWin.sysMonExpanded = false
+                        islandWin.langExpanded = false
+                    }
                 }
             }
 
@@ -2347,7 +2784,7 @@ ShellRoot {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 islandWin.sysMonExpanded = false
-                                root.runCmd("kitty -e htop")
+                                root.runCmd("kitty -e sh -c 'command -v htop >/dev/null 2>&1 && exec htop || exec btop'")
                             }
                         }
                     }
@@ -3939,7 +4376,7 @@ ShellRoot {
                 onHoveredChanged: {
                     if (islandHover.hovered) {
                         hoverCollapseGrace.stop()
-                    } else if (islandWin.expanded && !root.notifActive && islandWin.currentTab !== 4) {
+                    } else if (islandWin.expanded && !root.notifActive) {
                         hoverCollapseGrace.restart()
                     }
                 }
@@ -3947,8 +4384,9 @@ ShellRoot {
 
 
             readonly property real ala: 16
-            width: islandWin.expanded ? (islandWin.currentTab === 4 ? Math.min(modelData.width - 60, Math.max(780, ((root.workspacesData?.workspaces?.length || 2) * 268) + 210)) : 660) : (root.notifActive ? 460 : (collapsedContent.width + capsule.ala * 2 + 36))
-            height: islandWin.expanded ? (islandWin.currentTab === 4 ? Math.min(480, islandContentCol.implicitHeight + 64) : Math.min(800, islandContentCol.implicitHeight + 52)) : (root.notifActive ? 56 : 36)
+            readonly property bool showingOsd: !islandWin.expanded && !root.notifActive && root.osdActive
+            width: islandWin.expanded ? 660 : (root.notifActive ? 460 : (showingOsd ? 290 : (collapsedContent.width + capsule.ala * 2 + 36)))
+            height: islandWin.expanded ? Math.min(800, islandContentCol.implicitHeight + 52) : (root.notifActive ? ((root.notifActions && root.notifActions.length > 0) ? 84 : 56) : (showingOsd ? 38 : 36))
 
             Behavior on width {
                 NumberAnimation {
@@ -3994,10 +4432,22 @@ ShellRoot {
                 id: collapsedView
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: (!islandWin.expanded && !root.notifActive) ? 1 : 0
+                opacity: (!islandWin.expanded && !root.notifActive && !root.osdActive) ? 1 : 0
 
                 Behavior on opacity {
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                }
+
+                // Scroll wheel directly on notch adjusts volume + triggers Live OSD
+                WheelHandler {
+                    onWheel: event => {
+                        const step = event.angleDelta.y > 0 ? 0.05 : -0.05
+                        const p = Math.max(0, Math.min(1, root.volumeLevel + step))
+                        root.volumeLevel = p
+                        root.isMuted = false
+                        volApplyTimer.restart()
+                        root.showOsd("volume", Math.round(p * 100), false)
+                    }
                 }
 
                 MouseArea {
@@ -4034,12 +4484,35 @@ ShellRoot {
                         spacing: 6
                         anchors.verticalCenter: parent.verticalCenter
 
-                        Text {
-                            text: "󰝚"
-                            color: root.colAccent
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 13
+                        // Subtle animated 3-bar equalizer in native accent color
+                        RowLayout {
+                            spacing: 2
+                            Layout.preferredHeight: 13
+                            height: 13
                             anchors.verticalCenter: parent.verticalCenter
+                            Repeater {
+                                model: [
+                                    { minH: 3, maxH: 11, dur: 360 },
+                                    { minH: 5, maxH: 13, dur: 270 },
+                                    { minH: 3, maxH: 10, dur: 420 }
+                                ]
+                                delegate: Rectangle {
+                                    id: origEqBar
+                                    required property var modelData
+                                    property real barH: modelData.maxH
+                                    Layout.preferredWidth: 2
+                                    Layout.preferredHeight: barH
+                                    Layout.alignment: Qt.AlignBottom
+                                    radius: 1
+                                    color: root.colAccent
+                                    SequentialAnimation on barH {
+                                        running: root.isPlaying && collapsedView.visible
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: origEqBar.modelData.minH; to: origEqBar.modelData.maxH; duration: origEqBar.modelData.dur; easing.type: Easing.InOutSine }
+                                        NumberAnimation { from: origEqBar.modelData.maxH; to: origEqBar.modelData.minH; duration: origEqBar.modelData.dur; easing.type: Easing.InOutSine }
+                                    }
+                                }
+                            }
                         }
 
                         Text {
@@ -4302,7 +4775,65 @@ ShellRoot {
             }
 
             // ─────────────────────────────────────────────────────────────
-            // NOTIFICATION BANNER VIEW (Dynamic Island Banner)
+            // LIVE HARDWARE OSD VIEW (Volume / Brightness — native monochrome style)
+            // ─────────────────────────────────────────────────────────────
+            Item {
+                id: osdView
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                visible: opacity > 0
+                opacity: (!islandWin.expanded && !root.notifActive && root.osdActive) ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 10
+
+                    Text {
+                        text: {
+                            if (root.osdKind === "brightness") return root.osdValue > 65 ? "󰃠" : (root.osdValue > 30 ? "󰃟" : "󰃞")
+                            if (root.osdKind === "mic") return root.osdMuted ? "󰍭" : "󰍬"
+                            if (root.osdMuted || root.osdValue <= 0) return "󰝟"
+                            return root.osdValue > 55 ? "󰕾" : (root.osdValue > 25 ? "󰖀" : "󰕿")
+                        }
+                        color: root.osdMuted ? "#ff5555" : root.colAccent
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 15
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        radius: 4
+                        color: root.colSurface
+                        clip: true
+                        Rectangle {
+                            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                            radius: 4
+                            color: root.osdMuted ? "#ff5555" : root.colAccent
+                            width: Math.max(0, Math.min(parent.width, parent.width * (root.osdValue / (root.osdValue > 100 ? 150.0 : 100.0))))
+                            Behavior on width { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        }
+                    }
+
+                    Text {
+                        text: root.osdMuted ? root.t("mod_audio_muted", "Muted") : (root.osdValue + "%")
+                        color: root.osdMuted ? "#ff5555" : root.colFg
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 11
+                        font.weight: Font.Bold
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+            }
+
+            // ─────────────────────────────────────────────────────────────
+            // NOTIFICATION BANNER VIEW (Dynamic Island Banner — hover pause + working dismiss + actions)
             // ─────────────────────────────────────────────────────────────
             Item {
                 id: notifView
@@ -4318,87 +4849,142 @@ ShellRoot {
 
                 MouseArea {
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    onEntered: notifTimer.stop()
+                    onExited: if (root.notifActive) notifTimer.restart()
                     onClicked: root.notifOpenCenter(islandWin.modelData.name)
                 }
 
-                RowLayout {
+                ColumnLayout {
                     anchors.fill: parent
-                    anchors.topMargin: 2
-                    anchors.bottomMargin: 4
-                    spacing: 10
+                    anchors.topMargin: 4
+                    anchors.bottomMargin: 5
+                    spacing: 5
 
-                    // Notification Icon Bubble
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                        Layout.alignment: Qt.AlignVCenter
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "󰂚"
-                            color: root.colAccent
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 16
-                        }
-                    }
-
-                    // Content Details
-                    ColumnLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 1
+                        spacing: 10
 
-                        RowLayout {
-                            Layout.fillWidth: true
+                        // Notification Icon Bubble
+                        Rectangle {
+                            width: 32
+                            height: 32
+                            radius: 16
+                            color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                            Layout.alignment: Qt.AlignVCenter
+
                             Text {
-                                text: root.notifAppName.toUpperCase()
+                                anchors.centerIn: parent
+                                text: "󰂚"
                                 color: root.colAccent
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 10
-                                font.weight: Font.Bold
+                                font.pixelSize: 16
                             }
-                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Content Details
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 1
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: root.notifAppName.toUpperCase()
+                                    color: root.colAccent
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: root.t("notif_now", "now")
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                }
+                            }
+
                             Text {
-                                text: root.t("notif_now", "now")
+                                text: root.notifSummary || root.t("notif_default", "Notification")
+                                color: root.colFg
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            Text {
+                                visible: root.notifBody !== ""
+                                text: root.notifBody
                                 color: root.colMuted
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 9
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                                Layout.fillWidth: true
                             }
                         }
 
-                        Text {
-                            text: root.notifSummary || root.t("notif_default", "Notification")
-                            color: root.colFg
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            font.weight: Font.Bold
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            visible: root.notifBody !== ""
-                            text: root.notifBody
-                            color: root.colMuted
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            Layout.fillWidth: true
+                        // Working Dismiss X button
+                        Rectangle {
+                            width: 24; height: 24; radius: 12
+                            color: bannerDismissHover.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : "transparent"
+                            Layout.alignment: Qt.AlignVCenter
+                            Text {
+                                anchors.centerIn: parent
+                                text: "󰅖"
+                                color: bannerDismissHover.containsMouse ? root.colFg : root.colMuted
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 12
+                            }
+                            MouseArea {
+                                id: bannerDismissHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.dismissBanner()
+                            }
                         }
                     }
 
-                    // Dismiss X icon
-                    Text {
-                        text: "󰅖"
-                        color: root.colMuted
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        opacity: 0.7
-                        Layout.alignment: Qt.AlignVCenter
+                    // Clickable Freedesktop Action Buttons (when provided by the app)
+                    RowLayout {
+                        visible: !!(root.notifActions && root.notifActions.length > 0)
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: root.notifActions || []
+                            delegate: Rectangle {
+                                id: bannerActBtn
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 22
+                                radius: 11
+                                color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.22)
+                                border.color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.45)
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: (bannerActBtn.modelData && bannerActBtn.modelData.text) ? bannerActBtn.modelData.text : "Action"
+                                    color: root.colFg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 9
+                                    font.weight: Font.Bold
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (bannerActBtn.modelData && typeof bannerActBtn.modelData.invoke === "function") bannerActBtn.modelData.invoke()
+                                        root.dismissBanner()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -4563,43 +5149,6 @@ ShellRoot {
                             }
                         }
 
-                        // Tab 4: Workspaces Overview (Super + Tab)
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 34
-                            radius: 17
-                            color: islandWin.currentTab === 4 ? root.colAccent : root.colSurface
-                            Behavior on color { ColorAnimation { duration: 150 } }
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                Text {
-                                    text: "󰍹"
-                                    color: islandWin.currentTab === 4 ? root.colBg : root.colAccent
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 13
-                                }
-                                Text {
-                                    text: root.t("tab_spaces", "Spaces")
-                                    color: islandWin.currentTab === 4 ? root.colBg : root.colFg
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.weight: Font.Bold
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    islandWin.currentTab = 4
-                                    islandWin.controlSubView = 0
-                                    workspacesProc.running = true
-                                }
-                            }
-                        }
-
                         // Tab 1: Hyprland Settings
                         Rectangle {
                             Layout.fillWidth: true
@@ -4735,70 +5284,144 @@ ShellRoot {
                         visible: islandWin.currentTab === 0 && islandWin.controlSubView === 0
                         opacity: islandWin.tabFade
 
-                        // Media Player Card
+                        // Media Player Card (with Album Art, Multi-Player switcher & Seek Bar)
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 74
+                            Layout.preferredHeight: (root.mediaLength > 0 && root.activePlayerTitle !== "") ? 88 : 74
                             radius: 14
                             color: root.colSurface
                             border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
                             border.width: 1
 
-                            RowLayout {
+                            ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 10
-                                spacing: 12
-
-                                Rectangle {
-                                    width: 48; height: 48; radius: 10
-                                    color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: root.isPlaying ? "󰝚" : "󰝛"
-                                        color: root.colAccent
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 20
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                                    Text {
-                                        text: root.activePlayerTitle || root.t("mod_media_nothing", "Nothing Playing")
-                                        color: root.colFg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 12
-                                        font.weight: Font.Bold
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                    Text {
-                                        text: root.activePlayerArtist || (root.primaryPlayer?.identity ?? "Media")
-                                        color: root.colMuted
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                }
+                                spacing: 6
 
                                 RowLayout {
-                                    spacing: 8
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
                                     Rectangle {
-                                        width: 30; height: 30; radius: 15; color: "transparent"
-                                        Text { anchors.centerIn: parent; text: "󰒮"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.previous() || root.runCmd("playerctl previous") }
+                                        width: 48; height: 48; radius: 10
+                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                                        clip: true
+                                        Image {
+                                            id: mediaArtImg
+                                            anchors.fill: parent
+                                            source: root.activePlayerArt || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            visible: status === Image.Ready
+                                            asynchronous: true
+                                        }
+                                        Text {
+                                            visible: mediaArtImg.status !== Image.Ready
+                                            anchors.centerIn: parent
+                                            text: root.isPlaying ? "󰝚" : "󰝛"
+                                            color: root.colAccent
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 20
+                                        }
                                     }
-                                    Rectangle {
-                                        width: 34; height: 34; radius: 17; color: root.colAccent
-                                        Text { anchors.centerIn: parent; text: root.isPlaying ? "󰏤" : "󰐊"; color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16 }
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.playPause() || root.runCmd("playerctl play-pause") }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: root.activePlayerTitle || root.t("mod_media_nothing", "Nothing Playing")
+                                            color: root.colFg
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                            font.weight: Font.Bold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            Text {
+                                                text: root.activePlayerArtist || (root.primaryPlayer?.identity ?? "Media")
+                                                color: root.colMuted
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            // Multi-player switcher chip (cycles players when >1 active)
+                                            Rectangle {
+                                                visible: root.players && root.players.length > 1
+                                                height: 18
+                                                width: plSwLbl.implicitWidth + 12
+                                                radius: 9
+                                                color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                                                Text {
+                                                    id: plSwLbl
+                                                    anchors.centerIn: parent
+                                                    text: (root.selectedPlayerIdx + 1) + "/" + (root.players ? root.players.length : 1) + " 󰒟"
+                                                    color: root.colAccent
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 9
+                                                    font.weight: Font.Bold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (root.players && root.players.length > 1) {
+                                                            root.selectedPlayerIdx = (root.selectedPlayerIdx + 1) % root.players.length
+                                                            root.updateMedia()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
+
+                                    RowLayout {
+                                        spacing: 8
+                                        Rectangle {
+                                            width: 30; height: 30; radius: 15; color: "transparent"
+                                            Text { anchors.centerIn: parent; text: "󰒮"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.previous() || root.runCmd("playerctl previous") }
+                                        }
+                                        Rectangle {
+                                            width: 34; height: 34; radius: 17; color: root.colAccent
+                                            Text { anchors.centerIn: parent; text: root.isPlaying ? "󰏤" : "󰐊"; color: root.colBg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16 }
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.playPause() || root.runCmd("playerctl play-pause") }
+                                        }
+                                        Rectangle {
+                                            width: 30; height: 30; radius: 15; color: "transparent"
+                                            Text { anchors.centerIn: parent; text: "󰒭"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.next() || root.runCmd("playerctl next") }
+                                        }
+                                    }
+                                }
+
+                                // Sleek seekable progress bar (visible only when playing a track with duration)
+                                Item {
+                                    visible: root.mediaLength > 0 && root.activePlayerTitle !== ""
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 8
                                     Rectangle {
-                                        width: 30; height: 30; radius: 15; color: "transparent"
-                                        Text { anchors.centerIn: parent; text: "󰒭"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.primaryPlayer?.next() || root.runCmd("playerctl next") }
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width; height: 4; radius: 2
+                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.14)
+                                        Rectangle {
+                                            height: parent.height; radius: 2; color: root.colAccent
+                                            width: root.mediaLength > 0 ? Math.max(0, Math.min(parent.width, parent.width * (root.mediaPosition / root.mediaLength))) : 0
+                                            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: mouse => {
+                                            if (root.primaryPlayer && root.mediaLength > 0) {
+                                                const frac = Math.max(0, Math.min(1, mouse.x / Math.max(1, width)))
+                                                root.primaryPlayer.position = frac * root.mediaLength
+                                                root.updateMedia()
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -5760,7 +6383,7 @@ ShellRoot {
                                             const p = Math.max(0, Math.min(1, mouse.x / width))
                                             root.volumeLevel = p
                                             root.isMuted = false
-                                            root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                            volApplyTimer.restart()
                                         }
                                     }
                                     onPositionChanged: mouse => {
@@ -5768,8 +6391,17 @@ ShellRoot {
                                             const p = Math.max(0, Math.min(1, mouse.x / width))
                                             root.volumeLevel = p
                                             root.isMuted = false
-                                            root.runCmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + Math.round(p * 100) + "%")
+                                            volApplyTimer.restart()
                                         }
+                                    }
+                                }
+                                WheelHandler {
+                                    onWheel: event => {
+                                        const step = event.angleDelta.y > 0 ? 0.05 : -0.05
+                                        const p = Math.max(0, Math.min(1, root.volumeLevel + step))
+                                        root.volumeLevel = p
+                                        root.isMuted = false
+                                        volApplyTimer.restart()
                                     }
                                 }
                             }
@@ -5844,14 +6476,22 @@ ShellRoot {
                                     onClicked: mouse => {
                                         const p = Math.max(0.05, Math.min(1, mouse.x / width))
                                         root.brightnessLevel = p
-                                        root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                        briApplyTimer.restart()
                                     }
                                     onPositionChanged: mouse => {
                                         if (pressed) {
                                             const p = Math.max(0.05, Math.min(1, mouse.x / width))
                                             root.brightnessLevel = p
-                                            root.runCmd("brightnessctl set " + Math.round(p * 100) + "%")
+                                            briApplyTimer.restart()
                                         }
+                                    }
+                                }
+                                WheelHandler {
+                                    onWheel: event => {
+                                        const step = event.angleDelta.y > 0 ? 0.05 : -0.05
+                                        const p = Math.max(0.05, Math.min(1, root.brightnessLevel + step))
+                                        root.brightnessLevel = p
+                                        briApplyTimer.restart()
                                     }
                                 }
                             }
@@ -8246,10 +8886,10 @@ ShellRoot {
                             }
                         }
 
-                        // Card de Estilo y Ventanas (Redondeo y Gaps)
+                        // Card de Estilo y Ventanas (Redondeo, Gaps y Layout Presets)
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 96
+                            Layout.preferredHeight: 136
                             radius: 14
                             color: root.colSurface
                             border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
@@ -8346,6 +8986,56 @@ ShellRoot {
                                                 onClicked: {
                                                     root.hyprGaps = modelData.val
                                                     root.runCmd("$HOME/.local/bin/notch-hypr-helper set-gaps " + modelData.val)
+                                                    hyprRefreshTimer.restart()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Layout Presets (Code / Read / Float — native 1-click Hyprland profiles)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Text {
+                                        text: root.t("hypr_preset", "Preset:")
+                                        color: root.colFg
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                        Layout.preferredWidth: 80
+                                    }
+
+                                    Repeater {
+                                        model: [
+                                            { id: "code", label: "󰨞 Code" },
+                                            { id: "read", label: "󰂺 Read" },
+                                            { id: "float", label: "󰖯 Float" }
+                                        ]
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 30
+                                            radius: 8
+                                            color: preHover.containsMouse ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25) : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                                            border.color: preHover.containsMouse ? root.colAccent : "transparent"
+                                            border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 130 } }
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: root.colFg
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.weight: Font.Bold
+                                            }
+                                            MouseArea {
+                                                id: preHover
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.runCmd("$HOME/.local/bin/layout-preset " + modelData.id)
                                                     hyprRefreshTimer.restart()
                                                 }
                                             }
@@ -8781,12 +9471,12 @@ ShellRoot {
                                 height: 20
                                 width: Math.max(20, tabUnreadLbl.implicitWidth + 12)
                                 radius: 10
-                                color: root.notifUnread > 0 ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+                                color: root.notifHistory.length > 0 ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
                                 Text {
                                     id: tabUnreadLbl
                                     anchors.centerIn: parent
-                                    text: root.notifUnread > 9 ? "9+" : root.notifUnread
-                                    color: root.notifUnread > 0 ? root.colBg : root.colMuted
+                                    text: root.notifHistory.length > 9 ? "9+" : root.notifHistory.length
+                                    color: root.notifHistory.length > 0 ? root.colBg : root.colMuted
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 10
                                     font.weight: Font.Bold
@@ -8870,6 +9560,24 @@ ShellRoot {
                                                     font.family: "JetBrainsMono Nerd Font"
                                                     font.pixelSize: 9
                                                 }
+                                                Rectangle {
+                                                    width: 20; height: 20; radius: 10
+                                                    color: nDismissMa.containsMouse ? Qt.rgba(255, 90, 90, 0.25) : "transparent"
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "󰅖"
+                                                        color: nDismissMa.containsMouse ? "#ff6b6b" : root.colMuted
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 10
+                                                    }
+                                                    MouseArea {
+                                                        id: nDismissMa
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.notifDismissAt(index)
+                                                    }
+                                                }
                                             }
 
                                             Text {
@@ -8895,6 +9603,42 @@ ShellRoot {
                                                 Layout.fillWidth: true
                                             }
 
+                                            // Freedesktop action buttons (when available)
+                                            Flow {
+                                                visible: !!(modelData.actions && modelData.actions.length > 0)
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Repeater {
+                                                    model: modelData.actions || []
+                                                    delegate: Rectangle {
+                                                        id: cardActBtn
+                                                        required property var modelData
+                                                        height: 22
+                                                        width: cardActLbl.implicitWidth + 16
+                                                        radius: 11
+                                                        color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                                                        border.color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.45)
+                                                        border.width: 1
+                                                        Text {
+                                                            id: cardActLbl
+                                                            anchors.centerIn: parent
+                                                            text: (cardActBtn.modelData && cardActBtn.modelData.text) ? cardActBtn.modelData.text : "Action"
+                                                            color: root.colFg
+                                                            font.family: "JetBrainsMono Nerd Font"
+                                                            font.pixelSize: 9
+                                                            font.weight: Font.Bold
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (cardActBtn.modelData && typeof cardActBtn.modelData.invoke === "function") cardActBtn.modelData.invoke()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
                                             Text {
                                                 text: root.t("notif_tap_open", "Tap to open app")
                                                 color: root.colMuted
@@ -8906,6 +9650,7 @@ ShellRoot {
 
                                         MouseArea {
                                             anchors.fill: parent
+                                            z: -1
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
                                                 islandWin.expanded = false
@@ -9082,9 +9827,74 @@ ShellRoot {
                             }
                         }
 
-Flickable {
+                        // Live Search Filter Bar for Clipboard (native Pywal pill style)
+                        Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(470, Math.max(140, tabClipCol.implicitHeight))
+                            height: 34
+                            radius: 10
+                            color: root.colSurface
+                            border.color: clipSearchBox.activeFocus ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                spacing: 8
+                                Text { text: "󰍉"; color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
+                                TextInput {
+                                    id: clipSearchBox
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    color: root.colFg
+                                    selectionColor: root.colAccent
+                                    selectedTextColor: root.colBg
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    clip: true
+                                    onTextChanged: { if (root.clipSearchQuery !== text) root.clipSearchQuery = text }
+                                    Keys.onEscapePressed: {
+                                        if (text !== "") {
+                                            text = ""
+                                            root.clipSearchQuery = ""
+                                        } else {
+                                            focus = false
+                                            islandWin.expanded = false
+                                        }
+                                    }
+                                    Connections {
+                                        target: root
+                                        function onClipSearchQueryChanged() {
+                                            if (clipSearchBox.text !== root.clipSearchQuery) clipSearchBox.text = root.clipSearchQuery
+                                        }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: clipSearchBox.text === ""
+                                        text: root.t("clip_search", "Filter clipboard history...")
+                                        color: root.colMuted
+                                        font: clipSearchBox.font
+                                    }
+                                }
+                                Text {
+                                    visible: root.clipSearchQuery !== ""
+                                    text: "󰅖"
+                                    color: root.colMuted
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: { clipSearchBox.text = ""; root.clipSearchQuery = "" }
+                                    }
+                                }
+                            }
+                        }
+
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(430, Math.max(140, tabClipCol.implicitHeight))
                             contentWidth: width
                             contentHeight: tabClipCol.implicitHeight
                             clip: true
@@ -9094,7 +9904,11 @@ Flickable {
                                 width: parent.width
                                 spacing: 8
                         Repeater {
-                            model: root.clipList
+                            model: {
+                                const q = (root.clipSearchQuery || "").trim().toLowerCase()
+                                if (q === "") return root.clipList
+                                return root.clipList.filter(it => (String(it.title || "").toLowerCase().includes(q) || String(it.sub || "").toLowerCase().includes(q)))
+                            }
                             delegate: Rectangle {
                                 Layout.fillWidth: true
                                 height: 48
@@ -9198,459 +10012,6 @@ Flickable {
                             }
                         }
 
-                    }
-
-                    // ── TAB 4: WORKSPACES OVERVIEW (Super + Tab) ──
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        visible: islandWin.currentTab === 4 && islandWin.controlSubView === 0
-                        opacity: islandWin.tabFade
-
-                        Timer {
-                            id: wsProcRefreshTimer
-                            interval: 200
-                            repeat: false
-                            onTriggered: workspacesProc.running = true
-                        }
-
-                        // Header Bar: Title, Active Pill, Add Space button, Refresh button
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Text {
-                                text: "󰍹 " + root.t("ws_overview", "Workspaces Overview")
-                                color: root.colFg
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 13
-                                font.weight: Font.Bold
-                            }
-
-                            Rectangle {
-                                height: 22
-                                implicitWidth: wsActivePillText.implicitWidth + 14
-                                radius: 11
-                                color: Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.18)
-                                border.color: root.colAccent
-                                border.width: 1
-                                Text {
-                                    id: wsActivePillText
-                                    anchors.centerIn: parent
-                                    text: root.t("ws_space", "Space") + " " + (root.workspacesData?.active_id || 1) + " " + root.t("ws_active", "Active")
-                                    color: root.colAccent
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                }
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            // + Add Space Button
-                            Rectangle {
-                                height: 30
-                                implicitWidth: addWsRow.implicitWidth + 20
-                                radius: 15
-                                color: addWsMouse.containsMouse ? root.colAccentHover : root.colAccent
-                                Behavior on color { ColorAnimation { duration: 150 } }
-
-                                RowLayout {
-                                    id: addWsRow
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    Text {
-                                        text: "󰐕"
-                                        color: root.colBg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 13
-                                        font.weight: Font.Bold
-                                    }
-                                    Text {
-                                        text: root.t("ws_add", "Add Space")
-                                        color: root.colBg
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 11
-                                        font.weight: Font.Bold
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: addWsMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.runCmd("$HOME/.local/bin/notch-workspaces-helper add")
-                                        wsProcRefreshTimer.restart()
-                                    }
-                                }
-                            }
-
-                            // Refresh button
-                            Rectangle {
-                                width: 30; height: 30; radius: 15
-                                color: wsRefMouse.containsMouse ? root.colSurfaceHover : root.colSurface
-                                border.color: root.colBorder; border.width: 1
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "󰑐"
-                                    color: root.colFg
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 12
-                                }
-                                MouseArea {
-                                    id: wsRefMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (!workspacesProc.running) workspacesProc.running = true
-                                    }
-                                }
-                            }
-                        }
-
-                        // Workspaces Live Visual Strip (Apple macOS Spaces / Mission Control style)
-                        Flickable {
-                            id: wsFlickable
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 215
-                            contentWidth: wsHorizontalRow.implicitWidth + 24
-                            contentHeight: 215
-                            flickableDirection: Flickable.HorizontalFlick
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-
-                            RowLayout {
-                                id: wsHorizontalRow
-                                spacing: 14
-                                anchors.verticalCenter: parent.verticalCenter
-
-                                Repeater {
-                                    model: workspacesModel
-
-                                    delegate: Rectangle {
-                                        id: wsCard
-                                        readonly property int cardWsId: model.id
-                                        readonly property var cardClients: (root.workspacesData?.workspaces?.find(w => w.id === model.id)?.clients) || []
-                                        width: 250
-                                        height: 195
-                                        radius: 14
-                                        scale: cardHover.containsMouse ? 1.03 : 1.0
-                                        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                                        color: cardHover.containsMouse ? root.colSurfaceHover : root.colSurface
-                                        border.color: model.is_active ? root.colAccent : (cardHover.containsMouse ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.25) : root.colBorder)
-                                        border.width: model.is_active ? 2 : 1
-                                        Behavior on color { ColorAnimation { duration: 150 } }
-                                        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                                        MouseArea {
-                                            id: cardHover
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                islandWin.expanded = false
-                                                root.runCmd("$HOME/.local/bin/notch-workspaces-helper switch " + wsCard.cardWsId)
-                                            }
-                                        }
-
-                                        ColumnLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 8
-                                            spacing: 6
-
-                                            // Card Top Badge Bar
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 6
-
-                                                Rectangle {
-                                                    height: 20
-                                                    implicitWidth: spaceBadgeText.implicitWidth + 12
-                                                    radius: 10
-                                                    color: model.is_active ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.1)
-                                                    Text {
-                                                        id: spaceBadgeText
-                                                        anchors.centerIn: parent
-                                                        text: root.t("ws_space", "Space") + " " + model.id
-                                                        color: model.is_active ? root.colBg : root.colFg
-                                                        font.family: "JetBrainsMono Nerd Font"
-                                                        font.pixelSize: 10
-                                                        font.weight: Font.Bold
-                                                    }
-                                                }
-
-                                                Text {
-                                                    text: model.monitor || ""
-                                                    color: root.colMuted
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 9
-                                                }
-
-                                                Item { Layout.fillWidth: true }
-
-                                                // Remove button (appears smoothly on hover)
-                                                Rectangle {
-                                                    width: 20; height: 20; radius: 10
-                                                    opacity: (cardHover.containsMouse || closeWsHover.containsMouse) ? 1.0 : 0.0
-                                                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                                                    color: closeWsHover.containsMouse ? "#ff5555" : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
-
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "󰅖"
-                                                        color: closeWsHover.containsMouse ? "#ffffff" : root.colFg
-                                                        font.family: "JetBrainsMono Nerd Font"
-                                                        font.pixelSize: 10
-                                                    }
-
-                                                    MouseArea {
-                                                        id: closeWsHover
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            root.runCmd("$HOME/.local/bin/notch-workspaces-helper remove " + wsCard.cardWsId)
-                                                            wsProcRefreshTimer.restart()
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Desktop Miniature Preview (16:9 Viewport)
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 125
-                                                radius: 8
-                                                clip: true
-                                                color: "#12131a"
-                                                border.color: model.is_active ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
-                                                border.width: 1
-
-                                                // 1. Placeholder underneath (visible only if no windows or neither image loaded yet)
-                                                Item {
-                                                    anchors.fill: parent
-                                                    visible: model.windows_count === 0 || (!imgA.isLoaded && !imgB.isLoaded)
-
-                                                    ColumnLayout {
-                                                        anchors.centerIn: parent
-                                                        spacing: 4
-
-                                                        Text {
-                                                            text: model.windows_count > 0 ? "󰍹" : "󰘔"
-                                                            color: model.is_active ? root.colAccent : root.colMuted
-                                                            font.family: "JetBrainsMono Nerd Font"
-                                                            font.pixelSize: 20
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                        }
-                                                        Text {
-                                                            text: model.windows_count > 0 ? (root.t("ws_space", "Space") + " " + model.id) : root.t("ws_empty", "Empty Space")
-                                                            color: root.colFg
-                                                            font.family: "JetBrainsMono Nerd Font"
-                                                            font.pixelSize: 10
-                                                            font.weight: Font.Bold
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                        }
-                                                    }
-                                                }
-
-                                                // 2. Full Desktop Preview - Zero Flicker Double Buffer
-                                                Item {
-                                                    id: previewContainer
-                                                    anchors.fill: parent
-                                                    visible: model.windows_count > 0 && model.preview !== ""
-
-                                                    property string currentUrl: model.preview
-                                                    onCurrentUrlChanged: {
-                                                        if (currentUrl === "") return
-                                                        let fileUrl = "file://" + currentUrl
-                                                        if (imgA.isFront) {
-                                                            imgB.source = fileUrl
-                                                        } else {
-                                                            imgA.source = fileUrl
-                                                        }
-                                                    }
-
-                                                    Component.onCompleted: {
-                                                        if (model.preview) {
-                                                            imgA.source = "file://" + model.preview
-                                                        }
-                                                    }
-
-                                                    Image {
-                                                        id: imgA
-                                                        anchors.fill: parent
-                                                        fillMode: Image.PreserveAspectFit
-                                                        smooth: true
-                                                        asynchronous: true
-                                                        cache: false
-                                                        opacity: isFront ? 1.0 : 0.0
-                                                        property bool isFront: true
-                                                        property bool isLoaded: status === Image.Ready
-                                                        onStatusChanged: {
-                                                            if (status === Image.Ready) {
-                                                                isLoaded = true
-                                                                if (!isFront) {
-                                                                    isFront = true
-                                                                    imgB.isFront = false
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Image {
-                                                        id: imgB
-                                                        anchors.fill: parent
-                                                        fillMode: Image.PreserveAspectFit
-                                                        smooth: true
-                                                        asynchronous: true
-                                                        cache: false
-                                                        opacity: isFront ? 1.0 : 0.0
-                                                        property bool isFront: false
-                                                        property bool isLoaded: status === Image.Ready
-                                                        onStatusChanged: {
-                                                            if (status === Image.Ready) {
-                                                                isLoaded = true
-                                                                if (!isFront) {
-                                                                    isFront = true
-                                                                    imgA.isFront = false
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Footer: Window chips
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 4
-                                                visible: wsCard.cardClients.length > 0
-
-                                                Repeater {
-                                                    model: wsCard.cardClients.slice(0, 3)
-
-                                                    delegate: Rectangle {
-                                                        height: 18
-                                                        implicitWidth: Math.min(100, chipText.implicitWidth + 14)
-                                                        radius: 9
-                                                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-
-                                                        RowLayout {
-                                                            anchors.centerIn: parent
-                                                            spacing: 3
-                                                            Text {
-                                                                text: modelData.icon || "󰘔"
-                                                                color: root.colAccent
-                                                                font.family: "JetBrainsMono Nerd Font"
-                                                                font.pixelSize: 9
-                                                            }
-                                                            Text {
-                                                                id: chipText
-                                                                text: modelData.app_name || modelData.class
-                                                                color: root.colFg
-                                                                font.family: "JetBrainsMono Nerd Font"
-                                                                font.pixelSize: 8
-                                                                elide: Text.ElideRight
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                Text {
-                                                    visible: wsCard.cardClients.length > 3
-                                                    text: "+" + (wsCard.cardClients.length - 3)
-                                                    color: root.colMuted
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 8
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // + Add Space Button Card at the end of the row (Apple macOS Spaces style)
-                                Rectangle {
-                                    id: addWsCard
-                                    width: 120
-                                    height: 195
-                                    radius: 14
-                                    scale: addCardHover.containsMouse ? 1.03 : 1.0
-                                    Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                                    color: addCardHover.containsMouse ? root.colSurfaceHover : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.04)
-                                    border.color: addCardHover.containsMouse ? root.colAccent : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.15)
-                                    border.width: 1
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                                    ColumnLayout {
-                                        anchors.centerIn: parent
-                                        spacing: 8
-
-                                        Rectangle {
-                                            width: 38; height: 38; radius: 19
-                                            color: addCardHover.containsMouse ? root.colAccent : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
-                                            Behavior on color { ColorAnimation { duration: 150 } }
-                                            Layout.alignment: Qt.AlignHCenter
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "󰐕"
-                                                color: addCardHover.containsMouse ? root.colBg : root.colAccent
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 18
-                                                font.weight: Font.Bold
-                                            }
-                                        }
-
-                                        Text {
-                                            text: root.t("ws_add", "Add Space")
-                                            color: root.colFg
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 11
-                                            font.weight: Font.Bold
-                                            Layout.alignment: Qt.AlignHCenter
-                                        }
-
-                                        Text {
-                                            text: root.t("ws_space", "Space") + " " + (root.workspacesData?.next_id || "+")
-                                            color: root.colMuted
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 9
-                                            Layout.alignment: Qt.AlignHCenter
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: addCardHover
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.runCmd("$HOME/.local/bin/notch-workspaces-helper add")
-                                            wsProcRefreshTimer.restart()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Bottom Help Hint
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Layout.topMargin: 2
-
-                            Text {
-                                text: "󰌌 " + root.t("ws_footer", "Super + Tab toggles Overview • Click card to switch • 󰅖 removes space")
-                                color: root.colMuted
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 10
-                                Layout.alignment: Qt.AlignHCenter
-                            }
-                        }
                     }
 
                     // ── 5. SUBSECCIÓN: NIGHT LIGHT ──
@@ -10351,8 +10712,8 @@ Flickable {
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                                     Text { text: "󰌽"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: root.t("ota_kernel", "Linux Kernel"); color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: root.otaData.kernel || "Arch Linux"; color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: root.t("ota_kernel", "Distro & Kernel"); color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text { text: (root.otaData.kernel || root.otaData.distro || "Linux") + (root.otaData.pkg_manager && root.otaData.pkg_manager !== "auto" ? (" · " + root.otaData.pkg_manager) : ""); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }
@@ -10362,8 +10723,15 @@ Flickable {
                                 RowLayout { anchors.fill: parent; anchors.margins: 8; spacing: 8
                                     Text { text: "󰘬"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
-                                        Text { text: root.t("ota_channel", "Release Channel"); color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: (root.otaData.dotfiles_branch || "main") + " · " + (root.otaData.has_updates ? (root.otaData.dotfiles_behind + " " + root.t("ota_behind", "behind")) : root.t("ota_uptodate", "Up to date")); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: root.t("ota_channel", "Channel & Packages"); color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
+                                        Text {
+                                            text: {
+                                                const pkgs = (root.otaData.pkg_updates !== undefined && root.otaData.pkg_updates !== null) ? Number(root.otaData.pkg_updates) : Number(root.otaData.pacman_updates || 0)
+                                                const flp = Number(root.otaData.flatpak_updates || 0)
+                                                return (root.otaData.dotfiles_branch || "main") + " · " + pkgs + " pkg" + (flp > 0 ? (" · " + flp + " flatpak") : "")
+                                            }
+                                            color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true
+                                        }
                                     }
                                 }
                             }
@@ -10464,9 +10832,11 @@ Flickable {
                                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                     enabled: !root.otaUpdating
                                     onClicked: {
-                                        if (root.otaData.dotfiles_behind === 0 && (!root.otaData.latest_version || root.otaData.latest_version === root.otaData.current_version) && root.otaData.pacman_updates > 0) {
+                                        const pkgs = (root.otaData.pkg_updates !== undefined && root.otaData.pkg_updates !== null) ? Number(root.otaData.pkg_updates) : Number(root.otaData.pacman_updates || 0)
+                                        const flp = Number(root.otaData.flatpak_updates || 0)
+                                        if (pkgs > 0 || flp > 0) {
                                             islandWin.expanded = false;
-                                            root.runCmd("kitty -e system-ota update --system");
+                                            root.runCmd("kitty -e system-ota update --all --foreground --pause");
                                         } else {
                                             root.otaUpdating = true;
                                             otaUpdateProc.running = true;

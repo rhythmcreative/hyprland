@@ -54,71 +54,52 @@ case "${1:-}" in
     hide)
         echo "$monitor" > /tmp/wallpaper-bars-monitor
         if [ -f /tmp/wallpaper-bars-hidden ]; then
-            if [ "$monitor" = "all" ] && "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
+            if [ "$monitor" = "all" ]; then
                 quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-                    --any-display call island hide "all" >/dev/null 2>&1 || true
+                    --any-display call island hide "all" >/dev/null 2>&1 &
             fi
             exit 0
         fi
         touch /tmp/wallpaper-bars-hidden
-        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-                --any-display call island hide "$monitor" >/dev/null 2>&1 || true
-        fi
-        if [ "$monitor" = "all" ]; then
-            "$HOME/.local/bin/dock-procs" rust-dock signal all USR1 >/dev/null 2>&1 || true
-            pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || true
-            pkill -SIGUSR1 -x .waybar-wrapped >/dev/null 2>&1 || true
-            pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
-            pkill -SIGUSR1 -x .rust-dock-wrap >/dev/null 2>&1 || true
-            pkill -SIGUSR1 -x .rust-dock-wrapped >/dev/null 2>&1 || true
-        else
-            matched=0
-            while read -r pid; do [ -n "$pid" ] && { kill -USR1 "$pid" 2>/dev/null || true; matched=1; }; done < <(waybar_pids_for_monitor)
-            if [ "$matched" -eq 0 ]; then
-                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR1 2>/dev/null || \
-                pkill -SIGUSR1 -x waybar 2>/dev/null || \
-                pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null || true
+        # Lanzar ambos IPC en paralelo (antes corrian en serie con 1s de escaneo /proc)
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+            --any-display call island hide "$monitor" >/dev/null 2>&1 &
+        quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" \
+            --any-display call dock hide "$monitor" >/dev/null 2>&1 &
+        if pgrep -x 'waybar|\.waybar-wrapped' >/dev/null 2>&1; then
+            if [ "$monitor" = "all" ]; then
+                pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || pkill -SIGUSR1 -x .waybar-wrapped >/dev/null 2>&1 || true
+            else
+                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR1 >/dev/null 2>&1 &
             fi
-            matched_d=0
-            while read -r pid; do [ -n "$pid" ] && { kill -USR1 "$pid" 2>/dev/null || true; matched_d=1; }; done < <(dock_pids_for_monitor)
-            if [ "$matched_d" -eq 0 ]; then
-                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR1 2>/dev/null || \
-                pkill -SIGUSR1 -x rust-dock 2>/dev/null || \
-                pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || \
-                pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null || true
+        fi
+        if pgrep -x 'rust-dock|\.rust-dock-wrap|\.rust-dock-wrapped' >/dev/null 2>&1; then
+            if [ "$monitor" = "all" ]; then
+                pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || pkill -SIGUSR1 -x .rust-dock-wrap >/dev/null 2>&1 || pkill -SIGUSR1 -x .rust-dock-wrapped >/dev/null 2>&1 || true
+            else
+                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR1 >/dev/null 2>&1 &
             fi
         fi
         ;;
     show)
         rm -f /tmp/wallpaper-bars-hidden
-        if [ "$monitor" = "all" ]; then
-            "$HOME/.local/bin/dock-procs" rust-dock signal all USR2 >/dev/null 2>&1 || true
-            pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
-            pkill -SIGUSR2 -x .waybar-wrapped >/dev/null 2>&1 || true
-            pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true
-            pkill -SIGUSR2 -x .rust-dock-wrap >/dev/null 2>&1 || true
-            pkill -SIGUSR2 -x .rust-dock-wrapped >/dev/null 2>&1 || true
-        else
-            matched=0
-            while read -r pid; do [ -n "$pid" ] && { kill -USR2 "$pid" 2>/dev/null || true; matched=1; }; done < <(waybar_pids_for_monitor)
-            if [ "$matched" -eq 0 ]; then
-                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR2 2>/dev/null || \
-                pkill -SIGUSR2 -x waybar 2>/dev/null || \
-                pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null || true
-            fi
-            matched_d=0
-            while read -r pid; do [ -n "$pid" ] && { kill -USR2 "$pid" 2>/dev/null || true; matched_d=1; }; done < <(dock_pids_for_monitor)
-            if [ "$matched_d" -eq 0 ]; then
-                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR2 2>/dev/null || \
-                pkill -SIGUSR2 -x rust-dock 2>/dev/null || \
-                pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || \
-                pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null || true
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
+            --any-display call island reveal "$monitor" >/dev/null 2>&1 &
+        quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" \
+            --any-display call dock reveal "$monitor" >/dev/null 2>&1 &
+        if pgrep -x 'waybar|\.waybar-wrapped' >/dev/null 2>&1; then
+            if [ "$monitor" = "all" ]; then
+                pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || pkill -SIGUSR2 -x .waybar-wrapped >/dev/null 2>&1 || true
+            else
+                "$HOME/.local/bin/dock-procs" waybar signal "$monitor" USR2 >/dev/null 2>&1 &
             fi
         fi
-        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" \
-                --any-display call island reveal "$monitor" >/dev/null 2>&1 || true
+        if pgrep -x 'rust-dock|\.rust-dock-wrap|\.rust-dock-wrapped' >/dev/null 2>&1; then
+            if [ "$monitor" = "all" ]; then
+                pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || pkill -SIGUSR2 -x .rust-dock-wrap >/dev/null 2>&1 || pkill -SIGUSR2 -x .rust-dock-wrapped >/dev/null 2>&1 || true
+            else
+                "$HOME/.local/bin/dock-procs" rust-dock signal "$monitor" USR2 >/dev/null 2>&1 &
+            fi
         fi
         rm -f /tmp/wallpaper-bars-monitor
         ;;

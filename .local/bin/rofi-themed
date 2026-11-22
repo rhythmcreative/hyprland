@@ -24,32 +24,16 @@
 # se quedaba con el color del fondo anterior; medido: fondo #884400 y el
 # fichero seguia en #151921. rofi-colors lo regenera siempre y solo escribe si
 # el contenido cambia.
-"$HOME/.local/bin/rofi-colors" 2>/dev/null || true
-
 # Sincronizar dinamicamente con el idioma activo del sistema (Rhythm / Omarchy)
 if [ -f "$HOME/.config/environment.d/10-locale.conf" ]; then
     . "$HOME/.config/environment.d/10-locale.conf"
     export LANG LC_MESSAGES LANGUAGE
 fi
 
-active_lang="es"
-if [ -f "$HOME/.config/rhythm/language" ]; then
-    active_lang=$(head -n 1 "$HOME/.config/rhythm/language" 2>/dev/null | tr -d '[:space:]')
-fi
-
-# Placeholder localizado dinámicamente según idioma activo (51 idiomas soportados)
-placeholder_text=$(rhythm-i18n "rofi_search_apps" "Buscar aplicaciones..." "$active_lang" 2>/dev/null || echo "Buscar aplicaciones...")
-
-# Asegurar locale UTF-8 valido para evitar que rofi falle con 'Failed to set locale'
-_rofi_bin=$(command -v rofi 2>/dev/null || echo "/usr/bin/rofi")
-if [ -n "$(locale 2>&1 >/dev/null)" ] || ! "$_rofi_bin" -v >/dev/null 2>&1; then
-    export LC_ALL="C.UTF-8"
-fi
-
 # Limpiar pidfile huerfano o conmutar rofi si ya esta abierto
 pid_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/rofi.pid"
 if [ -f "$pid_file" ]; then
-    old_pid=$(cat "$pid_file" 2>/dev/null)
+    read -r old_pid < "$pid_file" 2>/dev/null || old_pid=""
     if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
         kill "$old_pid" 2>/dev/null || true
         rm -f "$pid_file" 2>/dev/null || true
@@ -61,45 +45,31 @@ fi
 
 args=("$@")
 
-# En modo normal no se toca el fondo: cada menu se queda con el suyo, que es como
-# estaba siempre, con su translucidez y el desenfoque del compositor detras. Antes
-# se imponia un fondo comun al 80% y con eso solo se veia el 20% del escritorio,
-# asi que el blur casi no se apreciaba y el menu perdia el aspecto que tenia.
-#
-# En los modos que apagan los efectos el fondo macizo es lo que toca, porque si no
-# el translucido se queda plano: sin desenfoque detras solo se ve el color del
-# escritorio, sin suavizar, y el menu se lee peor de lo que se leia antes.
 macizo="$HOME/.config/rofi/colors-solid.rasi"
 
 sin_efectos() {
-    # Las banderas de /tmp son solo una pista. La verdad es lo que diga el
-    # compositor, y se desincronizan solas: power_save.sh y optimize_performance.sh
-    # aplican el estado con "hyprctl --batch", y cualquier "hyprctl reload"
-    # posterior restaura los valores de la config SIN tocar /tmp. El OTA hace un
-    # reload en cada actualizacion, asi que una bandera se queda puesta con el
-    # sistema ya en modo normal.
-    #
-    # Medido: /tmp/hyprland_power_save puesto, blur activo y active_opacity 0.85,
-    # que es modo normal, y los menus salian macizos. Con solo mirar la bandera
-    # no hay manera de distinguir ese caso de un ahorro real.
-    #
-    # Asi que: si hay bandera pero el desenfoque esta activo, el compositor no
-    # esta en modo sin efectos y no se aplica el macizo.
     [ -f /tmp/powersave-active ] || [ -f /tmp/hypr_performance_mode ] || [ -f /tmp/hyprland_power_save ] || return 1
 
     local blur
-    blur=$(hyprctl getoption decoration:blur:enabled 2>/dev/null | head -1)
+    blur=$(hyprctl getoption decoration:blur:enabled 2>/dev/null)
+    blur=${blur%%$'\n'*}
     case "$blur" in
         *true*) return 1 ;;   # desenfoque activo: modo normal, fondo translucido
         *)      return 0 ;;   # sin desenfoque: modo sin efectos, fondo macizo
     esac
 }
 
-if sin_efectos && [ -f "$macizo" ]; then
-    args+=(-theme-str "$(cat "$macizo")")
+# Solo regenerar y aplicar fondo macizo cuando realmente estamos sin efectos
+if sin_efectos; then
+    if [ ! -f "$macizo" ] || [ "$HOME/.cache/wal/colors" -nt "$macizo" ]; then
+        "$HOME/.local/bin/rofi-colors" 2>/dev/null || true
+    fi
+    if [ -f "$macizo" ]; then
+        args+=(-theme-str "$(<"$macizo")")
+    fi
 fi
 
-# Aplicar placeholder localizado a lanzadores de aplicaciones
+# Aplicar placeholder localizado SOLO a lanzadores de aplicaciones (con cache en tmpfs)
 is_app_launcher=false
 for a in "$@"; do
     if [ "$a" = "drun" ] || [ "$a" = "-show" ] || [ "$a" = "run" ]; then
@@ -108,8 +78,23 @@ for a in "$@"; do
     fi
 done
 
-if $is_app_launcher && [ -n "$placeholder_text" ]; then
-    args+=(-theme-str "entry { placeholder: \"$placeholder_text\"; }")
+if $is_app_launcher; then
+    active_lang="es"
+    if [ -r "$HOME/.config/rhythm/language" ]; then
+        read -r active_lang < "$HOME/.config/rhythm/language" 2>/dev/null || true
+        active_lang="${active_lang//[[:space:]]/}"
+        [ -n "$active_lang" ] || active_lang="es"
+    fi
+    ph_cache="${XDG_RUNTIME_DIR:-/tmp}/.rofi_placeholder_${active_lang}"
+    if [ -r "$ph_cache" ]; then
+        read -r placeholder_text < "$ph_cache" 2>/dev/null || placeholder_text=""
+    else
+        placeholder_text=$(rhythm-i18n "rofi_search_apps" "Buscar aplicaciones..." "$active_lang" 2>/dev/null || echo "Buscar aplicaciones...")
+        printf '%s\n' "$placeholder_text" > "$ph_cache" 2>/dev/null || true
+    fi
+    if [ -n "$placeholder_text" ]; then
+        args+=(-theme-str "entry { placeholder: \"$placeholder_text\"; }")
+    fi
 fi
 
 exec rofi "${args[@]}"

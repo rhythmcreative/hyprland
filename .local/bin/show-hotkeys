@@ -6,21 +6,13 @@ export PATH="$HOME/.local/bin:$PATH"
 
 THEME_FILE="$HOME/.config/rofi/hotkeys.rasi"
 
-# Toggle behavior: if rofi hotkeys is already running, close it safely without pkill -f
+# Toggle behavior: if rofi hotkeys is already running, close it safely without scanning all of /proc
 _closed_hotkeys=0
-for _entry in /proc/[0-9]*; do
-    read -r _comm < "$_entry/comm" 2>/dev/null || continue
-    case "$_comm" in
-        rofi|.rofi*) ;;
-        *) continue ;;
-    esac
-    _cmd=$(tr '\0' ' ' < "$_entry/cmdline" 2>/dev/null) || continue
-    case "$_cmd" in
-        *hotkeys.rasi*)
-            kill "${_entry#/proc/}" 2>/dev/null || true
-            _closed_hotkeys=1
-            ;;
-    esac
+for _pid in $(pgrep -x 'rofi|\.rofi-wrapped' 2>/dev/null); do
+    if grep -aq "hotkeys.rasi" "/proc/$_pid/cmdline" 2>/dev/null; then
+        kill "$_pid" 2>/dev/null || true
+        _closed_hotkeys=1
+    fi
 done
 if [ "$_closed_hotkeys" -eq 1 ]; then
     exit 0
@@ -45,26 +37,20 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     fi
 fi
 
-# Manage visibility of Waybar, Rust-Dock and Quickshell
-_RUST_DOCK_WAS_VISIBLE=false
-_QUICKSHELL_WAS_VISIBLE=false
+# Hide bars in parallel without blocking Rofi startup
+_RUST_DOCK_WAS_VISIBLE=true
+_QUICKSHELL_WAS_VISIBLE=true
 _WAYBAR_WAS_VISIBLE=false
 
-if pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; then
+quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide all >/dev/null 2>&1 &
+quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" --any-display call dock hide all >/dev/null 2>&1 &
+if pgrep -x 'waybar|\.waybar-wrapped' >/dev/null 2>&1; then
     _WAYBAR_WAS_VISIBLE=true
     pkill -SIGUSR1 -x waybar 2>/dev/null || pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null &
 fi
-if "$HOME/.local/bin/dock-procs" rust-dock signal all USR1 >/dev/null 2>&1; then
-    _RUST_DOCK_WAS_VISIBLE=true
-elif pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
-    _RUST_DOCK_WAS_VISIBLE=true
+if pgrep -x 'rust-dock|\.rust-dock-wrap|\.rust-dock-wrapped' >/dev/null 2>&1; then
     pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
 fi
-if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-    _QUICKSHELL_WAS_VISIBLE=true
-    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide all >/dev/null 2>&1 &
-fi
-wait
 
 # Full list of keybindings in English
 HOTKEYS_DATA=$(cat << 'EOF'

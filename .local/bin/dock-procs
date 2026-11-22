@@ -41,18 +41,11 @@ signal="${4:-}"
 # Quickshell Dock nativo: si corre ~/.config/quickshell/dock/shell.qml,
 # enrutar las señales USR1 (ocultar) / USR2 (mostrar) y consultas vía IPC.
 qs_dock_running() {
-    local _proc _comm _cmd
-    for _proc in /proc/[0-9]*; do
-        _comm=$(cat "$_proc/comm" 2>/dev/null) || continue
-        case "$_comm" in
-            bash|sh|zsh|dash|fish|grep|rg|cat|head|tail|less|more|python*|sleep) continue ;;
-        esac
-        _cmd=$(tr '\0' ' ' < "$_proc/cmdline" 2>/dev/null) || continue
-        case "$_cmd" in
-            *quickshell*quickshell/dock/shell.qml*|*quickshell/dock/shell.qml*)
-                return 0
-                ;;
-        esac
+    local _pid
+    for _pid in $(pgrep -x 'quickshell|\.quickshell-wra|quickshell\.AppI|quickshell\.App|AppRun|qs' 2>/dev/null); do
+        if grep -aq "quickshell/dock/shell.qml" "/proc/$_pid/cmdline" 2>/dev/null; then
+            return 0
+        fi
     done
     return 1
 }
@@ -123,7 +116,7 @@ monitor_of() {
 
 pids_of_kind() {
     local pid exe
-    for pid in $(pgrep -x "$kind" 2>/dev/null; pgrep -x ".$kind-wrapped" 2>/dev/null; pgrep -x ".rust-dock-wrap" 2>/dev/null); do
+    for pid in $(pgrep -x "${kind}|\\.${kind}-wrapped|\\.rust-dock-wrap" 2>/dev/null); do
         exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
         case "$exe" in
             $want_exe) echo "$pid" ;;

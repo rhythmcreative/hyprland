@@ -27,92 +27,35 @@ fi
 # Log file para depuración
 LOG_FILE="$HOME/.cache/rofi-style3-launcher.log"
 
-# Función de logging
+# Función de logging sin forks (bash builtin printf)
 log_debug() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    printf '[%(%Y-%m-%d %H:%M:%S)T] %s\n' -1 "$1" >> "$LOG_FILE"
 }
 
-# Función para detectar el monitor activo basado en posición del cursor
+# Función rápida para detectar el monitor activo (cursor -> focused -> fallback)
 get_active_monitor() {
-    # PRIORIDAD 1: Detectar por posición del cursor
-    local cursor_info=$(hyprctl cursorpos 2>/dev/null)
-    if [ -n "$cursor_info" ]; then
-        local cursor_x=$(echo "$cursor_info" | cut -d',' -f1 | tr -d ' ')
-        local cursor_y=$(echo "$cursor_info" | cut -d',' -f2 | tr -d ' ')
-        
-        log_debug "Cursor en coordenadas: ($cursor_x, $cursor_y)"
-        
-        # Obtener información de todos los monitores
-        local monitors=$(hyprctl monitors -j 2>/dev/null)
-        
-        if [ -n "$monitors" ]; then
-            local cursor_monitor=$(echo "$monitors" | jq -r --arg cx "$cursor_x" --arg cy "$cursor_y" '
-                .[] | select(
-                    ($cx | tonumber) >= .x and 
-                    ($cx | tonumber) < (.x + .width) and 
-                    ($cy | tonumber) >= .y and 
-                    ($cy | tonumber) < (.y + .height)
-                ) | .name' 2>/dev/null | head -n1)
-            
-            if [ -n "$cursor_monitor" ] && [ "$cursor_monitor" != "null" ]; then
-                log_debug "Monitor detectado por cursor: $cursor_monitor"
-                echo "$cursor_monitor"
-                return
-            fi
+    local monitors cursor_info cursor_x cursor_y mon
+    monitors=$(hyprctl monitors -j 2>/dev/null)
+    if [ -n "$monitors" ]; then
+        cursor_info=$(hyprctl cursorpos 2>/dev/null)
+        if [ -n "$cursor_info" ]; then
+            cursor_x="${cursor_info%%,*}"
+            cursor_y="${cursor_info#*,}"
+            cursor_x="${cursor_x// /}"
+            cursor_y="${cursor_y// /}"
+            mon=$(printf '%s' "$monitors" | jq -r --argjson cx "${cursor_x:-0}" --argjson cy "${cursor_y:-0}" '
+                (.[] | select($cx >= .x and $cx < (.x + .width) and $cy >= .y and $cy < (.y + .height)) | .name),
+                (.[] | select(.focused == true) | .name),
+                (.[0].name)
+            ' 2>/dev/null | head -n1)
+        else
+            mon=$(printf '%s' "$monitors" | jq -r '(.[] | select(.focused == true) | .name), (.[0].name)' 2>/dev/null | head -n1)
+        fi
+        if [ -n "$mon" ] && [ "$mon" != "null" ]; then
+            echo "$mon"
+            return
         fi
     fi
-    
-    # FALLBACK 1: usar el monitor con la ventana activa
-    local active_window=$(hyprctl activewindow -j 2>/dev/null)
-    
-    if [ -n "$active_window" ] && [ "$active_window" != "Invalid" ]; then
-        # Extraer coordenadas de la ventana activa
-        local window_x=$(echo "$active_window" | jq -r '.at[0]' 2>/dev/null)
-        local window_y=$(echo "$active_window" | jq -r '.at[1]' 2>/dev/null)
-        
-        log_debug "Ventana activa en coordenadas: ($window_x, $window_y)"
-        
-        if [ -n "$window_x" ] && [ "$window_x" != "null" ] && [ "$window_x" != "0" ] || [ -n "$window_y" ] && [ "$window_y" != "null" ]; then
-            # Obtener información de todos los monitores
-            local monitors=$(hyprctl monitors -j 2>/dev/null)
-            
-            if [ -n "$monitors" ]; then
-                # Encontrar el monitor que contiene las coordenadas de la ventana
-                local active_monitor=$(echo "$monitors" | jq -r --arg wx "$window_x" --arg wy "$window_y" '
-                    .[] | select(
-                        ($wx | tonumber) >= .x and 
-                        ($wx | tonumber) < (.x + .width) and 
-                        ($wy | tonumber) >= .y and 
-                        ($wy | tonumber) < (.y + .height)
-                    ) | .name' 2>/dev/null | head -n1)
-                
-                if [ -n "$active_monitor" ] && [ "$active_monitor" != "null" ]; then
-                    log_debug "Monitor detectado por ventana activa: $active_monitor"
-                    echo "$active_monitor"
-                    return
-                fi
-            fi
-        fi
-    fi
-    
-    # Último fallback: usar el monitor principal/focused
-    local focused_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null)
-    if [ -n "$focused_monitor" ] && [ "$focused_monitor" != "null" ]; then
-        log_debug "Monitor detectado como focused: $focused_monitor"
-        echo "$focused_monitor"
-        return
-    fi
-    
-    # Fallback final: usar el primer monitor disponible
-    local first_monitor=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
-    if [ -n "$first_monitor" ] && [ "$first_monitor" != "null" ]; then
-        log_debug "Usando primer monitor disponible: $first_monitor"
-        echo "$first_monitor"
-        return
-    fi
-    
-    # Último recurso
-    log_debug "No se pudo detectar monitor, usando eDP-1 por defecto"
     echo "eDP-1"
 }
 
@@ -121,44 +64,38 @@ _RUST_DOCK_WAS_VISIBLE=false
 _QUICKSHELL_WAS_VISIBLE=false
 _WAYBAR_WAS_VISIBLE=false
 
-# Ocultar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
+# Ocultar barras en paralelo SIN bloquear el arranque de rofi (0ms de espera)
 hide_active_bars() {
     local mon="$ACTIVE_MONITOR"
-    log_debug "Ocultando barras en monitor activo: $mon..."
-    if [ -n "$mon" ]; then
-        if "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR1 >/dev/null 2>&1; then
-            _WAYBAR_WAS_VISIBLE=true
-        elif pgrep -x waybar >/dev/null 2>&1 || pgrep -x .waybar-wrapped >/dev/null 2>&1; then
-            _WAYBAR_WAS_VISIBLE=true
-            pkill -SIGUSR1 -x waybar 2>/dev/null || pkill -SIGUSR1 -x .waybar-wrapped 2>/dev/null &
-        fi
-        if "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR1 >/dev/null 2>&1; then
-            _RUST_DOCK_WAS_VISIBLE=true
-        elif pgrep -x rust-dock >/dev/null 2>&1 || pgrep -x .rust-dock-wrap >/dev/null 2>&1 || pgrep -x .rust-dock-wrapped >/dev/null 2>&1; then
-            _RUST_DOCK_WAS_VISIBLE=true
-            pkill -SIGUSR1 -x rust-dock 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR1 -x .rust-dock-wrapped 2>/dev/null &
-        fi
-        if "$HOME/.local/bin/island-running" >/dev/null 2>&1; then
-            _QUICKSHELL_WAS_VISIBLE=true
-            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$mon" >/dev/null 2>&1 &
-        fi
+    [ -n "$mon" ] || return 0
+    _QUICKSHELL_WAS_VISIBLE=true
+    _RUST_DOCK_WAS_VISIBLE=true
+    quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island hide "$mon" >/dev/null 2>&1 &
+    quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" --any-display call dock hide "$mon" >/dev/null 2>&1 &
+    if pgrep -x 'waybar|\.waybar-wrapped' >/dev/null 2>&1; then
+        _WAYBAR_WAS_VISIBLE=true
+        "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR1 >/dev/null 2>&1 &
+    fi
+    if pgrep -x 'rust-dock|\.rust-dock-wrap|\.rust-dock-wrapped' >/dev/null 2>&1; then
+        "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR1 >/dev/null 2>&1 &
     fi
 }
 
-# Restaurar Waybar, Rust-dock y Quickshell SOLO en el monitor activo
+# Restaurar barras en paralelo al cerrar rofi
 show_active_bars() {
     local mon="$ACTIVE_MONITOR"
-    log_debug "Restaurando barras en monitor activo: $mon..."
-    if [ -n "$mon" ]; then
-        if [ "$_WAYBAR_WAS_VISIBLE" = true ]; then
-            "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR2 >/dev/null 2>&1 || pkill -SIGUSR2 -x waybar 2>/dev/null || pkill -SIGUSR2 -x .waybar-wrapped 2>/dev/null &
+    [ -n "$mon" ] || return 0
+    if [ "$_QUICKSHELL_WAS_VISIBLE" = true ]; then
+        quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &
+    fi
+    if [ "$_RUST_DOCK_WAS_VISIBLE" = true ]; then
+        quickshell ipc -p "$HOME/.config/quickshell/dock/shell.qml" --any-display call dock reveal "$mon" >/dev/null 2>&1 &
+        if pgrep -x 'rust-dock|\.rust-dock-wrap|\.rust-dock-wrapped' >/dev/null 2>&1; then
+            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 >/dev/null 2>&1 &
         fi
-        if [ "$_RUST_DOCK_WAS_VISIBLE" = true ]; then
-            "$HOME/.local/bin/dock-procs" rust-dock signal "$mon" USR2 >/dev/null 2>&1 || pkill -SIGUSR2 -x rust-dock 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrap 2>/dev/null || pkill -SIGUSR2 -x .rust-dock-wrapped 2>/dev/null &
-        fi
-        if [ "$_QUICKSHELL_WAS_VISIBLE" = true ]; then
-            quickshell ipc -p "$HOME/.config/quickshell/waybar-island/shell.qml" --any-display call island reveal "$mon" >/dev/null 2>&1 &
-        fi
+    fi
+    if [ "$_WAYBAR_WAS_VISIBLE" = true ]; then
+        "$HOME/.local/bin/dock-procs" waybar signal "$mon" USR2 >/dev/null 2>&1 &
     fi
 }
 
@@ -197,17 +134,21 @@ log_debug "Monitor activo detectado: $ACTIVE_MONITOR"
 # unico sitio que lo creaba se dejaba para despues. En una maquina nueva,
 # SUPER+A moria con "No se encontraron temas de rofi disponibles" y no habia
 # forma de generar el tema con el propio atajo que lo necesita.
+# Solo regenerar colores/tema si faltan o si pywal cambió (0ms cuando ya están al día)
 sync_rofi_colors() {
-    log_debug "Sincronizando colores de rofi con pywal..."
-
+    local c_file="$HOME/.config/rofi/colors-pywal.rasi"
+    local t_file="$HOME/.config/rofi/style-3-pywal.rasi"
+    local w_file="$HOME/.cache/wal/colors.sh"
+    if [ -f "$c_file" ] && [ -f "$t_file" ]; then
+        if [ ! -f "$w_file" ] || { [ "$c_file" -nt "$w_file" ] && [ "$t_file" -nt "$w_file" ]; }; then
+            return 0
+        fi
+    fi
     if [[ -x "$HOME/.local/bin/sync-rofi-pywal" ]]; then
         "$HOME/.local/bin/sync-rofi-pywal" > /dev/null 2>&1
-        log_debug "Colores de rofi sincronizados con pywal"
         return 0
-    else
-        log_debug "Script sync-rofi-pywal no encontrado"
-        return 1
     fi
+    return 1
 }
 
 sync_rofi_colors
@@ -307,32 +248,23 @@ fi
 
 # Función principal para lanzar rofi
 launch_rofi() {
-    # Los colores ya estan sincronizados arriba, antes de elegir tema; se deja
-    # esta llamada por si el wallpaper ha cambiado entre medias.
-    sync_rofi_colors
-
     hide_active_bars
     
-    log_debug "Lanzando rofi con style-3 + fuentes powermenu en monitor: $ACTIVE_MONITOR"
-    log_debug "Tema: $ADAPTED_STYLE"
-    
-    # El fondo lo pone rofi, no este script.
-    # Lanzar rofi con el tema adaptado (stderr capturado: antes el error real se perdia).
+    # Lanzar rofi de inmediato con el tema adaptado
     local _t0 _rc _dt
-    _t0=$(date +%s)
+    printf -v _t0 '%(%s)T' -1
     rofi-themed -show drun \
          -theme "$ADAPTED_STYLE" \
          -m "$ACTIVE_MONITOR" >>"$LOG_FILE" 2>&1
     _rc=$?
-    _dt=$(( $(date +%s) - _t0 ))
-    log_debug "Rofi cerrado (exit=$_rc, duracion=${_dt}s)"
-    if [ "$_dt" -lt 2 ] && [ "$_rc" -ne 0 ]; then
-        log_debug "Cierre instantaneo: reintento con tema por defecto."
+    local _t1
+    printf -v _t1 '%(%s)T' -1
+    _dt=$(( _t1 - _t0 ))
+    # rc=0 (seleccion) y rc=1 (Esc/cancelar) y 130/143 (SIGINT/SIGTERM) son salidas normales
+    if [ "$_dt" -lt 2 ] && [ "$_rc" -gt 1 ] && [ "$_rc" -lt 128 ]; then
+        log_debug "Cierre anomalo (exit=$_rc): reintento con tema por defecto."
         notify-send "Rofi" "Theme $ADAPTED_STYLE failed (exit $_rc), retrying..." 2>/dev/null || true
-        _t0=$(date +%s)
         rofi-themed -show drun -m "$ACTIVE_MONITOR" >>"$LOG_FILE" 2>&1
-        _rc=$?
-        log_debug "Reintento cerrado (exit=$_rc, duracion=$(( $(date +%s) - _t0 ))s)"
     fi
 }
 

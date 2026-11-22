@@ -1,19 +1,24 @@
 #!/bin/bash
-# Rofi safety wrapper for UTF-8 locale resilience across all languages
-_self_real=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")
+# Fast Rofi UTF-8 locale wrapper (0ms overhead on valid UTF-8 sessions)
 REAL_ROFI=""
-IFS=':' read -r -a _path_dirs <<< "${PATH:-/usr/bin:/bin}"
-for _d in "${_path_dirs[@]}"; do
-    [ -x "$_d/rofi" ] || continue
-    _cand_real=$(realpath "$_d/rofi" 2>/dev/null || echo "$_d/rofi")
-    if [ "$_cand_real" != "$_self_real" ]; then
-        REAL_ROFI="$_d/rofi"
-        break
-    fi
-done
-[ -n "$REAL_ROFI" ] || REAL_ROFI="/usr/bin/rofi"
-
-if [ -n "$(locale 2>&1 >/dev/null)" ] || ! "$REAL_ROFI" -v >/dev/null 2>&1; then
-    export LC_ALL="C.UTF-8"
+if [ -x "/usr/bin/rofi" ] && [ "${BASH_SOURCE[0]}" != "/usr/bin/rofi" ]; then
+    REAL_ROFI="/usr/bin/rofi"
+else
+    _self_real=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")
+    IFS=':' read -r -a _path_dirs <<< "${PATH:-/usr/bin:/bin}"
+    for _d in "${_path_dirs[@]}"; do
+        [ -x "$_d/rofi" ] || continue
+        _cand_real=$(realpath "$_d/rofi" 2>/dev/null || echo "$_d/rofi")
+        if [ "$_cand_real" != "$_self_real" ]; then
+            REAL_ROFI="$_d/rofi"
+            break
+        fi
+    done
+    [ -n "$REAL_ROFI" ] || REAL_ROFI="/usr/bin/rofi"
 fi
+
+case "${LC_ALL:-${LANG:-}}" in
+    *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
+    *) export LC_ALL="C.UTF-8" ;;
+esac
 exec "$REAL_ROFI" "$@"

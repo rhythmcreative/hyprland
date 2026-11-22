@@ -1332,6 +1332,19 @@ ShellRoot {
         return fallback !== undefined ? fallback : (key || "")
     }
 
+    function isRemoteNewer(remoteVer, localVer) {
+        if (!remoteVer || !localVer || remoteVer === localVer) return false
+        const a = String(remoteVer).replace(/^v/, "").split(".").map(n => parseInt(n, 10) || 0)
+        const b = String(localVer).replace(/^v/, "").split(".").map(n => parseInt(n, 10) || 0)
+        const len = Math.max(a.length, b.length)
+        for (let i = 0; i < len; i++) {
+            const va = a[i] || 0, vb = b[i] || 0
+            if (va > vb) return true
+            if (va < vb) return false
+        }
+        return false
+    }
+
     function getOtaStatusText() {
         const _dep = root._i18nReloadCounter
         const o = root.otaData
@@ -1340,7 +1353,7 @@ ShellRoot {
         }
         const pkgs = (o.pkg_updates !== undefined && o.pkg_updates !== null) ? Number(o.pkg_updates) : Number(o.pacman_updates || 0)
         const flp = Number(o.flatpak_updates || 0)
-        if (o.latest_version && o.latest_version !== o.current_version) {
+        if (root.isRemoteNewer(o.latest_version, o.current_version)) {
             return root.t("ota_new_release", "New release available:") + " " + o.latest_version + (o.dotfiles_behind > 0 ? (" (" + o.dotfiles_behind + " " + root.t("ota_behind", "behind") + ")") : "")
         }
         let parts = []
@@ -10702,7 +10715,7 @@ ShellRoot {
                                     Text { text: "󰑐"; color: root.colAccent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15 }
                                     ColumnLayout { spacing: 1
                                         Text { text: root.t("ota_target", "Target Release"); color: root.colMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 9 }
-                                        Text { text: (root.otaData.latest_version && root.otaData.latest_version !== root.otaData.current_version) ? (root.otaData.latest_version + " (" + root.t("ota_new_tag", "New") + ")") : (root.otaData.current_version + " (" + root.t("ota_latest_tag", "Latest") + ")"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: root.isRemoteNewer(root.otaData.latest_version, root.otaData.current_version) ? (root.otaData.latest_version + " (" + root.t("ota_new_tag", "New") + ")") : (root.otaData.current_version + " (" + root.t("ota_latest_tag", "Latest") + ")"); color: root.colFg; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 10; font.weight: Font.Bold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                 }
                             }

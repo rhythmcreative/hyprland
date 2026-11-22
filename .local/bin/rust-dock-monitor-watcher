@@ -90,7 +90,31 @@ dock_output() {
 # Event driven handling alone is not enough: an event that arrives while the
 # script is restarting, a monitor with a slow handshake, or an instance that
 # dies on its own leaves the dock on the wrong screen until the next event.
+qs_dock_running() {
+    local entry comm cmd
+    for entry in /proc/[0-9]*; do
+        read -r comm < "$entry/comm" 2>/dev/null || continue
+        case "$comm" in
+            quickshell|.quickshell*|qs) ;;
+            *) continue ;;
+        esac
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *quickshell/dock/shell.qml*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 reconcile_docks() {
+    # Quickshell dock gestiona todos los monitores de forma nativa con Variants.
+    if command -v quickshell >/dev/null 2>&1 && [ -f "$HOME/.config/quickshell/dock/shell.qml" ]; then
+        if ! qs_dock_running; then
+            restart_dock
+        fi
+        return 0
+    fi
+
     command -v hyprctl >/dev/null 2>&1 || return 0
 
     local monitors

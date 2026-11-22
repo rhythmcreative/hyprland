@@ -8,7 +8,7 @@ export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
 export GDK_BACKEND="wayland,x11"
 
 # Matar cualquier instancia previa
-pkill -f nwg-dock-hyprland
+pkill -x nwg-dock-hyprland 2>/dev/null || true
 
 # Esperar a que termine completamente
 sleep 1

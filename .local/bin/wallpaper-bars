@@ -66,6 +66,7 @@ case "${1:-}" in
                 --any-display call island hide "$monitor" >/dev/null 2>&1 || true
         fi
         if [ "$monitor" = "all" ]; then
+            "$HOME/.local/bin/dock-procs" rust-dock signal all USR1 >/dev/null 2>&1 || true
             pkill -SIGUSR1 -x waybar >/dev/null 2>&1 || true
             pkill -SIGUSR1 -x .waybar-wrapped >/dev/null 2>&1 || true
             pkill -SIGUSR1 -x rust-dock >/dev/null 2>&1 || true
@@ -92,6 +93,7 @@ case "${1:-}" in
     show)
         rm -f /tmp/wallpaper-bars-hidden
         if [ "$monitor" = "all" ]; then
+            "$HOME/.local/bin/dock-procs" rust-dock signal all USR2 >/dev/null 2>&1 || true
             pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
             pkill -SIGUSR2 -x .waybar-wrapped >/dev/null 2>&1 || true
             pkill -SIGUSR2 -x rust-dock >/dev/null 2>&1 || true

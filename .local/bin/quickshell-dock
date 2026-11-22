@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Daemon launcher para el Dock de Quickshell (multi-monitor y multi-distro nativo)
+
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -e "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+
+# Asegurar directorios XDG en todas las distros (Flatpak, Snap, NixOS, FHS)
+for d in \
+    "$HOME/.local/share/flatpak/exports/share" \
+    "/var/lib/flatpak/exports/share" \
+    "/var/lib/snapd/desktop" \
+    "$HOME/.nix-profile/share" \
+    "/run/current-system/sw/share" \
+    "/usr/local/share" \
+    "/usr/share"; do
+    case ":${XDG_DATA_DIRS:-}:" in
+        *":$d:"*) ;;
+        *) [ -d "$d" ] && XDG_DATA_DIRS="${XDG_DATA_DIRS:+$XDG_DATA_DIRS:}$d" ;;
+    esac
+done
+export XDG_DATA_DIRS
+
+buscar_socket() {
+    local s
+    for s in "$XDG_RUNTIME_DIR"/wayland-[0-9]*; do
+        case "$s" in
+            *.lock|*/wayland-[0-9]*-awww*) continue ;;
+        esac
+        [ -S "$s" ] && { printf '%s\n' "$s"; return 0; }
+    done
+    return 1
+}
+
+esperar_pantalla() {
+    local i
+    for ((i = 1; i <= 120; i++)); do
+        if WAYLAND_DISPLAY="$(buscar_socket)"; then
+            export WAYLAND_DISPLAY="$(basename "$WAYLAND_DISPLAY")"
+            [ -n "$WAYLAND_DISPLAY" ] && return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+    :
+elif ! esperar_pantalla; then
+    echo "quickshell-dock: no aparecio ningun socket de Wayland en $XDG_RUNTIME_DIR" >&2
+    exit 1
+fi
+
+export QT_QPA_PLATFORM="wayland"
+# Usar tema de iconos GTK3 (p.ej. Tela-circle-red) si libqgtk3 existe en cualquier distro
+if [ -z "${QT_QPA_PLATFORMTHEME:-}" ] || [ "${QT_QPA_PLATFORMTHEME:-}" = "qt5ct" ]; then
+    _has_qgtk3=0
+    for _p in \
+        /usr/lib/qt6/plugins/platformthemes/libqgtk3.so \
+        /usr/lib64/qt6/plugins/platformthemes/libqgtk3.so \
+        /usr/lib/x86_64-linux-gnu/qt6/plugins/platformthemes/libqgtk3.so \
+        /usr/lib/aarch64-linux-gnu/qt6/plugins/platformthemes/libqgtk3.so; do
+        [ -f "$_p" ] && { _has_qgtk3=1; break; }
+    done
+    if [ "$_has_qgtk3" -eq 0 ] && [ -n "${QT_PLUGIN_PATH:-}" ]; then
+        IFS=':' read -r -a _qdirs <<< "$QT_PLUGIN_PATH"
+        for _qd in "${_qdirs[@]}"; do
+            [ -f "$_qd/platformthemes/libqgtk3.so" ] && { _has_qgtk3=1; break; }
+        done
+    fi
+    [ "$_has_qgtk3" -eq 1 ] && export QT_QPA_PLATFORMTHEME="gtk3"
+fi
+
+buscar_firma() {
+    local d s dir
+    for dir in "$XDG_RUNTIME_DIR/hypr" "/tmp/hypr"; do
+        [ -d "$dir" ] || continue
+        for d in $(ls -t "$dir" 2>/dev/null); do
+            [ -d "$dir/$d" ] || continue
+            s="$d"
+            [ -n "$s" ] || continue
+            if [ -S "$dir/$d/.socket2.sock" ] ||
+               [ -S "$dir/$d.socket2.sock" ] ||
+               [ -S "$dir/$d/.socket.sock" ]; then
+                printf '%s\n' "$s"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+if HYPRLAND_INSTANCE_SIGNATURE="$(buscar_firma)"; then
+    export HYPRLAND_INSTANCE_SIGNATURE
+fi
+
+# Cerrar cualquier instancia previa de quickshell/dock sin tocar waybar-island
+for _proc in /proc/[0-9]*; do
+    _pid="${_proc#/proc/}"
+    [ "$_pid" = "$$" ] && continue
+    [ -r "$_proc/comm" ] || continue
+    { read -r _comm < "$_proc/comm"; } 2>/dev/null || continue
+    case "$_comm" in
+        quickshell|.quickshell*|qs) ;;
+        *) continue ;;
+    esac
+    _cmd="$(tr '\0' ' ' < "$_proc/cmdline" 2>/dev/null)" || continue
+    case "$_cmd" in
+        *quickshell/dock/shell.qml*)
+            kill "$_pid" 2>/dev/null || true
+            ;;
+    esac
+done
+
+if ! command -v quickshell >/dev/null 2>&1; then
+    echo "quickshell-dock: quickshell binary not found in PATH" >&2
+    exit 1
+fi
+
+DOCK_QML="$HOME/.config/quickshell/dock/shell.qml"
+if [ ! -f "$DOCK_QML" ]; then
+    echo "quickshell-dock: missing $DOCK_QML" >&2
+    exit 1
+fi
+
+exec quickshell -p "$DOCK_QML"

@@ -38,6 +38,56 @@ signal="${4:-}"
     exit 2
 }
 
+# Quickshell Dock nativo: si corre ~/.config/quickshell/dock/shell.qml,
+# enrutar las señales USR1 (ocultar) / USR2 (mostrar) y consultas vía IPC.
+qs_dock_running() {
+    local _proc _comm _cmd
+    for _proc in /proc/[0-9]*; do
+        _comm=$(cat "$_proc/comm" 2>/dev/null) || continue
+        case "$_comm" in
+            bash|sh|zsh|dash|fish|grep|rg|cat|head|tail|less|more|python*|sleep) continue ;;
+        esac
+        _cmd=$(tr '\0' ' ' < "$_proc/cmdline" 2>/dev/null) || continue
+        case "$_cmd" in
+            *quickshell*quickshell/dock/shell.qml*|*quickshell/dock/shell.qml*)
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+if [ "$kind" = "rust-dock" ] && qs_dock_running; then
+    DOCK_QML="$HOME/.config/quickshell/dock/shell.qml"
+    case "$action" in
+        signal)
+            mon_arg="${target:-all}"
+            case "$signal" in
+                USR1|SIGUSR1)
+                    timeout 1 quickshell ipc -p "$DOCK_QML" --any-display call dock hide "$mon_arg" >/dev/null 2>&1 || true
+                    exit 0
+                    ;;
+                USR2|SIGUSR2)
+                    timeout 1 quickshell ipc -p "$DOCK_QML" --any-display call dock reveal "$mon_arg" >/dev/null 2>&1 || true
+                    exit 0
+                    ;;
+                *)
+                    exit 0
+                    ;;
+            esac
+            ;;
+        on)
+            exit 0
+            ;;
+        list)
+            if command -v hyprctl >/dev/null 2>&1; then
+                hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || true
+            fi
+            exit 0
+            ;;
+    esac
+fi
+
 # Ejecutables aceptados para cada tipo. Se comparan contra /proc/<pid>/exe, que
 # es el binario de verdad, no una cadena de la linea de comandos.
 #

@@ -1,10 +1,12 @@
 #!/bin/bash
-# Lanza una instancia de rust-dock por cada monitor conectado
+# Lanza el Dock de Quickshell (multi-monitor nativo) o rust-dock como fallback
 
 RUST_DOCK="$HOME/.local/bin/rust-dock"
 if [ ! -x "$RUST_DOCK" ] && command -v rust-dock >/dev/null 2>&1; then
     RUST_DOCK=$(command -v rust-dock)
 fi
+QS_DOCK_QML="$HOME/.config/quickshell/dock/shell.qml"
+QS_DOCK_LAUNCHER="$HOME/.local/bin/quickshell-dock"
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 STATE_FILE="$RUNTIME/rust-dock-visible"
 DOCK_CONF="$HOME/.config/rhythm/dock.conf"
@@ -22,6 +24,21 @@ dock_pids() {
     done
 }
 
+qs_dock_pids() {
+    local entry pid comm cmd
+    for entry in /proc/[0-9]*; do
+        pid="${entry#/proc/}"
+        comm=$(cat "$entry/comm" 2>/dev/null) || continue
+        case "$comm" in
+            bash|sh|zsh|dash|fish|grep|rg|cat|head|tail|less|more|python*|sleep) continue ;;
+        esac
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *quickshell*quickshell/dock/shell.qml*|*quickshell/dock/shell.qml*) echo "$pid" ;;
+        esac
+    done
+}
+
 # Estado persistente: si el usuario apago el dock, aqui no se relanza nunca.
 # 'on' cuando no hay fichero, para que una instalacion nueva muestre el dock.
 if [ -f "$DOCK_CONF" ] && [ "$(awk -F= '$1 == "enabled" {print $2; exit}' "$DOCK_CONF")" = "off" ]; then
@@ -29,9 +46,32 @@ if [ -f "$DOCK_CONF" ] && [ "$(awk -F= '$1 == "enabled" {print $2; exit}' "$DOCK
     pkill -x rust-dock >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
-    pkill -f "rust-dock" >/dev/null 2>&1 || true
+    if qs_dock_pids | grep -q .; then
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock setEnabled off >/dev/null 2>&1 || true
+    fi
     echo "hidden" > "$STATE_FILE" 2>/dev/null || true
     echo "hidden" > "/tmp/rust-dock-visible" 2>/dev/null || true
+    exit 0
+fi
+
+# Preferir el dock nativo de Quickshell cuando esté disponible
+if command -v quickshell >/dev/null 2>&1 && [ -f "$QS_DOCK_QML" ]; then
+    # Apagar cualquier instancia legada de rust-dock GTK4
+    for pid in $(dock_pids); do kill "$pid" 2>/dev/null || true; done
+    pkill -x rust-dock >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
+    pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
+
+    if qs_dock_pids | grep -q .; then
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock setEnabled on >/dev/null 2>&1 || true
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock reveal all >/dev/null 2>&1 || true
+    elif [ -x "$QS_DOCK_LAUNCHER" ]; then
+        setsid "$QS_DOCK_LAUNCHER" >/dev/null 2>&1 </dev/null &
+    else
+        setsid quickshell -p "$QS_DOCK_QML" >/dev/null 2>&1 </dev/null &
+    fi
+    echo "visible" > "$STATE_FILE" 2>/dev/null || true
+    echo "visible" > "/tmp/rust-dock-visible" 2>/dev/null || true
     exit 0
 fi
 

@@ -43,24 +43,47 @@ dock_pids() {
     done
 }
 
+QS_DOCK_QML="$HOME/.config/quickshell/dock/shell.qml"
+
+qs_dock_running() {
+    local entry comm cmd
+    for entry in /proc/[0-9]*; do
+        comm=$(cat "$entry/comm" 2>/dev/null) || continue
+        case "$comm" in
+            bash|sh|zsh|dash|fish|grep|rg|cat|head|tail|less|more|python*|sleep) continue ;;
+        esac
+        cmd=$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *quickshell*quickshell/dock/shell.qml*|*quickshell/dock/shell.qml*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 dock_on() {
     save_dock_state "on"
     printf 'visible\n' > "$STATE_FILE" 2>/dev/null || true
     printf 'visible\n' > "/tmp/rust-dock-visible" 2>/dev/null || true
-    "$LAUNCHER" >/dev/null 2>&1 &
+    if command -v quickshell >/dev/null 2>&1 && [ -f "$QS_DOCK_QML" ] && qs_dock_running; then
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock setEnabled on >/dev/null 2>&1 || true
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock reveal all >/dev/null 2>&1 || true
+    else
+        "$LAUNCHER" >/dev/null 2>&1 &
+    fi
 }
 
 dock_off() {
     save_dock_state "off"
-    # Matar instancias reales buscando por ejecutable para funcionar en NixOS (.rust-dock-wrapped)
-    # y distros estándar.
+    if command -v quickshell >/dev/null 2>&1 && [ -f "$QS_DOCK_QML" ] && qs_dock_running; then
+        timeout 1 quickshell ipc -p "$QS_DOCK_QML" --any-display call dock setEnabled off >/dev/null 2>&1 || true
+    fi
+    # Matar instancias legadas de rust-dock si quedara alguna
     for pid in $(dock_pids); do
         kill "$pid" 2>/dev/null || true
     done
     pkill -x rust-dock >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrap >/dev/null 2>&1 || true
     pkill -x .rust-dock-wrapped >/dev/null 2>&1 || true
-    pkill -f "rust-dock" >/dev/null 2>&1 || true
     sleep 0.1
     for pid in $(dock_pids); do
         kill -9 "$pid" 2>/dev/null || true

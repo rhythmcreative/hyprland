@@ -3,7 +3,7 @@
 # Script para iniciar Plank con configuración elegante
 
 # Matar cualquier instancia previa de plank
-pkill -f plank
+pkill -x plank 2>/dev/null || true
 
 # Esperar a que termine completamente
 sleep 1

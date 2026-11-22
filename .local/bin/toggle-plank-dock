@@ -4,7 +4,7 @@
 
 if pgrep -x "plank" > /dev/null; then
     # Si Plank está corriendo, lo matamos
-    pkill -f plank
+    pkill -x plank 2>/dev/null || true
     notify-send "Plank Dock" "Dock hidden" -t 1000
 else
     # Si Plank no está corriendo, lo iniciamos

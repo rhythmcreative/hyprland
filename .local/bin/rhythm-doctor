@@ -159,8 +159,12 @@ check_delivery() {
         [ -f "$b" ] || continue
         local base
         base=$(basename "$b")
-        # Solo los que la unit ejecuta; el resto se copia igual.
-        grep -rqs "$base" "$REPO_DIR"/.config/systemd/user/ || continue
+        # Legacy GTK4 rust-dock binary is optional when native Quickshell Dock is deployed.
+        if [ "$base" = "rust-dock" ] && [ -f "$HOME/.config/quickshell/dock/shell.qml" ]; then
+            continue
+        fi
+        # Solo los que la unit ejecuta (coincidencia exacta, no subcadena como rust-dock en rust-dock-monitor-watcher).
+        grep -rqE "(^|/| )${base}(\$|[[:space:]])" "$REPO_DIR"/.config/systemd/user/ || continue
         if [ ! -x "$HOME/.local/bin/$base" ]; then
             bad "script not deployed or not executable: $base"
             missing=$((missing+1))

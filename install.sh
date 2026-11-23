@@ -176,9 +176,15 @@ rhythm_msg() {
         [ -n "$color" ] && args+=(--foreground "$color")
         [ -n "$bold" ] && args+=(--bold)
         gum "${args[@]}" -- "$prefix $text" 2>/dev/null \
-            || printf "%s%s%s%s\033[0m\n" "$PADDING_LEFT_SPACES" "$bold" "$prefix $text" "$color"
+            || printf "%s%s %s\n" "$PADDING_LEFT_SPACES" "$prefix" "$text"
     else
-        printf "%s%s%s%s%s\033[0m\n" "$PADDING_LEFT_SPACES" "$bold" "$prefix" "$text" "$color"
+        local ansi=""
+        case "$color" in
+            [0-7]) ansi="\033[3${color}m" ;;
+            8)     ansi="\033[90m" ;;
+        esac
+        [ -n "$bold" ] && ansi="\033[1m${ansi}"
+        printf "%s%b%s %s\033[0m\n" "$PADDING_LEFT_SPACES" "$ansi" "$prefix" "$text"
     fi
 }
 
@@ -2074,7 +2080,11 @@ CHARM_EOF
         sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
 
         # Ensure bootstrap tools exist
-        local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 python3-pip python3-pipx shadow pciutils)
+        local suse_py="python313"
+        if command -v python3 >/dev/null 2>&1; then
+            suse_py=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")' 2>/dev/null || echo "python313")
+        fi
+        local suse_bootstrap=(git curl sudo zsh fzf stow tar xz coreutils gcc gcc-c++ make ca-certificates python3 "${suse_py}-pip" "${suse_py}-pipx" shadow pciutils)
         sudo zypper --no-cd --non-interactive --gpg-auto-import-keys install --auto-agree-with-licenses "${suse_bootstrap[@]}" >> "$LOG_FILE" 2>&1 || true
 
         # Standalone binary fallback for gum on openSUSE
@@ -2710,27 +2720,15 @@ install_themes_and_fonts() {
 
     # 2. Tela Circle Icon Theme (All variants)
     if [ ! -d "/usr/share/icons/Tela-circle" ] && [ ! -d "$HOME/.local/share/icons/Tela-circle" ]; then
-        step_item "Installing Tela Circle Icon Theme (All Variants)..."
-        local tmp_tela
-        tmp_tela=$(mktemp "${TMPDIR:-/tmp}/tela-circle.XXXXXX.tar.gz")
-        if curl -fsSL --connect-timeout 15 --max-time 180 \
-            "https://github.com/rhythmcreative/hyprland/releases/download/v0.25/tela-circle-icon-theme-all.tar.gz" \
-            -o "$tmp_tela" >> "$LOG_FILE" 2>&1; then
-            sudo mkdir -p /usr/share/icons
-            sudo tar -xzf "$tmp_tela" -C /usr/share/icons/ >> "$LOG_FILE" 2>&1
-            step_ok "Tela Circle Icon Theme deployed."
+        step_item "Installing Tela Circle Icon Theme from upstream..."
+        local tela_src
+        tela_src=$(mktemp -d "${TMPDIR:-/tmp}/tela-circle.XXXXXXXX")
+        if git clone --depth=1 https://github.com/vinceliuice/Tela-circle-icon-theme.git "$tela_src" >> "$LOG_FILE" 2>&1; then
+            sudo bash "$tela_src/install.sh" -a >> "$LOG_FILE" 2>&1 && step_ok "Tela Circle Icon Theme deployed." || step_warn "Could not install Tela Circle theme."
         else
-            step_item "Installing Tela Circle Icon Theme from upstream..."
-            local tela_src
-            tela_src=$(mktemp -d "${TMPDIR:-/tmp}/tela-circle.XXXXXXXX")
-            if git clone --depth=1 https://github.com/vinceliuice/Tela-circle-icon-theme.git "$tela_src" >> "$LOG_FILE" 2>&1; then
-                sudo bash "$tela_src/install.sh" -a >> "$LOG_FILE" 2>&1 && step_ok "Tela Circle Icon Theme deployed." || step_warn "Could not install Tela Circle theme."
-            else
-                step_warn "Could not download Tela Circle theme."
-            fi
-            rm -rf "$tela_src"
+            step_warn "Could not download Tela Circle theme."
         fi
-        rm -f "$tmp_tela"
+        rm -rf "$tela_src"
     else
         step_ok "Tela Circle Icon Theme already present."
     fi
@@ -2765,7 +2763,9 @@ install_themes_and_fonts() {
         elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv pipx >> "$LOG_FILE" 2>&1 || true
         elif [ "$DISTRO" = "opensuse" ]; then
-            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses python3-pywal python3-pipx python3-pip >> "$LOG_FILE" 2>&1 || true
+            local suse_py="python313"
+            command -v python3 >/dev/null 2>&1 && suse_py=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")' 2>/dev/null || echo "python313")
+            sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "${suse_py}-pipx" "${suse_py}-pip" >> "$LOG_FILE" 2>&1 || true
         fi
         export PATH="$HOME/.local/bin:$PATH"
         if ! command -v wal >/dev/null 2>&1; then
@@ -3026,12 +3026,11 @@ step_software() {
             xdg-desktop-portal-hyprland
             xdg-desktop-portal-gtk
             quickshell
-            rofi-wayland
+            rofi
             kitty
             zsh
             zsh-autosuggestions
             zsh-syntax-highlighting
-            starship
             thunar
             thunar-archive-plugin
             thunar-volman
@@ -3046,7 +3045,7 @@ step_software() {
             NetworkManager
             network-manager-applet
             bluez
-            bluez-obex
+            bluez-obexd
             blueman
             openssh-server
             openssh-clients
@@ -3101,7 +3100,7 @@ step_software() {
             flatpak
             stow
             curl
-            wget
+            wget2
             unzip
             jq
             bc
@@ -3132,7 +3131,7 @@ step_software() {
             fi
         fi
 
-        for extra in awww swww mpvpaper hyprland-guiutils hyprland-qtutils ImageMagick; do
+        for extra in rofi-wayland bluez-obex wget awww swww mpvpaper hyprland-guiutils hyprland-qtutils ImageMagick; do
             sudo dnf install -y --skip-broken --allowerasing "$extra" >> "$LOG_FILE" 2>&1 || true
         done
         step_ok "Core packages installed."
@@ -3208,7 +3207,6 @@ step_software() {
             brightness-udev
             v4l-utils
             lsof
-            swappy
             grim
             slurp
             wl-clipboard
@@ -3222,8 +3220,6 @@ step_software() {
             libxkbcommon-x11-0
             libx11-xcb1
             layer-shell-qt
-            liblayershellqtinterface6
-            qml6-module-org-kde-layershell
             qml-module-qtgraphicaleffects
             qml-module-qtquick-controls2
             libqt5svg5
@@ -3234,7 +3230,6 @@ step_software() {
             qtwayland5
             qml6-module-qtquick
             qml6-module-qtquick-controls
-            qml6-module-qtquick-effects
             qml6-module-qtquick-shapes
             qml6-module-qtquick-layouts
             qml6-module-qtquick-templates
@@ -3252,21 +3247,15 @@ step_software() {
             qml6-module-qt-labs-platform
             qml6-module-qt-labs-folderlistmodel
             qml6-module-qt-labs-settings
-            libgtk4-layer-shell0
-            libgtk4-layer-shell-dev
             libgtk-4-dev
             libqt6svg6
             hyprpaper
             swaybg
             qt5ct
             qt6ct
-            kvantum
-            qt-style-kvantum-themes
             polkit-kde-agent-1
             gnome-keyring
             pciutils
-            nwg-displays
-            nwg-look
             cava
             fonts-noto
             fonts-noto-cjk
@@ -3290,7 +3279,6 @@ step_software() {
             mpv
             htop
             btop
-            fastfetch
             inotify-tools
             psmisc
             xdg-user-dirs
@@ -3299,6 +3287,24 @@ step_software() {
             build-essential
             pkg-config
         )
+        # Packages present in Debian 13+ / newer Ubuntu but absent on Ubuntu 24.04 Noble
+        local DEBIAN_EXTRA_PKGS=(
+            swappy
+            liblayershellqtinterface6
+            qml6-module-org-kde-layershell
+            qml6-module-qtquick-effects
+            libgtk4-layer-shell0
+            libgtk4-layer-shell-dev
+            qt-style-kvantum
+            qt-style-kvantum-themes
+            nwg-displays
+            nwg-look
+            fastfetch
+        )
+        if [ "$DISTRO" = "debian" ]; then
+            DEBIAN_CORE_PKGS+=("${DEBIAN_EXTRA_PKGS[@]}")
+            DEBIAN_EXTRA_PKGS=()
+        fi
 
         export DEBIAN_FRONTEND=noninteractive
         if [ "$ENABLE_SDDM" = true ] && command -v debconf-set-selections >/dev/null 2>&1; then
@@ -3343,7 +3349,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi libfuse2 fuse3; do
+        for extra in "${DEBIAN_EXTRA_PKGS[@]}" swww mpvpaper awww hyprpaper swaybg hyprland-guiutils hyprland-qtutils imagemagick rofi libfuse2 fuse3; do
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
@@ -3576,6 +3582,11 @@ step_software() {
             sudo zypper --no-cd --non-interactive --gpg-auto-import-keys refresh >> "$LOG_FILE" 2>&1 || true
         fi
 
+        local suse_py="python313"
+        if command -v python3 >/dev/null 2>&1; then
+            suse_py=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")' 2>/dev/null || echo "python313")
+        fi
+
         local OPENSUSE_CORE_PKGS=(
             # Compositor & Wayland core
             hyprland
@@ -3591,8 +3602,6 @@ step_software() {
             rofi
             kitty
             zsh
-            zsh-autosuggestions
-            zsh-syntax-highlighting
             starship
 
             # File Management & Media
@@ -3615,7 +3624,7 @@ step_software() {
 
             # Audio Architecture
             pipewire
-            pipewire-pulse
+            pipewire-pulseaudio
             pipewire-alsa
             wireplumber
             pavucontrol
@@ -3634,12 +3643,13 @@ step_software() {
             upower
 
             # Qt & SDDM
-            qt5-wayland
+            libqt5-qtwayland
             qt6-wayland
-            qt6-declarative
-            qt6-qt5compat
+            qt6-declarative-imports
+            qt6-qt5compat-imports
             qt6-virtualkeyboard
-            qt6-svg
+            libQt6Svg6
+            qt6-imageformats
             swaybg
             hyprpaper
             qt5ct
@@ -3648,12 +3658,11 @@ step_software() {
 
             # Theming, Fonts & Utilities
             jetbrains-mono-fonts
-            noto-sans-fonts
-            noto-coloremoji-fonts
+            google-noto-sans-fonts
+            google-noto-coloremoji-fonts
             fontawesome-fonts
-            python3-Pillow
-            python3-pywal
-            python3-pipx
+            "${suse_py}-Pillow"
+            "${suse_py}-pipx"
             flatpak
             stow
             curl
@@ -3699,7 +3708,7 @@ step_software() {
         fi
 
         # Extra utilities if available in repos
-        for extra in rofi-wayland swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava libgtk4-layer-shell0 symbols-only-nerd-fonts libfuse2 fuse; do
+        for extra in rofi-wayland swww mpvpaper awww hyprland-guiutils hyprland-qtutils ImageMagick cava libgtk4-layer-shell0 symbols-only-nerd-fonts libfuse2 fuse zsh-autosuggestions zsh-syntax-highlighting; do
             sudo zypper --no-cd --non-interactive install --auto-agree-with-licenses "$extra" >> "$LOG_FILE" 2>&1 || true
         done
 
@@ -3865,8 +3874,20 @@ step_software() {
         snapper
     )
 
-    rhythm_install_with_progress "${#CORE_PKGS[@]}" "Installing core packages and dependencies via yay..." \
-        yay -S --needed --noconfirm "${CORE_PKGS[@]}"
+    if ! rhythm_install_with_progress "${#CORE_PKGS[@]}" "Installing core packages and dependencies via yay..." \
+        yay -S --needed --noconfirm "${CORE_PKGS[@]}"; then
+        local total_arch=${#CORE_PKGS[@]}
+        local idx=0
+        for pkg in "${CORE_PKGS[@]}"; do
+            idx=$((idx + 1))
+            render_progress_bar "$idx" "$total_arch" "Installing $pkg (fallback)..."
+            yay -S --needed --noconfirm "$pkg" >> "$LOG_FILE" 2>&1 || true
+        done
+        if [ "$total_arch" -gt 0 ]; then
+            render_progress_bar "$total_arch" "$total_arch" "Installation complete." 100
+            if [ -t 1 ]; then printf "\n"; elif [ -c /dev/tty ] && { : > /dev/tty; } 2>/dev/null; then printf "\n" > /dev/tty 2>/dev/null || true; fi
+        fi
+    fi
     step_ok "Core packages installed."
 
     install_quickshell || true
@@ -4124,7 +4145,7 @@ detect_existing_display_manager() {
 # --- FIRST RUN SETUP CHOICES (OMARCHY TUI WIZARD) ---
 first_run_choices() {
     if [ "$AUTO_YES" = true ]; then
-        if [ "$DISTRO" = "alpine" ]; then
+        if [ "$DISTRO" = "alpine" ] || [ "$SKIP_APPS" = true ]; then
             INSTALL_MODE="minimal"
             PACMAN_INSTALL=()
             FLATPAK_INSTALL=()
@@ -4755,8 +4776,10 @@ step_applications() {
                     PACMAN_INSTALL=("${filtered_pkgs[@]}")
                 fi
             fi
-            rhythm_install_with_progress "${#PACMAN_INSTALL[@]}" "Installing selected applications via yay (${#PACMAN_INSTALL[@]} items)..." \
-                yay -S --needed --noconfirm "${PACMAN_INSTALL[@]}" || step_warn "Some native packages could not be installed."
+            if [ ${#PACMAN_INSTALL[@]} -gt 0 ]; then
+                rhythm_install_with_progress "${#PACMAN_INSTALL[@]}" "Installing selected applications via yay (${#PACMAN_INSTALL[@]} items)..." \
+                    yay -S --needed --noconfirm "${PACMAN_INSTALL[@]}" || step_warn "Some native packages could not be installed."
+            fi
         fi
     fi
 
@@ -4922,13 +4945,19 @@ step_dotfiles() {
         fi
     fi
 
-    # Adjust NVIDIA-specific environment variables based on detected hardware
+    # Adjust NVIDIA-specific environment variables (dedicated-only systems; hybrid laptops keep iGPU primary)
     local is_nv=false
+    local has_igpu=false
+    local gpu_pci
+    gpu_pci=$(lspci 2>/dev/null | grep -i -E "vga|3d|display" || true)
+    if echo "$gpu_pci" | grep -qiE "intel|amd|ati|radeon"; then
+        has_igpu=true
+    fi
     if [ "$GPU_OVERRIDE" = "nvidia" ]; then
         is_nv=true
     elif [ "$GPU_OVERRIDE" = "none" ] || [ "$GPU_OVERRIDE" = "amd" ] || [ "$GPU_OVERRIDE" = "intel" ]; then
         is_nv=false
-    elif lspci 2>/dev/null | grep -i -E "vga|3d|display" | grep -qi "nvidia"; then
+    elif echo "$gpu_pci" | grep -qi "nvidia" && [ "$has_igpu" = false ]; then
         is_nv=true
     fi
 
@@ -5453,8 +5482,10 @@ step_system() {
     section "System Services & Finalization"
     
     if [ "$SET_ZSH" = true ]; then
-        if [ "$SHELL" != "$(which zsh)" ]; then
-            sudo chsh -s "$(which zsh)" "$USER" >> "$LOG_FILE" 2>&1 || true
+        local zsh_bin
+        zsh_bin=$(command -v zsh 2>/dev/null || true)
+        if [ -n "$zsh_bin" ] && [ "${SHELL:-}" != "$zsh_bin" ]; then
+            sudo chsh -s "$zsh_bin" "$USER" >> "$LOG_FILE" 2>&1 || true
             step_ok "Default shell set to Zsh."
         fi
     fi

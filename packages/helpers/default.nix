@@ -222,9 +222,11 @@ EOF
     # hash is filled in on first use) and keeps working if the user swaps the
     # binary by hand.
 
-    # The locker probe checks FHS paths that do not exist on NixOS.
-    substituteInPlace "$out/bin/powermenu-with-monitor-detection" \
-      --replace '/usr/bin/hyprlock' '${hyprlock}/bin/hyprlock'
+    # The locker probe checks FHS paths that do not exist on NixOS (when present).
+    if grep -q '/usr/bin/hyprlock' "$out/bin/powermenu-with-monitor-detection" 2>/dev/null; then
+      substituteInPlace "$out/bin/powermenu-with-monitor-detection" \
+        --replace-fail '/usr/bin/hyprlock' '${hyprlock}/bin/hyprlock'
+    fi
 
     if [ -f "$out/bin/toggle-noise-suppression" ] && [ -n "${if rnnoise-plugin != null then rnnoise-plugin else ""}" ]; then
       substituteInPlace "$out/bin/toggle-noise-suppression" \
